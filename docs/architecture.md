@@ -1,7 +1,7 @@
 # RESORA — Technical Architecture (Draft)
 
 **Status:** Proposed design baseline | **Date:** 2026-10-10  
-Implementation must follow the actual Better-T-Stack generated structure; paths below are an **expected layout**, not proof the scaffolder was executed.
+The Better-T-Stack 3.44.3 scaffold now exists (`bts.jsonc`). Phase 1 uses Supabase Development PostgreSQL through Express/Drizzle, with optional local Docker PostgreSQL. Product/domain sections below remain the proposed baseline.
 
 ## 1. Approved technical choices
 
@@ -18,7 +18,7 @@ Implementation must follow the actual Better-T-Stack generated structure; paths 
 | Workspace                 | Bun workspaces + Turborepo                    | PM-approved direction                           |
 | Lint/format               | Biome                                         | Recommended scaffolding option                  |
 
-CLI scaffolding command documented in `docs/setup.md`. **Do not claim the repo has been generated or services launched** until local verification.
+The recorded scaffold command and Phase 1 verification steps are documented in `docs/setup.md`; production release readiness remains unverified.
 
 ## 2. High-level logical architecture
 
@@ -36,12 +36,12 @@ CLI scaffolding command documented in `docs/setup.md`. **Do not claim the repo h
                                |
                 packages/api / packages/auth / packages/db
                                |
-                  PostgreSQL (private network)
+                PostgreSQL (Supabase / optional local)
 ```
 
 Client-only UI restrictions are not authorization; enforce access in tRPC procedures/services. Plan a modular monolith; do not introduce microservices unless load/team architecture justifies them.
 
-### Expected monorepo directories
+### Actual monorepo directories
 
 ```text
 resora/
@@ -54,7 +54,7 @@ resora/
 │   ├── auth/          # Better Auth config (location may differ)
 │   ├── db/            # Drizzle tables/migrations/query helpers
 │   ├── config/        # shared TS/env/tool configuration
-│   └── ui/            # optional generated UI package
+│   └── ui/            # generated shared UI package
 ├── docs/
 │   ├── prd.md
 │   ├── architecture.md
@@ -123,7 +123,8 @@ Shared `protectedProcedure` checks authenticated session; dedicated scoped proce
 
 ### Local development
 
-- Docker Compose runs PostgreSQL; Bun runs Next.js and Express locally.
+- Supabase Development is the external PostgreSQL target. Express/Drizzle uses `DATABASE_URL` (Session Pooler); migration tooling prefers `DIRECT_DB_URL` (Direct Connection). Direct failures never silently switch connections; see `docs/setup.md` for IPv6 and explicit Session Pooler alternatives.
+- Bun runs Next.js and Express locally. Docker PostgreSQL remains optional behind the Compose `local-db` profile; default Compose starts web/server using the server's configured external URL.
 - Use generated `bun db:start`, `bun dev`, `bun check-types`, etc. **only if present** in `package.json`; local scripts vary by CLI version.
 - Env files and secrets are ignored by Git. Store examples with placeholders, validate required env. Port assignments may change.
 

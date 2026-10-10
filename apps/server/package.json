@@ -9,6 +9,8 @@
     "dev": "bun run --hot src/index.ts",
     "start": "bun run dist/index.mjs",
     "env:generate": "varlock codegen",
+    "db:check": "bun run src/scripts/check-db.ts",
+    "db:check:direct": "bun run src/scripts/check-db.ts --direct",
     "auth:generate": "varlock run -- bun x auth@latest generate --config src/services.ts --output ../../packages/db/src/schema/auth.ts --yes"
   },
   "dependencies": {

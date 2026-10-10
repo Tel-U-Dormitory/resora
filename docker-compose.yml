@@ -18,7 +18,7 @@ services:
         required: false
     environment:
       SERVER_URL: http://server:3000
-      NEXT_PUBLIC_SERVER_URL: http://server:3000
+      NEXT_PUBLIC_SERVER_URL: http://localhost:3000
     depends_on:
       server:
         condition: service_healthy
@@ -51,7 +51,6 @@ services:
         required: false
     environment:
       CORS_ORIGIN: http://localhost:3001
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-password}@postgres:5432/resora
     healthcheck:
       test:
         [
@@ -64,12 +63,10 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-    depends_on:
-      postgres:
-        condition: service_healthy
     restart: unless-stopped
 
   postgres:
+    profiles: [local-db]
     image: postgres:18
     container_name: resora-postgres
     environment:

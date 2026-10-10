@@ -22,8 +22,7 @@
       "interactive": true
     },
     "db:generate": {
-      "cache": false,
-      "interactive": true
+      "cache": false
     },
     "db:migrate": {
       "cache": false,
@@ -47,12 +46,14 @@
       "cache": false
     }
   },
+  "globalPassThroughEnv": ["VARLOCK_TELEMETRY_DISABLED"],
   "globalEnv": [
     "BETTER_AUTH_SECRET",
     "BETTER_AUTH_URL",
     "CI",
     "CORS_ORIGIN",
     "DATABASE_URL",
+    "DIRECT_DB_URL",
     "NEXT_PUBLIC_SERVER_URL",
     "NODE_ENV",
     "VERCEL",

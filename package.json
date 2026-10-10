@@ -37,6 +37,8 @@
     "db:studio": "turbo run db:studio -F @resora/db --",
     "db:generate": "turbo run db:generate -F @resora/db --",
     "db:migrate": "turbo run db:migrate -F @resora/db --",
+    "db:check": "cd apps/server && bun run db:check",
+    "db:check:direct": "cd apps/server && bun run db:check:direct",
     "db:start": "docker compose up -d postgres",
     "db:watch": "docker compose up postgres",
     "db:stop": "docker compose stop postgres",
