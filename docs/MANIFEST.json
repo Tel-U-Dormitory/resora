@@ -1,0 +1,20 @@
+{
+  "project": "RESORA (working name)",
+  "created_on": "2026-10-10",
+  "type": "Documentation sources only; not a scaffolded code repository",
+  "target_pilot": "2026-10-18",
+  "files": [
+    "AGENTS.md",
+    "docs/architecture.md",
+    "docs/decisions/0001-stack-and-monorepo.md",
+    "docs/decisions/0002-identity-and-auth.md",
+    "docs/decisions/0003-event-qr-attendance.md",
+    "docs/decisions/0004-pilot-scope-and-governance.md",
+    "docs/decisions/0005-deployment-and-integrations.md",
+    "docs/decisions/README.md",
+    "docs/modules/need-001/acceptance-tests.md",
+    "docs/modules/need-001/prd.md",
+    "docs/prd.md",
+    "docs/setup.md"
+  ]
+}
