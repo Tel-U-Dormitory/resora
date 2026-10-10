@@ -55,11 +55,13 @@ Initial superadmin has system-level privileges, **not** a fifth primary actor. I
 | Geofence radius | Default **20 meters**, configurable; permitted range **TBD** after field testing |
 | Late tolerance | Default **15 minutes**, configurable per event |
 | QR lifetime | Default **six hours from activation**, configurable per event; static, no automatic rotation |
-| Lifecycle storage | Draft/published/closed/cancelled state names and edit/closure rules are **PROPOSED/TBD** |
+| Lifecycle | Explicit authorized HCO close invalidates active QR; title/description are the only confirmed published edits; audience/schedule immutable. Cancellation/reopening details **TBD** |
 
 **CONFIRMED timing:** check-in is permitted while the QR is active, including before scheduled start and after scheduled end. `EARLY` means `attendance_at < starts_at`; `ON_TIME` means `starts_at <= attendance_at <= starts_at + late tolerance`; `LATE` means afterward. QR scans use actual server time. Event end must not automatically reject a scan while QR remains active.
 
-**Presence is separate:** an attendance record means `PRESENT`; an invitee without one is `PENDING`/not yet present until the attendance window closes, then `ABSENT`. Attendance-window closure and QR reissue semantics remain **TBD**; do not infer closure merely from scheduled end.
+**Presence is separate:** an attendance record means `PRESENT`; an invitee without one is `PENDING`/not yet present until the attendance window closes, then `ABSENT`. Authorized HCO **explicitly closes** the event: invalidate active QR and report invited non-attendees as ABSENT. Expiry alone does not close an event. HCO may explicitly reissue expired/revoked challenges with configured TTL (default six hours); previous challenges remain invalid. Cancellation/reopening remains TBD.
+
+**Recommended, pending final PM confirmation:** freeze event center, geofence radius and late tolerance at publication. Do not present this safeguard as a confirmed rule.
 
 ## 5. End-to-end workflows
 
@@ -69,7 +71,7 @@ Initial superadmin has system-level privileges, **not** a fifth primary actor. I
 2. HCO selects title, schedule, audience, map pin/latitude-longitude center, radius, late tolerance and QR lifetime.
 3. Backend validates inputs and permissions. Publication generates the invited participant snapshot atomically with publication state.
 4. HCO activates an unpredictable event-bound QR and displays it directly on the event page. Default expiry is activation + six hours; no automatic rotation. Authorized HCO may revoke before expiry.
-5. Event access/check-in uses the publication snapshot plus current account active status. Reports retain all invitees after assignment changes or non-attendance. Explicit QR reissue/edit/resnapshot policy remains TBD.
+5. Event access/check-in uses the publication snapshot plus current account active status. Reports retain all invitees after assignment changes or non-attendance. Only title/description edits are permitted after publication; audience/schedule are immutable. Reissue expired/revoked QR explicitly using configured TTL; never reactivate previous challenges. Cancellation/reopening/republication snapshot handling remains TBD.
 
 ### 5.2 SR attendance via QR
 
@@ -96,7 +98,7 @@ Allowed effective-time override bounds and handling of backdated manual entry fo
 
 ### 5.4 Attendance correction
 
-Only KADIV HCO may correct recorded attendance, requiring reason and immutable before/after audit in the same transaction. Recalculate timing automatically from corrected effective time; preserve original `recorded_at`. If a record exists, offer correction instead of a second insertion. No routine hard-delete or unaudited overwrite.
+Only KADIV HCO may correct recorded attendance, requiring reason and immutable before/after audit in the same transaction. Recalculate timing automatically from corrected effective time; preserve original `recorded_at`. If a record exists, offer correction instead of a second insertion. Corrections preserve original `QR`/`MANUAL` source and create immutable audit. No routine hard-delete or unaudited overwrite.
 
 ### 5.5 Authentication and provisioning (Phase 2)
 
@@ -121,7 +123,7 @@ The historic workbook does not contain dedicated QR-scan FRs for NEED-001. **Nev
 | N001-FR-03 | HCO displays/revokes static event QR, default 6h from activation, configurable   | Confirmed; token protocol proposed                         |
 | N001-FR-04 | Eligible authenticated SR can check in to event via QR                     | Confirmed                                         |
 | N001-FR-05 | Server checks invitation, active status, QR validity, duplicates and geofence     | Confirmed checks; GPS threshold/radius bounds TBD   |
-| N001-FR-06 | Presence separate from EARLY/ON_TIME/LATE; 15-min default grace inclusive | Confirmed; attendance-window closure TBD    |
+| N001-FR-06 | Presence separate from EARLY/ON_TIME/LATE; 15-min default grace inclusive | Confirmed; explicit HCO close invalidates QR and reports non-attendees ABSENT |
 | N001-FR-07 | KADIV HCO searches/selects participant and inserts manual attendance/reason                    | Confirmed                                         |
 | N001-FR-08 | Effective/recorded time distinct; automatic class; insert/correction audited      | Confirmed                                         |
 | N001-FR-09 | HCO reports/exports every invitee, including non-attendees; required CSV                              | Confirmed                                         |
@@ -131,7 +133,7 @@ The historic workbook does not contain dedicated QR-scan FRs for NEED-001. **Nev
 
 The [canonical NEED-001 data model](resora-need-001-data-model.md) owns the proposed ERD, columns, defaults, PK/FK relationships, constraints, indexes, snapshots and audit design. Do not duplicate those table definitions here.
 
-**Implemented baseline:** `packages/db/src/schema/auth.ts` currently contains only Better Auth `user`, `session`, `account`, `verification`; Username Plugin fields and all NEED-001 domain tables are pending. The data model's [repository compatibility review](resora-need-001-data-model.md#12-repository-compatibility-review-2026-10-10) records discrepancies and suggested corrections. Review before future schema generation/migrations; this documentation update changes no schema or database.
+**Phase 2A source baseline:** Better Auth Username Plugin is enabled server-side; generated `user.username` (unique, nullable) and `display_username` accompany the four core auth tables. Drizzle defines `user_profiles`, `sr_profiles`, `departments`, `positions`, `buildings`, `system_privileges`, with deferred SR/actor/NIM integrity SQL. All migrations remain unapplied. No event/QR/attendance tables or provisioning/auth UI flows are implemented. The data model's [repository compatibility review](resora-need-001-data-model.md#12-repository-compatibility-review-2026-10-10) records discrepancies and suggested corrections. Review before future schema generation/migrations; the [Phase 2A implementation record](resora-need-001-data-model.md#13-phase-2a-identity-foundation-implementation-record) separates generated source/migrations from unapplied database state.
 
 ## 8. Proposed tRPC procedures (contract sketch)
 
@@ -177,8 +179,8 @@ Use Zod to validate payloads and recompute all authorization and attendance rule
 
 | Key | Remaining item | Owner | Gate |
 | --- | --- | --- | --- |
-| OPEN-001 | Attendance-window closure/absence trigger; explicit QR reissue after expiry/revocation | HCO + PM | Before reporting/QR lifecycle implementation |
-| OPEN-002 | Publish/edit/cancel/republish policy and snapshot refresh/versioning | HCO + PM | Before event lifecycle implementation |
+| OPEN-001 | Cancellation/reopening lifecycle; reissue must not silently invent a reopening policy | HCO + PM | Before lifecycle implementation |
+| OPEN-002 | Confirm recommended publication freeze for center/radius/late tolerance; republication snapshot handling | HCO + PM | Before event lifecycle implementation |
 | OPEN-003 | Permitted radius range, GPS accuracy threshold and configurable TTL/grace bounds | HCO + PM | Before validation/field UAT |
 | OPEN-004 | Manual effective-time bounds; backdated entry for now-inactive participants | KADIV HCO + PM | Before manual implementation |
 | OPEN-005 | Actual roster/building/position values and secure credential delivery | PM + RnD | Before real import/UAT |
@@ -186,7 +188,7 @@ Use Zod to validate payloads and recompute all authorization and attendance rule
 | OPEN-007 | Lateness-duration basis/rounding, export filters/logging and retention | HCO + PM | Before reports/release |
 | INFRA-001 | VPS/domain/TLS, funding, backups and operational targets | PM + DevOps | Before deployment |
 
-The audience/snapshot rule, static six-hour QR default, early/after-end scanning, inclusive timing boundary, real emails/CSV columns and direct KADIV manual workflow are **CONFIRMED**, not open policy.
+The audience/snapshot rule, static six-hour QR default, explicit HCO close/reissue, title/description-only published edits with immutable audience/schedule, original source on correction, early/after-end scanning, inclusive timing boundary, real emails/CSV columns and direct KADIV manual workflow are **CONFIRMED**, not open policy.
 
 ## 12. Acceptance, UAT & release gate
 

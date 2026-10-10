@@ -2,7 +2,7 @@
 
 **Status:** Confirmed requirements translated to acceptance scenarios; execution/UAT pending. Only explicitly marked policy details remain `TBD`.
 
-Sources: [NEED-001 PRD](prd.md) and [canonical data model/repository review](resora-need-001-data-model.md#12-repository-compatibility-review-2026-10-10). Schema/index details in that document are proposed, not implemented. Use synthetic accounts until the private CSV arrives.
+Sources: [NEED-001 PRD](prd.md) and [canonical data model/repository review](resora-need-001-data-model.md#12-repository-compatibility-review-2026-10-10). Phase 2A identity definitions/migration files are implemented but unapplied; event/QR/attendance schema and application behavior remain future work. Use synthetic accounts until the private CSV arrives.
 
 | ID     | Scenario / Given                                                 | When                                                            | Expected outcome                                                   | Decision state                                        |
 | ------ | ---------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------- |
@@ -24,7 +24,7 @@ Sources: [NEED-001 PRD](prd.md) and [canonical data model/repository review](res
 | AT-016 | Participant beyond configured radius | Try scan | No automatic attendance; direct participant to KADIV HCO for manual entry | Confirmed |
 | AT-017 | Location denied/unverifiable GPS accuracy | Try scan | No automatic attendance; contact KADIV HCO for manual entry | Confirmed fallback; accuracy threshold TBD |
 | AT-018 | KADIV HCO manual entry | Submit without reason or with blank reason | Rejected; no attendance or partial audit write | Confirmed |
-| AT-019 | Existing attendance record | KADIV HCO corrects effective time with reason | Preserve original recorded_at; automatically recalculate timing; append before/after audit | Confirmed |
+| AT-019 | Existing attendance record | KADIV HCO corrects effective time with reason | Preserve original recorded_at **and original source**; recalculate timing; append immutable before/after audit | Confirmed |
 | AT-020 | Event grace configured to 30 min | Scan at start +30min and +30min 1sec | ON_TIME at inclusive boundary, then LATE; presence remains PRESENT | Confirmed |
 | AT-021 | HCO report includes every published invitee | View/export CSV | NIM/name, organization fields, presence, effective time, timing, duration, source; include missing records; exclude secrets/raw GPS | Confirmed columns; duration/retention TBD |
 | AT-022 | SR accesses other's attendance record                            | Direct request                                                  | Forbidden, own-history only                                        | Confirmed                                             |
@@ -37,9 +37,9 @@ Sources: [NEED-001 PRD](prd.md) and [canonical data model/repository review](res
 | AT-029 | Event QR configured for another lifetime | Activate, then authorized HCO revokes early | Configured expiration from activation; revoked token immediately unusable | Confirmed; lifetime bounds TBD |
 | AT-030 | Attacker substitutes another event/token or forges privileges/time | Submit check-in | Backend rejects invalid binding/token; never trusts client classification/time/permissions | Confirmed |
 | AT-031 | Event audience selects eligible active roster | Publish event | Participant snapshot committed with publication; only invitees may check in | Confirmed; storage proposed |
-| AT-032 | Invited SR changes department/position/building after publication | View historical event report | Invitation and organization snapshot retained; do not silently refresh roster | Confirmed; republish policy TBD |
+| AT-032 | Invited SR changes department/position/building after publication | View historical event report | Invitation and organization snapshot retained; do not silently refresh roster | Confirmed snapshot; cancellation/republication handling TBD |
 | AT-033 | Invitee is later inactive, including a stored session | Attempt login or QR check-in | Both rejected regardless of participant snapshot; historical invitation retained | Confirmed |
-| AT-034 | Invited participant has no attendance record | Report before closure, then after confirmed window closure | PENDING/not yet present, then ABSENT; no fabricated attendance timestamp/class/source | Confirmed result; closure trigger TBD |
+| AT-034 | Invited participant has no attendance record | Report before closure, then after confirmed window closure | PENDING/not yet present, then ABSENT; no fabricated attendance timestamp/class/source | Confirmed: explicit authorized HCO closure |
 | AT-035 | KADIV HCO records manual attendance at 17:00 for actual 13:05, event starts 13:00 | Enter reason and override effective time | attendance_at 13:05, recorded_at 17:00, ON_TIME; actor/reason audited | Confirmed; permitted override bounds TBD |
 | AT-036 | Manual correction/audit transaction fails | Save correction | Roll back both changes; no destructive history overwrite or partial mutation | Required integrity |
 | AT-037 | Initial superadmin account and HCO/KADIV accounts | Change SR assignments/active status | Only superadmin system privilege succeeds; exactly one primary actor, not a fifth actor | Confirmed |
@@ -49,6 +49,13 @@ Sources: [NEED-001 PRD](prd.md) and [canonical data model/repository review](res
 | AT-041 | Phase 2 Gmail SMTP configured with synthetic/test recipient | Verify recovery/email-verification flows and sender identity | Display name RnD SR XIV; address/credentials environment-only; secrets absent from docs/logs | Confirmed direction; operational policy TBD |
 | AT-042 | QR or MANUAL present participant and absent invitee | Export CSV | Attendance source/timing/time only where relevant; all invitees included; no passwords/sessions/QR secrets/raw GPS | Confirmed; XLSX optional |
 | AT-043 | QR reused by different invited active users during its lifetime | Each checks in once | Same static QR valid for each invitee; duplicates per event/user rejected | Confirmed |
+| AT-044 | Published event | HCO edits title/description, then attempts audience/start/end edits via direct request | Title/description edits allowed; audience/schedule changes rejected; existing participant snapshot retained | Confirmed; future implementation |
+| AT-045 | Published event with active QR and invited non-attendee | Authorized HCO explicitly closes event | Active QR invalidated atomically; scans denied; non-attendee reported ABSENT; existing attendance retained | Confirmed; future implementation |
+| AT-046 | Expired or revoked QR, event not explicitly closed | HCO reissues challenge | New activation + configured TTL (default six hours); previous challenges remain invalid; no automatic rotation | Confirmed; future implementation |
+| AT-047 | No attendance record and QR expired | Report before HCO explicitly closes, then after close | Pending before closure; ABSENT after close, regardless of scheduled end | Confirmed; future implementation |
+| AT-048 | Attendance originally sourced QR or MANUAL | KADIV HCO corrects effective time/reason | Original source and recorded_at preserved; immutable audit captures correction; automatic timing recalculation | Confirmed; future implementation |
+| AT-049 | Published event center/radius/late tolerance | Attempt edit after publication | Freeze recommended; executable expectation awaits final PM confirmation | PROPOSED safeguard, not an approved acceptance gate |
+
 
 ## Approval fields
 
@@ -59,4 +66,4 @@ Sources: [NEED-001 PRD](prd.md) and [canonical data model/repository review](res
 
 A `TBD` scenario is **not automatically passing**. Review the [PRD](prd.md) before writing tests that assert unknown policy as fact.
 
-These are acceptance specifications, not executed automated tests. Remaining gates: closure/reissue, post-publication edits, GPS/radius limits, override bounds (including now-inactive invitees), source provenance after correction, lateness rounding, CSV values, credential delivery, retention and SMTP operations. See the canonical model §10/§12.
+These are acceptance specifications, not executed automated tests. Remaining gates: cancellation/reopening/republication handling, final PM confirmation of center/radius/tolerance freeze, GPS/radius limits, override bounds (including now-inactive invitees and post-closure manual operations), lateness rounding, CSV values, credential delivery, retention and SMTP operations. Phase 2A identity tests are code-level checks, not completion of these application acceptance scenarios. See the canonical model §10/§12.

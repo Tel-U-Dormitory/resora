@@ -63,14 +63,16 @@ The following are **candidate** NEEDs, not necessarily modules with approved MVP
 
 1. Approved-provisioned SR accounts; sign-in using NIM/password; account status and HCO/KADIV authorization.
 2. HCO event creation and configuration: name, start/end and configurable late threshold; audience selection SR or KADIV, future-ready `ALL_STUDENTS`; event location center and geofence radius.
-3. Participant snapshots at publication; event-bound unpredictable QR displayed on the event page, static for a configurable lifetime (default six hours from activation), revocable by HCO, with duplicate prevention.
+3. Participant snapshots at publication; event-bound unpredictable QR displayed on the event page, static for a configurable lifetime (default six hours from activation), revocable by HCO, with explicit reissue of expired/revoked challenges using configured TTL; previous challenges stay invalid, with duplicate prevention.
 4. HCO-selected map pin/latitude-longitude center and backend distance validation (default radius **20 m**, configurable); unverifiable GPS leads to KADIV HCO manual entry.
-5. KADIV HCO direct manual insertion/correction with mandatory reason, overridable effective attendance time, immutable creation time and audit history. HCO recap/CSV includes all invited non-attendees; XLSX optional.
+5. KADIV HCO direct manual insertion/correction with mandatory reason, overridable effective attendance time, immutable creation time and audit history; corrections preserve original attendance source. HCO recap/CSV includes all invited non-attendees; XLSX optional.
 6. SR access to eligible events and personal event/attendance history.
 
 **Explicitly not ready for general-audience production launch:** student (non-SR) logins, university SSO/API, extensive analytics, activity registration module NEED-007. Event audience `ALL_STUDENTS` must **not be represented as end-to-end available** until student accounts have login support.
 
-QR validity permits early and after-end check-in; event end is not an automatic cutoff. Timing is separate from presence: `EARLY` before start, `ON_TIME` through configurable tolerance inclusive (default 15 minutes), `LATE` afterward. Missing attendance is pending until the attendance window closes, then absent; closure trigger remains TBD.
+QR validity permits early and after-end check-in; event end is not an automatic cutoff. Timing is separate from presence: `EARLY` before start, `ON_TIME` through configurable tolerance inclusive (default 15 minutes), `LATE` afterward. Missing attendance is pending until the attendance window closes, then absent; authorized HCO closes explicitly, invalidating active QR and reporting non-attendees as absent.
+
+Published events allow edits to title/description only; audience/schedule become immutable. Freezing location, radius and late tolerance is **RECOMMENDED**, pending final PM confirmation.
 
 **Detailed sources:** [NEED-001 PRD](modules/need-001/prd.md), [canonical proposed data model](modules/need-001/resora-need-001-data-model.md).
 
@@ -104,7 +106,7 @@ Pilot outcomes to measure (numeric targets **TBD**): SR invited/eligible vs chec
 
 ## 9. Main dependencies and risks
 
-- **OPEN:** Attendance-window closure, published-event edits/reissue and manual override bounds require HCO/PM decisions; timing, QR lifetime default, snapshots and direct manual workflow are confirmed.
+- **OPEN:** Cancellation/reopening lifecycle, geofence-freeze safeguard and manual override bounds still need HCO/PM decisions; timing, QR lifetime default, snapshots and direct manual workflow are confirmed.
 - **BLOCKER:** SR identity input and safe credential distribution; exact SR building/position data.
 - **IMPLEMENTATION GATE:** Verify confirmed KADIV HCO permissions, publication snapshots and live inactive-account rejection with positive/negative tests.
 - **RISK:** Browser GPS inaccurate or spoofed, especially with 10–20 m radius; treat as signal, not proof of physical presence.
@@ -118,7 +120,7 @@ An individual module is ready for release only when its scoped requirements have
 
 ## 11. Open decisions that must not be fabricated
 
-1. Attendance-window closure/absence trigger, explicit QR reissue and published-event edit/cancel/republish snapshot lifecycle.
+1. Cancellation/reopening/republication lifecycle and any snapshot handling; confirm the recommended location/radius/late-tolerance freeze.
 2. GPS accuracy threshold and permitted radius range after field testing; configurable QR TTL/grace bounds.
 3. Manual effective-time override bounds and backdated entry for now-inactive invitees.
 4. Actual roster/building/position values, CSV header validation/mapping and secure initial credential delivery.
@@ -127,7 +129,7 @@ An individual module is ready for release only when its scoped requirements have
 7. Actual deployment origins/subdomains, cookie configuration, VPS/budget approval and operational targets.
 8. Numerical pilot-success criteria and UAT participants.
 
-Confirmed technical baseline: pnpm **10.33.4**, Bun **1.3.13** backend runtime, Next.js/Express/tRPC, Better Auth, Drizzle, Varlock, Supabase managed PostgreSQL through Express only. Runtime `DATABASE_URL` is Session Pooler; migration tooling prefers `DIRECT_DB_URL` without silent failure fallback. Local Docker PostgreSQL is optional; VPS deployment planned. Phase 1 and pnpm migration do not implement authentication/domain features.
+Confirmed technical baseline: pnpm **10.33.4**, Bun **1.3.13** backend runtime, Next.js/Express/tRPC, Better Auth, Drizzle, Varlock, Supabase managed PostgreSQL through Express only. Runtime `DATABASE_URL` is Session Pooler; migration tooling prefers `DIRECT_DB_URL` without silent failure fallback. Local Docker PostgreSQL is optional; VPS deployment planned. Phase 2A now defines auth username fields and the six identity tables; generated migrations are unapplied. Login UI, signup/active-account enforcement, provisioning and the rest of NEED-001 remain later work; infrastructure/schema definitions do not establish pilot readiness.
 
 ## 12. Document map
 

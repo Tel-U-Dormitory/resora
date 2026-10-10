@@ -80,15 +80,17 @@
 - [ ] Penerapan migration Development/verifikasi tabel hanya setelah review dan izin terpisah; bukan syarat yang diam-diam sudah dianggap selesai.
 - [ ] Pisahkan environment dev/prod dan gunakan least-privilege credential jika memungkinkan; jangan pernah uji destruktif pada production.
 
-**Hasil F1:** backend SELECT 1 berhasil, baseline migration versioned tersedia; repeatability aplikasi SQL dari DB kosong belum diuji. Supabase/pnpm dipertahankan. F2 dan domain NEED-001 belum diimplementasikan; review [model kanonis](resora-need-001-data-model.md) dahulu.
+**Hasil F1:** backend SELECT 1 berhasil, baseline migration versioned tersedia; repeatability aplikasi SQL dari DB kosong belum diuji. Supabase/pnpm dipertahankan. F2A source identitas + migration telah dibuat (belum diterapkan); login/UI/provisioning/RBAC dan domain event/QR/attendance belum diimplementasikan; review [model kanonis](resora-need-001-data-model.md) dahulu.
 
 ### F2 — Identitas SR, login NIM & provisioning (TODO)
 
 **Codex:**
 
-- [ ] Aktifkan Better Auth Username Plugin agar `username=NIM` dan login NIM/password, bukan email/password di UI.
+- [x] F2A: Username Plugin server + generated username/display_username, enam tabel identitas dan migration additive/custom siap review, belum diterapkan.
+- [ ] Integrasi client/login NIM, enforcement akun aktif/password change, provisioning dan RBAC tetap fase berikutnya.
 - [ ] Matikan **server-side** public sign-up; hapus UI sign-up, dan uji request langsung ke endpoint signup ditolak.
-- [ ] Tambahkan tabel/profil SR dan lookup departemen, gedung, jabatan serta status aktif; migrasi versioned.
+- [x] Definisi tabel/profil SR, dictionary, actor/active/password-change dan privilege superadmin + relasi/constraints/versioned migrations.
+- [ ] Review SQL lalu uji PostgreSQL disposable lokal; tidak menerapkan migration Supabase otomatis.
 - [ ] Siapkan skrip import CSV **privileged** (NIM, nama, email nyata, departemen, jabatan, gedung, aktif); data nyata privat sebelum UAT, synthetic sementara; validasi NIM unik, relasi satu departemen/satu gedung, jabatan, dan duplikasi.
 - [ ] Akun awal memakai password sementara acak yang kuat, hashing melalui Better Auth, distribusi privat, dan kebijakan ganti password pertama.
 - [ ] Gunakan email nyata setiap SR; implementasikan recovery/verifikasi Phase 2 via rencana Gmail SMTP, display name `RnD SR XIV`; alamat pengirim/credential hanya env.
@@ -116,7 +118,7 @@
 - [ ] Skema event dengan creator, title, jadwal, audience, lokasi pusat, radius default 20m, toleransi telat 15 menit, dan status lifecycle.
 - [ ] CRUD event khusus HCO, input tervalidasi Zod, kebijakan perubahan/pembatalan saat sudah ada absensi.
 - [ ] Audience predicate menghasilkan snapshot peserta saat publish secara atomik; list/check-in memakai snapshot dan status aktif live; laporan menyertakan undangan tanpa record.
-- [ ] Modul QR memakai token unpredictable **terikat event**, statis default 6 jam dari aktivasi (editable), display halaman event, revoke HCO, tanpa rotasi otomatis. Protokol penyimpanan/redisplay masih proposal model.
+- [ ] Modul QR memakai token unpredictable **terikat event**, statis default 6 jam dari aktivasi (editable), display halaman event, revoke HCO, tanpa rotasi otomatis. Expired/revoked QR dapat di-reissue eksplisit dengan TTL configured, QR sebelumnya tetap invalid. Protokol redisplay masih proposal model.
 - [ ] Pisahkan QR issuance/verification dari aturan absensi sehingga NEED-007 bisa menggunakan engine sama nanti, tanpa mengimplementasikan NEED-007 sekarang.
 - [ ] UI minimal HCO: form create event, detail, QR tampil, state loading/error/expired.
 
@@ -127,7 +129,7 @@
 - [ ] SR scan QR melalui browser mobile dan mengirim lokasi dengan izin pengguna (HTTPS pada staging/production).
 - [ ] Backend memvalidasi token, session, audience, snapshot, QR aktif/expiry/revoke, lokasi/radius dan status aktif; tidak mempercayai lokasi/waktu yang dihitung frontend.
 - [ ] Default radius **20m** dan late tolerance **15 menit**, masing-masing editable per event.
-- [ ] Scan boleh sebelum mulai/setelah selesai selama QR aktif; waktu server menentukan EARLY/ON_TIME/LATE dengan batas grace inklusif. Presence terpisah: pending tanpa record hingga closure, lalu absent; trigger closure TBD.
+- [ ] Scan boleh sebelum mulai/setelah selesai selama QR aktif; waktu server menentukan EARLY/ON_TIME/LATE dengan batas grace inklusif. Presence terpisah: pending tanpa record hingga closure, lalu absent; closure eksplisit HCO membatalkan QR aktif; non-attendee menjadi ABSENT.
 - [ ] DB constraint `UNIQUE(event_id,user_id)`; retry/concurrent scan tidak menghasilkan attendance ganda.
 - [ ] Error state eksplisit untuk invalid QR, expired QR, GPS ditolak/kurang akurat, di luar radius, session habis, koneksi putus.
 - [ ] Jangan simpan histori GPS kontinu; catat hanya bukti minimum yang disetujui.
@@ -138,7 +140,7 @@
 
 - [ ] KADIV HCO membuka event, mencari nama/NIM dan memilih profil peserta undangan; input dengan alasan wajib.
 - [ ] attendance_at default server sekarang, dapat override waktu aktual; recorded_at immutable saat pencatatan. Klasifikasi otomatis dari waktu efektif.
-- [ ] Insert/koreksi + audit before/after atomik; unique event/user; koreksi tidak menghapus histori atau menulis ulang recorded_at.
+- [ ] Insert/koreksi + audit before/after atomik; unique event/user; koreksi mempertahankan source asli, histori dan recorded_at.
 - [ ] SR melihat histori sendiri; HCO melihat semua undangan, termasuk pending sebelum closure dan absent sesudahnya.
 - [ ] CSV wajib: NIM/nama, departemen/jabatan/gedung, presence, waktu efektif, timing, durasi keterlambatan, QR/MANUAL bila relevan. XLSX opsional; tanpa password/session/QR secret/koordinat GPS mentah.
 - [ ] Uji izin negatif, concurrent QR/manual, rollback audit dan batas waktu override setelah kebijakan disepakati.
@@ -173,16 +175,16 @@
 
 | ID | Keputusan tersisa | Pemutus | Gate |
 | --- | --- | --- | --- |
-| OPEN-001 | Trigger closure/absent dan explicit QR reissue | HCO + PM | Lifecycle/reporting |
-| OPEN-002 | Edit/cancel/republish dan refresh/version snapshot | HCO + PM | F4 |
+| OPEN-001 | Cancel/reopen/republication lifecycle; HCO close/reissue eksplisit sudah confirmed | HCO + PM | Lifecycle/reporting |
+| OPEN-002 | Final PM confirmation freeze center/radius/tolerance; audience/jadwal immutable, edit published hanya title/description | HCO + PM | F4 |
 | OPEN-003 | Radius range/accuracy threshold setelah field test; batas TTL/grace | HCO + PM | F5/UAT |
 | OPEN-004 | Batas override waktu; input historis untuk peserta sekarang inactive | KADIV HCO + PM | F6 |
 | OPEN-005 | Nilai roster/gedung/jabatan dan distribusi credential aman | PM + RnD | Import nyata/UAT |
 | OPEN-006 | Konfigurasi Gmail sender, recovery/verifikasi | PM + RnD | F2 |
-| OPEN-007 | Basis/pembulatan lateness, provenance source setelah koreksi, filter/log/retensi ekspor | HCO + PM | F6/release |
+| OPEN-007 | Basis/pembulatan lateness, filter/log/retensi ekspor; source asli tetap saat koreksi | HCO + PM | F6/release |
 | INFRA-001 | VPS/domain/HTTPS, biaya, backup dan target operasional | PM + DevOps | F8 |
 
-Snapshot saat publish, QR statis 6 jam default, scan sebelum/sesudah jadwal, batas ON_TIME inklusif, CSV/email nyata dan input manual langsung KADIV sudah **CONFIRMED**. Jangan mengubah TBD menjadi aturan tersirat; lihat [model](resora-need-001-data-model.md).
+Snapshot publish, QR statis 6 jam, explicit HCO close/reissue (QR lama invalid), audience/jadwal immutable setelah publish, edit hanya title/description, source koreksi tetap, early/after-end scan, ON_TIME inklusif, CSV/email nyata dan input langsung KADIV sudah **CONFIRMED**. Jangan mengubah TBD menjadi aturan tersirat; lihat [model](resora-need-001-data-model.md).
 
 ## 5. Batas MVP dan pekerjaan yang ditunda
 

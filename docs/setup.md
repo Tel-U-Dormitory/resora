@@ -148,13 +148,13 @@ Generated baseline: `packages/db/src/migrations/20261010093513_phase1_scaffold/{
 
 ## 7. Later phase: authentication bootstrapping (critical)
 
-- Add Better Auth Username Plugin on server and client; migrate schema for `username` field.
+- Phase 2A enables the server Username Plugin and defines compatible username/display_username plus identity tables; all migrations remain unapplied. Client/login UI, provisioning and authentication enforcement are later work. Review the [implementation/migration record](modules/need-001/resora-need-001-data-model.md#13-phase-2a-identity-foundation-implementation-record) first.
 - Set `username = NIM` for SR accounts. Numeric NIM strings remain strings to preserve leading zeros.
 - Better Auth's underlying provisioning expects `email`, `name`, `password`; every SR has a real email. Authorized CSV columns: NIM, name, email, department, position, building and active status. PM provides real data privately before pilot UAT; use synthetic accounts until then.
 - Create a privileged, **non-public** provisioning script/CLI for imports, validate unique NIM, actor SR, assigned department/building, position. Seed synthetic development-only accounts for tests.
 - Cryptographically random initial passwords, safe one-time distribution, first-login password change required. Keep import evidence private, not in repo.
 - Password recovery and email verification belong to Phase 2. Plan Gmail SMTP with sender display name `RnD SR XIV`; sender address and SMTP credentials remain environment variables, not documentation values.
-- Review the [canonical data model](modules/need-001/resora-need-001-data-model.md) before schema implementation; current Drizzle tables are Better Auth core only. This synchronization applies no migrations.
+- Review the [canonical data model](modules/need-001/resora-need-001-data-model.md) before schema implementation; Drizzle source now defines auth username fields and six identity tables; database application remains pending review. This synchronization applies no migrations.
 
 ## 8. Work sequence before 2026-10-18
 
@@ -177,7 +177,7 @@ This is a dependency sequence, **not** a fabricated daily sprint schedule.
 - [ ] HCO/KADIV/other SR permission matrix tested.
 - [ ] Map-selected center, 20 m radius, 15 min inclusive tolerance and configurable static six-hour QR lifetime verified; scan allowed before/after schedule while QR active.
 - [ ] Expired/revoked QR, duplicate, inactive account and GPS denial cases pass; KADIV HCO manual insert/correction, effective/recorded time and immutable audit verified.
-- [ ] Publication snapshots and exports include all invited non-attendees; pending becomes absent only on confirmed window closure.
+- [ ] Publication snapshots and exports include all invited non-attendees; pending becomes absent on explicit authorized HCO closure, which invalidates the active QR.
 - [ ] PostgreSQL backup and restore tested; secrets rotated from defaults; HTTPS active.
 - [ ] UAT signed off by PM and HCO policy owner.
 

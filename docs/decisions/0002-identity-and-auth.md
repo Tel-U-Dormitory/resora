@@ -1,6 +1,6 @@
 # ADR-0002: NIM-first SR authentication and actor separation
 
-**Date:** 2026-10-10 | **Status:** Accepted business rules; Phase 2 implementation pending
+**Date:** 2026-10-10 | **Status:** Accepted business rules; Phase 2A foundation defined; full authentication pending
 
 ## Decision
 
@@ -16,7 +16,7 @@ Every SR has a real email. Authorized CSV import columns are NIM, name, email, d
 
 Initial superadmin is a system privilege, not a fifth actor; initially only superadmin changes SR assignments and active status. Inactive accounts cannot authenticate/check in, regardless of participant snapshots or existing sessions. Backend checks privileges.
 
-Plan Gmail SMTP, sender display name **RnD SR XIV**; sender address and SMTP credentials remain environment variables. Password recovery/email verification belong to Phase 2. Actual roster/dictionary values, secure credential delivery and SMTP operations remain TBD. The current Better Auth core schema has no Username Plugin fields; see the [canonical model review](../modules/need-001/resora-need-001-data-model.md#12-repository-compatibility-review-2026-10-10).
+Plan Gmail SMTP, sender display name **RnD SR XIV**; sender address and SMTP credentials remain environment variables. Password recovery/email verification belong to Phase 2. Actual roster/dictionary values, secure credential delivery and SMTP operations remain TBD. Phase 2A enables the server Username Plugin, generates compatible username/display_username fields and defines six identity tables plus deferred SR/NIM constraints; all migrations remain unapplied. Client/login/provisioning/enforcement remains future work; see the [canonical model review](../modules/need-001/resora-need-001-data-model.md#12-repository-compatibility-review-2026-10-10).
 
 
 **Synchronization (2026-10-10):** updated in place for the explicitly confirmed Phase 1/pnpm and NEED-001 decisions; prior Bun package-manager/local-only DB assumptions and manual request/approval direction are superseded where applicable. Acceptance does not imply implementation.
