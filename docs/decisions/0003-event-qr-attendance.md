@@ -1,15 +1,24 @@
-# ADR-0003: Event-scoped reusable QR challenge with location and manual review
+# ADR-0003: Event-scoped reusable QR challenge with location and audited manual entry
 
-**Date:** 2026-10-10 | **Status:** Accepted intent; token protocol Proposed
+**Date:** 2026-10-10 | **Status:** Accepted business rules; token protocol/storage Proposed
 
 ## Decision
 
-HCO creates event and QR together. Event configuration has target audience `SR`, `KADIV`, or `ALL_STUDENTS`; geographic center/radius default **20 m** configurable; late tolerance default **15 min** configurable. QR primitives should be reusable by NEED-007; attendance workflow is separate domain logic. If location is denied/unreliable, the SR may submit a manual request that KADIV HCO approves/rejects. KADIV HCO exclusively corrects attendance.
+HCO creates/configures attendance events for `SR`, `KADIV` or `ALL_STUDENTS` (includes SR); participant snapshots are generated at publication and reports include all invitees, even without attendance. Current inactive status always blocks authentication/check-in.
+
+HCO selects the geofence center by map pin or latitude/longitude; radius default **20 meters**, configurable separately. Backend validates distance from untrusted/imperfect browser location. GPS failure leads to direct KADIV HCO entry, with mandatory reason, overridable effective time defaulting to server now, immutable creation time and audit of every insertion/correction.
+
+QR has an unpredictable event-bound token, static for a configurable lifetime, default **six hours from activation**, without automatic rotation. HCO displays it on the event page and may revoke before expiration. Reject expired/revoked tokens. QR infrastructure remains reusable by NEED-007 without importing its business logic.
+
+Scan while QR active, including before scheduled start and after scheduled end. Actual server scan time determines `EARLY` before start, `ON_TIME` through start + configured tolerance inclusive (default **15 minutes**), `LATE` afterward. Presence is separate: missing attendance pending until window closure, then absent. Scheduled end cannot cut off an active QR.
 
 ## Proposed technical choices (not HCO-approved rules)
 
-Opaque short-lived event-bound nonce, revocation/rotation, server-side verification, atomic unique `(eventId,userId)` attendance records, manual state machine and immutable audit. Do not count pending requests as attendance. Do not presume GPS proves presence.
+The [canonical data model](../modules/need-001/resora-need-001-data-model.md) proposes HMAC-based static redisplay, challenge storage, participant composite keys, attendance unique/composite FK and append-only before/after audit. These are technical proposals awaiting schema review. Authorization, active-account/participant checks, QR/geofence validation and timestamp/classification are server-side; attendance mutation/audit is atomic. GPS alone does not prove presence.
 
 ## Open policy
 
-QR TTL; allowed location radius min/max and accuracy; default coordinates; early scan/late/after-end window; manual evidence/approval semantics; eligibility snapshot vs live.
+Attendance-window closure/absence trigger, explicit QR reissue, published-event edit/cancel/republish behavior, GPS accuracy/radius and configurable TTL/grace bounds, manual override limits/now-inactive backdating, source provenance after correction, lateness-duration basis/rounding and retention remain TBD. Snapshot publication, QR defaults/static behavior, early/after-end scans and direct KADIV manual workflow are confirmed.
+
+
+**Synchronization (2026-10-10):** updated in place for the explicitly confirmed Phase 1/pnpm and NEED-001 decisions; prior Bun package-manager/local-only DB assumptions and manual request/approval direction are superseded where applicable. Acceptance does not imply implementation.

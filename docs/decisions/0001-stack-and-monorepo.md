@@ -4,7 +4,7 @@
 
 ## Decision
 
-Use Better-T-Stack with Next.js frontend, Express.js backend, Bun runtime/package manager, tRPC, TypeScript, PostgreSQL/Drizzle, Better Auth, Turborepo, and Biome; Docker for local DB and planned web/server deployment.
+Use Better-T-Stack with Next.js frontend, Express.js backend, Bun 1.3.13 backend runtime, pnpm 10.33.4 package manager, tRPC, TypeScript, Supabase managed PostgreSQL/Drizzle through Express only, Better Auth, Turborepo, and Biome; Varlock environment management; optional Docker local PostgreSQL and planned web/server deployment on a VPS. Runtime `DATABASE_URL` uses Session Pooler; migrations prefer `DIRECT_DB_URL`, with explicit IPv6 failure handling and no silent switch. Better Auth is retained; no Supabase Auth or browser DB access.
 
 ## Context and consequences
 
@@ -17,3 +17,5 @@ Laravel from older planning sheets is superseded. Do not use Prisma unless a new
 ## Pending
 
 VPS provider, CI, automated backups, root DNS and specific environment settings.
+
+**Synchronization (2026-10-10):** Bun remains the runtime; pnpm replaces Bun package management. Supabase integration and pnpm installation/build configuration are implemented; see [setup](../setup.md) and [verification](../pnpm-migration.md) for evidence and unresolved checks.

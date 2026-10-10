@@ -1,11 +1,11 @@
 # RESORA — Data Model & Schema Specification (NEED-001)
 
-**Version:** 0.1 · **Created:** 2026-10-10 · **Status:** proposed technical schema, awaiting PM review  
+**Version:** 0.2 · **Updated:** 2026-10-10 · **Status:** confirmed business semantics; proposed technical schema, awaiting review\
 **Target:** pilot presensi internal SR, 2026-10-18  
-**Intended repository path:** `docs/modules/need-001/data-model.md`  
-**Companion:** `docs/modules/need-001/prd.md`, `docs/architecture.md`, `docs/modules/need-001/acceptance-tests.md`
+**Canonical repository path:** `docs/modules/need-001/resora-need-001-data-model.md`\
+**Companion:** [NEED-001 PRD](prd.md), [architecture](../../architecture.md), [acceptance tests](acceptance-tests.md), [roadmap](roadmap.md)
 
-> **Scope:** logical PostgreSQL/Drizzle design, **not executable migration SQL**. Do not run migrations from this document. Better Auth's **actual generated schema** takes precedence for its own four tables. Maintain existing Bun/Express/tRPC/Drizzle stack; Supabase is managed PostgreSQL accessed **through Express only**. Do not use Supabase Auth or direct browser/database connections.
+> **Scope:** logical PostgreSQL/Drizzle design, **not executable migration SQL**. Do not run migrations from this document. Better Auth's **actual generated schema** takes precedence for its own four tables. Preserve pnpm 10.33.4 package management, Bun 1.3.13 Express runtime, Next.js/tRPC/Drizzle/Better Auth and Varlock; Supabase is managed PostgreSQL accessed **through Express only**. Do not use Supabase Auth or direct browser/database connections.
 
 ## 1. Decisions and semantics
 
@@ -13,23 +13,24 @@
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
 | Identity          | Exactly one primary actor per account (`SR`, `MAHASISWA`, `ASUS`, `DITMAWA`); only SR can sign in at pilot                                                                                           | Confirmed                                            |
 | SR                | One department, one position, one building, active state; NIM login through Better Auth Username Plugin                                                                                              | Confirmed                                            |
-| System permission | `SUPERADMIN` granted to a specifically authorized account; **not** a fifth actor. Initially only superadmin maintains SR assignments                                                                 | Confirmed                                            |
-| Event audience    | One of `SR`, `KADIV`, `ALL_STUDENTS`; `KADIV` means position KADIV in **any** department; `ALL_STUDENTS` can include SR                                                                              | Confirmed                                            |
+| System permission | `SUPERADMIN` granted to a specifically authorized account; **not** a fifth actor. Initially only superadmin changes SR assignments and active status | Confirmed |
+| Event audience    | One of `SR`, `KADIV`, `ALL_STUDENTS`; `KADIV` means position KADIV in **any** department; `ALL_STUDENTS` includes SR and MAHASISWA                                                                              | Confirmed                                            |
 | Event organizer   | SR belonging to HCO can create event, show QR, view/export attendance; only **KADIV HCO** can input/correct manual attendance                                                                        | Confirmed                                            |
-| Participant list  | Persist per-event eligible participant roster **at publication** to preserve historical reports and absent invitees                                                                                  | **Recommended design; PM final sign-off pending**    |
+| Participant list  | Persist per-event eligible participant roster **at publication** to preserve historical reports and absent invitees                                                                                  | **Confirmed business rule; table design proposed**    |
 | Attendance scan   | Valid while event is published and challenge is active/unexpired/unrevoked, including before `starts_at` and after `ends_at`                                                                         | Confirmed                                            |
 | Timing            | `EARLY` if before event start; `ON_TIME` from start through 15-minute grace (configurable); `LATE` after grace                                                                                       | Confirmed                                            |
 | QR                | Static within a configurable lifetime; default 6 hours since activation; no periodic rotation; HCO can revoke manually                                                                               | Confirmed                                            |
-| Geofence          | Event creator selects latitude/longitude center; configurable radius, **20 m proposed default**; browser sends location; server calculates distance. GPS unreliable/spoofable                        | Center/validation confirmed; accuracy thresholds TBD |
+| Geofence          | HCO selects map pin or latitude/longitude center; separate configurable radius, **20 m confirmed default**; browser requests location; backend validates distance from untrusted/imperfect GPS | Confirmed; accuracy threshold/radius bounds TBD |
 | Manual entry      | KADIV HCO selects an invited person by name/NIM; `attendance_at` defaults to server time but can be overridden; `recorded_at` is actual immutable server write time, plus mandatory reason and actor | Confirmed                                            |
 | Non-attendees     | Record absence via a report **LEFT JOIN** over invited participants; do not insert fake attendance rows                                                                                              | Recommended                                          |
 | Export            | Include every invited participant, attendance timestamp/status, time classification and lateness; exclude secrets and raw GPS coordinates                                                            | Confirmed                                            |
-| Email             | Real SR email in Better Auth user; Gmail SMTP sender `RnD SR XIV` handled by backend, not stored in domain schema                                                                                    | Confirmed direction, setup TBD                       |
+| Email             | Real SR email; planned backend Gmail SMTP display name `RnD SR XIV`; sender address/credentials in env. Recovery/verification in Phase 2 | Confirmed; operational setup TBD |
 
 ### Non-negotiable implementation principles
 
 - PostgreSQL `timestamptz` for instants; display `Asia/Jakarta` in UI. Store NIM as **text**, never an integer.
-- All authorization, QR signature checks, event eligibility, duplicate checks, and geofence distance checks happen on the **backend**.
+- All authorization, QR token verification, event eligibility, duplicate checks, and geofence distance checks happen on the **backend**. The specific HMAC protocol below is proposed.
+- Runtime uses `DATABASE_URL` (Supabase Session Pooler); migration tooling prefers `DIRECT_DB_URL`, reports IPv6/network failures explicitly and never silently retries another connection. [Setup](../../setup.md) documents deliberate pooler alternatives. Local Docker PostgreSQL is optional; VPS deployment planned.
 - `attendance_at` is the **effective time of attendance**; `recorded_at` is **when the record was actually written**, including manual late entry.
 - Data changes by KADIV must create append-only audit records. Do not use destructive delete as a routine correction.
 - Do not store plaintext passwords, QR bearer tokens, Gmail app passwords or raw GPS coordinates in event reports.
@@ -225,7 +226,7 @@ NIM comes from `user.username` (Better Auth Username Plugin). Do **not** duplica
 | `created_at`         | `timestamptz`         | NN, default now     |                                                        |
 | `updated_at`         | `timestamptz`         | NN, default now     |                                                        |
 
-**Constraints:** `ends_at > starts_at`; `geofence_radius_m > 0`; `qr_ttl_minutes > 0`; `late_grace_minutes >= 0`; coordinate range checks. On `PUBLISHED`, freeze event audience/scheduled start/grace/participant snapshot for consistent history or require an explicit audited edit-and-resnapshot workflow (**recommended**). `CLOSED` blocks QR check-ins regardless of QR TTL; manual correction by KADIV may remain permitted. Do not automatically set `CLOSED` simply because scheduled `ends_at` passed.
+**Proposed constraints:** `ends_at > starts_at`; `geofence_radius_m > 0`; `qr_ttl_minutes > 0`; `late_grace_minutes >= 0`; coordinate range checks. On `PUBLISHED`, freeze audience/scheduled start/grace/snapshot or use a reviewed audited edit-and-resnapshot workflow. Closure behavior is **TBD**; a proposed explicit close must atomically invalidate active QR challenges, so a QR is not treated as active while scans are denied solely by lifecycle state. Manual correction after closure is also pending policy review. Do not automatically set `CLOSED` simply because scheduled `ends_at` passed.
 
 ### 4.6 `event_participants` — roster snapshot at publication
 
@@ -351,7 +352,7 @@ Compute with `event_participants LEFT JOIN attendance_records`; participants wit
 1. KADIV HCO selects an **invited participant** from this event's snapshot by NIM/name.
 2. If no attendance exists, create a `MANUAL` record with `attendance_at = current server time` unless KADIV supplies actual effective time; `recorded_at` remains current server time.
 3. If attendance exists, present a **correction** action (not a second insert); require reason, save before and after.
-4. Reject future effective timestamps and invalid/unreasonable event-time overrides according to policy (allowed historical window **TBD**); log override.
+4. Validate effective timestamps and audit overrides. Allowed historical/future bounds are **TBD**; rejecting future timestamps is a **PROPOSED** safeguard, not a confirmed rule.
 5. Perform attendance mutation + append-only audit atomically; preserve original `recorded_at` on corrections, and record later correction timestamp in audit.
 6. Recalculate timing classification from corrected `attendance_at` and frozen event policy.
 
@@ -383,7 +384,7 @@ Compute with `event_participants LEFT JOIN attendance_records`; participants wit
 | `building_code`   | Yes      | Resolve `buildings.code` → `sr_profiles.building_id`                 |
 | `is_active`       | Yes      | `user_profiles.is_active`; true/false parse strictly                 |
 
-Use **synthetic data** until real CSV arrives. Production import must be idempotent, preview/report invalid rows before committing, validate duplicates both in-file and against DB, and provision account/password via Better Auth's supported server API. Passwords never appear in source-controlled CSV. Approval/delivery channel for initial credentials is TBD. CSV is needed before final UAT, not to unblock schema implementation.
+Use **synthetic data** until real CSV arrives. Production import must be idempotent, preview/report invalid rows before committing, validate duplicates both in-file and against DB, and provision account/password via Better Auth's supported server API. Passwords never appear in source-controlled CSV. Secure delivery channel for initial credentials is TBD. The seven business columns are confirmed; technical headers shown above and casing/normalization rules remain a proposed import mapping. CSV is needed before final UAT, not to unblock schema implementation.
 
 ## 8. Ownership and authorization (pilot)
 
@@ -413,13 +414,13 @@ Do not implement every table at once if incremental migrations can be safely dep
 
 | ID   | Open item                                                                                               | Impact                                                |
 | ---- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| D-01 | PM final approval for participant **snapshot at publication** (vs live eligibility)                     | `event_participants` lifecycle and historical reports |
+| D-01 | Published-event edits/republishing: retain, refresh or version participant snapshots                     | `event_participants` lifecycle and historical reports |
 | D-02 | Event closure/absence rule: explicit HCO close vs automatic after last valid QR expires                 | Absent vs pending reports                             |
-| D-03 | Max/min QR TTL, radius, grace period, accuracy threshold and invalid GPS behavior                       | Validation policy and UAT                             |
+| D-03 | QR TTL/grace bounds; radius range and GPS accuracy threshold after field testing                       | Validation policy and UAT                             |
 | D-04 | QR reissue policy after expiry or revocation                                                            | HCO event operations                                  |
 | D-05 | Manual time override allowed range and whether corrected effective time can precede event start by days | Audit and fraud controls                              |
-| D-06 | Email recovery provider credentials, recovery policy, temporary password delivery and verification      | Account readiness                                     |
-| D-07 | Exact SR CSV values (buildings/positions) and official default geofence locations                       | Pilot real-data import                                |
+| D-06 | Gmail SMTP sender configuration, recovery/verification policy and secure temporary password delivery      | Account readiness                                     |
+| D-07 | Exact SR CSV values (buildings/positions); optional default center presets (HCO selects map/lat-lng)     | Pilot real-data import                                |
 | D-08 | Attendance data retention, export access logging, and timezone/rounding display                         | Compliance and historical reporting                   |
 
 Until approved, don't silently convert these proposal-level details into product requirements. Implementation may use safe technical defaults with explicit review gates only where user-approved behavior is not affected.
@@ -440,3 +441,29 @@ Event starts **13:00 Asia/Jakarta**, grace **15 min**, QR activated 12:00 and ex
 | No scan, event closed | ABSENT   | —       |                   — |                  — | —      |
 
 Manual example: KADIV saves at 17:00 but sets effective presence at 13:05. Persist `attendance_at=13:05`, `recorded_at=17:00`, `source=MANUAL`, `timing_class=ON_TIME`, actor KADIV HCO, non-empty reason, and immutable audit row. Never retroactively rewrite the initial `recorded_at`.
+
+## 12. Repository compatibility review (2026-10-10)
+
+**Read-only evidence:** reviewed `packages/db/src/schema/auth.ts`, schema exports, `packages/auth/src/index.ts`, package scripts, `pnpm-workspace.yaml` and the Phase 1 baseline migration. No live database introspection was performed. The repository implements **only four Better Auth core tables**; all domain tables in §4 are **PROPOSED**, not deployed or implemented. No schema/migration/code/environment files were changed by documentation synchronization.
+
+| Coverage / discrepancy | Actual repository or current proposal | Suggested correction / review gate |
+| --- | --- | --- |
+| Better Auth core keys and relations | Text PKs on `user`, `session`, `account`, `verification`; unique email/session token; session/account `user_id` NN FK to `user` with cascade; user/identifier indexes | Reuse generated names/types/relations; do not duplicate Better Auth tables |
+| Better Auth nullability/defaults | User name/email NN; email_verified NN default false; image nullable. Session expiry/token/user NN, IP/user-agent nullable. Account IDs/provider/user NN, password/tokens/scope/expiry nullable. Verification identifier/value/expiry NN. Creation defaults exist; session/account updated_at are NN with application on-update but **no database default** | Preserve auth-owned credential/token semantics; exercise provisioning through supported APIs rather than raw inserts that assume defaults |
+| Username/NIM | Username Plugin not enabled (`plugins: []`); `user` has no username/displayUsername fields | Phase 2 enables plugin, generates/reviews compatible fields and unique NIM; preserve NIM as text. Do not hand-copy the conceptual ERD as executable auth schema |
+| Authentication policy | Current config enables email/password with no Username Plugin, explicit signup-disable setting or email recovery/verification callbacks | Phase 2 implements NIM login, server-side signup denial, secure provisioning/password change, active-account enforcement and planned Gmail flows; do not treat core tables as completed authentication |
+| Actor/SR identity and active state | No implemented actor, active, SR profile or password-change gate | Review proposed `user_profiles` PK and one-to-one SR assignment FKs; transactionally enforce exactly one actor and SR profile consistency. Reject inactive authentication/existing-session actions/check-in even if snapshotted |
+| Superadmin and dictionaries | Proposed privilege composite PK; department/position/building references not implemented | Review controlled bootstrap and explicit grant access. Only superadmin changes SR assignments/active status initially. Other position/building values await actual CSV; no blanket attendance bypass |
+| Dictionary required fields | `buildings.code` is listed UK but its NN constraint is not explicit; `sr_profiles.user_id` inverse actor condition is not guaranteed by FK | **PROPOSED clarification:** require building code/name NN for reliable CSV resolution; enforce SR-only profiles and complete assignments transactionally/tests or reviewed DB constraints |
+| Invitations and inactive users | Publication snapshot is now **CONFIRMED**, while table/field implementation remains proposed; composite `(event_id,user_id)` PK and user-event index documented | Atomic publish + eligible roster snapshot; preserve all invitees in reports. Snapshot cannot override live inactive status. Snapshot NIM/organization fields nullable for future actors; require populated SR snapshots in pilot validation |
+| Event policy | Proposed NN schedule/center, defaults 20m/15min/360min, positive/range checks; publish/close timestamps nullable | Validate coordinate center separately from meter radius, schedule order and default policies. **PROPOSED:** conditional published_at/closed_at consistency checks. Published policy edits and closure remain TBD; scheduled end cannot close active QR scanning |
+| QR validity | Proposed activation/expiration NN, revoked_at nullable, event/issuer FKs, partial unique current challenge | Preserve static default six-hour activation lifetime/revocation. HMAC reconstruction and random UUID challenge IDs are proposed protocol details; require unpredictable event-bound token, not guessable ID alone. Reissue semantics remain TBD |
+| Attendance identity and time | Proposed unique event/user + composite invitation FK, effective attendance_at NN, immutable recorded_at default now; source/timing NN; manual reason conditional | Implement only after review; reason must be nonblank for manual insert/correction. Compute timing with inclusive tolerance; preserve recorded_at on correction. Presence derived from invitation LEFT JOIN, separate from timing |
+| Audit and provenance | Proposed append-only audit with mandatory reason, before nullable only on insertion, after NN, actor/attendance/event/user FKs and event/record indexes | **PROPOSED strengthening:** enforce audit event/user matches its attendance row (composite FK or validated transaction), restrict updates/deletes, preserve immutable creation time. Decide QR/MANUAL source provenance after correction explicitly; audit retains original/new states |
+| Historical deletes | Auth child sessions/accounts cascade on user deletion; proposed domain FK deletion behavior is mostly unspecified | **PROPOSED:** restrict deletion of users/events referenced by invitation/attendance/audit; prefer deactivation/archive. Do not propagate auth cascade into attendance history without review |
+| Timestamp mapping | Actual Better Auth uses `timestamp()` **without time zone**; proposed domain instants use `timestamptz` | Preserve auth-generated schema unless a reviewed compatible migration is separately approved. Explicitly handle UTC conversion and Asia/Jakarta display; test interoperability rather than silently changing auth columns |
+| Reporting | Proposed LEFT JOIN covers invited non-attendees; classification examples correct at start/grace boundary | Required CSV contains NIM/name, appropriate organization snapshots, presence, effective timestamp, timing, lateness duration and source; no passwords, sessions, QR secrets or raw GPS. Duration basis/rounding and closure/cancellation projection await policy review |
+
+**Additional TBDs:** backdated manual entries for currently inactive invitees; source provenance when correcting QR attendance; manual correction after closure; canceled-event reporting. These supplement §10 without changing confirmed rules. `CLOSED` storage, HMAC and the report projection mechanism remain proposals; pending-to-absent at attendance-window closure is confirmed. Do not implement proposal details as approved policy by implication.
+
+**Readiness:** confirmed requirements and acceptance cases support a reviewed Drizzle schema plan and Phase 2 authentication design. Resolve affected TBDs before implementing those behaviors; review the proposed schema/constraints and generated auth changes before any migration. Stop for documentation review first. Phase 1 connectivity and pnpm verification remain recorded in [setup](../../setup.md) and [migration report](../../pnpm-migration.md).

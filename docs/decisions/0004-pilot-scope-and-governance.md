@@ -8,4 +8,4 @@ MVP is defined **per NEED**, not a single release of all RESORA modules. First p
 
 ## Consequence
 
-Shipping a QR page alone does not satisfy MVP. Must validate full pilot journey, actual SR authentication, HCO event/recap, KADIV manual correction, privacy/security and UAT. Students outside SR are not in initial login scope, even if future events may target `ALL_STUDENTS`.
+Shipping a QR page alone does not satisfy MVP. Must validate full pilot journey, actual SR authentication, HCO event/recap, KADIV audited manual insertion/correction, publication snapshots and exports including non-attendees, privacy/security and UAT. Phase 1/pnpm infrastructure completion does not satisfy these gates. Students outside SR are not in initial login scope, even if future events may target `ALL_STUDENTS`.
