@@ -1,24 +1,28 @@
 # RESORA — Repository Setup & Pilot Readiness
 
-> **CONFIRMED — Phase 1:** the monorepo exists, `bun run dev` works, and a Supabase Development project has been created. Application database access stays in Express via Drizzle; Better Auth is retained. Authentication policy, RBAC, NEED-001 and production rollout are later phases. No migrations are applied as part of Phase 1.
+> **CONFIRMED — Phase 1:** the monorepo exists, the development scaffold works, and a Supabase Development project has been created. Application database access stays in Express via Drizzle; Better Auth is retained. Authentication policy, RBAC, NEED-001 and production rollout are later phases. No migrations are applied as part of Phase 1.
 
 ## 1. Prerequisites
 
-- Recent supported Bun and Node.js LTS per Better-T-Stack prerequisites, Docker Engine/Compose, Git.
-- Verify `bun --version`, `node --version`, `docker compose version`, `git --version`.
+- Node.js 24, Bun 1.3.13 (backend runtime), pnpm 10.33.4 (package manager), Docker Engine/Compose, Git.
+- Verify `pnpm --version`, `bun --version`, `node --version`, `docker compose version`, `git --version`.
 - Do not create a public repo containing real SR identity spreadsheets or credentials.
 
 ## 2. Actual scaffold and corrected command
 
-Do not rerun scaffolding in this repository. `bts.jsonc` records Better-T-Stack **3.44.3** and the following reproducible command (for a new, empty parent directory only). The old guide appended `--yes`; the command below matches the recorded scaffold options:
+Do not rerun scaffolding in this repository. `bts.jsonc` records Better-T-Stack **3.44.3** and the equivalent command below with the current pnpm package manager (for reference in a new, empty parent directory only). The scaffold was originally created with Bun package management; this repository has been migrated without rescaffolding:
 
 ```bash
-bun create better-t-stack@3.44.3 resora --frontend next --backend express --runtime bun --database postgres --orm drizzle --api trpc --auth better-auth --payments none --addons turborepo biome --examples none --db-setup docker --web-deploy docker --server-deploy docker --git --package-manager bun --install
+pnpm create better-t-stack@3.44.3 resora --frontend next --backend express --runtime bun --database postgres --orm drizzle --api trpc --auth better-auth --payments none --addons turborepo biome --examples none --db-setup docker --web-deploy docker --server-deploy docker --git --package-manager pnpm --install
 ```
 
 To preview a new directory creation, append `--dry-run`. Do not use `--directory-conflict overwrite` on this repository. [CLI option reference](https://www.better-t-stack.dev/docs/cli/options); future generator versions may differ. The existing Docker scaffold is retained even though Development now uses an external database.
 
 Actual packages: `apps/web` (Next.js, port 3001), `apps/server` (Express, port 3000), `packages/api`, `packages/auth`, `packages/db`, `packages/config`, and `packages/ui`. The DB package uses `pg` with `drizzle-orm/node-postgres`, not a Supabase SDK. Better Auth schema already exists in `packages/db/src/schema/auth.ts`; Phase 1 does not change it. Shared packages receive initialized clients/configuration from Express.
+
+Enable the pnpm shim using `corepack enable pnpm`; Turbo requires `pnpm` on PATH, even when launched through `corepack pnpm`. On Windows without permission to write to the Node installation directory, use `corepack enable --install-directory "$env:APPDATA\npm" pnpm` and ensure that directory is on PATH. Package installation uses `pnpm install --frozen-lockfile`. The root `postinstall` still generates all three Varlock schemas. `pnpm-workspace.yaml` owns `apps/*`, `packages/*`, the unchanged catalog ranges and the Next/Varlock override. Bun is retained for Express, TypeScript DB scripts and `pnpm run test:smoke`; Next.js builds/run scripts use Node.
+
+If PowerShell blocks the `.ps1` shim, use `pnpm.cmd` instead; no execution-policy change is needed. [pnpm migration verification](pnpm-migration.md) records package-resolution, build and runtime results.
 
 ## 3. Supabase Development environment and connectivity
 
@@ -38,9 +42,9 @@ Keep `apps/web/.env` limited to frontend configuration, including `NEXT_PUBLIC_S
 From the repository root:
 
 ```bash
-bun run env:generate
-bun run db:check
-bun run db:check:direct
+pnpm run env:generate
+pnpm run db:check
+pnpm run db:check:direct
 ```
 
 The checks run a constant `SELECT 1` through Drizzle, close their pool, and exit nonzero on failure. They do not query application data or require schema/auth tables. Output names the selected env key without printing connection URLs, driver messages or stacks. Connections have a 10-second acquisition timeout. The direct check never falls back; a nested network-unreachable failure explains the IPv6 requirement explicitly.
@@ -54,24 +58,24 @@ Supabase Direct Connection normally requires IPv6 unless an IPv4 add-on is enabl
 Generate files only, without applying SQL:
 
 ```bash
-bun run db:generate -- --name=phase1_scaffold
+pnpm run db:generate --name=phase1_scaffold
 ```
 
 Commit the complete generated migration directory under `packages/db/src/migrations` (SQL and snapshot/metadata). The installed Drizzle Kit 1.0.0-rc.4 determines the directory format; do not invent a journal layout from older versions. The Phase 1 baseline contains only the four existing scaffold Better Auth tables, not new authentication behavior or NEED-001 tables. Review every SQL file before application. [Drizzle migration workflow](https://orm.drizzle.team/docs/migrations).
 
-**Later, with explicit approval to write to the Development project**, verify that the target is Development, check for existing tables or an existing migration history, review SQL and arrange recovery, then run `bun run db:migrate`. Its read-only preflight uses the same selected connection before invoking Drizzle Kit. The `db:migrate:deploy` package alias uses the same preflight. Applying the baseline over tables previously created with `db:push` may fail; do not drop tables or invent migration history to resolve that. No migration runs during dev, builds, Docker startup or Phase 1 verification. Do not use `db:push` on Supabase.
+**Later, with explicit approval to write to the Development project**, verify that the target is Development, check for existing tables or an existing migration history, review SQL and arrange recovery, then run `pnpm run db:migrate`. Its read-only preflight uses the same selected connection before invoking Drizzle Kit. The `db:migrate:deploy` package alias uses the same preflight. Applying the baseline over tables previously created with `db:push` may fail; do not drop tables or invent migration history to resolve that. No migration runs during dev, builds, Docker startup or Phase 1 verification. Do not use `db:push` on Supabase.
 
 ### Explicit IPv4-only migration alternative
 
 If Direct Connection fails with `ENETUNREACH`/`EHOSTUNREACH`, DNS errors or timeout, first check IPv6 routing, firewall/VPN restrictions and project status. Prefer running migration tooling on an IPv6-capable host. Do not silently replace the direct URL.
 
-If the team deliberately chooses Session Pooler for a reviewed Development migration, use **Session mode on port 5432**, not Transaction mode on port 6543. One-command PowerShell override below leaves the env files unchanged and does not print either URL. It loads the runtime Session Pooler URL via Varlock, passes it to the child as `DIRECT_DB_URL`, and waits for that child:
+If the team deliberately chooses Session Pooler for a reviewed Development migration, use **Session mode on port 5432**, not Transaction mode on port 6543. The explicit command below leaves the env files unchanged and does not print either URL. It loads the runtime Session Pooler URL via Varlock, passes it to the child as `DIRECT_DB_URL`, and waits for that child:
 
 ```powershell
 # Read-only verification of the explicitly selected Session Pooler path:
-bun run --cwd packages/db scripts/session-pooler.ts --check
+pnpm --dir packages/db exec bun run scripts/session-pooler.ts --check
 # Only after separate approval for the reviewed migration:
-bun run --cwd packages/db scripts/session-pooler.ts --migrate
+pnpm --dir packages/db exec bun run scripts/session-pooler.ts --migrate
 ```
 
 Both commands explicitly announce the Session Pooler selection. Errors stop the command; neither changes env files or retries another connection. Production migration approval and recovery planning remain outside Phase 1.
@@ -93,24 +97,26 @@ External Supabase is the default for Compose: `docker compose config --services`
 
 For isolated local development:
 
-1. Run `bun run db:start` (or `bun run db:watch`). Explicitly selecting `postgres` enables that profiled service.
+1. Run `pnpm run db:start` (or `pnpm run db:watch`). Explicitly selecting `postgres` enables that profiled service.
 2. Wait for `docker compose exec postgres pg_isready -U postgres` to succeed.
 3. Privately configure `DATABASE_URL` for the local DB (`localhost:5432/resora` for Bun on the host); clear `DIRECT_DB_URL` for local-only migrations. For containerized Express use hostname `postgres` instead. Keep the database password consistent with `POSTGRES_PASSWORD`; the scaffold's default is disposable local development only.
-4. Run `bun run db:check`. Apply reviewed local migrations only when intentionally requested.
+4. Run `pnpm run db:check`. Apply reviewed local migrations only when intentionally requested.
 
-For a fully local Compose stack, use `docker compose --profile local-db up -d --build` after the database is healthy and the server env is configured for hostname `postgres`. For external Supabase use the existing `bun run docker:up`. These commands start services and are manual verification steps, not Phase 1 deployment approval. Builds require the existing `apps/web/.env` and `apps/server/.env` as BuildKit secrets. The browser API URL stays `http://localhost:3000`, while server-to-server traffic uses `SERVER_URL=http://server:3000`.
+For a fully local Compose stack, use `docker compose --profile local-db up -d --build` after the database is healthy and the server env is configured for hostname `postgres`. For external Supabase use the existing `pnpm run docker:up`. These commands start services and are manual verification steps, not Phase 1 deployment approval. Builds require the existing `apps/web/.env` and `apps/server/.env` as BuildKit secrets. The browser API URL stays `http://localhost:3000`, while server-to-server traffic uses `SERVER_URL=http://server:3000`.
 
 ## 6. Exact Phase 1 manual verification
 
 1. Confirm privately that both DB URLs point to the Development project, with Session Pooler for runtime and Direct Connection for tooling. Do not use production URLs.
-2. Run `bun run env:generate`, then `bun run db:check`; expect `DATABASE_URL: SELECT 1 succeeded.` and exit 0.
-3. Run `bun run db:check:direct`; expect success and exit 0 on an IPv6-capable network, or a sanitized nonzero failure on an incompatible network. No pooler retry occurs. For a deliberate read-only alternative run `bun run --cwd packages/db scripts/session-pooler.ts --check`; expect the explicit selection and `SELECT 1` success.
-4. Run `bunx --no-install biome check .`, `bun run check-types`, `bun test packages/db/src/connectivity.test.ts`, and `bun run build`. `bun run check` uses `--write` and is not suitable for read-only validation.
+2. Run `pnpm run env:generate`, then `pnpm run db:check`; expect `DATABASE_URL: SELECT 1 succeeded.` and exit 0.
+3. Run `pnpm run db:check:direct`; expect success and exit 0 on an IPv6-capable network, or a sanitized nonzero failure on an incompatible network. No pooler retry occurs. For a deliberate read-only alternative run `pnpm --dir packages/db exec bun run scripts/session-pooler.ts --check`; expect the explicit selection and `SELECT 1` success.
+4. Run `pnpm exec biome check .`, `pnpm run check-types`, `bun test packages/db/src/connectivity.test.ts`, and `pnpm run build`. `pnpm run check` uses `--write` and is not suitable for read-only validation.
 5. Run `docker compose config --quiet`, `docker compose config --services`, and `docker compose --profile local-db config --services`. Expect valid configuration, web/server by default, and postgres only with the profile. Avoid raw `docker compose config` output because it expands secrets.
-6. Run `bun run dev`, open `http://localhost:3001`, and request `http://localhost:3000/`; expect the app and `OK`. The root HTTP check is process health, not database readiness. Do not exercise sign-up or write flows in Phase 1.
+6. Run `pnpm run dev`, open `http://localhost:3001`, and request `http://localhost:3000/`; expect the app and `OK`. The root HTTP check is process health, not database readiness. Do not exercise sign-up or write flows in Phase 1.
 7. Review `git diff` and generated migration SQL/snapshots. Do not run `db:migrate`, `db:push` or authentication generation during this verification. Stop here for Phase 1 review.
 
 ### Recorded Phase 1 results (2026-10-10)
+
+Historical results below retain the Bun commands actually executed before the pnpm migration; use the current commands above for new work.
 
 Changed files:
 

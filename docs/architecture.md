@@ -9,13 +9,14 @@ The Better-T-Stack 3.44.3 scaffold now exists (`bts.jsonc`). Phase 1 uses Supaba
 | ------------------------- | --------------------------------------------- | ----------------------------------------------- |
 | Frontend                  | Next.js + TypeScript                          | PM-approved direction                           |
 | Backend                   | Express.js + TypeScript                       | PM-approved direction                           |
-| Runtime / package manager | Bun                                           | PM-approved direction                           |
+| Backend runtime           | Bun                                           | Retained during package-manager migration       |
+| Package manager           | pnpm 10.33.4                                  | Confirmed migration from Bun package management |
 | API                       | tRPC                                          | PM-approved direction                           |
 | Database                  | PostgreSQL                                    | PM-approved direction                           |
 | ORM & schema/migrations   | Drizzle                                       | PM-approved                                     |
 | Authentication            | Better Auth                                   | PM-approved; NIM/username configuration pending |
 | App hosting               | VPS; Docker images/Compose for web and server | Planned; host/funding TBD                       |
-| Workspace                 | Bun workspaces + Turborepo                    | PM-approved direction                           |
+| Workspace                 | pnpm workspaces + Turborepo                   | Existing package layout retained                |
 | Lint/format               | Biome                                         | Recommended scaffolding option                  |
 
 The recorded scaffold command and Phase 1 verification steps are documented in `docs/setup.md`; production release readiness remains unverified.
@@ -124,8 +125,8 @@ Shared `protectedProcedure` checks authenticated session; dedicated scoped proce
 ### Local development
 
 - Supabase Development is the external PostgreSQL target. Express/Drizzle uses `DATABASE_URL` (Session Pooler); migration tooling prefers `DIRECT_DB_URL` (Direct Connection). Direct failures never silently switch connections; see `docs/setup.md` for IPv6 and explicit Session Pooler alternatives.
-- Bun runs Next.js and Express locally. Docker PostgreSQL remains optional behind the Compose `local-db` profile; default Compose starts web/server using the server's configured external URL.
-- Use generated `bun db:start`, `bun dev`, `bun check-types`, etc. **only if present** in `package.json`; local scripts vary by CLI version.
+- pnpm launches Next.js on Node and Express on Bun locally. Docker PostgreSQL remains optional behind the Compose `local-db` profile; default Compose starts web/server using the server's configured external URL.
+- Use `pnpm run db:start`, `pnpm run dev`, `pnpm run check-types`, etc. **only if present** in `package.json`.
 - Env files and secrets are ignored by Git. Store examples with placeholders, validate required env. Port assignments may change.
 
 ### VPS / deployment (proposed)

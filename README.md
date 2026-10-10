@@ -10,7 +10,8 @@ This existing monorepo was created with Better-T-Stack 3.44.3 (`bts.jsonc`). Pha
 - **Shared UI package** - shadcn/ui primitives live in `packages/ui`
 - **Express** - Fast, unopinionated web framework
 - **tRPC** - End-to-end type-safe APIs
-- **Bun** - Runtime environment
+- **Bun** - Express backend runtime
+- **pnpm 10.33.4** - Workspace package manager and lockfile
 - **Drizzle** - TypeScript-first ORM
 - **PostgreSQL** - Database engine
 - **Authentication** - Better-Auth
@@ -19,11 +20,15 @@ This existing monorepo was created with Better-T-Stack 3.44.3 (`bts.jsonc`). Pha
 
 ## Getting Started
 
-First, install the dependencies:
+Install Node.js 24, Bun 1.3.13 and pnpm 10.33.4. With Corepack, enable the shim using `corepack enable pnpm`; Turbo requires `pnpm` on PATH. On Windows without permission to write to the Node installation directory, use `corepack enable --install-directory "$env:APPDATA\npm" pnpm` and ensure that user bin directory is on PATH. Then install the dependencies:
 
 ```bash
-bun install
+pnpm install --frozen-lockfile
 ```
+
+Workspace packages, the shared dependency catalog, the Varlock `@next/env` override and native build-script allowlist live in `pnpm-workspace.yaml`. Commit `pnpm-lock.yaml`; do not run `bun install`. Bun remains the backend runtime and smoke-test runner.
+
+If PowerShell blocks the Corepack `.ps1` shim, use `pnpm.cmd` without changing execution policy. See [migration verification and compatibility notes](docs/pnpm-migration.md).
 
 ## Database Setup
 
@@ -36,9 +41,9 @@ This project uses PostgreSQL with Drizzle ORM. Configure the ignored `apps/serve
 Regenerate Varlock types and run the read-only connectivity checks (no auth tables required):
 
 ```bash
-bun run env:generate
-bun run db:check
-bun run db:check:direct
+pnpm run env:generate
+pnpm run db:check
+pnpm run db:check:direct
 ```
 
 `db:check:direct` never falls back to the pooler. Direct connections may require IPv6; [manual alternatives and the migration workflow](docs/setup.md#4-version-controlled-migrations) are documented. Commit generated SQL and snapshots under `packages/db/src/migrations`. `db:generate` creates migration files locally; `db:migrate` applies reviewed files and is a separate, explicitly authorized step. Do not use `db:push` against Supabase.
@@ -46,7 +51,7 @@ bun run db:check:direct
 Then run the development server:
 
 ```bash
-bun run dev
+pnpm run dev
 ```
 
 Open [http://localhost:3001](http://localhost:3001) in your browser to see the web application.
@@ -65,7 +70,7 @@ React web apps in this stack share shadcn/ui primitives through `packages/ui`.
 Run this from the project root to add more primitives to the shared UI package:
 
 ```bash
-npx shadcn@latest add accordion dialog popover sheet table -c packages/ui
+pnpm dlx shadcn@latest add accordion dialog popover sheet table -c packages/ui
 ```
 
 Import shared components like this:
@@ -80,7 +85,7 @@ If you want to add app-specific blocks instead of shared primitives, run the sha
 
 ## Environment Configuration
 
-Each app owns its environment schema in `.env.schema`. Varlock generates `src/env.ts` during installation; run `bun run env:generate` after changing a schema. Commit schemas, and keep secrets in ignored env files or your deployment platform.
+Each app owns its environment schema in `.env.schema`. Varlock generates `src/env.ts` during installation; run `pnpm run env:generate` after changing a schema. Commit schemas, and keep secrets in ignored env files or your deployment platform.
 
 Import the generated `ENV` accessor in application code. Shared database and auth packages receive configuration or initialized clients from the application. See [Varlock's monorepo guide](https://varlock.dev/guides/monorepos/).
 
@@ -94,21 +99,21 @@ Run standalone Node/Bun tools that use Varlock from the owning app directory so 
 
 - Target: web + server
 - Config: `docker-compose.yml` (app Dockerfiles live in `apps/*/Dockerfile`)
-- Build images: bun run docker:build
-- Start: bun run docker:up
-- Logs: bun run docker:logs
-- Stop: bun run docker:down
+- Build images: pnpm run docker:build
+- Start: pnpm run docker:up
+- Logs: pnpm run docker:logs
+- Stop: pnpm run docker:down
 
 Compose reads the external database URL from `apps/server/.env`; it does not override it or start local PostgreSQL by default. `SERVER_URL` uses container networking and the browser API URL uses `http://localhost:3000`. BuildKit secrets supply build configuration without copying env files into image layers.
 
-Local PostgreSQL is optional: `bun run db:start` / `bun run db:watch` explicitly select the `postgres` service in the `local-db` profile. Configure local URLs separately (host `localhost` for Bun, `postgres` for the server container), and wait for `pg_isready` before starting the apps. See [local setup](docs/setup.md#5-optional-local-postgresql).
+Local PostgreSQL is optional: `pnpm run db:start` / `pnpm run db:watch` explicitly select the `postgres` service in the `local-db` profile. Configure local URLs separately (host `localhost` for Bun, `postgres` for the server container), and wait for `pg_isready` before starting the apps. See [local setup](docs/setup.md#5-optional-local-postgresql).
 
 For more details, see the guide on [Deploying with Docker Compose](https://www.better-t-stack.dev/docs/guides/docker).
 
 ## Git Hooks and Formatting
 
-- Read-only lint/format check: `bunx --no-install biome check .`
-- `bun run check` formats/fixes files in place; it is not a read-only check.
+- Read-only lint/format check: `pnpm exec biome check .`
+- `pnpm run check` formats/fixes files in place; it is not a read-only check.
 
 ## Project Structure
 
@@ -127,23 +132,25 @@ resora/
 
 ## Available Scripts
 
-- `bun run dev`: Start all applications in development mode
-- `bun run build`: Build all applications
-- `bun run dev:web`: Start only the web application
-- `bun run dev:server`: Start only the server
-- `bun run check-types`: Check TypeScript types across all apps
-- `bun run db:check`: Read-only runtime `SELECT 1` from the server environment
-- `bun run db:check:direct`: Read-only `SELECT 1` using only `DIRECT_DB_URL`
-- `bun run db:push`: Direct schema synchronization (local disposable databases only)
-- `bun run db:generate`: Generate version-controlled migration SQL and snapshots locally
-- `bun run db:migrate`: Preflight and apply reviewed migrations (writes; manual approval required)
-- `bun run db:studio`: Open database studio UI
-- `bun run check`: Run Biome formatting/linting with automatic writes
-- `bun run docker:build`: Build the Docker Compose images
-- `bun run docker:up`: Build and start the Docker Compose stack
-- `bun run docker:logs`: Tail logs from the Docker Compose stack
-- `bun run docker:down`: Stop the Docker Compose stack
+- `pnpm run dev`: Start all applications in development mode
+- `pnpm run build`: Build all applications
+- `pnpm run dev:web`: Start only the web application
+- `pnpm run dev:server`: Start only the server
+- `pnpm run check-types`: Check TypeScript types across all apps
+- `pnpm run db:check`: Read-only runtime `SELECT 1` from the server environment
+- `pnpm run db:check:direct`: Read-only `SELECT 1` using only `DIRECT_DB_URL`
+- `pnpm run db:push`: Direct schema synchronization (local disposable databases only)
+- `pnpm run db:generate`: Generate version-controlled migration SQL and snapshots locally
+- `pnpm run db:migrate`: Preflight and apply reviewed migrations (writes; manual approval required)
+- `pnpm run db:studio`: Open database studio UI
+- `pnpm run lint`: Read-only Biome lint/format checks
+- `pnpm run test:smoke`: Run the existing DB connectivity unit tests on Bun
+- `pnpm run check`: Run Biome formatting/linting with automatic writes
+- `pnpm run docker:build`: Build the Docker Compose images
+- `pnpm run docker:up`: Build and start the Docker Compose stack
+- `pnpm run docker:logs`: Tail logs from the Docker Compose stack
+- `pnpm run docker:down`: Stop the Docker Compose stack
 
 ## Better Auth Schema Generation
 
-After changing auth plugins or schema options, run `bun run auth:generate` from the project root. The script runs the Better Auth CLI through `varlock run` from the owning app directory, loading the auth instance from `src/services.ts`. Review the schema changes, then use your ORM's migration workflow to apply them.
+After changing auth plugins or schema options, run `pnpm run auth:generate` from the project root. The script runs the Better Auth CLI through `varlock run` from the owning app directory, loading the auth instance from `src/services.ts`. Review the schema changes, then use your ORM's migration workflow to apply them.

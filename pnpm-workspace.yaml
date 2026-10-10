@@ -1,0 +1,30 @@
+packages:
+  - apps/*
+  - packages/*
+
+catalog:
+  zod: ^4.5.4
+  typescript: ^6.0.3
+  '@types/bun': ^1.4.2
+  varlock: 1.18.0
+  '@trpc/server': ^11.18.0
+  better-auth: 1.7.7
+  lucide-react: ^1.41.0
+  next-themes: ^0.4.6
+  react: ^19.2.8
+  react-dom: ^19.2.8
+  sonner: ^2.0.8
+  '@trpc/client': ^11.18.0
+  '@tailwindcss/postcss': ^4.3.3
+  '@types/react': ^19.2.18
+  '@types/react-dom': ^19.2.7
+  tailwindcss: ^4.3.3
+  drizzle-orm: 1.0.0-rc.4
+
+overrides:
+  '@next/env': npm:@varlock/nextjs-integration@1.2.2
+
+# Native build tools used by Next.js/tsdown and Drizzle Kit.
+onlyBuiltDependencies:
+  - esbuild
+  - sharp

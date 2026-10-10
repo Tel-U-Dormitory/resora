@@ -87,7 +87,7 @@ services:
 volumes:
   resora_postgres_data:
 
-# BuildKit makes these available only while install/build commands run.
+# BuildKit makes these available only while pnpm install/build commands run.
 secrets:
   web_env:
     file: apps/web/.env

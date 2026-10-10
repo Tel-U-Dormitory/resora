@@ -31,6 +31,7 @@ If specs conflict, stop on the affected behavior, document the discrepancy, and 
 ## Engineering conventions
 
 - Stack: Next.js + Express + Bun + TypeScript + tRPC + PostgreSQL + Drizzle + Better Auth + Docker + Turborepo + Biome.
+- Package management: pnpm 10.33.4 with `pnpm-workspace.yaml` and `pnpm-lock.yaml`. Use `pnpm install --frozen-lockfile`, `pnpm run`, `pnpm exec` and `pnpm dlx`; do not use `bun install` or `bunx`. Keep Bun for Express runtime, `bun test` and Bun-specific scripts/compilation.
 - Use the generated project layout (expected `apps/web`, `apps/server`, `packages/api`, `packages/db`, `packages/auth`, `packages/config`). Verify actual generator output first.
 - Use TypeScript strict mode, Zod inputs at trust boundaries, safe DB migrations, and explicit server-side authorization.
 - Keep tRPC routers thin; domain/service logic independently testable; database access behind repositories/queries where appropriate.

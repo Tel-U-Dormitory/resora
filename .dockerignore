@@ -10,6 +10,11 @@
 **/.astro
 **/.turbo
 .turbo
+.pnpm-store
+yarn.lock
+bun.lock
+tmp
+temp
 
 **/.wrangler
 **/.alchemy

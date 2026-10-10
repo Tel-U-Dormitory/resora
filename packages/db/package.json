@@ -9,7 +9,7 @@
     "check-types": "tsc --noEmit",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
-    "db:migrate:deploy": "bun run db:migrate",
+    "db:migrate:deploy": "pnpm run db:migrate",
     "db:studio": "drizzle-kit studio",
     "db:migrate": "bun run scripts/check-migration.ts && drizzle-kit migrate"
   },

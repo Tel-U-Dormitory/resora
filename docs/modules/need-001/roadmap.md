@@ -12,7 +12,7 @@
 - **Tracking eksekusi:** spreadsheet logbook NEED-001 yang terpisah; dokumen ini adalah roadmap teknis, **bukan** duplikasi task logbook.
 - **Status:** `DONE` = teruji, `IN PROGRESS` = sedang dikerjakan, `TODO` = belum dimulai, `BLOCKED` = menunggu keputusan/akses. Jangan ubah status berdasarkan asumsi.
 - **Batas perubahan:** satu branch/PR per fase atau perubahan yang koheren; review migration dan security sebelum merge; Codex tidak boleh deploy, migrasi remote, atau impor data sungguhan tanpa izin eksplisit.
-- **Arsitektur:** Bun + Turborepo; Next.js (`apps/web`) → Express/tRPC (`apps/server`, `packages/api`) → Drizzle (`packages/db`) → **Supabase PostgreSQL**. Better Auth di backend; **bukan** Supabase Auth dan tidak ada koneksi DB langsung dari browser.
+- **Arsitektur:** pnpm workspace/package manager + Bun runtime backend + Turborepo; Next.js (`apps/web`) → Express/tRPC (`apps/server`, `packages/api`) → Drizzle (`packages/db`) → **Supabase PostgreSQL**. Better Auth di backend; **bukan** Supabase Auth dan tidak ada koneksi DB langsung dari browser.
 
 ### Keputusan sudah dikonfirmasi
 
@@ -53,11 +53,11 @@
 
 ### F0 — Audit & baseline repository (static audit: DONE; runtime check: sebagian)
 
-**Auditor:** reviewer teknis. **Diketahui:** scaffold tersedia di GitHub, `bun run dev` sudah berhasil menurut PM. **Belum diverifikasi:** build/test/migration aktual.
+**Auditor:** reviewer teknis. **Diketahui:** scaffold tersedia di GitHub, `pnpm run dev` sudah berhasil menurut PM (awalnya dengan Bun sebagai package manager; sekarang memakai pnpm). **Belum diverifikasi:** build/test/migration aktual.
 
 - [x] Cek struktur `apps/web`, `apps/server`, `packages/api`, `packages/auth`, `packages/db`, Turborepo, Bun, Docker, Varlock.
 - [x] Temukan bahwa scaffold masih menyediakan sign-up publik, email/password, dan Docker PostgreSQL lokal.
-- [ ] Catat SHA commit baseline dan uji `bun run check-types`, `bunx biome check .` (read-only), `bun run build`.
+- [ ] Catat SHA commit baseline dan uji `pnpm run check-types`, `pnpm exec biome check .` (read-only), `pnpm run build`.
 - [ ] Perbarui dokumentasi scaffold: `docs/setup.md` masih berisi flag `--yes` yang tidak kompatibel dengan explicit stack flags.
 
 **Gate F0:** tidak melakukan scaffold ulang atau refactor yang tidak diperlukan.
@@ -76,7 +76,7 @@
 - [ ] Review SQL migration auth terlebih dahulu, baru jalankan migration **development** setelah izin PM; verifikasi tabel melalui Supabase.
 - [ ] Pisahkan environment dev/prod dan gunakan least-privilege credential jika memungkinkan; jangan pernah uji destruktif pada production.
 
-**Gate F1:** backend sukses `SELECT 1`, migration versioned dapat diulang dari DB development kosong, `bun run dev` tetap berjalan. Belum perlu skema domain NEED-001.
+**Gate F1:** backend sukses `SELECT 1`, migration versioned dapat diulang dari DB development kosong, `pnpm run dev` tetap berjalan. Belum perlu skema domain NEED-001.
 
 ### F2 — Identitas SR, login NIM & provisioning (TODO)
 
@@ -144,7 +144,7 @@
 
 - [ ] Selesaikan mobile UI SR dan HCO; lokasi browser, kamera QR, loading, izin ditolak, expired token dan pesan error yang jelas.
 - [ ] Tulis unit test (audience, policy, geofence, status waktu), integration test (auth, RBAC, DB uniqueness), dan E2E alur utama.
-- [ ] Jalankan `bunx biome check .` (read-only), `bun run check-types`, `bun run build`, serta test command sesuai repo. `bun run check` saat ini memakai `--write`; jangan pakai sebagai audit read-only.
+- [ ] Jalankan `pnpm exec biome check .` (read-only), `pnpm run check-types`, `pnpm run build`, serta test command sesuai repo. `pnpm run check` saat ini memakai `--write`; jangan pakai sebagai audit read-only.
 - [ ] Tambahkan CI minimal pada pull request: Biome, typecheck, build dan tests relevan.
 - [ ] Cek pembatasan public sign-up secara langsung, security headers, cookie/CORS/trusted origins, rate limiting, logging redaction.
 - [ ] Catat hasil terhadap `docs/modules/need-001/acceptance-tests.md`; setiap gagal punya severity dan owner.
