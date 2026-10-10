@@ -104,6 +104,52 @@ For isolated local development:
 
 For a fully local Compose stack, use `docker compose --profile local-db up -d --build` after the database is healthy and the server env is configured for hostname `postgres`. For external Supabase use the existing `pnpm run docker:up`. These commands start services and are manual verification steps, not Phase 1 deployment approval. Builds require the existing `apps/web/.env` and `apps/server/.env` as BuildKit secrets. The browser API URL stays `http://localhost:3000`, while server-to-server traffic uses `SERVER_URL=http://server:3000`.
 
+### Phase 2A.5 disposable identity validation
+
+Phase 2A.5 successfully applied the three migrations only to native PostgreSQL 18.3 on `127.0.0.1:55432`, database `resora_identity_test_phase2a5`. Docker returned HTTP 500, so no Docker resources were changed. The ignored cluster at `tmp/phase2a5-postgres/data` is stopped after validation. See the [audit/results](modules/need-001/resora-need-001-data-model.md#14-phase-2a5-local-postgresql-validation). No Supabase migration is authorized by these reproduction steps.
+
+For another host, prepare an isolated local PostgreSQL database named `resora_identity_test_*`; verify its server address/port and exact database name before any DDL. Do not substitute the application's configured database. To reuse this machine's retained scratch cluster, use the installed `pg_ctl.exe` with that exact data directory and `-o '-h 127.0.0.1 -p 55432 -c timezone=UTC'`, writing logs under the ignored scratch directory. Local trust authentication is disposable-only; keep it loopback-bound and stop it when finished.
+
+The following read-only command verifies the retained target without passing a connection string:
+
+```powershell
+& 'C:/Program Files/PostgreSQL/18/bin/psql.exe' -X -h 127.0.0.1 -p 55432 -U resora_identity_test -d resora_identity_test_phase2a5 -v ON_ERROR_STOP=1 -c 'SELECT current_database(), inet_server_addr(), inet_server_port();'
+```
+
+Privately set `RESORA_IDENTITY_TEST_DB_URL` to the verified scratch connection. Then, from the repository root, run the existing workflow with explicit process overrides; do not edit env files or print URLs. Varlock resolved these overrides correctly during validation. The second migration invocation verifies rerun safety, and the integration suite verifies recorded names/hashes and the live catalog.
+
+```powershell
+$target = [Uri]$env:RESORA_IDENTITY_TEST_DB_URL
+if ($target.Scheme -notin @('postgres', 'postgresql') -or
+    $target.Host -notin @('localhost', '127.0.0.1', '[::1]') -or
+    $target.AbsolutePath -cnotmatch '^/resora_identity_test_[a-z0-9_]+$' -or
+    $target.Query -or $target.Fragment) { throw 'Refusing non-scratch target' }
+$keys = @('DATABASE_URL', 'DIRECT_DB_URL', 'VARLOCK_TELEMETRY_DISABLED')
+$saved = @{}
+foreach ($key in $keys) { $saved[$key] = [Environment]::GetEnvironmentVariable($key, 'Process') }
+try {
+    $env:DATABASE_URL = $env:RESORA_IDENTITY_TEST_DB_URL
+    $env:DIRECT_DB_URL = $env:RESORA_IDENTITY_TEST_DB_URL
+    $env:VARLOCK_TELEMETRY_DISABLED = '1'
+    pnpm.cmd --dir packages/db run db:migrate
+    if ($LASTEXITCODE -ne 0) { throw 'Local migration failed' }
+    pnpm.cmd --dir packages/db run db:migrate
+    if ($LASTEXITCODE -ne 0) { throw 'Local migration rerun failed' }
+    pnpm.cmd run test:identity
+    if ($LASTEXITCODE -ne 0) { throw 'Local identity validation failed' }
+} finally {
+    foreach ($key in $keys) { [Environment]::SetEnvironmentVariable($key, $saved[$key], 'Process') }
+}
+```
+
+After testing, restore the previously set test URL or remove it if originally unset. Stop only the dedicated retained cluster:
+
+```powershell
+& 'C:/Program Files/PostgreSQL/18/bin/pg_ctl.exe' -D "$PWD/tmp/phase2a5-postgres/data" -w -t 20 -m fast stop
+```
+
+An unset test URL runs offline tests and skips the PostgreSQL cases; it never falls back to DATABASE_URL/DIRECT_DB_URL. Negative tests use ordinary awaited try/catch assertions to avoid a verified Bun 1.3.13 rejection-matcher stall. Scratch tests use synthetic data, roll back ordinary cases and explicitly clean the successful COMMIT fixture. Supabase application still requires separate approval, target/history/recovery review and the direct/pooler preflight described above.
+
 ## 6. Exact Phase 1 manual verification
 
 1. Confirm privately that both DB URLs point to the Development project, with Session Pooler for runtime and Direct Connection for tooling. Do not use production URLs.
@@ -148,13 +194,13 @@ Generated baseline: `packages/db/src/migrations/20261010093513_phase1_scaffold/{
 
 ## 7. Later phase: authentication bootstrapping (critical)
 
-- Phase 2A enables the server Username Plugin and defines compatible username/display_username plus identity tables; all migrations remain unapplied. Client/login UI, provisioning and authentication enforcement are later work. Review the [implementation/migration record](modules/need-001/resora-need-001-data-model.md#13-phase-2a-identity-foundation-implementation-record) first.
+- Phase 2A enables the server Username Plugin and defines compatible username/display_username plus identity tables; Phase 2A.5 validated the full chain on a disposable local database; Supabase migrations remain unapplied. Client/login UI, provisioning and authentication enforcement are later work. Review the [implementation/migration record](modules/need-001/resora-need-001-data-model.md#13-phase-2a-identity-foundation-implementation-record) first.
 - Set `username = NIM` for SR accounts. Numeric NIM strings remain strings to preserve leading zeros.
 - Better Auth's underlying provisioning expects `email`, `name`, `password`; every SR has a real email. Authorized CSV columns: NIM, name, email, department, position, building and active status. PM provides real data privately before pilot UAT; use synthetic accounts until then.
 - Create a privileged, **non-public** provisioning script/CLI for imports, validate unique NIM, actor SR, assigned department/building, position. Seed synthetic development-only accounts for tests.
 - Cryptographically random initial passwords, safe one-time distribution, first-login password change required. Keep import evidence private, not in repo.
 - Password recovery and email verification belong to Phase 2. Plan Gmail SMTP with sender display name `RnD SR XIV`; sender address and SMTP credentials remain environment variables, not documentation values.
-- Review the [canonical data model](modules/need-001/resora-need-001-data-model.md) before schema implementation; Drizzle source now defines auth username fields and six identity tables; database application remains pending review. This synchronization applies no migrations.
+- Review the [canonical data model](modules/need-001/resora-need-001-data-model.md) before schema implementation; Drizzle source now defines auth username fields and six identity tables; local application/testing passed in Phase 2A.5; Supabase application remains pending explicit approval. See the [local validation record](modules/need-001/resora-need-001-data-model.md#14-phase-2a5-local-postgresql-validation).
 
 ## 8. Work sequence before 2026-10-18
 

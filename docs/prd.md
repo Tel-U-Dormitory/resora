@@ -129,7 +129,7 @@ An individual module is ready for release only when its scoped requirements have
 7. Actual deployment origins/subdomains, cookie configuration, VPS/budget approval and operational targets.
 8. Numerical pilot-success criteria and UAT participants.
 
-Confirmed technical baseline: pnpm **10.33.4**, Bun **1.3.13** backend runtime, Next.js/Express/tRPC, Better Auth, Drizzle, Varlock, Supabase managed PostgreSQL through Express only. Runtime `DATABASE_URL` is Session Pooler; migration tooling prefers `DIRECT_DB_URL` without silent failure fallback. Local Docker PostgreSQL is optional; VPS deployment planned. Phase 2A now defines auth username fields and the six identity tables; generated migrations are unapplied. Login UI, signup/active-account enforcement, provisioning and the rest of NEED-001 remain later work; infrastructure/schema definitions do not establish pilot readiness.
+Confirmed technical baseline: pnpm **10.33.4**, Bun **1.3.13** backend runtime, Next.js/Express/tRPC, Better Auth, Drizzle, Varlock, Supabase managed PostgreSQL through Express only. Runtime `DATABASE_URL` is Session Pooler; migration tooling prefers `DIRECT_DB_URL` without silent failure fallback. Local Docker PostgreSQL is optional; VPS deployment planned. Phase 2A now defines auth username fields and the six identity tables; Phase 2A.5 validated the generated migrations locally; Supabase application remains pending explicit approval. Login UI, signup/active-account enforcement, provisioning and the rest of NEED-001 remain later work; infrastructure/schema definitions do not establish pilot readiness.
 
 ## 12. Document map
 

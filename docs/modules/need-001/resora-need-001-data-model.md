@@ -1,6 +1,6 @@
 # RESORA — Data Model & Schema Specification (NEED-001)
 
-**Version:** 0.2 · **Updated:** 2026-10-10 · **Status:** Phase 2A identity source/migrations implemented, unapplied; future domain schema remains proposed\
+**Version:** 0.3 · **Updated:** 2026-10-10 · **Status:** Phase 2A.5 identity migrations validated locally; Supabase unapplied; future domain schema remains proposed\
 **Target:** pilot presensi internal SR, 2026-10-18  
 **Canonical repository path:** `docs/modules/need-001/resora-need-001-data-model.md`\
 **Companion:** [NEED-001 PRD](prd.md), [architecture](../../architecture.md), [acceptance tests](acceptance-tests.md), [roadmap](roadmap.md)
@@ -155,7 +155,7 @@ erDiagram
 
 ## 4. Domain tables and columns — identity implemented; later domains proposed
 
-Notation: **PK** primary key; **FK** foreign key; **UK** unique; **NN** not null. `timestamptz` = PostgreSQL timestamp with time zone. Defaults/constraints listed separately. Sections 4.1–4.4 are the authorized Phase 2A baseline now defined in Drizzle; their SQL is unapplied. Sections 4.5–4.9 remain future designs.
+Notation: **PK** primary key; **FK** foreign key; **UK** unique; **NN** not null. `timestamptz` = PostgreSQL timestamp with time zone. Defaults/constraints listed separately. Sections 4.1–4.4 are the authorized Phase 2A baseline now defined in Drizzle; their SQL is validated on disposable local PostgreSQL; Supabase application is pending explicit approval. Sections 4.5–4.9 remain future designs.
 
 ### 4.1 `user_profiles` — exclusive actor and account operational status
 
@@ -444,7 +444,7 @@ Manual example: KADIV saves at 17:00 but sets effective presence at 13:05. Persi
 
 ## 12. Repository compatibility review (2026-10-10)
 
-**Phase 2A review (updated after the documentation baseline):** reviewed `packages/db/src/schema/auth.ts`, schema exports, `packages/auth/src/index.ts`, package scripts, `pnpm-workspace.yaml` and the Phase 1 baseline migration. The repository now defines four Better Auth tables with generated username fields and the six identity tables in §4.1–§4.4. All migrations are unapplied; event/QR/attendance tables remain proposed. No live database introspection/application was performed. Phase 2A changes schema definitions, auth plugin configuration and migration/test files; environment/connection/package-manager configuration is preserved.
+**Phase 2A review (updated after the documentation baseline):** reviewed `packages/db/src/schema/auth.ts`, schema exports, `packages/auth/src/index.ts`, package scripts, `pnpm-workspace.yaml` and the Phase 1 baseline migration. The repository now defines four Better Auth tables with generated username fields and the six identity tables in §4.1–§4.4. Phase 2A.5 applied/introspected all three migrations on disposable local PostgreSQL only; Supabase remains unapplied. Event/QR/attendance tables remain proposed. Phase 2A changes schema definitions, auth plugin configuration and migration/test files; environment/connection/package-manager configuration is preserved.
 
 | Coverage / discrepancy | Actual repository or current proposal | Suggested correction / review gate |
 | --- | --- | --- |
@@ -452,9 +452,9 @@ Manual example: KADIV saves at 17:00 but sets effective presence at 13:05. Persi
 | Better Auth nullability/defaults | User name/email NN; email_verified NN default false; image nullable. Session expiry/token/user NN, IP/user-agent nullable. Account IDs/provider/user NN, password/tokens/scope/expiry nullable. Verification identifier/value/expiry NN. Creation defaults exist; session/account updated_at are NN with application on-update but **no database default** | Preserve auth-owned credential/token semantics; exercise provisioning through supported APIs rather than raw inserts that assume defaults |
 | Username/NIM | Server Username Plugin enabled; generated nullable username/displayUsername fields and unique username present | Phase 2A generated/reviewed compatible fields; deferred integrity SQL requires nonblank username for SR. Preserve NIM as text. Do not hand-copy the conceptual ERD as executable auth schema |
 | Authentication policy | Config now includes Username Plugin; signup denial, active-account authorization, first-password-change enforcement and email callbacks are not implemented in Phase 2A | Phase 2 implements NIM login, server-side signup denial, secure provisioning/password change, active-account enforcement and planned Gmail flows; do not treat core tables as completed authentication |
-| Actor/SR identity and active state | Actor/active/password-change flags and SR profile defined; auth enforcement remains pending | PK/enum/FKs and deferred SR consistency implemented in unapplied SQL; future provisioning must write complete identity transactionally. Reject inactive authentication/existing-session actions/check-in even if snapshotted |
+| Actor/SR identity and active state | Actor/active/password-change flags and SR profile defined; auth enforcement remains pending | PK/enum/FKs and deferred SR consistency implemented in versioned SQL validated locally in Phase 2A.5; future provisioning must write complete identity transactionally. Reject inactive authentication/existing-session actions/check-in even if snapshotted |
 | Superadmin and dictionaries | Privilege composite PK and dictionary references defined; no bootstrap/grant/maintenance service implemented | Review controlled bootstrap and explicit grant access. Only superadmin changes SR assignments/active status initially. Other position/building values await actual CSV; no blanket attendance bypass |
-| Dictionary required fields | Building code/name now NN/nonblank; SR inverse actor condition supplied by deferred integrity migration | Authorized Phase 2A adopts the documented clarification; explicit synthetic tests cover constraints, with local database execution pending migration review |
+| Dictionary required fields | Building code/name now NN/nonblank; SR inverse actor condition supplied by deferred integrity migration | Authorized Phase 2A adopts the documented clarification; explicit synthetic tests cover constraints, with local database execution passing in Phase 2A.5; Supabase application still requires approval |
 | Invitations and inactive users | Publication snapshot is now **CONFIRMED**, while table/field implementation remains proposed; composite `(event_id,user_id)` PK and user-event index documented | Atomic publish + eligible roster snapshot; preserve all invitees in reports. Snapshot cannot override live inactive status. Snapshot NIM/organization fields nullable for future actors; require populated SR snapshots in pilot validation |
 | Event policy | Proposed NN schedule/center, defaults 20m/15min/360min, positive/range checks; publish/close timestamps nullable | Validate coordinate center separately from meter radius, schedule order and default policies. **PROPOSED:** conditional published_at/closed_at consistency checks. Audience/schedule immutability and explicit HCO close are confirmed; center/radius/grace freeze still proposed; scheduled end cannot close active QR scanning |
 | QR validity | Proposed activation/expiration NN, revoked_at nullable, event/issuer FKs, partial unique current challenge | Preserve static default six-hour activation lifetime/revocation. HMAC reconstruction and random UUID challenge IDs are proposed protocol details; require unpredictable event-bound token, not guessable ID alone. Explicit expired/revoked reissue using configured TTL is confirmed; closed-event reopening remains TBD |
@@ -466,13 +466,13 @@ Manual example: KADIV saves at 17:00 but sets effective presence at 13:05. Persi
 
 **Additional TBDs:** backdated manual entries for currently inactive invitees; manual correction after closure; canceled-event reporting. Original attendance source preservation on correction is confirmed. These supplement §10 without changing confirmed rules. `CLOSED` storage, HMAC and the report projection mechanism remain proposals; pending-to-absent at attendance-window closure is confirmed. Do not implement proposal details as approved policy by implication.
 
-**Readiness:** confirmed requirements and acceptance cases support a reviewed Drizzle schema plan and Phase 2 authentication design. Resolve affected TBDs before implementing those behaviors; review the proposed schema/constraints and generated auth changes before any migration. Stop for Phase 2A SQL/schema review before applying migrations. Phase 1 connectivity and pnpm verification remain recorded in [setup](../../setup.md) and [migration report](../../pnpm-migration.md).
+**Readiness:** confirmed requirements and acceptance cases support a reviewed Drizzle schema plan and Phase 2 authentication design. Resolve affected TBDs before implementing those behaviors; review the proposed schema/constraints and generated auth changes before any migration. Phase 2A.5 local validation passed; stop for explicit approval and target review before applying to Supabase. Phase 1 connectivity and pnpm verification remain recorded in [setup](../../setup.md) and [migration report](../../pnpm-migration.md).
 
 ## 13. Phase 2A identity foundation implementation record
 
 **Scope:** server Username Plugin, generated compatible auth fields, six Drizzle identity tables, relations, PK/FK/index/check constraints, versioned additive SQL and synthetic tests. No UI, event/QR/attendance tables, SMTP, CSV provisioning, authentication authorization flows or application RBAC services. Those remain future work. Active/password-change flags and superadmin grants are storage foundations, not enforcement of those actions by themselves.
 
-### Migration chain (all unapplied)
+### Migration chain (unapplied at Phase 2A; now locally validated, Supabase unapplied)
 
 1. Existing `20261010093513_phase1_scaffold`: untouched SQL/snapshot creates only `user`, `session`, `account`, `verification`.
 2. `20261010114142_phase2a_identity`: adds username/display_username and unique username; creates actor/privilege enums, six identity tables, required/unique dictionary fields, assignment/grant FKs and indexes. No duplicate auth creation, drops, data deletes or auth timestamp conversion. Composite/table PKs imply NOT NULL in PostgreSQL even where generated SQL omits an explicit clause.
@@ -502,7 +502,7 @@ All directories contain SQL and snapshot metadata. The custom trigger/function d
 
 Initial Bun/pnpm commands hit Windows sandbox EPERM/EACCES resolving pnpm links/CLI cache; approved retries passed. Generation's expected pre-refresh username-field diagnostic was resolved by the generated fields. An initial migration-chain test incorrectly treated `.gitkeep` as a migration directory; restricting it to the three foundation migrations fixed the test. Targeted auth import ordering was corrected. No dependency upgrades or live database operations were used to resolve these issues.
 
-Run `pnpm run test:identity` for offline plugin/schema/SQL/chain checks using synthetic fixtures. Local PostgreSQL tests are opt-in via **RESORA_IDENTITY_TEST_DB_URL**, accept only loopback `resora_identity_test_*` databases without URL options, and never read DATABASE_URL/DIRECT_DB_URL or run DDL/migrations. They require the complete reviewed migration chain already applied manually to that disposable database; each test rolls back synthetic data. Guards reject Supabase and ordinary application DB names. Do not point tests at Development or production.
+Run `pnpm run test:identity` for offline plugin/schema/SQL/chain checks using synthetic fixtures. Local PostgreSQL tests are opt-in via **RESORA_IDENTITY_TEST_DB_URL**, accept only loopback `resora_identity_test_*` databases without URL options, and never read DATABASE_URL/DIRECT_DB_URL or run DDL/migrations. They require the complete reviewed migration chain already applied manually to that disposable database; ordinary cases roll back synthetic data; commit-boundary probes explicitly clean their committed synthetic fixtures. Guards reject Supabase and ordinary application DB names. Do not point tests at Development or production.
 
 After review and separate approval/manual application of the chain to that local scratch database, privately set the test URL, run tests and restore the previous variable value:
 
@@ -514,4 +514,44 @@ pnpm.cmd run test:identity
 Remove-Item Env:RESORA_IDENTITY_TEST_DB_URL
 ```
 
-**Current readiness:** SQL ready for review, not approved/applied or validated on PostgreSQL. Before applying anything, review this chain and custom triggers; verify the target has no existing tables/migration history requiring reconciliation; obtain approval. After review, apply to an explicitly selected disposable local database and run the opt-in integrity suite before considering a separately approved Development migration. Use the existing Varlock/direct connection preflight and explicit Session Pooler alternative in [setup](../../setup.md); do not use db:push or silently switch connections. No migration ran in Phase 2A.
+**Phase 2A readiness (historical; superseded by §14):** SQL ready for review, not approved/applied or validated on PostgreSQL at that phase. Before applying anything, review this chain and custom triggers; verify the target has no existing tables/migration history requiring reconciliation; obtain approval. After review, apply to an explicitly selected disposable local database and run the opt-in integrity suite before considering a separately approved Development migration. Use the existing Varlock/direct connection preflight and explicit Session Pooler alternative in [setup](../../setup.md); do not use db:push or silently switch connections. No migration ran in Phase 2A.
+
+## 14. Phase 2A.5 local PostgreSQL validation
+
+**Date:** 2026-10-10 (Asia/Jakarta). **Authorization:** this phase explicitly authorized disposable local migration application/testing. Supabase Development and production were not connected to or modified. No schema, migration SQL/snapshot, dependency, lockfile, environment file or application feature changed.
+
+### Environment and safety audit
+
+- Windows native PostgreSQL **18.3**, using the existing installation at `C:/Program Files/PostgreSQL/18/bin`. Bun **1.3.13**, pnpm **10.33.4**, installed Drizzle Kit/ORM **1.0.0-rc.4** retained.
+- Docker Desktop was running, but `docker info` hung and returned HTTP 500 from the Linux Engine API. No Docker pull, container start, prune or disk repair was attempted. Host free space before setup: approximately **16.4 GiB C:** and **83.2 GiB E:**. Native PostgreSQL provided a working alternative.
+- Dedicated cluster: ignored `tmp/phase2a5-postgres/data`; bound only to **127.0.0.1:55432**, UTC timezone, role `resora_identity_test`, database **resora_identity_test_phase2a5**. Local trust authentication was limited to this disposable loopback cluster, which is stopped after validation; do not use it for shared/deployed resources. Retained scratch files are ignored for review/reuse.
+- Verified server address/port/version before database creation, then verified the exact database name and zero public tables before migration DDL. Process overrides set **both DATABASE_URL and DIRECT_DB_URL** to the scratch target. A temporary guard verified Varlock resolved both overrides exactly; no Supabase fallback occurred. All overrides were restored and URLs/credentials withheld from logs.
+- Native `pg_ctl` startup and pnpm-linked imports needed approved execution outside the Windows sandbox. Temporary PowerShell execution policy applied only to the wrapper process; machine policy was not changed. A Windows inline-argument quoting failure was resolved with a temporary source file before migrations ran.
+
+Audit: Phase 1 creates four auth tables before adding their FKs. Identity enums precede their columns; all six identity tables exist before assignment/grant FKs are added. Username columns/uniqueness ALTER the existing auth table. PKs enforce non-null identities (including the composite privilege key); all indexes and checks are additive. The final migration creates the function before three AFTER ROW, DEFERRABLE INITIALLY DEFERRED constraint triggers. Trigger checks use final transactional state, qualified public tables and parent locks. No duplicate table creation or destructive SQL was found.
+
+### Execution and evidence
+
+| Check / command | Result |
+| --- | --- |
+| Native `initdb`, `pg_ctl`, guarded local `createdb`, target `SELECT` | Isolated PostgreSQL cluster and empty scratch database prepared successfully |
+| `pnpm --dir packages/db run db:migrate` | Existing Varlock/direct preflight passed SELECT 1; all three versioned migrations applied in order |
+| Catalog/history validation | Ten public tables; two enums; ten PKs, nine validated FKs, four unique constraints, six checks; 22 valid indexes; generated nullable text username/display_username; three deferred triggers |
+| Drizzle history | `drizzle.__drizzle_migrations` contains exactly three entries; ordered names, SHA-256 file hashes and timestamp keys match `readMigrationFiles`; applied_at populated |
+| Second `pnpm --dir packages/db run db:migrate` | Success with identical object OIDs, constraints, indexes, triggers, function definition and history rows; no duplicated objects or history edits |
+| Local `pnpm run test:identity` | **38 passed, 0 failed, 0 skipped; 154 assertions**: 28 PostgreSQL cases plus ten offline plugin/schema/guard tests |
+| Default `pnpm run test:identity` after stopping scratch DB | **10 passed, 0 failed; 30 skips** (28 PostgreSQL cases and two hooks); verifies opt-in behavior without any database fallback |
+| `pnpm run test:smoke` | **4 passed**, 0 failed; 11 assertions |
+| `pnpm run check-types` | All **six** workspace tasks passed |
+| Targeted read-only Biome | Nine relevant source/test files passed; formatting was applied only to the edited integration test before the read-only check |
+| Full read-only Biome | `pnpm run lint --max-diagnostics=5 --reporter=summary`: **86 errors, 69 warnings, 1 info**, all remaining scaffold issues; no unrelated fixes applied |
+| Documentation/diff checks | Nine Markdown files, 43 internal links/anchors, 37 tables and balanced fences pass; `git diff --check` passes; migration/runtime/lockfile configuration unchanged |
+| Build | Not repeated: changes are tests/documentation only; Phase 2A app builds passed and no runtime/schema configuration changed |
+
+**Defect and minimal fix:** Bun 1.3.13's `.rejects.toMatchObject()` stalled pg query/protocol progress, then rollback hooks timed out and later tests could not acquire the single pooled client. A minimal SELECT 1/0 + rollback reproduction succeeded in Bun and Node with ordinary try/catch, but timed out with that Bun rejection matcher. `identity.integration.test.ts` now awaits query failures normally and synchronously asserts the same SQLSTATE/constraint fields. No constraints were removed or weakened; SQL required no fix.
+
+Added reusable live catalog/history checks, missing-position/building FK cases, and COMMIT-boundary probes. A complete SR transaction commits successfully; incomplete SR fails at deferred COMMIT and leaves no partial identity. Original negative cases cover non-SR assignments, missing/cleared NIM, duplicate NIM/profile/privilege, required fields and protected dictionary deletion. Ordinary cases roll back; the successful COMMIT probe explicitly deletes its synthetic fixtures. All seven identity/auth-user/dictionary tables were empty after testing.
+
+### Recommendation and remaining gates
+
+**Ready for a separately approved Supabase Development migration**, subject to SQL review and private target/history/recovery checks. Local validation removes the PostgreSQL execution blocker. Docker API health remains unresolved but did not block this phase. Supabase server version, migration-role permissions, direct connectivity/IPv6 and target history were not checked in this local-only phase; validate them deliberately after explicit approval. Never use db:push or fabricate history. Follow the [local reproduction steps](../../setup.md#phase-2a5-disposable-identity-validation) and existing explicit Direct/Session Pooler choices. Authentication enforcement, provisioning, RBAC and pilot/UAT readiness remain later gates.

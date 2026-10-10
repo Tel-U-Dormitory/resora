@@ -1,7 +1,7 @@
 # RESORA — Technical Architecture (Draft)
 
 **Status:** Proposed design baseline | **Date:** 2026-10-10  
-The Better-T-Stack 3.44.3 scaffold now exists (`bts.jsonc`). Phase 1 uses Supabase Development PostgreSQL through Express/Drizzle, with optional local Docker PostgreSQL. Product rules below reflect confirmed decisions; domain tables and service contracts remain proposed. Phase 2A defines generated username fields and six identity tables alongside Better Auth core tables; all migration SQL remains unapplied. Event/QR/attendance definitions and auth UI/provisioning/enforcement are still future work. See the [canonical data model](modules/need-001/resora-need-001-data-model.md) for compatibility review.
+The Better-T-Stack 3.44.3 scaffold now exists (`bts.jsonc`). Phase 1 uses Supabase Development PostgreSQL through Express/Drizzle, with optional local Docker PostgreSQL. Product rules below reflect confirmed decisions; domain tables and service contracts remain proposed. Phase 2A defines generated username fields and six identity tables alongside Better Auth core tables; Phase 2A.5 applied and validated the chain on disposable local PostgreSQL 18.3; Supabase migrations remain unapplied. Event/QR/attendance definitions and auth UI/provisioning/enforcement are still future work. See the [canonical data model](modules/need-001/resora-need-001-data-model.md) for compatibility review.
 
 ## 1. Approved technical choices
 
@@ -14,7 +14,7 @@ The Better-T-Stack 3.44.3 scaffold now exists (`bts.jsonc`). Phase 1 uses Supaba
 | API                       | tRPC                                          | PM-approved direction                           |
 | Database                  | Supabase managed PostgreSQL                                    | PM-approved direction                           |
 | ORM & schema/migrations   | Drizzle                                       | PM-approved                                     |
-| Authentication            | Better Auth                                   | PM-approved; NIM/username configuration pending |
+| Authentication            | Better Auth                                   | Username Plugin enabled; auth flows pending |
 | App hosting               | VPS; Docker images/Compose for web and server | Planned; host/funding TBD                       |
 | Workspace                 | pnpm workspaces + Turborepo                   | Existing package layout retained                |
 | Lint/format               | Biome                                         | Recommended scaffolding option                  |

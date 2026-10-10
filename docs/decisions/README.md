@@ -5,7 +5,7 @@ Records include `Accepted`, `Proposed`, and `Deferred` decisions. `Accepted` mea
 | ADR | Topic | Status |
 |---|---|---|
 | [0001](0001-stack-and-monorepo.md) | Stack, pnpm/Bun, Supabase, monorepo | Accepted direction |
-| [0002](0002-identity-and-auth.md) | SR-only initial login, NIM/password, role model | Accepted; Phase 2A identity source/SQL pending application review |
+| [0002](0002-identity-and-auth.md) | SR-only initial login, NIM/password, role model | Accepted; Phase 2A.5 locally validated; Supabase application pending approval |
 | [0003](0003-event-qr-attendance.md) | Reusable event-bound QR and geofencing | Accepted business rules; schema/protocol Proposed |
 | [0004](0004-pilot-scope-and-governance.md) | MVP NEED-001 and deadline | Accepted target with UAT requirements |
 | [0005](0005-deployment-and-integrations.md) | VPS/Docker and deferred institutional integrations | Planned / Deferred |

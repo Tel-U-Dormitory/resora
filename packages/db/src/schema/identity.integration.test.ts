@@ -7,6 +7,8 @@ import {
 	expect,
 	test,
 } from "bun:test";
+import { join } from "node:path";
+import { readMigrationFiles } from "drizzle-orm/migrator";
 import { Pool, type PoolClient } from "pg";
 
 function scratchDatabaseUrl(value: string): string {
@@ -121,6 +123,20 @@ databaseSuite(
 			if (!client) throw new Error("Scratch transaction not started");
 			return client;
 		}
+		async function expectDatabaseError(
+			operation: Promise<unknown>,
+			expected: { code: string; constraint?: string },
+		) {
+			// Bun 1.3.13's rejection matcher can stall pg's protocol callbacks.
+			// Await the query normally, then assert the same database error fields.
+			let actual: unknown;
+			try {
+				await operation;
+			} catch (error) {
+				actual = error;
+			}
+			expect(actual).toMatchObject(expected);
+		}
 		async function authUser(
 			id = "synthetic-sr",
 			username: string | null = "0000123456",
@@ -151,6 +167,108 @@ databaseSuite(
 			await assignment();
 		}
 
+		test("live catalog and history match the versioned migration chain", async () => {
+			const db = connection();
+			const tables = await db.query<{ tablename: string }>(
+				"SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename",
+			);
+			expect(tables.rows.map((row) => row.tablename)).toEqual([
+				"account",
+				"buildings",
+				"departments",
+				"positions",
+				"session",
+				"sr_profiles",
+				"system_privileges",
+				"user",
+				"user_profiles",
+				"verification",
+			]);
+			const columns = await db.query<{
+				column_name: string;
+				data_type: string;
+				is_nullable: string;
+			}>(
+				"SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name='user' AND column_name IN ('username','display_username') ORDER BY column_name",
+			);
+			expect(columns.rows).toEqual([
+				{
+					column_name: "display_username",
+					data_type: "text",
+					is_nullable: "YES",
+				},
+				{ column_name: "username", data_type: "text", is_nullable: "YES" },
+			]);
+			const enums = await db.query<{ typname: string; labels: string[] }>(
+				"SELECT t.typname, array_agg(e.enumlabel::text ORDER BY e.enumsortorder) AS labels FROM pg_type t JOIN pg_enum e ON e.enumtypid=t.oid WHERE t.typnamespace='public'::regnamespace GROUP BY t.typname ORDER BY t.typname",
+			);
+			expect(enums.rows).toEqual([
+				{
+					typname: "actor_type",
+					labels: ["SR", "MAHASISWA", "ASUS", "DITMAWA"],
+				},
+				{ typname: "system_privilege", labels: ["SUPERADMIN"] },
+			]);
+			const constraints = await db.query<{
+				contype: string;
+				count: number;
+				validated: boolean;
+			}>(
+				"SELECT contype, count(*)::int AS count, bool_and(convalidated) AS validated FROM pg_constraint WHERE connamespace='public'::regnamespace AND contype IN ('p','f','u','c') GROUP BY contype ORDER BY contype",
+			);
+			expect(constraints.rows).toEqual([
+				{ contype: "c", count: 6, validated: true },
+				{ contype: "f", count: 9, validated: true },
+				{ contype: "p", count: 10, validated: true },
+				{ contype: "u", count: 4, validated: true },
+			]);
+			const indexes = await db.query<{
+				indexname: string;
+				indisvalid: boolean;
+			}>(
+				"SELECT i.indexname, p.indisvalid FROM pg_indexes i JOIN pg_index p ON p.indexrelid=(quote_ident(i.schemaname)||'.'||quote_ident(i.indexname))::regclass WHERE i.schemaname='public' ORDER BY i.indexname",
+			);
+			expect(indexes.rows).toHaveLength(22);
+			for (const row of indexes.rows) expect(row.indisvalid).toBe(true);
+			for (const name of [
+				"account_userId_idx",
+				"session_userId_idx",
+				"verification_identifier_idx",
+				"sr_profiles_department_idx",
+				"sr_profiles_position_idx",
+				"sr_profiles_building_idx",
+				"system_privileges_granted_by_idx",
+				"user_profiles_actor_active_idx",
+				"user_username_key",
+			])
+				expect(indexes.rows.map((row) => row.indexname)).toContain(name);
+			const history = await db.query<{
+				name: string;
+				hash: string;
+				created_at: string;
+				applied: boolean;
+			}>(
+				"SELECT name, hash, created_at, applied_at IS NOT NULL AS applied FROM drizzle.__drizzle_migrations ORDER BY created_at",
+			);
+			const migrations = readMigrationFiles({
+				migrationsFolder: join(import.meta.dir, "../migrations"),
+			});
+			expect(history.rows).toHaveLength(3);
+			expect(
+				history.rows.map((row) => ({
+					...row,
+					created_at: Number(row.created_at),
+				})),
+			).toEqual(
+				migrations.map((migration) => ({
+					name: migration.name,
+					hash: migration.hash,
+					created_at: migration.folderMillis,
+					applied: true,
+				})),
+			);
+		});
+
 		test("complete SR identity commits its constraints and preserves a zero-prefixed NIM", async () => {
 			await validSr();
 			await enforce();
@@ -165,10 +283,50 @@ databaseSuite(
 				must_change_password: true,
 			});
 		});
+		test("valid SR transaction commits and its synthetic rows are cleaned up", async () => {
+			await validSr();
+			const db = connection();
+			await db.query("COMMIT");
+			try {
+				const result = await db.query(
+					"SELECT actor FROM user_profiles WHERE user_id=$1",
+					["synthetic-sr"],
+				);
+				expect(result.rows).toEqual([{ actor: "SR" }]);
+			} finally {
+				await db.query("BEGIN");
+				await db.query("DELETE FROM sr_profiles WHERE user_id=$1", [
+					"synthetic-sr",
+				]);
+				await db.query("DELETE FROM user_profiles WHERE user_id=$1", [
+					"synthetic-sr",
+				]);
+				await db.query('DELETE FROM "user" WHERE id=$1', ["synthetic-sr"]);
+				await db.query("DELETE FROM buildings WHERE id=$1", [buildingId]);
+				await db.query("DELETE FROM positions WHERE code='SYN_KADIV'");
+				await db.query("DELETE FROM departments WHERE code='SYN_HCO'");
+				await db.query("COMMIT");
+				await db.query("BEGIN");
+			}
+		});
+		test("incomplete SR fails at COMMIT and leaves no partial identity", async () => {
+			await authUser();
+			await profile();
+			await expectDatabaseError(connection().query("COMMIT"), {
+				code: "23514",
+				constraint: "sr_profile_actor_consistency",
+			});
+			const result = await connection().query(
+				'SELECT id FROM "user" WHERE id=$1',
+				["synthetic-sr"],
+			);
+			expect(result.rows).toHaveLength(0);
+			await connection().query("BEGIN");
+		});
 		test("SR without an assignment fails the deferred constraint", async () => {
 			await authUser();
 			await profile();
-			await expect(enforce()).rejects.toMatchObject({
+			await expectDatabaseError(enforce(), {
 				code: "23514",
 				constraint: "sr_profile_actor_consistency",
 			});
@@ -177,7 +335,7 @@ databaseSuite(
 			await authUser();
 			await profile("MAHASISWA");
 			await assignment();
-			await expect(enforce()).rejects.toMatchObject({ code: "23514" });
+			await expectDatabaseError(enforce(), { code: "23514" });
 		});
 		test("non-SR primary actor is valid without an SR profile", async () => {
 			await authUser();
@@ -190,14 +348,14 @@ databaseSuite(
 				"UPDATE user_profiles SET actor='MAHASISWA' WHERE user_id=$1",
 				["synthetic-sr"],
 			);
-			await expect(enforce()).rejects.toMatchObject({ code: "23514" });
+			await expectDatabaseError(enforce(), { code: "23514" });
 		});
 		test("removing an assignment alone cannot leave an incomplete SR identity", async () => {
 			await validSr();
 			await connection().query("DELETE FROM sr_profiles WHERE user_id=$1", [
 				"synthetic-sr",
 			]);
-			await expect(enforce()).rejects.toMatchObject({ code: "23514" });
+			await expectDatabaseError(enforce(), { code: "23514" });
 		});
 		test("actor and SR profile can transition consistently in the same transaction", async () => {
 			await validSr();
@@ -214,7 +372,7 @@ databaseSuite(
 			await authUser("synthetic-sr", null);
 			await profile();
 			await assignment();
-			await expect(enforce()).rejects.toMatchObject({
+			await expectDatabaseError(enforce(), {
 				code: "23514",
 				constraint: "sr_profile_nim_required",
 			});
@@ -225,74 +383,93 @@ databaseSuite(
 				" ",
 				"synthetic-sr",
 			]);
-			await expect(enforce()).rejects.toMatchObject({
+			await expectDatabaseError(enforce(), {
 				code: "23514",
 				constraint: "sr_profile_nim_required",
 			});
 		});
 		test("duplicate NIM is rejected", async () => {
 			await validSr();
-			await expect(authUser("synthetic-duplicate")).rejects.toMatchObject({
+			await expectDatabaseError(authUser("synthetic-duplicate"), {
 				code: "23505",
 			});
 		});
 		test("one primary actor row per account", async () => {
 			await validSr();
-			await expect(profile("ASUS")).rejects.toMatchObject({ code: "23505" });
+			await expectDatabaseError(profile("ASUS"), { code: "23505" });
 		});
 		test("one SR assignment per account", async () => {
 			await validSr();
-			await expect(assignment()).rejects.toMatchObject({ code: "23505" });
+			await expectDatabaseError(assignment(), { code: "23505" });
 		});
 		test("superadmin cannot be used as a primary actor", async () => {
 			await authUser();
-			await expect(profile("SUPERADMIN")).rejects.toMatchObject({
+			await expectDatabaseError(profile("SUPERADMIN"), {
 				code: "22P02",
 			});
 		});
 		test("actor profile cannot reference a missing auth user", async () => {
-			await expect(profile()).rejects.toMatchObject({ code: "23503" });
+			await expectDatabaseError(profile(), { code: "23503" });
 		});
 		test("SR assignment cannot reference an auth user without an actor profile", async () => {
 			await authUser();
-			await expect(assignment()).rejects.toMatchObject({ code: "23503" });
+			await expectDatabaseError(assignment(), { code: "23503" });
 		});
 		test("assignment foreign keys reject nonexistent dictionaries", async () => {
 			await authUser();
 			await profile();
-			await expect(
+			await expectDatabaseError(
 				assignment("synthetic-sr", "MISSING_SYNTHETIC_DEPARTMENT"),
-			).rejects.toMatchObject({ code: "23503" });
+				{ code: "23503" },
+			);
+		});
+		test.each([
+			["position_code", "MISSING_SYNTHETIC_POSITION"],
+			["building_id", "00000000-0000-4000-8000-000000000099"],
+		])("assignment rejects a missing %s reference", async (column, value) => {
+			await validSr();
+			// Column names are fixed test cases, never participant input.
+			await expectDatabaseError(
+				connection().query(
+					`UPDATE sr_profiles SET ${column}=$1 WHERE user_id=$2`,
+					[value, "synthetic-sr"],
+				),
+				{ code: "23503" },
+			);
 		});
 		test("SR assignment cannot omit required position", async () => {
 			await authUser();
 			await profile();
-			await expect(
+			await expectDatabaseError(
 				connection().query(
 					"INSERT INTO sr_profiles(user_id, department_code, building_id) VALUES ($1, 'SYN_HCO', $2)",
 					["synthetic-sr", buildingId],
 				),
-			).rejects.toMatchObject({ code: "23502" });
+				{ code: "23502" },
+			);
 		});
 		test("dictionary names cannot be blank", async () => {
-			await expect(
+			await expectDatabaseError(
 				connection().query(
 					"INSERT INTO departments(code, name) VALUES ('SYN_BLANK', ' ')",
 				),
-			).rejects.toMatchObject({ code: "23514" });
+				{ code: "23514" },
+			);
 		});
 		test("building codes are unique", async () => {
-			await expect(
+			await expectDatabaseError(
 				connection().query(
 					"INSERT INTO buildings(code, name) VALUES ('SYN_BUILDING', 'Synthetic duplicate')",
 				),
-			).rejects.toMatchObject({ code: "23505" });
+				{ code: "23505" },
+			);
 		});
 		test("referenced dictionaries cannot be deleted", async () => {
 			await validSr();
-			await expect(
+			await expectDatabaseError(
 				connection().query("DELETE FROM departments WHERE code='SYN_HCO'"),
-			).rejects.toMatchObject({ code: "23503" });
+				{ code: "23503" },
+			);
 		});
 		test("superadmin privilege does not create another primary actor", async () => {
 			await validSr();
@@ -301,21 +478,23 @@ databaseSuite(
 				["synthetic-sr"],
 			);
 			await enforce();
-			await expect(
+			await expectDatabaseError(
 				connection().query(
 					"INSERT INTO system_privileges(user_id, privilege_code) VALUES ($1, 'SUPERADMIN')",
 					["synthetic-sr"],
 				),
-			).rejects.toMatchObject({ code: "23505" });
+				{ code: "23505" },
+			);
 		});
 		test("privilege grantor must reference an existing auth account", async () => {
 			await validSr();
-			await expect(
+			await expectDatabaseError(
 				connection().query(
 					"INSERT INTO system_privileges(user_id, privilege_code, granted_by_user_id) VALUES ($1, 'SUPERADMIN', 'synthetic-missing-grantor')",
 					["synthetic-sr"],
 				),
-			).rejects.toMatchObject({ code: "23503" });
+				{ code: "23503" },
+			);
 		});
 		test("inactive status remains independent of actor/profile consistency", async () => {
 			await validSr();
