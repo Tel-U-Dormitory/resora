@@ -1,6 +1,6 @@
 # RESORA — Data Model & Schema Specification (NEED-001)
 
-**Version:** 0.3 · **Updated:** 2026-10-10 · **Status:** Phase 2A.5 identity migrations validated locally; Supabase unapplied; future domain schema remains proposed\
+**Version:** 0.3 · **Updated:** 2026-10-10 · **Status:** Phase 2A.6 identity migrations applied and verified on Supabase Development; future domain schema remains proposed\
 **Target:** pilot presensi internal SR, 2026-10-18  
 **Canonical repository path:** `docs/modules/need-001/resora-need-001-data-model.md`\
 **Companion:** [NEED-001 PRD](prd.md), [architecture](../../architecture.md), [acceptance tests](acceptance-tests.md), [roadmap](roadmap.md)
@@ -151,11 +151,11 @@ erDiagram
 | `account`      | Credentials; its `password` column is auth-managed hashed credential                        | Never write raw passwords directly; use supported Better Auth APIs                                                     |
 | `verification` | Auth/email verification/reset tokens                                                        | Better Auth-managed                                                                                                    |
 
-**Phase 2A:** server Username Plugin and compatible generated `username` (nullable, unique) / `display_username` (nullable) fields are present in `packages/db/src/schema/auth.ts`. Plugin normalization is disabled to preserve NIM text; immutableUsername is enabled. Client integration and complete authentication enforcement remain later work. Review all unapplied migrations before application. Do not add a second application-level NIM column as a competing source of truth unless migration requirements dictate it.
+**Phase 2A:** server Username Plugin and compatible generated `username` (nullable, unique) / `display_username` (nullable) fields are present in `packages/db/src/schema/auth.ts`. Plugin normalization is disabled to preserve NIM text; immutableUsername is enabled. Client integration and complete authentication enforcement remain later work. Phase 2A.6 applied and verified the foundation migrations on Development (§15); review any future unapplied migrations before application. Do not add a second application-level NIM column as a competing source of truth unless migration requirements dictate it.
 
 ## 4. Domain tables and columns — identity implemented; later domains proposed
 
-Notation: **PK** primary key; **FK** foreign key; **UK** unique; **NN** not null. `timestamptz` = PostgreSQL timestamp with time zone. Defaults/constraints listed separately. Sections 4.1–4.4 are the authorized Phase 2A baseline now defined in Drizzle; their SQL is validated on disposable local PostgreSQL; Supabase application is pending explicit approval. Sections 4.5–4.9 remain future designs.
+Notation: **PK** primary key; **FK** foreign key; **UK** unique; **NN** not null. `timestamptz` = PostgreSQL timestamp with time zone. Defaults/constraints listed separately. Sections 4.1–4.4 are the authorized Phase 2A baseline defined in Drizzle, validated locally in Phase 2A.5 and applied/verified on Supabase Development in Phase 2A.6 (§15). Sections 4.5–4.9 remain future designs.
 
 ### 4.1 `user_profiles` — exclusive actor and account operational status
 
@@ -444,7 +444,7 @@ Manual example: KADIV saves at 17:00 but sets effective presence at 13:05. Persi
 
 ## 12. Repository compatibility review (2026-10-10)
 
-**Phase 2A review (updated after the documentation baseline):** reviewed `packages/db/src/schema/auth.ts`, schema exports, `packages/auth/src/index.ts`, package scripts, `pnpm-workspace.yaml` and the Phase 1 baseline migration. The repository now defines four Better Auth tables with generated username fields and the six identity tables in §4.1–§4.4. Phase 2A.5 applied/introspected all three migrations on disposable local PostgreSQL only; Supabase remains unapplied. Event/QR/attendance tables remain proposed. Phase 2A changes schema definitions, auth plugin configuration and migration/test files; environment/connection/package-manager configuration is preserved.
+**Phase 2A review (updated after the documentation baseline):** reviewed `packages/db/src/schema/auth.ts`, schema exports, `packages/auth/src/index.ts`, package scripts, `pnpm-workspace.yaml` and the Phase 1 baseline migration. The repository now defines four Better Auth tables with generated username fields and the six identity tables in §4.1–§4.4. Phase 2A.5 applied/introspected all three migrations locally; Phase 2A.6 applied and verified the same chain on Supabase Development (§15). Event/QR/attendance tables remain proposed. Phase 2A changes schema definitions, auth plugin configuration and migration/test files; environment/connection/package-manager configuration is preserved.
 
 | Coverage / discrepancy | Actual repository or current proposal | Suggested correction / review gate |
 | --- | --- | --- |
@@ -472,7 +472,7 @@ Manual example: KADIV saves at 17:00 but sets effective presence at 13:05. Persi
 
 **Scope:** server Username Plugin, generated compatible auth fields, six Drizzle identity tables, relations, PK/FK/index/check constraints, versioned additive SQL and synthetic tests. No UI, event/QR/attendance tables, SMTP, CSV provisioning, authentication authorization flows or application RBAC services. Those remain future work. Active/password-change flags and superadmin grants are storage foundations, not enforcement of those actions by themselves.
 
-### Migration chain (unapplied at Phase 2A; now locally validated, Supabase unapplied)
+### Migration chain (unapplied at Phase 2A; validated locally in 2A.5 and applied to Development in 2A.6)
 
 1. Existing `20261010093513_phase1_scaffold`: untouched SQL/snapshot creates only `user`, `session`, `account`, `verification`.
 2. `20261010114142_phase2a_identity`: adds username/display_username and unique username; creates actor/privilege enums, six identity tables, required/unique dictionary fields, assignment/grant FKs and indexes. No duplicate auth creation, drops, data deletes or auth timestamp conversion. Composite/table PKs imply NOT NULL in PostgreSQL even where generated SQL omits an explicit clause.
@@ -555,3 +555,39 @@ Added reusable live catalog/history checks, missing-position/building FK cases, 
 ### Recommendation and remaining gates
 
 **Ready for a separately approved Supabase Development migration**, subject to SQL review and private target/history/recovery checks. Local validation removes the PostgreSQL execution blocker. Docker API health remains unresolved but did not block this phase. Supabase server version, migration-role permissions, direct connectivity/IPv6 and target history were not checked in this local-only phase; validate them deliberately after explicit approval. Never use db:push or fabricate history. Follow the [local reproduction steps](../../setup.md#phase-2a5-disposable-identity-validation) and existing explicit Direct/Session Pooler choices. Authentication enforcement, provisioning, RBAC and pilot/UAT readiness remain later gates.
+
+## 15. Phase 2A.6 Supabase Development migration
+
+**Preflight date:** 2026-10-10 (Asia/Jakarta). **Authorization:** PM explicitly approved this phase against Development only and confirmed project `resora`, reference `unak…nbbo`, matches the configured target. The dashboard browser verification tool was unavailable; target identity uses that explicit PM confirmation plus matching Session Pooler/Direct project references.
+
+### Preflight and recovery plan
+
+- Selected the existing **Session Pooler, port 5432**, database `postgres`, login/database role `postgres`; server PostgreSQL **17.11**. No Transaction Pooler, alternate database, env-file edit or fallback was used.
+- Process-only `VARLOCK_TELEMETRY_DISABLED=1` retained Varlock loading/validation. The URL did not specify TLS; process-only `PGSSLMODE=verify-full` initially rejected the untrusted certificate chain. Supabase's public Root 2021 CA was downloaded over HTTPS and inspected (valid until 2031); `NODE_EXTRA_CA_CERTS` supplied it to Bun and Node. The connected TLS socket was encrypted and certificate-authorized. Certificate verification was never disabled. See [Supabase SSL guidance](https://supabase.com/docs/guides/platform/ssl-enforcement).
+- Existing Session Pooler `--check` passed `SELECT 1`. Catalog/data checks ran in a **read-only transaction**. Database CREATE, public CREATE/USAGE, PL/pgSQL USAGE and `gen_random_uuid()` EXECUTE privileges passed. All three SQL SHA-256 hashes match the Phase 2A.5 validated version; SQL/snapshot files are unchanged from validation commit `7409a6a`.
+- No non-extension public/Drizzle relations, custom functions, public enums, conflicting migration tables/history or unexpected custom schemas exist. `auth.users`, `storage.objects` and `storage.buckets` counts are zero. A conservative schema guard first paused on `pgbouncer`; inspection confirmed no relations and only the managed `get_auth(text)` function, matching [Supabase's published baseline](https://github.com/supabase/postgres/blob/develop/ansible/files/pgbouncer_config/pgbouncer_auth_schema.sql). No credentials or application row contents were queried/exported.
+- **Recovery for this empty Development baseline:** the installed Drizzle ORM wraps all pending application DDL and their history inserts in one transaction. On failure, stop, inspect whether that transaction rolled back, and compare catalog/history with this empty baseline. Initial Drizzle tracking schema/table creation occurs outside that transaction and may remain empty; do not drop/reset objects, fabricate history or retry blindly. Any partial/conflicting state requires review before repair. There is no existing application data to restore; managed schemas remain untouched. Dashboard backup/PITR availability was not verified or assumed. After a successful migration, reversal/removal requires a separately reviewed recovery action; this phase authorizes no destructive rollback.
+
+### Execution and post-migration verification
+
+`pnpm.cmd --dir packages/db exec bun run scripts/session-pooler.ts --migrate` **passed** with the process-only telemetry/TLS settings above. The explicit wrapper passed DATABASE_URL as DIRECT_DB_URL only to its child. All three unchanged migrations applied in order; no db:push, SQL Editor migration, reset, schema alteration outside the reviewed files or second migration invocation was used.
+
+| History ID | Migration | created_at key | applied_at (UTC) | SQL SHA-256 |
+| --- | --- | --- | --- | --- |
+| 1 | `20261010093513_phase1_scaffold` | `1791624913000` | `2026-10-10T15:34:27.644Z` | `01d8d61940f53db3a97c295b6634e1daf10a8db207deff0a3c9c73131e0379e5` |
+| 2 | `20261010114142_phase2a_identity` | `1791632502000` | `2026-10-10T15:34:27.644Z` | `6794ce881f717bfa6d5b314c844171931e8503ca847015ff10fd208af3852e5f` |
+| 3 | `20261010114235_phase2a_identity_integrity` | `1791632555000` | `2026-10-10T15:34:27.644Z` | `a946a26552850e37865cb28cee6462d6ba15e10d7bfbb036fc2ea1d0f649d21e` |
+
+Read-only post-verification passed:
+
+- Exactly ten public tables: `account`, `buildings`, `departments`, `positions`, `session`, `sr_profiles`, `system_privileges`, `user`, `user_profiles`, `verification`; all have zero rows. No synthetic or real accounts were created.
+- Username/display_username are nullable text; username is unique. Actor enum has SR/MAHASISWA/ASUS/DITMAWA; SUPERADMIN remains a separate privilege enum.
+- **10 PKs, 9 validated FKs, 4 unique constraints, 6 validated checks, 22 valid/ready indexes**. Reviewed named constraints, FK columns/targets/delete behavior, composite privilege PK and all explicit identity indexes match.
+- `user_profiles_sr_consistency`, `sr_profiles_actor_consistency`, `user_sr_nim_consistency` are enabled (`O`), DEFERRABLE and INITIALLY DEFERRED on their expected tables. Function body matches the reviewed SQL, with invoker security and fixed search_path.
+- Exactly three `drizzle.__drizzle_migrations` rows; names, hashes, timestamp keys and populated applied_at match `readMigrationFiles`. **Zero pending migrations**; verified from history without rerunning DDL.
+- `pnpm.cmd run db:check` **passed** the Express backend's DATABASE_URL `SELECT 1` with verified TLS. No Supabase integrity fixtures were executed; the 38-case local Phase 2A.5 result remains the behavioral evidence.
+- `pnpm.cmd run test:smoke`: **4 passed, 0 failed, 11 assertions**, with no database acquisition. Documentation-only diff, all **51 internal links/anchors** across ten changed Markdown files, balanced fences and `git diff --check` passed. Migration SQL/snapshots remain identical to commit `7409a6a`. Build/typecheck/Biome were not repeated for documentation-only changes; Phase 2A.5 results and existing unrelated scaffold lint failures remain recorded in §14.
+
+Initial failures were non-destructive: untrusted TLS chain resolved by explicitly trusting the public CA; conservative managed-schema guard resolved after catalog/source verification; first post-verification attempt stopped on a guard before catalog validation, and a retry with more precise stage reporting passed without changing verification assertions or database state. No SQL defect or migration-file correction was needed.
+
+**Remaining limitations:** configured URLs still omit TLS mode; future commands must deliberately supply the verified TLS/CA settings (see setup). No env files, runtime configuration or machine trust settings were changed. Direct/IPv6 connectivity, production backup/PITR/restore, least-privilege role provisioning and Docker health remain outside this validation. Development identity foundation is migrated and ready for reviewed Phase 2B work; authentication policy/UI, provisioning, SMTP, RBAC and event/QR/attendance remain unimplemented. Stop here for review.

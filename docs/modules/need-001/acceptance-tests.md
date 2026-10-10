@@ -2,7 +2,7 @@
 
 **Status:** Confirmed requirements translated to acceptance scenarios; execution/UAT pending. Only explicitly marked policy details remain `TBD`.
 
-Sources: [NEED-001 PRD](prd.md) and [canonical data model/repository review](resora-need-001-data-model.md#12-repository-compatibility-review-2026-10-10). Phase 2A identity definitions/migration files are implemented but unapplied; event/QR/attendance schema and application behavior remain future work. Use synthetic accounts until the private CSV arrives.
+Sources: [NEED-001 PRD](prd.md) and [canonical data model/repository review](resora-need-001-data-model.md#12-repository-compatibility-review-2026-10-10). Phase 2A identity definitions/migrations were validated locally in Phase 2A.5 and applied/read-only verified on Supabase Development in [Phase 2A.6](resora-need-001-data-model.md#15-phase-2a6-supabase-development-migration); event/QR/attendance schema and application behavior remain future work. Use synthetic accounts only in authorized development testing until the private CSV arrives; no accounts were created in Phase 2A.6.
 
 | ID     | Scenario / Given                                                 | When                                                            | Expected outcome                                                   | Decision state                                        |
 | ------ | ---------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------- |

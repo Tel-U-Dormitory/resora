@@ -80,6 +80,25 @@ pnpm --dir packages/db exec bun run scripts/session-pooler.ts --migrate
 
 Both commands explicitly announce the Session Pooler selection. Errors stop the command; neither changes env files or retries another connection. Production migration approval and recovery planning remain outside Phase 1.
 
+### Phase 2A.6 Development migration status and verified TLS
+
+**Applied and verified, 2026-10-10:** PM confirmed `resora` Development (`unak…nbbo`). Session Pooler **5432**, database/role `postgres`, PostgreSQL **17.11** passed empty-schema/history, permissions and recovery checks. The existing explicit `--migrate` workflow applied all three unchanged Phase 1/2A migrations. Read-only checks verified ten empty application tables, username fields, constraints/indexes, three enabled deferred triggers and exactly three matching history entries; **no migrations are pending**. Backend DATABASE_URL `SELECT 1` passed. See the [complete preflight, recovery and history record](modules/need-001/resora-need-001-data-model.md#15-phase-2a6-supabase-development-migration). Do not rerun migration DDL just to verify this status.
+
+The configured URL has no TLS mode. Verification deliberately supplied `PGSSLMODE=verify-full`; the initial untrusted-chain error was resolved with Supabase's public Root 2021 CA via `NODE_EXTRA_CA_CERTS`, without disabling certificate verification or changing env files. Download the project CA through Dashboard → Database settings → SSL Configuration ([official instructions](https://supabase.com/docs/guides/platform/ssl-enforcement)). This phase used the public [Supabase CA download](https://supabase-downloads.s3.ap-southeast-1.amazonaws.com/prod/ssl/prod-ca-2021.crt), inspected as `Supabase Root 2021 CA`, valid until 2031, certificate thumbprint `A4518A0933AF6949482CCA3014C007C369DF9F6F`. The downloaded public certificate remains ignored at `tmp/phase2a6-prod-ca-2021.crt` on the validation workstation; acquire/verify it separately on another workstation.
+
+To repeat **read-only** checks in a fresh PowerShell process, preserve/restore any existing values if using a shared session:
+
+```powershell
+$env:VARLOCK_TELEMETRY_DISABLED = '1'
+$env:PGSSLMODE = 'verify-full'
+$env:NODE_EXTRA_CA_CERTS = (Resolve-Path -LiteralPath tmp/phase2a6-prod-ca-2021.crt).Path
+pnpm.cmd --dir packages/db exec bun run scripts/session-pooler.ts --check
+pnpm.cmd run db:check
+# Close this dedicated process afterward, or restore the three previous values.
+```
+
+Use the same verified TLS settings for deliberate future database connections; settings here apply only to the launched process and do not establish persistent runtime/container TLS configuration. Never set `NODE_TLS_REJECT_UNAUTHORIZED=0` or `rejectUnauthorized=false`. Do not run identity integration tests against Supabase; keep RESORA_IDENTITY_TEST_DB_URL unset or pointed only at the guarded local scratch database.
+
 ### Windows Varlock verification workaround
 
 During Phase 1 verification, Varlock 1.18.0 hit `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)` with Node 24.13.0 on Windows. Temporarily disabling Varlock telemetry let codegen, connectivity and the web build complete. This keeps Varlock validation/loading active and does not change credential files or dependencies. In the PowerShell session used for verification:
@@ -194,13 +213,13 @@ Generated baseline: `packages/db/src/migrations/20261010093513_phase1_scaffold/{
 
 ## 7. Later phase: authentication bootstrapping (critical)
 
-- Phase 2A enables the server Username Plugin and defines compatible username/display_username plus identity tables; Phase 2A.5 validated the full chain on a disposable local database; Supabase migrations remain unapplied. Client/login UI, provisioning and authentication enforcement are later work. Review the [implementation/migration record](modules/need-001/resora-need-001-data-model.md#13-phase-2a-identity-foundation-implementation-record) first.
+- Phase 2A enables the server Username Plugin and defines compatible username/display_username plus identity tables; Phase 2A.5 validated the full chain locally; Phase 2A.6 applied and verified it on Supabase Development through the explicit Session Pooler workflow. Client/login UI, provisioning and authentication enforcement are later work. Review the [current migration record](modules/need-001/resora-need-001-data-model.md#15-phase-2a6-supabase-development-migration) first.
 - Set `username = NIM` for SR accounts. Numeric NIM strings remain strings to preserve leading zeros.
 - Better Auth's underlying provisioning expects `email`, `name`, `password`; every SR has a real email. Authorized CSV columns: NIM, name, email, department, position, building and active status. PM provides real data privately before pilot UAT; use synthetic accounts until then.
 - Create a privileged, **non-public** provisioning script/CLI for imports, validate unique NIM, actor SR, assigned department/building, position. Seed synthetic development-only accounts for tests.
 - Cryptographically random initial passwords, safe one-time distribution, first-login password change required. Keep import evidence private, not in repo.
 - Password recovery and email verification belong to Phase 2. Plan Gmail SMTP with sender display name `RnD SR XIV`; sender address and SMTP credentials remain environment variables, not documentation values.
-- Review the [canonical data model](modules/need-001/resora-need-001-data-model.md) before schema implementation; Drizzle source now defines auth username fields and six identity tables; local application/testing passed in Phase 2A.5; Supabase application remains pending explicit approval. See the [local validation record](modules/need-001/resora-need-001-data-model.md#14-phase-2a5-local-postgresql-validation).
+- Review the [canonical data model](modules/need-001/resora-need-001-data-model.md) before future schema implementation; Drizzle source defines auth username fields and six identity tables; local testing passed in Phase 2A.5; Supabase Development application and read-only verification passed in Phase 2A.6. See the [migration record](modules/need-001/resora-need-001-data-model.md#15-phase-2a6-supabase-development-migration).
 
 ## 8. Work sequence before 2026-10-18
 

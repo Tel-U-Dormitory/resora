@@ -39,7 +39,7 @@
 
 | Tanggal target | Milestone                                   | Kondisi selesai (gate)                                               | Status awal                                          |
 | -------------- | ------------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------- |
-| **10 Okt**     | F0 Audit scaffold + mulai F1 Supabase       | Struktur repo dipahami; rencana perubahan env/DB disetujui           | **F0 audit DONE**; F1 koneksi/workflow DONE; SQL teruji lokal F2A.5; Supabase belum diterapkan |
+| **10 Okt**     | F0 Audit scaffold + mulai F1 Supabase       | Struktur repo dipahami; rencana perubahan env/DB disetujui           | **F0 audit DONE**; F1 koneksi/workflow DONE; SQL teruji lokal F2A.5; Supabase Development diterapkan/diverifikasi F2A.6 |
 | **11 Okt**     | Review F1/pnpm + rencana skema; mulai F2 identitas | Koneksi teruji; SQL baseline versioned; review sebelum aplikasi SQL    | TODO                                                 |
 | **12 Okt**     | F2 Login/provisioning + F3 RBAC             | SR dummy login NIM; signup publik mati; izin HCO/KADIV diuji         | TODO                                                 |
 | **13 Okt**     | F4 Event & reusable QR                      | HCO buat event/QR; audience dan challenge diverifikasi backend       | TODO                                                 |
@@ -55,7 +55,7 @@
 
 ### F0 — Audit & baseline repository (static audit: DONE; runtime check: sebagian)
 
-**Auditor:** reviewer teknis. **Diketahui:** scaffold tersedia di GitHub, `pnpm run dev` sudah berhasil menurut PM (awalnya dengan Bun sebagai package manager; sekarang memakai pnpm). **Teruji:** typecheck enam task, build dua app, empat Bun smoke tests; Biome masih gagal pada scaffold. F2A.5 menguji migrasi di PostgreSQL lokal 18.3; Supabase belum diterapkan. Docker API mengembalikan HTTP 500; instalasi PostgreSQL native dipakai sebagai alternatif. [Bukti pnpm](../../pnpm-migration.md).
+**Auditor:** reviewer teknis. **Diketahui:** scaffold tersedia di GitHub, `pnpm run dev` sudah berhasil menurut PM (awalnya dengan Bun sebagai package manager; sekarang memakai pnpm). **Teruji:** typecheck enam task, build dua app, empat Bun smoke tests; Biome masih gagal pada scaffold. F2A.5 menguji migrasi di PostgreSQL lokal 18.3; Supabase Development diterapkan/diverifikasi F2A.6. Docker API mengembalikan HTTP 500; instalasi PostgreSQL native dipakai sebagai alternatif. [Bukti pnpm](../../pnpm-migration.md).
 
 - [x] Cek struktur `apps/web`, `apps/server`, `packages/api`, `packages/auth`, `packages/db`, Turborepo, Bun, Docker, Varlock.
 - [x] Temukan bahwa scaffold masih menyediakan sign-up publik, email/password, dan Docker PostgreSQL lokal.
@@ -65,7 +65,7 @@
 
 **Gate F0:** tidak melakukan scaffold ulang atau refactor yang tidak diperlukan.
 
-### F1 — Supabase development, environment & Drizzle migration workflow (DONE; SQL teruji lokal, Supabase belum diterapkan)
+### F1 — Supabase development, environment & Drizzle migration workflow (DONE; SQL teruji lokal, Supabase Development diterapkan/diverifikasi F2A.6)
 
 **Manual — PM:** project Supabase Development **sudah dibuat**; URL Session Pooler dimasukkan ke `DATABASE_URL`, Direct ke `DIRECT_DB_URL` (nilai rahasia jangan disalin ke Git/chat).
 
@@ -77,21 +77,21 @@
 - [x] Sesuaikan Compose: PostgreSQL Docker tetap opsional untuk lokal; deployment web/server **tidak** mewajibkan container database lokal.
 - [x] Sediakan verifikasi koneksi **read-only** (`SELECT 1`) dan contoh variabel tanpa secret. Jangan menampilkan URL yang memuat password.
 - [x] Baseline empat tabel auth dibuat/versioned dan SQL direview tanpa aplikasi ke DB.
-- [ ] Penerapan migration Development/verifikasi tabel hanya setelah review dan izin terpisah; bukan syarat yang diam-diam sudah dianggap selesai.
+- [x] F2A.6: izin PM dan seluruh preflight lulus; tiga migration unchanged diterapkan lewat Session Pooler 5432, sepuluh tabel/constraints/triggers/history diverifikasi read-only; backend SELECT 1 lulus.
 - [ ] Pisahkan environment dev/prod dan gunakan least-privilege credential jika memungkinkan; jangan pernah uji destruktif pada production.
 
-**Hasil F1:** backend SELECT 1 berhasil, baseline migration versioned tersedia; F2A.5 menguji aplikasi SQL dari DB lokal kosong dan rerun tanpa perubahan objek/history. Supabase/pnpm dipertahankan. F2A source identitas + migration telah dibuat dan teruji lokal F2A.5 (Supabase belum diterapkan); login/UI/provisioning/RBAC dan domain event/QR/attendance belum diimplementasikan; review [model kanonis](resora-need-001-data-model.md) dahulu.
+**Hasil F1:** backend SELECT 1 berhasil, baseline migration versioned tersedia; F2A.5 menguji aplikasi SQL dari DB lokal kosong dan rerun tanpa perubahan objek/history. Supabase/pnpm dipertahankan. F2A source identitas + migration telah dibuat dan teruji lokal F2A.5 (Supabase Development diterapkan/diverifikasi F2A.6); login/UI/provisioning/RBAC dan domain event/QR/attendance belum diimplementasikan; review [model kanonis](resora-need-001-data-model.md) dahulu.
 
 ### F2 — Identitas SR, login NIM & provisioning (TODO)
 
 **Codex:**
 
-- [x] F2A: Username Plugin server + generated username/display_username, enam tabel identitas dan migration additive/custom teruji lokal F2A.5; Supabase belum diterapkan.
+- [x] F2A: Username Plugin server + generated username/display_username, enam tabel identitas dan migration additive/custom teruji lokal F2A.5; Supabase Development diterapkan/diverifikasi F2A.6.
 - [ ] Integrasi client/login NIM, enforcement akun aktif/password change, provisioning dan RBAC tetap fase berikutnya.
 - [ ] Matikan **server-side** public sign-up; hapus UI sign-up, dan uji request langsung ke endpoint signup ditolak.
 - [x] Definisi tabel/profil SR, dictionary, actor/active/password-change dan privilege superadmin + relasi/constraints/versioned migrations.
 - [x] F2A.5: audit SQL, tiga migration pada PostgreSQL 18.3 disposable lokal, history/rerun identik; 38 identity tests (28 PostgreSQL + 10 offline) lulus tanpa skip. Fix matcher Bun di test harness, bukan SQL. [Bukti validasi](resora-need-001-data-model.md#14-phase-2a5-local-postgresql-validation).
-- [ ] Migration Supabase Development hanya setelah izin eksplisit dan verifikasi target/history/koneksi; tidak dilakukan di F2A.5.
+- [x] F2A.6: migration Supabase Development disetujui PM, diterapkan setelah target/history/privileges/recovery/TLS terverifikasi; history tepat tiga entry, nol pending. Tidak ada fixture/integrity writes di Supabase. [Bukti](resora-need-001-data-model.md#15-phase-2a6-supabase-development-migration).
 - [ ] Siapkan skrip import CSV **privileged** (NIM, nama, email nyata, departemen, jabatan, gedung, aktif); data nyata privat sebelum UAT, synthetic sementara; validasi NIM unik, relasi satu departemen/satu gedung, jabatan, dan duplikasi.
 - [ ] Akun awal memakai password sementara acak yang kuat, hashing melalui Better Auth, distribusi privat, dan kebijakan ganti password pertama.
 - [ ] Gunakan email nyata setiap SR; implementasikan recovery/verifikasi Phase 2 via rencana Gmail SMTP, display name `RnD SR XIV`; alamat pengirim/credential hanya env.
@@ -220,7 +220,8 @@ Ready for next phase? yes/no, reason:
 
 ## 7. Final release checklist
 
-- [ ] Supabase Development terkoneksi dan migration history reproducible; production tidak berbagi environment dev.
+- [x] Supabase Development terkoneksi dan migration history cocok dengan tiga file versioned (F2A.6).
+- [ ] Verifikasi production tidak berbagi environment dev; production tidak diakses pada fase ini.
 - [ ] Public sign-up diblokir di backend; login NIM/password berhasil dengan akun provisioned.
 - [ ] Password awal aman dan reset/change-first-login berhasil; tidak ada credential di repo/log.
 - [ ] HCO vs KADIV HCO vs KADIV non-HCO vs SR biasa diuji untuk semua aksi penting.
