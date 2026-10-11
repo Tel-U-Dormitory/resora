@@ -267,7 +267,7 @@ pnpm.cmd run org:seed -- --apply     # explicit local insert of missing referenc
 pnpm.cmd run test:rbac
 ```
 
-The seed ensures the [canonical dictionaries](modules/need-001/resora-need-001-data-model.md#42-departments-positions-buildings--canonical-organization-dictionaries) (7 departments, 7 positions, 18 buildings). Rerun inserts zero rows and preserves building UUIDs/assignments. Legacy codes (including KADIV), mismatched names or inactive entries abort atomically with explicit conflict codes; review existing data rather than deleting or overwriting it. The old retained Phase 2A.5 scratch database has synthetic legacy references; Phase 3 uses separate `resora_identity_test_phase3_20261011`. No Supabase seed/import or new migration is authorized.
+The seed ensures the [canonical dictionaries](modules/need-001/resora-need-001-data-model.md#42-departments-positions-buildings--canonical-organization-dictionaries) (8 departments, 7 positions, 18 buildings). Rerun inserts zero rows and preserves building UUIDs/assignments. Legacy codes (including KADIV), invalid department/position assignments, mismatched names or inactive entries abort atomically with explicit conflict codes; review existing data rather than deleting or overwriting it. The old retained Phase 2A.5 scratch database has synthetic legacy references; Phase 3 uses separate `resora_identity_test_phase3_20261011`. No Supabase seed/import or new migration is authorized.
 
 ### Phase 2C: internal CSV provisioning (local synthetic imports only)
 
@@ -280,7 +280,7 @@ nim,name,email,department,position,building,is_active
 000260000001,Synthetic SR,synthetic-sr@example.invalid,HCO,ANGGOTA,A,true
 ```
 
-Use the [canonical 7/7/18 organization codes](modules/need-001/resora-need-001-data-model.md#42-departments-positions-buildings--canonical-organization-dictionaries), including KADEP instead of legacy KADIV and separate buildings A–F / 1–12. These organization **codes** must already exist and be active in the local dictionaries; the importer never creates or changes organization records. Header order may vary, but all seven columns are mandatory, with no extra columns. NIM stays a string using the configured Username Plugin validation. Email is normalized to lowercase; `is_active` accepts `true`, `false`, `1`, `0`. Do not open/save the roster through spreadsheet number coercion; import NIM as text. Use only synthetic names/emails in this phase.
+Use the [canonical 8/7/18 organization codes](modules/need-001/resora-need-001-data-model.md#42-departments-positions-buildings--canonical-organization-dictionaries), including KADEP instead of legacy KADIV and separate buildings A–F / 1–12. INTI accepts only KETUM/WAKETUM/SEKRETARIS/BENDAHARA; other departments accept KADEP/SEKDEP/ANGGOTA. These organization **codes** must already exist and be active in the local dictionaries; the importer never creates or changes organization records. Header order may vary, but all seven columns are mandatory, with no extra columns. NIM stays a string using the configured Username Plugin validation. Email is normalized to lowercase; `is_active` accepts `true`, `false`, `1`, `0`. Do not open/save the roster through spreadsheet number coercion; import NIM as text. Use only synthetic names/emails in this phase.
 
 ```powershell
 # Run from repository root; privately set RESORA_IDENTITY_TEST_DB_URL first.
@@ -337,3 +337,11 @@ This is a dependency sequence, **not** a fabricated daily sprint schedule.
 - [ ] UAT signed off by PM and HCO policy owner.
 
 Useful docs: https://www.better-t-stack.dev/docs/project-structure | https://www.better-t-stack.dev/docs/guides/docker | https://www.better-auth.com/docs/plugins/username
+
+### Phase 4: internal events/session/QR local review
+
+New migration: `packages/db/src/migrations/20261011135412_phase4_attendance/` (SQL + generated snapshot); applied only to disposable `resora_identity_test_phase4_20261011` on local PostgreSQL 18.3, loopback port 55432. Four migration history entries matched versioned hashes and rerun applied nothing. Existing three applied identity migrations remain unchanged. No Supabase migration/seed occurred.
+
+For another explicitly selected scratch database, first verify loopback hostname/database `resora_identity_test_*` and initialize the entire versioned chain via the existing Drizzle migrator. Never silently substitute DATABASE_URL. Set RESORA_IDENTITY_TEST_DB_URL privately, then `pnpm.cmd run org:seed` (preview), `pnpm.cmd run org:seed -- --apply`, and `pnpm.cmd run test:attendance`. The guarded seed adds INTI without updating old assignments; invalid legacy data aborts visibly. Regression commands remain `test:identity`, `test:auth`, `test:rbac`, `test:provision`, `test:smoke`.
+
+HCO uses `/events` to create/edit a draft, select roster, preview, publish, explicitly activate session, display/revoke/reissue QR and close event. Non-HCO sees published invited events only. Publish freezes schedule/roster/session configuration; it does not activate QR. Signing derives a domain-separated key from existing backend Better Auth secret; no new frontend secret/env or auth configuration. Secret rotation invalidates previously signed challenges. QR validity is not check-in: scanner, GPS validation, records/audit/export remain future phases. Remote migration needs separate target preflight and PM approval; manual UI UAT remains required.

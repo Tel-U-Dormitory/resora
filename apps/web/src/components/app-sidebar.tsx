@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutDashboard, LockKeyhole } from "lucide-react";
+import { CalendarDays, LayoutDashboard, LockKeyhole } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -20,7 +20,12 @@ export function AppSidebar({ name }: { name: string }) {
 			>
 				{MAIN_NAVIGATION.map(({ title, href, icon }) => {
 					const active = pathname === href;
-					const Icon = icon === "dashboard" ? LayoutDashboard : LockKeyhole;
+					const Icon =
+						icon === "dashboard"
+							? LayoutDashboard
+							: icon === "events"
+								? CalendarDays
+								: LockKeyhole;
 					return (
 						<Link
 							key={href}

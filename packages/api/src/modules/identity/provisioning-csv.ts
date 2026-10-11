@@ -1,4 +1,5 @@
 import {
+	isValidSrAssignment,
 	officialBuildingCodes,
 	officialDepartments,
 	officialPositions,
@@ -25,23 +26,27 @@ export const csvColumns = [
 	"is_active",
 ] as const;
 export const maxCsvBytes = 5 * 1024 * 1024;
-const rowSchema = z.object({
-	// Match the configured Username Plugin; never convert identifiers to numbers.
-	nim: z
-		.string()
-		.trim()
-		.min(3)
-		.max(30)
-		.regex(/^[a-zA-Z0-9_.]+$/),
-	name: z.string().trim().min(1),
-	email: z.email().transform((value) => value.toLowerCase()),
-	department: z.enum(officialDepartments.map((row) => row.code)),
-	position: z.enum(officialPositions.map((row) => row.code)),
-	building: z.enum(officialBuildingCodes),
-	is_active: z
-		.enum(["true", "false", "1", "0"])
-		.transform((value) => value === "true" || value === "1"),
-});
+const rowSchema = z
+	.object({
+		// Match the configured Username Plugin; never convert identifiers to numbers.
+		nim: z
+			.string()
+			.trim()
+			.min(3)
+			.max(30)
+			.regex(/^[a-zA-Z0-9_.]+$/),
+		name: z.string().trim().min(1),
+		email: z.email().transform((value) => value.toLowerCase()),
+		department: z.enum(officialDepartments.map((row) => row.code)),
+		position: z.enum(officialPositions.map((row) => row.code)),
+		building: z.enum(officialBuildingCodes),
+		is_active: z
+			.enum(["true", "false", "1", "0"])
+			.transform((value) => value === "true" || value === "1"),
+	})
+	.refine((row) => isValidSrAssignment(row.department, row.position), {
+		message: "Invalid department/position assignment",
+	});
 export type SrImportRow = z.infer<typeof rowSchema> & { record: number };
 
 // RFC 4180 quoting, escaped quotes and embedded newlines; no external parser.

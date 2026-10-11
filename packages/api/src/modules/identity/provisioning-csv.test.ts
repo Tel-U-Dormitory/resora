@@ -19,6 +19,29 @@ const row = [
 ];
 const csv = (rows: string[][] = [row]) =>
 	encodeCsv([Array.from(csvColumns), ...rows]);
+test("CSV enforces official INTI and non-INTI position combinations", () => {
+	for (const position of ["KETUM", "WAKETUM", "SEKRETARIS", "BENDAHARA"]) {
+		expect(
+			parseSrCsv(csv([[...row.slice(0, 3), "INTI", position, "A", "true"]]))[0]
+				?.department,
+		).toBe("INTI");
+	}
+	for (const [department, position] of [
+		["INTI", "KADEP"],
+		["INTI", "SEKDEP"],
+		["INTI", "ANGGOTA"],
+		["HCO", "KETUM"],
+		["RND", "BENDAHARA"],
+	]) {
+		expect(() =>
+			parseSrCsv(
+				csv([
+					[...row.slice(0, 3), department ?? "", position ?? "", "A", "true"],
+				]),
+			),
+		).toThrow("INVALID_CSV_ROW");
+	}
+});
 test("official CSV accepts KADEP and separate letter/numeric building codes", () => {
 	for (const building of ["A", "F", "1", "12"] as const) {
 		const parsed = parseSrCsv(

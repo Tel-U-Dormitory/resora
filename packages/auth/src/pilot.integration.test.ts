@@ -129,7 +129,7 @@ test("auth integration guard rejects remote and ordinary application targets", (
 						)
 					).rows[0].count,
 				),
-			).toBe(3);
+			).toBe(4); // Complete reviewed chain, including Phase 4 additive domain migration.
 			auth = createAuth(
 				{
 					BETTER_AUTH_URL: "http://127.0.0.1:3000",

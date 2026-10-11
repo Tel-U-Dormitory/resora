@@ -174,9 +174,13 @@ databaseSuite(
 			);
 			expect(tables.rows.map((row) => row.tablename)).toEqual([
 				"account",
+				"attendance_sessions",
 				"buildings",
 				"departments",
+				"event_participants",
+				"events",
 				"positions",
+				"qr_challenges",
 				"session",
 				"sr_profiles",
 				"system_privileges",
@@ -217,10 +221,10 @@ databaseSuite(
 				"SELECT contype, count(*)::int AS count, bool_and(convalidated) AS validated FROM pg_constraint WHERE connamespace='public'::regnamespace AND contype IN ('p','f','u','c') GROUP BY contype ORDER BY contype",
 			);
 			expect(constraints.rows).toEqual([
-				{ contype: "c", count: 6, validated: true },
-				{ contype: "f", count: 9, validated: true },
-				{ contype: "p", count: 10, validated: true },
-				{ contype: "u", count: 4, validated: true },
+				{ contype: "c", count: 13, validated: true },
+				{ contype: "f", count: 15, validated: true },
+				{ contype: "p", count: 14, validated: true },
+				{ contype: "u", count: 5, validated: true },
 			]);
 			const indexes = await db.query<{
 				indexname: string;
@@ -228,7 +232,7 @@ databaseSuite(
 			}>(
 				"SELECT i.indexname, p.indisvalid FROM pg_indexes i JOIN pg_index p ON p.indexrelid=(quote_ident(i.schemaname)||'.'||quote_ident(i.indexname))::regclass WHERE i.schemaname='public' ORDER BY i.indexname",
 			);
-			expect(indexes.rows).toHaveLength(22);
+			expect(indexes.rows).toHaveLength(30);
 			for (const row of indexes.rows) expect(row.indisvalid).toBe(true);
 			for (const name of [
 				"account_userId_idx",
@@ -253,7 +257,7 @@ databaseSuite(
 			const migrations = readMigrationFiles({
 				migrationsFolder: join(import.meta.dir, "../migrations"),
 			});
-			expect(history.rows).toHaveLength(3);
+			expect(history.rows).toHaveLength(migrations.length);
 			expect(
 				history.rows.map((row) => ({
 					...row,

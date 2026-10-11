@@ -6,6 +6,7 @@ export const relations = {
 	...defineRelations(schema),
 	...schema.authRelations,
 	...schema.identityRelations,
+	...schema.attendanceRelations,
 	user: {
 		...schema.authRelations.user,
 		relations: {

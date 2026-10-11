@@ -1,8 +1,14 @@
 import { sql } from "drizzle-orm";
 import type { Database, DatabaseTransaction } from "./index";
-import { buildings, departments, positions } from "./schema/identity";
+import {
+	buildings,
+	departments,
+	positions,
+	srProfiles,
+} from "./schema/identity";
 
 export const officialDepartments = [
+	{ code: "INTI", name: "Inti" },
 	{ code: "ADAPTIF", name: "Adaptif" },
 	{ code: "SOSIAL", name: "Sosial" },
 	{ code: "AKADEMIK", name: "Akademik" },
@@ -11,6 +17,18 @@ export const officialDepartments = [
 	{ code: "MEDIA", name: "Media" },
 	{ code: "RND", name: "RnD" },
 ] as const;
+
+// Reuse for CSV, future assignment mutations and organization roster eligibility.
+export function isValidSrAssignment(
+	departmentCode: string,
+	positionCode: string,
+) {
+	if (!officialDepartments.some((row) => row.code === departmentCode))
+		return false;
+	return departmentCode === "INTI"
+		? ["KETUM", "WAKETUM", "SEKRETARIS", "BENDAHARA"].includes(positionCode)
+		: ["KADEP", "SEKDEP", "ANGGOTA"].includes(positionCode);
+}
 export const officialPositions = [
 	{ code: "KETUM", name: "Ketum" },
 	{ code: "WAKETUM", name: "Waketum" },
@@ -48,9 +66,13 @@ export const officialBuildings = officialBuildingCodes.map((code) => ({
 type DictionaryRow = { code: string; name: string; isActive: boolean };
 type ReferenceRow = { code: string; name: string };
 export type OrganizationConflict = {
-	table: "departments" | "positions" | "buildings";
+	table: "departments" | "positions" | "buildings" | "sr_profiles";
 	code: string;
-	reason: "LEGACY_CODE" | "NAME_MISMATCH" | "INACTIVE_REFERENCE";
+	reason:
+		| "LEGACY_CODE"
+		| "NAME_MISMATCH"
+		| "INACTIVE_REFERENCE"
+		| "INVALID_ASSIGNMENT";
 };
 export class OrganizationConflictError extends Error {
 	constructor(readonly conflicts: OrganizationConflict[]) {
@@ -92,6 +114,7 @@ export async function seedOrganization(
 		const departmentRows = await tx.select().from(departments).for("share");
 		const positionRows = await tx.select().from(positions).for("share");
 		const buildingRows = await tx.select().from(buildings).for("share");
+		const assignments = await tx.select().from(srProfiles).for("share");
 		const departmentPlan = inspect(
 			"departments",
 			departmentRows,
@@ -103,6 +126,17 @@ export async function seedOrganization(
 			...departmentPlan.conflicts,
 			...positionPlan.conflicts,
 			...buildingPlan.conflicts,
+			...assignments
+				.filter(
+					(row) => !isValidSrAssignment(row.departmentCode, row.positionCode),
+				)
+				.map(
+					(row): OrganizationConflict => ({
+						table: "sr_profiles",
+						code: `${row.departmentCode}/${row.positionCode}`,
+						reason: "INVALID_ASSIGNMENT",
+					}),
+				),
 		];
 		if (conflicts.length) throw new OrganizationConflictError(conflicts);
 		if (apply) {

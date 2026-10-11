@@ -33,6 +33,7 @@
 		"org:seed": "pnpm --dir apps/server run org:seed",
 		"test:rbac": "bun test packages/api/src/modules/identity/identity-policy.test.ts packages/api/src/modules/identity/identity-policy.integration.test.ts packages/db/src/organization.integration.test.ts",
 		"test:ui": "bun test packages/ui/src/components/input-group.test.tsx apps/web/src/utils/server-url.test.ts",
+		"test:attendance": "bun test packages/api/src/modules/attendance/attendance.test.ts packages/api/src/modules/attendance/attendance.integration.test.ts",
 		"lint": "biome check .",
 		"check": "biome check --write ."
 	},
