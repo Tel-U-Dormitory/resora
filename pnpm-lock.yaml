@@ -239,6 +239,9 @@ importers:
       '@trpc/server':
         specifier: 'catalog:'
         version: 11.19.0(typescript@6.0.3)
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 1.0.0-rc.4(@types/pg@8.23.1)(bun-types@1.4.2)(pg@8.23.1)(zod@4.6.5)
       zod:
         specifier: 'catalog:'
         version: 4.6.5

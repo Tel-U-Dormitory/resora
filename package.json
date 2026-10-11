@@ -28,6 +28,8 @@
 		"test:smoke": "bun test packages/db/src/connectivity.test.ts",
 		"test:identity": "bun test packages/db/src/schema/identity.test.ts packages/db/src/schema/identity.integration.test.ts packages/auth/src/identity.test.ts",
 		"test:auth": "bun test packages/auth/src/pilot.test.ts packages/auth/src/pilot.integration.test.ts",
+		"test:provision": "bun test packages/api/src/modules/identity/provisioning-csv.test.ts packages/api/src/modules/identity/sr-provisioning.integration.test.ts",
+		"sr:provision": "pnpm --dir apps/server run sr:provision",
 		"test:ui": "bun test packages/ui/src/components/input-group.test.tsx apps/web/src/utils/server-url.test.ts",
 		"lint": "biome check .",
 		"check": "biome check --write ."

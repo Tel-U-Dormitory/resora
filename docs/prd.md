@@ -40,7 +40,7 @@ RESORA is an integrated digital platform for operations and services related to 
 
 | Primary actor | Role in RESORA                                          | Login readiness                                                          |
 | ------------- | ------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `SR`          | Senior Resident and internal operational departments    | NIM/password and first-password-change flow tested locally in Phase 2B; provisioning/UAT pending. |
+| `SR`          | Senior Resident and internal operational departments    | NIM/password, first-password-change and synthetic CSV provisioning tested locally; real import/UAT pending. |
 | `MAHASISWA`   | Student/dormitory user, including eligible new students | Required for NEED-007 later; login mechanism/provisioning not finalized. |
 | `ASUS`        | Dormitory operational/administrative stakeholder        | Deferred.                                                                |
 | `DITMAWA`     | University administration stakeholder                   | Deferred.                                                                |
@@ -130,7 +130,8 @@ The earlier plan identifies **2026-10-18 as a target for a controlled NEED-001 p
 | Next.js/Express/tRPC monorepo and technical scaffold                                  | Present in repository                                                                            | Keep builds, lint/type-check and configuration stable.                          |
 | PostgreSQL/Drizzle identity foundation                                                | **Three reviewed migrations applied and verified on Supabase Development** (Phase 2A/2A.5/2A.6). | Do not modify applied identity migrations without reviewed follow-up migration. |
 | Better Auth SR sign-in (NIM/password), active checks, no-public-signup and first-password-change enforcement | **Implemented; synthetic local HTTP/browser validation passed in Phase 2B** | Review [implementation evidence](modules/need-001/resora-need-001-data-model.md#16-phase-2b-sr-authentication); pilot UAT still required. |
-| Authorized CSV SR provisioning and email recovery | **Pending** | Phase 2C and access to real roster; secure credentials delivery. |
+| Internal CSV SR provisioning | **Implemented/tested locally with synthetic data in Phase 2C** | Dry-run/apply, Better Auth hashing, private credentials export; real imports/distribution require approval. |
+| Email recovery/verification | **Pending** | Gmail SMTP and operational delivery are outside Phase 2C. |
 | NEED-001 event, roster builder, attendance sessions, QR, geofence and reporting       | **Domain design only; no attendance domain migrations**                                          | Align data model/acceptance docs, then review migration and implement.          |
 | NEED-007 student login, quotas, registration and Adaptif attendance                   | **PM-confirmed business rules, not delivered**                                                   | Separate module specification and Adaptif UAT.                                  |
 | Production VPS and full product release                                               | **Planned, unverified**                                                                          | Security, backup, deployment, operations and PM go/no-go.                       |

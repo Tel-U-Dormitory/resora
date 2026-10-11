@@ -211,12 +211,12 @@ Varlock also regenerated the ignored `src/env.ts` files. No dependencies or secr
 
 Generated baseline: `packages/db/src/migrations/20261010093513_phase1_scaffold/{migration.sql,snapshot.json}`. SQL was reviewed against the four existing Better Auth tables and has not been applied. Docker image builds/container startup and browser dev smoke checks are left for manual verification; Phase 1 does not establish auth/pilot/production readiness.
 
-## 7. SR authentication and remaining provisioning work
+## 7. SR authentication and provisioning
 
-- Phase 2A enables the server Username Plugin and defines compatible username/display_username plus identity tables; Phase 2A.5 validated the full chain locally; Phase 2A.6 applied and verified it on Supabase Development through the explicit Session Pooler workflow. Phase 2B implements NIM login/logout, live active-SR checks, disabled public signup and first-password-change enforcement/UI without another migration. Provisioning and recovery remain pending. Review the [current migration record](modules/need-001/resora-need-001-data-model.md#15-phase-2a6-supabase-development-migration) and [Phase 2B evidence](modules/need-001/resora-need-001-data-model.md#16-phase-2b-sr-authentication).
+- Phase 2A enables the server Username Plugin and defines compatible username/display_username plus identity tables; Phase 2A.5 validated the full chain locally; Phase 2A.6 applied and verified it on Supabase Development through the explicit Session Pooler workflow. Phase 2B implements NIM login/logout, live active-SR checks, disabled public signup and first-password-change enforcement/UI without another migration. Phase 2C adds local synthetic CSV provisioning; real import/distribution and recovery remain pending. Review the [current migration record](modules/need-001/resora-need-001-data-model.md#15-phase-2a6-supabase-development-migration) and [Phase 2B evidence](modules/need-001/resora-need-001-data-model.md#16-phase-2b-sr-authentication).
 - Set `username = NIM` for SR accounts. Numeric NIM strings remain strings to preserve leading zeros.
 - Better Auth's underlying provisioning expects `email`, `name`, `password`; every SR has a real email. Authorized CSV columns: NIM, name, email, department, position, building and active status. PM provides real data privately before pilot UAT; use synthetic accounts until then.
-- Create a privileged, **non-public** provisioning script/CLI for imports, validate unique NIM, actor SR, assigned department/building, position. Seed synthetic development-only accounts for tests.
+- Phase 2C supplies the internal `sr:provision` CLI described below; public signup stays disabled. Real imports and credential distribution still require separate PM approval.
 - Cryptographically random initial passwords, safe one-time distribution, first-login password change required. Keep import evidence private, not in repo.
 - Password recovery and email verification belong to Phase 2. Plan Gmail SMTP with sender display name `RnD SR XIV`; sender address and SMTP credentials remain environment variables, not documentation values.
 - Review the [canonical data model](modules/need-001/resora-need-001-data-model.md) before future schema implementation; Drizzle source defines auth username fields and six identity tables; local testing passed in Phase 2A.5; Supabase Development application and read-only verification passed in Phase 2A.6. See the [migration record](modules/need-001/resora-need-001-data-model.md#15-phase-2a6-supabase-development-migration).
@@ -256,6 +256,42 @@ Biome excludes exactly the generator-owned Varlock files `apps/server/src/env.ts
 Use `pnpm run test:ui` for CLI component and server-URL regression tests, alongside `check-types`, `build`, `test:auth`, `test:identity`, and `test:smoke`. Database integration suites require the guarded disposable local test database described above; never substitute Supabase.
 
 Lint cleanup verification on `chore/lint-cleanup`: repository diagnostics decreased from **102 errors/61 warnings to zero**. Workspace typecheck and Express/Next.js production builds passed. **10 UI/URL, 16 auth, 38 identity and 4 smoke tests passed**, with no skips. Auth/identity suites reused the retained loopback scratch database, without migrations; synthetic accounts/profiles were cleaned up, migration history remained three entries and the cluster was stopped. No Supabase access, dependency upgrade, commit, push or deployment was performed. Manual visual/keyboard UAT is still a separate review gate.
+
+### Phase 2C: internal CSV provisioning (local synthetic imports only)
+
+Use a disposable loopback PostgreSQL database named `resora_identity_test_*` with the three existing migrations. Set `RESORA_IDENTITY_TEST_DB_URL` privately in the process, as for the guarded integration suites. The CLI checks both the URL and actual server host/database/port before account writes. It ignores `DATABASE_URL`/`DIRECT_DB_URL`, loads no `.env` files, and rejects remote targets. No migrations are part of provisioning. An authorized real-environment rollout is a later approval gate, not a current CLI option.
+
+UTF-8 input (optional BOM, RFC CSV quoting, maximum 5 MiB/5,000 accounts):
+
+```csv
+nim,name,email,department,position,building,is_active
+000260000001,Synthetic SR,synthetic-sr@example.invalid,HCO,MEMBER,TEST_BUILDING,true
+```
+
+These organization **codes** must already exist and be active in the local dictionaries; the importer never creates or changes organization records. Header order may vary, but all seven columns are mandatory, with no extra columns. NIM stays a string using the configured Username Plugin validation. Email is normalized to lowercase; `is_active` accepts `true`, `false`, `1`, `0`. Do not open/save the roster through spreadsheet number coercion; import NIM as text. Use only synthetic names/emails in this phase.
+
+```powershell
+# Run from repository root; privately set RESORA_IDENTITY_TEST_DB_URL first.
+pnpm.cmd run sr:provision -- --input .\tmp\synthetic-sr.csv --dry-run
+pnpm.cmd run sr:provision -- --input .\tmp\synthetic-sr.csv --apply
+pnpm.cmd run test:provision
+```
+
+Dry-run is the default: read-only transaction, no hashing/account writes/credential export. Apply validates the whole batch, serializes concurrent imports, and uses transaction-bound Better Auth internal user/account creation and its configured password hasher. Each new SR receives its organizational profile, imported active status and `must_change_password=true`; no superadmin privilege is granted. Initial passwords contain 256 random bits and are unique within the batch. Identical existing identities are skipped (including after password change), with no password reset or old password export. Any differing identity/organization/active status or conflicting NIM/email rejects the entire batch; this is not an account-update tool.
+
+Each apply that creates accounts writes **one** `credentials.csv` under `.private/sr-provisioning/<random-run-id>/`, with `nim,name,email,temporary_password`. The `.private` directory is Git-ignored (verified before export) and excluded from Biome traversal; it contains private operational data, not source. New directories are owner-only on POSIX (700/files 600), or restricted to the current Windows user and SYSTEM; existing insecure directories are rejected. Output never replaces the input or a previous export. Console output contains counts/path only; do not paste credentials into logs, tickets or Git. Read the CSV as text, not as executable spreadsheet formulas.
+
+The adjacent `status.json` records count, CSV SHA-256 and `PREPARED`, `COMMITTED`, `FAILED` or `UNCONFIRMED`, without passwords. The complete credential file is exclusively created and fsynced **before** account inserts and DB commit. Output failure rolls back all accounts. Constraint/insert failure also rolls back the whole batch and retains a `FAILED` export; do not distribute it. Only `COMMITTED` is ready for private handoff. If a process stops after preparing output or commit confirmation/metadata fails, keep the private CSV and treat `PREPARED`/`UNCONFIRMED` as requiring a read-only account/profile comparison before any handoff. Do not delete/reset accounts, regenerate passwords or edit migration history to resolve uncertainty. Retry skips exact existing accounts; never recreates their credentials. Windows uses file fsync/NTFS; directory fsync is used where supported. Database/filesystem commit is not a single atomic resource transaction, so retain this recovery evidence.
+
+`test:provision` creates one principal synthetic dummy through the actual CLI, exercises login → mandatory password change → protected dashboard API, and uses temporary additional fixtures for failure/bulk/concurrency cases. All database fixtures are removed afterwards; private credential exports remain ignored for review. Tests never log passwords and require the local scratch target; without it PostgreSQL cases explicitly skip. Existing auth/identity regression suites remain required. SMTP/recovery, real roster import and operational distribution are not implemented here.
+
+After `pnpm run build`, optional CLI-only production-page verification starts an isolated Next.js process targeting that suite's local Express instance and checks anonymous redirect, first-password-change redirect and successful dashboard HTTP response:
+
+```powershell
+$env:RESORA_PROVISION_WEB_SMOKE = '1'
+pnpm.cmd exec bun test packages/api/src/modules/identity/sr-provisioning.integration.test.ts --test-name-pattern 'dry-run|one dummy'
+Remove-Item Env:RESORA_PROVISION_WEB_SMOKE
+```
 
 ## 8. Work sequence before 2026-10-18
 
