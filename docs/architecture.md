@@ -1,162 +1,390 @@
-# RESORA — Technical Architecture (Draft)
+# RESORA — Technical Architecture & Repository Standards
 
-**Status:** Proposed design baseline | **Date:** 2026-10-10  
-The Better-T-Stack 3.44.3 scaffold now exists (`bts.jsonc`). Phase 1 uses Supabase Development PostgreSQL through Express/Drizzle, with optional local Docker PostgreSQL. Product rules below reflect confirmed decisions; domain tables and service contracts remain proposed. Phase 2A defines generated username fields and six identity tables alongside Better Auth core tables; Phase 2A.5 applied and validated the chain on disposable local PostgreSQL 18.3; Phase 2A.6 applied and verified the unchanged chain on Supabase Development (Session Pooler 5432, PostgreSQL 17.11); see the model’s migration record. Event/QR/attendance definitions and auth UI/provisioning/enforcement are still future work. See the [canonical data model](modules/need-001/resora-need-001-data-model.md) for compatibility review.
+**Document type:** System-wide Technical Architecture  
+**Version:** 0.3.1 — folder convention clarified 2026-10-11  
+**Owner:** RnD engineering, subject to PM approval for consequential scope, data and deployment changes  
+**Status:** Approved technology direction + **proposed target folder/domain architecture**. Some foundation is implemented; event/QR/attendance domains, folder reorganizations and deployment are **not** implemented by this document.
 
-## 1. Approved technical choices
+> **Document boundary:** The [system-wide PRD](prd.md) owns **business rules, user actors, feature scope and ownership**; this document owns **how the implementation is organized, boundaries, constraints, interfaces, migration strategy and operations**. Module PRDs and FR Master are the authoritative reference for feature acceptance. A technical pattern written here does not grant new business permissions.
 
-| Layer                     | Choice                                        | State                                           |
-| ------------------------- | --------------------------------------------- | ----------------------------------------------- |
-| Frontend                  | Next.js + TypeScript                          | PM-approved direction                           |
-| Backend                   | Express.js + TypeScript                       | PM-approved direction                           |
-| Backend runtime           | Bun 1.3.13                                           | Retained during package-manager migration       |
-| Package manager           | pnpm 10.33.4                                  | Confirmed migration from Bun package management |
-| API                       | tRPC                                          | PM-approved direction                           |
-| Database                  | Supabase managed PostgreSQL                                    | PM-approved direction                           |
-| ORM & schema/migrations   | Drizzle                                       | PM-approved                                     |
-| Authentication            | Better Auth                                   | Username Plugin enabled; auth flows pending |
-| App hosting               | VPS; Docker images/Compose for web and server | Planned; host/funding TBD                       |
-| Workspace                 | pnpm workspaces + Turborepo                   | Existing package layout retained                |
-| Lint/format               | Biome                                         | Recommended scaffolding option                  |
+## 1. Current technology baseline and readiness
 
-The recorded scaffold command and Phase 1 verification steps are documented in `docs/setup.md`; production release readiness remains unverified.
+| Layer                | Baseline                                                          | Current state / caution                                                                                                                              |
+| -------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Frontend             | **Next.js**, React, TypeScript                                    | Scaffold/repository present; feature-based folders below are **target standard**.                                                                    |
+| Backend entrypoint   | **Express.js** with **Bun 1.3.13** runtime                        | Repo present; keep runtime bootstrap thin.                                                                                                           |
+| API boundary         | **tRPC** + Zod schema validation                                  | Existing `packages/api`; domain modules proposed.                                                                                                    |
+| Identity             | **Better Auth** + Username Plugin (`username=NIM` for SR)         | Identity schema/plugin prepared; SR login, active-account enforcement, provisioning, first-login change and recovery still need implementation/UAT.  |
+| Primary database     | **Supabase managed PostgreSQL**                                   | Supabase **Development** configured through backend, not directly from browser.                                                                      |
+| ORM & schema         | **Drizzle**                                                       | Existing schema and **three applied/verified identity foundation migrations** in Supabase Development. Attendance/domain migrations **not applied**. |
+| Workspace            | **pnpm 10.33.4**, pnpm workspaces, Turborepo                      | Project scaffold exists.                                                                                                                             |
+| Shared packages      | `packages/api`, `auth`, `db`, `config`, `ui`                      | Some package content still scaffold-level.                                                                                                           |
+| Tooling              | TypeScript strict checks, Biome, Varlock/environment schema       | Preserve actual scripts/tool versions from repo; CI policy TBD.                                                                                      |
+| Deployment           | Planned VPS, Docker images/Compose, reverse proxy, TLS            | **Not production-approved or proven.** DNS, secrets, operations and backup gates remain.                                                             |
+| Development database | Supabase Development; optional disposable local Docker PostgreSQL | Never confuse successful Development migration with production readiness.                                                                            |
 
-## 2. High-level logical architecture
+**Correction to the previous Architecture:** Phase 2A.6 **did apply and verify** the reviewed identity migration chain on Supabase Development. Any older closing statement claiming that no migrations have been applied is obsolete. There have been **no attendance-domain migrations**.
+
+## 2. Logical architecture
 
 ```text
-                      Browser/mobile (SR/HCO)
-                                |
-                           HTTPS / TLS
-                                |
-                      Reverse proxy (VPS)
-                         /           \\
-                   apps/web       apps/server
-                   Next.js         Express + tRPC + Better Auth
-                         \           /
-                    domain services / authorization
-                               |
-                packages/api / packages/auth / packages/db
-                               |
-                PostgreSQL (Supabase / optional local)
+ Browser / mobile (SR and, later, mahasiswa/maba)
+                         |
+                    HTTPS / TLS
+                         |
+                  Reverse proxy (VPS)
+                     /         \
+                    /           \
+          apps/web (Next.js)   apps/server (Express + Bun)
+                    |                |
+                tRPC client <----> packages/api (tRPC boundary)
+                                     |
+                              Domain services/policy
+                                /            \
+                      packages/auth       repositories
+                                               |
+                                          packages/db
+                                               |
+                                     PostgreSQL (Supabase)
 ```
 
-Client-only UI restrictions are not authorization; enforce access in tRPC procedures/services. Plan a modular monolith; do not introduce microservices unless load/team architecture justifies them.
+**Non-negotiable boundaries**
 
-### Actual monorepo directories
+1. **Browser/web does not access PostgreSQL directly.** Database access flows through protected backend use cases. Next.js server-side rendering does not become an alternative DB permission bypass.
+2. **Authentication ≠ authorization.** Better Auth establishes the user/session; backend domain policies decide whether that user may operate on the event/session/row.
+3. **Modular monolith first.** Multiple business domains share one deployment and database but do not share permission scope or reach into one another's private repository logic.
+4. **Shared engine, separate domain owners.** MOD-03 Attendance is reusable; its HCO and Adaptif contexts must remain isolated by operator and eligibility policy.
+5. Shared code is extracted only when there is a genuine reused, stable contract. Avoid a universal god-service or `shared/` folder as a dump for business rules.
+
+## 3. Repository structure standard — feature-first, shallow, **TARGET**
+
+RESORA uses **one directory per stable business domain/feature**, with related files **co-located directly inside that directory**. Do **not** create mandatory `components/`, `hooks/`, `api/`, `types/`, `router/`, `service/`, `repository/`, `schema/`, `policy/`, or `tests/` subdirectories inside each feature when they would contain only one file. Names such as `attendance.service.ts` describe the file’s responsibility without requiring another nesting level.
+
+This is the **target convention** for new work and incremental refactoring, not the current repository tree. Existing working routes/routers must not be moved solely to match the diagram. The directory list below is illustrative: **do not generate empty feature directories** before those features are implemented. The only sample files shown are for `attendance`, to clarify file co-location; this is not a mandatory file checklist.
 
 ```text
 resora/
-├── AGENTS.md
 ├── apps/
-│   ├── web/           # Next.js, UI and tRPC client
-│   └── server/        # Express, tRPC routing and auth endpoints
+│   ├── web/
+│   │   └── src/
+│   │       ├── app/                  # Next.js URL routing/layouts
+│   │       │   ├── (auth)/           # Route groups only if useful
+│   │       │   ├── (dashboard)/
+│   │       │   └── (public)/
+│   │       ├── features/             # Feature-first; flat per domain
+│   │       │   ├── identity/
+│   │       │   ├── attendance/
+│   │       │   │   ├── attendance-view.tsx
+│   │       │   │   ├── attendance-form.tsx
+│   │       │   │   ├── use-attendance.ts
+│   │       │   │   └── attendance.schema.ts
+│   │       │   ├── activity/
+│   │       │   ├── resident/
+│   │       │   ├── inspection/
+│   │       │   ├── complaint/
+│   │       │   ├── performance/
+│   │       │   └── inventory/
+│   │       ├── components/           # Truly reusable within this app
+│   │       └── lib/                  # Shared app-level infrastructure
+│   └── server/
+│       └── src/                    # Thin Express/Bun bootstrap
+│
 ├── packages/
-│   ├── api/           # shared router and context infrastructure
-│   ├── auth/          # Better Auth config (location may differ)
-│   ├── db/            # Drizzle tables/migrations/query helpers
-│   ├── config/        # shared TS/env/tool configuration
-│   └── ui/            # generated shared UI package
-├── docs/
-│   ├── prd.md
-│   ├── architecture.md
-│   ├── setup.md
-│   ├── decisions/
-│   └── modules/need-001/
-├── turbo.json
-└── docker-compose.yml
+│   ├── api/
+│   │   └── src/
+│   │       ├── modules/            # Domain-first; flat per domain
+│   │       │   ├── identity/
+│   │       │   ├── attendance/
+│   │       │   │   ├── attendance.router.ts
+│   │       │   │   ├── attendance.service.ts
+│   │       │   │   ├── attendance.repository.ts
+│   │       │   │   ├── attendance.policy.ts
+│   │       │   │   └── attendance.schema.ts
+│   │       │   ├── activity/
+│   │       │   ├── resident/
+│   │       │   ├── inspection/
+│   │       │   ├── complaint/
+│   │       │   ├── performance/
+│   │       │   └── inventory/
+│   │       └── shared/             # Only for real cross-domain reuse
+│   ├── auth/                        # Better Auth provider/session
+│   ├── db/
+│   │   ├── src/
+│   │   │   ├── schema/              # Drizzle table definitions
+│   │   │   └── migrations/          # Reviewed migration chain
+│   │   └── scripts/
+│   ├── config/
+│   └── ui/                         # Shared design system
+│
+└── docs/
+    ├── modules/                   # PRDs/acceptance per NEED
+    │   └── need-001/
+    └── decisions/                 # ADRs
 ```
 
-The exact generated package tree may vary with Better-T-Stack version. Prefer generated conventions; no unnecessary rewiring on day 1. Official generator structure: https://www.better-t-stack.dev/docs/project-structure
+The attendance example is deliberately **not** duplicated as separate feature trees for HCO and Adaptif. Their UI flows and backend permissions may vary, but both use the `attendance` domain and the single MOD-03 engine. Source code domains are named `attendance`, `activity`, etc., **not** `need-001` or `need-007`. Next.js route groups are optional organization mechanisms, not a requirement to modify existing URLs.
 
-## 3. Domain boundaries
+### 3.1 Rules against unnecessary abstraction and nesting
 
-| Domain        | Responsibility                                                                | Initial need               |
-| ------------- | ----------------------------------------------------------------------------- | -------------------------- |
-| Identity      | auth users, sessions, initial credentials, disable accounts                   | shared core                |
-| SR Directory  | actor, position, department/building association, active membership           | shared core                |
-| Event         | event metadata, schedule, audience policy, location/radius and late threshold | NEED-001, extensible later |
-| QR Challenge  | activate, display, revoke and verify static event challenge                   | reusable NEED-001/007      |
-| Attendance    | record, compute classification, concurrency, report                           | NEED-001-specific adapter  |
-| Manual Entry  | KADIV HCO insertion/correction, effective time and audit                          | NEED-001                   |
-| Audit         | privileged modifications, exports, correlation IDs                            | cross-cutting              |
+| Rule              | Standard                                                                                                                                                                                                         |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Primary grouping  | One directory per stable business feature/domain.                                                                                                                                                                |
+| Default depth     | Files are **flat within their feature folder**; no one-file technical-layer subfolders.                                                                                                                          |
+| File creation     | Introduce `.service.ts`, `.repository.ts`, `.schema.ts`, hooks or test files **only when responsibilities justify them**; not every feature must contain every layer.                                            |
+| Subfolders        | Add a subfolder only when it groups several genuinely related files or a substantial **business subfeature** and demonstrably improves navigation. Do not group by file type reflexively.                        |
+| Naming            | Directories in `kebab-case`; feature files use descriptive names with predictable suffixes, e.g. `attendance.router.ts`, `attendance.service.ts`, `use-attendance.ts`, `attendance-form.tsx`.                    |
+| Imports           | Prefer feature-local imports. Keep a deliberate public API for cross-domain access; never import another feature's private repository or policy implementation directly.                                         |
+| Common code       | Extract to app-level shared folders or `packages/ui` **after real reuse**. Avoid premature shared abstractions and overlapping design systems.                                                                   |
+| Tests             | Co-locate relevant unit tests beside implementation, e.g. `attendance.service.test.ts`, rather than creating `tests/` for one file. Large integration/E2E suites may use a separate test harness when justified. |
+| Existing scaffold | Evolve the current structure gradually. A folder-standard change is **not** a mandate for an immediate, broad relocation.                                                                                        |
 
-Avoid `qr.generateAttendance` as a universal service. Prefer reusable primitives such as `qr.issueChallenge({subjectType,subjectId,...})` (typed domain-specific policies); attendance services own eligibility and time windows.
+### 3.2 Ownership of the top-level locations
 
-## 4. Authentication, provisioning and permission model
+| Location                             | Responsibility                                                                                                                                                 |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/src/app/`                  | Next.js URLs, page/layout files, loading/error boundaries and composition of features; no business-rule authority.                                             |
+| `apps/web/src/features/{domain}/`    | Domain-owned React components, feature state/hooks, API integration, form validation and types **co-located in one feature folder**.                           |
+| `apps/web/src/components/`           | Truly reusable UI within the web application; `packages/ui` owns reused design-system primitives.                                                              |
+| `apps/server/src/`                   | Express/Bun entrypoint, transport wiring, runtime config, middleware and health endpoints; not the main location for domain use cases.                         |
+| `packages/api/src/modules/{domain}/` | tRPC routers, business services, policy, domain data access, Zod validation and colocated tests.                                                               |
+| `packages/auth/`                     | Better Auth provider, session and identity infrastructure. Account/organizational domain operations still require authorization in API modules.                |
+| `packages/db/`                       | Drizzle schema/migration ownership and backend database integration; feature-local `.schema.ts` files are **Zod input schemas**, not duplicate Drizzle tables. |
+| `packages/api/src/shared/`           | Stable, reusable transport/error infrastructure; never a dumping ground for business logic or an authorization bypass.                                         |
 
-- Only `SR` logins for pilot; public sign-up **disabled**, not just hidden.
-- Better Auth Email+Password with Username Plugin: `username=NIM`, `signIn.username(...)`; plugin requires an **email during user creation**. Every SR supplies a real email. Plan Gmail SMTP with sender display name `RnD SR XIV`; sender address/SMTP credentials remain environment variables. Password recovery and email verification are Phase 2 work.
-- Authorized CSV import uses NIM, name, email, department, position, building and active status. Real CSV arrives privately before pilot UAT; use synthetic development accounts meanwhile. Validate unique NIM/email, preserve NIM leading zeros and validate assignments.
-- Generate temporary passwords with cryptographic randomness and sufficient entropy; deliver via a secure one-time mechanism. Store hashes through Better Auth only; do not log/commit/export plaintext passwords.
-- First-login password change is a security requirement; verify if generator/auth plugin provides such enforcement, otherwise implement explicit app-level gate.
-- Account has one **primary actor**. Actor (`SR`, `MAHASISWA`) is distinct from event audience (`ALL_STUDENTS`, `KADIV`). `KADIV` is SR position.
-- HCO members can create/QR/view/export. A KADIV **in department HCO** alone may insert/correct manual attendance with a reason and audit. Check both fields on every protected server procedure.
-- Initial superadmin is a system privilege, not a fifth actor. Initially only superadmin changes SR department, position, building and active status; no implicit bypass of attendance permissions. Reject inactive users during authentication and protected actions, regardless of stored sessions or invitation snapshots.
-- Adopt deny-by-default action permissions, don't trust custom role claims supplied in request bodies.
+## 4. Frontend: co-located feature implementation
 
-## 5. Event, QR and attendance consistency
+**Default example:** `apps/web/src/features/attendance/` may contain `attendance-view.tsx`, `attendance-form.tsx`, `use-attendance.ts`, `attendance.schema.ts`, and a test beside the behavior under test. These are **illustrative names, not mandatory scaffolding**. If one simple component and a typed tRPC call suffice, there is no requirement to invent an API wrapper, separate type declaration, hook, or validation module.
 
-- HCO chooses event audience, scheduled start/end, map pin or latitude/longitude center, radius default **20 meters**, late tolerance default **15 minutes** and QR lifetime default **six hours from activation**, all configurable per event. Radius/accuracy/TTL/grace bounds remain TBD; coordinates and radius are separate units.
-- At publication, persist eligible participant snapshots atomically. Historical reports retain all invitees and organizational snapshots. Check-in uses the snapshot plus live active-account status; later assignment changes do not silently replace the roster.
-- QR uses an unpredictable event-bound token, static during its lifetime, displayable directly on the event page, with HCO revocation and no automatic rotation. Reject before activation, on expiry or revocation. The canonical data model's HMAC reconstruction protocol is **PROPOSED**, not yet implemented.
-- Validate browser location/distance on the backend; client location and GPS accuracy are untrusted/imperfect. Failed verification directs participants to KADIV HCO for manual entry. GPS accuracy threshold and radius range need field testing.
-- Active QR permits scans before event start and after event end; scheduled end is not an automatic cutoff. QR scan `attendance_at` uses actual server time. `EARLY` before start, `ON_TIME` through start + tolerance inclusive, `LATE` afterward.
-- Presence is separate from timing: a record means present; missing record means pending until attendance-window closure, then absent. Authorized HCO closes explicitly, invalidating active QR and reporting non-attendees absent; expiry/scheduled end alone does not close an event.
-- Enforce `UNIQUE(event_id,user_id)` and the proposed composite FK to invitations; concurrent QR/manual inserts cannot create duplicates. Report via all participants LEFT JOIN attendance, including absentees. CSV required, XLSX optional; include NIM/name, organizational fields, presence, effective time, timing, lateness duration and source, excluding credentials, QR secrets and raw GPS coordinates.
-- Only KADIV HCO searches/selects an invited participant by name/NIM, inserts manual attendance with mandatory reason and effective time defaulting to server now (override permitted), or corrects existing attendance. Compute timing automatically. Preserve immutable original `recorded_at`; every insertion/correction appends before/after audit atomically; corrections retain original source. Override bounds remain TBD; no SR request/approval subsystem.
+- **Routing vs implementation:** `app/` determines the URL, layout and page-level composition; the feature directory owns nontrivial UI and orchestration. Avoid duplicating the full `app/` route structure under `features/`.
+- **UI state and server state:** a hook is useful only when stateful logic is reused or complex enough to extract. Use the existing typed tRPC integration rather than wrapping every procedure in a redundant function.
+- **Validation and types:** use a feature-specific Zod schema when a form needs it; backend validation is mandatory regardless. Prefer inferred tRPC/Zod types over copied DTO interfaces.
+- **Sharing:** keep attendance-specific UI within `features/attendance`, activity registration UI within `features/activity`, and general design-system primitives in `packages/ui`; do not place business-specific components in global `components/` solely to shorten an import.
+- **Growth:** if a feature genuinely grows into multiple coherent business areas (e.g. `roster` versus `check-in`), evaluate business-subfeature extraction **when needed**. A subdirectory containing one file is not an architectural milestone.
 
-## 6. Suggested tRPC boundaries
+Frontend still follows the established NEED boundaries: HCO event/roster screens for SR and Adaptif registration/attendance screens for general activities call the shared attendance backend with context-aware permissions; the UI never independently decides who may attend.
 
-- `eventRouter`: list eligible, create, update, view details, event QR issue (or delegate to qr router).
-- `attendanceRouter`: check in, own history, per-event report and export.
-- `manualAttendanceRouter`: participant search, manual insertion and audited correction, restricted to KADIV HCO.
-- `identityRouter`/Better Auth endpoints: session and login; no public sign-up.
+## 5. Backend: flat domains, clear boundaries
 
-Shared `protectedProcedure` checks authenticated session; dedicated scoped procedures check actor, department/position and event/row ownership; Zod validates every input. Business actions live in testable services rather than huge route handlers.
+**Default example:** `packages/api/src/modules/attendance/` keeps `attendance.router.ts`, `attendance.service.ts`, `attendance.repository.ts`, `attendance.policy.ts`, and `attendance.schema.ts` **side by side**, with optional colocated test files. This is a **responsibility model**, not an obligation to create six files or six folders for every feature. For simple workflows, direct service-to-Drizzle access may be appropriate; introduce a repository abstraction when query reuse, transactional clarity or testing benefits justify it.
 
-## 7. Initial DB & migrations
+| Responsibility  | Common file name (when needed) | Purpose                                                                                                                                          |
+| --------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Transport       | `attendance.router.ts`         | Typed tRPC procedures, input parsing, authenticated context and permission entry points.                                                         |
+| Use cases       | `attendance.service.ts`        | State transitions, eligibility enforcement, orchestration and transactions.                                                                      |
+| Persistence     | `attendance.repository.ts`     | Domain-owned reusable Drizzle queries. **Optional**, not a universal mandatory layer.                                                            |
+| Access policy   | `attendance.policy.ts`         | HCO/Adaptif operator rules, KADIV HCO restrictions, invitation/registration eligibility. Extract when policy complexity merits a dedicated file. |
+| Input contracts | `attendance.schema.ts`         | Zod validation/input/output; not the Drizzle database schema.                                                                                    |
+| Tests           | `attendance.service.test.ts`   | Unit/integration tests next to the implemented unit; cross-domain E2E tests can be grouped by actual test suite later.                           |
 
-- Prefer migration files generated by Drizzle rather than uncontrolled `push` against production. Never run destructive migrations without reviewing SQL and a recovery plan.
-- Partition auth tables from SR directory and event/attendance domain tables (schema boundary in code even when one Postgres database).
-- Use canonical proposed PK/FKs/indexes: participant composite PK, attendance unique/composite participant FK, QR current-challenge index and audit event/record indexes. Validate defaults/nullability against the generated schema before implementing.
-- Publication snapshots preserve invitations and organizational history. Published title/description edits only, immutable audience/schedule and original attendance source are confirmed; center/radius/late-tolerance freeze still needs PM confirmation; do not silently alter past timing classifications.
-- Store all instants as UTC, display Asia/Jakarta. Coordinates decimal degrees, radius and accuracy meters.
+**Preferred logical flow:** `tRPC router → business use case / policy → Drizzle access → packages/db → PostgreSQL`. This is a **call-direction constraint**, not a mandate for a separate class/file/folder per arrow.
 
-## 8. Local and production environments
+- Route handlers should not accumulate business rules. Service-level checks also protect future jobs/internal callers from bypassing policies.
+- Domain modules cannot directly import another module's private persistence implementation. Share explicit typed contracts/services; avoid circular references.
+- Keep database transaction ownership clear: event publication + snapshot and registration quota + cancellation must be atomic. Attendance scan must enforce idempotency and single-record uniqueness.
+- Do not copy a QR engine into `activity`. Use one MOD-03 attendance implementation and activity eligibility lookup through a constrained interface.
+- Avoid generic `BaseService`, `BaseRepository`, pass-through API wrappers, one-method classes, duplicate type definitions, barrel files with no public-boundary benefit, and files/directories created purely for a template.
 
-### Local development
+### 5.1 Domain-to-module mapping
 
-- Supabase Development is the external PostgreSQL target. Express/Drizzle uses `DATABASE_URL` (Session Pooler); migration tooling prefers `DIRECT_DB_URL` (Direct Connection). Direct failures never silently switch connections; see `docs/setup.md` for IPv6 and explicit Session Pooler alternatives.
-- pnpm launches Next.js on Node and Express on Bun locally. Docker PostgreSQL remains optional behind the Compose `local-db` profile; default Compose starts web/server using the server's configured external URL.
-- Use `pnpm run db:start`, `pnpm run dev`, `pnpm run check-types`, etc. **only if present** in `package.json`.
-- Env files and secrets are ignored by Git. Store examples with placeholders, validate required env. Port assignments may change.
+| Domain folder  | Business capability / owner                               | Notes                                                                                                |
+| -------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `identity`     | MOD-01; RnD/SUPERADMIN-controlled administration          | Better Auth provider configuration itself stays in `packages/auth`.                                  |
+| `attendance`   | **MOD-03 shared**; HCO/Adaptif according to event context | One QR/session engine, context-specific eligibility/permissions.                                     |
+| `activity`     | MOD-06/NEED-007; Adaptif                                  | Event registration, quotas, cancellation; delivers registered-participant eligibility to attendance. |
+| `resident`     | MOD-02 resident information                               | Student occupancy and official data sync separate from SR organizational identity.                   |
+| `inspection`   | MOD-04                                                    | Policies/details await owner validation.                                                             |
+| `complaint`    | MOD-05                                                    | Policies/details await owner validation.                                                             |
+| `performance`  | MOD-07                                                    | KPI rules remain a different domain from attendance.                                                 |
+| `inventory`    | MOD-08                                                    | Separate inventory lifecycle.                                                                        |
+| Future domains | MOD-09–MOD-14                                             | Create when corresponding scope is approved.                                                         |
 
-### VPS / deployment (proposed)
+**Caution:** A `need-001` source folder is appropriate under `docs/modules/` for requirements history, but implementation belongs to the reusable business `attendance` domain and supporting `identity` domain. Do not create a different code tree per NEED or stakeholder department.
 
-- Use `--web-deploy docker --server-deploy docker` and generated root Compose; adjust host origin, auth URL, trusted origins and CORS.
-- Put reverse proxy and TLS termination in front; don't publicly expose Postgres, Express internals or dev services.
-- Change all placeholder DB passwords and auth secrets. Review cookie domain/secure/sameSite policy if using multiple subdomains.
-- Verify Supabase-managed backups and restore; optional local PostgreSQL requires its own volume backups. Test restore, document migration/rollback and health checks. Funding, domain/subdomain and SLO TBD.
+## 6. Authentication, identity and RBAC
 
-Official deployment guide: https://www.better-t-stack.dev/docs/guides/docker
+### 6.1 Identity baseline
 
-## 9. Initial security tests
+- Use Better Auth with Username Plugin: **SR `username = NIM`**, preserving leading zeros as a string. Confirm status for a user before permitting protected actions; session alone is not an active-account guarantee.
+- The user has one primary actor: `SR`, `MAHASISWA`, `ASUS`, or `DITMAWA`. SR attributes include exactly one department, one position and one building; **Inti** membership is an organizational grouping that needs an authoritative mapping.
+- Initial pilot has **SR logins only**. Prevent public sign-up on backend, not merely UI. Authorized CSV provisioning and temporary credential flow are still required; use real email addresses for eventual recovery, with SMTP settings only in server environment.
+- `SUPERADMIN` is an explicitly assigned system privilege, separate from `actor=SR` and any department membership. It does not bypass HCO/Adaptif attendance data rules by default.
+- Implement first-login password-change gate and secure credential recovery in Phase 2B/2C; no claim that scaffolded UI already enforces them.
 
-- Non-HCO SR cannot create QR/event or export others' attendance.
-- HCO member who is not KADIV cannot insert manual attendance/correct; KADIV of another department also cannot insert manual attendance/correct.
-- SR cannot check in to `KADIV` audience if not KADIV; KADIV of any department can.
-- SR remains eligible for `ALL_STUDENTS` despite exclusive primary actor; non-SR students cannot log in during pilot.
-- Duplicate and concurrent check-ins produce one record; QR expired/revoked rejected; missing attendance stays pending until window closure, then absent.
-- GPS disabled/out-of-radius → contact KADIV HCO for audited manual entry; no server authorization bypass via forged client payload.
-- Security review of export, sessions, reset and provisioning.
+### 6.2 Authorization matrix for attendance
 
-## 10. Architecture unknowns
+| Protected operation                                             | Needed principal + contextual permission                                                                                                           |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Create, configure, publish, close internal SR event             | Active `SR`, department **HCO**, HCO event-operator permission.                                                                                    |
+| Build/select internal SR participant roster and preview         | Same HCO permission, limited to eligible active SR roster.                                                                                         |
+| Issue/revoke/reissue internal SR QR; view/export complete recap | Authorized active HCO operator and event of **SR_INTERNAL** context.                                                                               |
+| Scan SR internal QR                                             | Active authenticated **SR**, present in **published event snapshot**, valid session/QR/location, not already checked in.                           |
+| Manual insert/correct internal SR                               | Active SR with **department HCO and position KADIV**, relevant permission, invited target and mandatory audit reason.                              |
+| Create/update/cancel activity registration                      | Authenticated eligible RESORA user, controlled by open registration window and MOD-06 rules.                                                       |
+| Configure/activate/revoke/close general activity attendance     | Active authorized **Adaptif** operator, event of **GENERAL_ACTIVITY** context.                                                                     |
+| General activity QR check-in                                    | Authenticated account, **successful active/non-cancelled MOD-06 registration**, valid QR/session/location, not previously checked in this session. |
+| Manual insert/correct general activity attendance               | **Any authorized Adaptif operator**, valid registration target, mandatory reason and immutable audit; no KADIV requirement.                        |
+| Update SR department/position/building/account active flag      | Explicit `SUPERADMIN` privilege with audit; HCO/Adaptif/ordinary RnD membership alone insufficient.                                                |
 
-1. Cancellation/reopening/republication handling; explicit HCO close/reissue are confirmed. Reissue uses configured TTL and leaves previous challenges invalid.
-2. Final approval of recommended center/radius/late-tolerance freeze; published title/description edits only and immutable audience/schedule are confirmed.
-3. GPS accuracy/radius limits after field testing, QR TTL/grace bounds and manual override limits (including now-inactive participant backdating).
-4. Actual roster dictionary values and secure credential delivery; Gmail SMTP operational setup and recovery/verification policy.
-5. DNS/subdomains, proxy, production VPS ownership, funding, backups and operational targets.
-6. Retention, export logging/filters and lateness-duration basis/rounding.
+The uppercase context names above are **proposed code-level discriminators**, not confirmed persisted database enum names. Backend policy must check resource context, not just who owns the QR link or which page rendered the form. Policy tests include direct tRPC requests with forged department/position or another event ID.
 
-See [ADRs](decisions/README.md), [data-model repository compatibility review](modules/need-001/resora-need-001-data-model.md#12-repository-compatibility-review-2026-10-10) and [pnpm migration verification](pnpm-migration.md). Phase 2A changes only identity source/configuration, migration artifacts/tests and related documentation. No migrations have been applied.
+## 7. Shared attendance engine and module contracts
+
+**Principle:** common check-in mechanics, **separate eligibility providers and operators**.
+
+```text
+  NEED-001 / HCO                         NEED-007 / Adaptif
+  -----------------                      ---------------------
+  SR internal event                       General activity
+         |                                    |
+  Published invited SR snapshot            MOD-06 registration
+         |                                    |
+     Eligibility check <----- typed -----> Eligibility check
+                     \                 /
+                      \               /
+                   MOD-03 Attendance
+                  (session, QR, geofence,
+                   record, audit, reports)
+```
+
+### 7.1 Event, session, challenge and record
+
+| Concept                              | Technical responsibility                                                                                                                                                                                      |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `events` / activity event reference  | Who organized the event, business context, schedule, publication/closure and policy configuration. The exact cross-domain event ownership/reference contract remains under design.                            |
+| `event_participants`                 | For NEED-001, immutable **publish-time snapshot** of the final invited active SR after composable filters and manual include/exclude.                                                                         |
+| `activity_registrations`             | For NEED-007, authoritative successful/not-cancelled registration and capacity allocation; **owned by activity domain**.                                                                                      |
+| **`attendance_sessions` (proposed)** | Explicit session active/closed state, event/context reference, configured operator/location/QR policy. NEED-001 **one session per event** initially; multiple sessions later only with approved requirements. |
+| `qr_challenges`                      | Unpredictable token/challenge attached to session; activation, current challenge, expiry, revocation and controlled reissue.                                                                                  |
+| `attendance_records`                 | Actual presence per **`(session_id, user_id)`**; effective time, immutable recorded time, timing classification and source.                                                                                   |
+| `attendance_audit_logs`              | Immutable actor, time, reason and before/after changes, including manual inserts/corrections.                                                                                                                 |
+
+Do **not** retain old `UNIQUE(event_id,user_id)` as the universal shared-engine uniqueness rule. The proposed new invariant is **`UNIQUE(session_id,user_id)`**, with a separately enforced entitlement to that session's eligible source. For one internal SR session/event, this still gives one attendance per event. This is a **conceptual design direction**, not an instruction to alter applied SQL before review.
+
+**Important model synchronization:** The existing `docs/modules/need-001/resora-need-001-data-model.md` was drafted against **single audience SR/KADIV/general-student** and **event-bound QR/attendance**. It must be reconciled with the new **SR roster builder**, **session-based shared engine**, and **Adaptif registration eligibility** before coding domain migrations. The old model/ADR is not silently assumed to be up to date.
+
+### 7.2 NEED-001 event/attendance flow
+
+1. HCO drafts an event with schedule, map point and radius (default 20 m), grace period (default 15 min) and QR TTL (default 360 min). HCO selects **all SR**, one/multiple departments, **Inti**, **Inti+KADIV**, specific individuals, or combined criteria. Manual individual include/exclude applies to the **draft**.
+2. A roster resolver produces a **deduplicated draft preview** from the current active SR directory and the explicit include/exclude set. The resolver must not change SR master assignments or treat an invitee as already present.
+3. **Publish** transaction freezes the resulting participants and required historical identity/organizational snapshots, then makes the event discoverable by invited SR. Only title/description are confirmed editable afterwards; postpublication roster amendments are TBD.
+4. HCO activates the attendance session and issues a **static verifiable QR challenge**. Default expiry = activation + six hours; configurable TTL, explicit revoke/reissue; no automatic rotation. QR expiration alone does not close the event.
+5. QR scan validates live authenticated SR account, snapshot, session active state, **current** QR challenge, validity, location and uniqueness. The server chooses attendance timestamp; it may accept scans before scheduled start/after scheduled end **while both session and QR are valid**.
+6. Presence record has `PRESENT` plus `EARLY`/`ON_TIME`/`LATE` using event start and configured grace; 15-minute grace boundary is **inclusive**. Missing invitees are `PENDING` until HCO **explicitly closes event**, then `ABSENT` is derived from no record.
+7. KADIV HCO only may insert/correct manually for an invitee, using reason, effective time and append-only audit. Original record timestamp and source stay immutable; enforce transaction atomicity.
+8. HCO recap/CSV begins from **all participant snapshot rows**, not merely attendance records. Exclude tokens, credentials and raw GPS from exported data.
+
+**Geolocation:** The browser provides a location measurement and its accuracy; the backend verifies distance (meters) from configured center (latitude/longitude). Client data and GPS can be spoofed; accuracy/radius thresholds still need HCO field UAT. Location failures do not create a record; KADIV HCO manual correction is the controlled fallback.
+
+**Published policy:** The business rule currently confirms only title/description edits after publication and locks audience/schedule. A complete center/radius/grace freeze is **recommended but not PM-confirmed**. Do not allow unrestricted modification of those fields or silently recalculate historical timing before the policy is decided.
+
+### 7.3 NEED-007 registration and Adaptif attendance flow
+
+1. Adaptif configures a registration window and **limited positive integer capacity** or **unlimited** capacity. Successful registration immediately makes the participant eligible for attendance, until cancelled.
+2. On a limited-capacity event, count/reserve seats **atomically** under concurrent requests. Full capacity → new request **rejected**, not queued or silently accepted. An eligible cancellation releases capacity; fresh applicants may register again **only while the registration form is open**.
+3. Activity domain exposes a typed, backend-only **eligibility check for a given event and logged-in user**. A cancelled or nonexistent registration must fail. The student/maba login and account-provisioning mechanism is a separate dependency, not delivered by NEED-001.
+4. **Authorized Adaptif operators** configure session location/radius, issue/revoke QR, activate/close sessions, and perform manual attendance/corrections with reasons and append-only audit. HCO is not in this workflow. Adaptif operator authority comes from membership **and permission**, not a mandatory `KADIV` title.
+5. Check-in uses the shared Attendance service, but replaces SR snapshot eligibility with **current successful, uncancelled registration**. No duplicate records per session.
+
+**Boundary:** Registration form, capacity and cancellation are implemented in `activity`; QR/geofence/check-in/manual audit in `attendance`. Shared code must not force registration on SR-internal meetings or invitee snapshots on Adaptif activities. Attendance for NEED-007 must be blocked until the non-SR authentication and registration lifecycle is ready.
+
+## 8. Candidate API/tRPC contract boundaries
+
+Procedure names are **illustrative, not already implemented** and may be adjusted during refinement.
+
+| Domain                   | Candidate actions                                                                                        |
+| ------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `identity` / Better Auth | Sign-in, sign-out, active-account gate, authorized roster/provisioning, privileged SR assignment update. |
+| `attendance.events`      | `createDraft`, `previewInvitees`, `publish`, `updateAllowedFields`, `close`, `listEligible`, `get`.      |
+| `attendance.sessions`    | `activate`, `close`, `getCurrentQr`, `issueQr`, `revokeQr`, `reissueQr`.                                 |
+| `attendance.records`     | `checkIn`, `ownHistory`, `byEvent`, `exportCsv`.                                                         |
+| `attendance.manual`      | `insert`, `correct`, `auditHistory` (scoped to operator context).                                        |
+| `activity.events`        | Manage activity fields, registration-window and quota (subject to activity creation policy).             |
+| `activity.registrations` | `register`, `cancel`, `getOwn`, internal `isEligibleForAttendance`.                                      |
+
+**Transport pattern:** `protectedProcedure` authenticates, Zod validates, domain service enforces operator/context/row policy, and repository/transaction enforces persistence invariants. Use typed DTOs; avoid accepting `actor`, department, KADIV status or target owner supplied by the client as authority. Separate API public types from raw DB row types. Add pagination/filtering and export streaming limits if volume requires them.
+
+## 9. Database integrity, transactions and audit
+
+### 9.1 Foundations already present
+
+Four Better Auth core tables plus six identity-domain tables are part of the **applied Phase 2A schema chain in Supabase Development**. Continue through reviewed additive migrations; do not re-run, reset or edit applied migrations to backfill conceptual attendance changes. The database must remain private behind backend transport.
+
+### 9.2 Domain schema **proposals, not applied**
+
+- `events`: business context/type and lifecycle, schedule and HCO-specific config as applicable; generalized ownership model to be designed carefully with MOD-06.
+- `event_participants`: one row per SR invitee/event at publish, with optional historical data snapshot for reports.
+- `activity_registrations`: active/cancelled participant registration per activity and a capacity-invariant strategy; source for NEED-007 eligibility.
+- `attendance_sessions`: event/context reference, status, geofence center/radius, TTL/grace policy and activation/closure.
+- `qr_challenges`: a token hash/HMAC or other secure redisplay mechanism after technical review; only current, active challenge accepted.
+- `attendance_records`: uniqueness on `(session_id,user_id)`, immutable origin/source and operation time, corrected effective attendance time and timing classification.
+- `attendance_audit_logs`: append-only event/record/actor, original/updated values and mandatory reasons for privileged operations.
+
+The old event-centric FK from attendance to `event_participants` is insufficient by itself for NEED-007. Design eligibility through a **context-aware service/constraint combination**; keep hard database uniqueness and foreign keys where possible, without pretending a general FK can reference both event participants and activity registrations automatically.
+
+**Atomic operations and race-safety:**
+
+- Publish event and its SR snapshot in one transaction. Concurrent changes to group membership need a defined snapshot consistency strategy.
+- Create QR/reissue with transaction-safe “current challenge” behavior. Never accept an expired or revoked challenge, and never expose the raw token in logs/exports.
+- Check authorization + active eligibility and insert attendance idempotently; use DB uniqueness to guard racing scans/manual entries. Avoid replacing the original `attendance_at` or `recorded_at` on duplicates.
+- Capacity-limited registration cannot be implemented as an unprotected `COUNT(*)` followed by `INSERT`; use a transaction-safe locking/counter approach with clear cancellation semantics. Reject overflow.
+- Manual changes and their audit entry must succeed or fail as **one transaction**; original source and original operation time remain available.
+- Use server timestamps in **UTC**, display local dates in **Asia/Jakarta**; NIM stays a string; latitude/longitude use decimal degrees and distance/accuracy use meters.
+
+## 10. Environment, secrets and deployment architecture
+
+### 10.1 Local and Development
+
+- Workspace commands follow existing package scripts, verified via `package.json` rather than assumed. Start the web app on its Next.js-supported runtime and the Express server on **Bun**.
+- The current remote dev database is **Supabase Development**. Runtime backend connectivity uses a configured `DATABASE_URL` (Session Pooler); reviewed migration operations prefer `DIRECT_DB_URL` (Direct Connection). Do not silently fall back to a different DB connection when one fails; document and approve any deliberate alternative.
+- Optional local Docker PostgreSQL is disposable and separated from remote Development. Label and inspect the connection target before every migration command.
+- Keep secrets in ignored environment files or deployment secret stores; env schemas/examples must have placeholders only. Do not embed private credentials, SMTP secret, raw QR tokens or user production data in source/tests.
+- Maintain synthetic SR accounts in development until a PM-approved real roster has been supplied securely.
+
+### 10.2 Planned VPS / production
+
+- Deploy Next.js and Express behind a reverse proxy with HTTPS/TLS. Set correct Better Auth URL, CORS/trusted origins, cookie domain/secure/sameSite/CSRF policy according to actual domains/subdomains. Never publish PostgreSQL or internal database/admin ports.
+- Configure separate least-privilege access to external Postgres and operational secrets; test session behavior across the intended hostname design.
+- Production readiness includes VPS ownership, domain/DNS, funding, monitoring, secure backup/restore, recovery targets, migration runbook, rollback/forward-fix plan, incident response and PM approval.
+- Backup ownership and production Supabase subscription/point-in-time restore capabilities must be verified, not inferred from Development behavior. No production deployment is approved by this architecture.
+
+## 11. Testing strategy and release gates
+
+**Identity/RBAC tests:** deny public signup, invalid NIM, inactive user with an old session, direct request from non-HCO, ordinary HCO manual attempt, KADIV of another department, Adaptif attempting internal HCO operations, HCO attempting Adaptif events, unprivileged RnD attempting superadmin updates, forged client role fields.
+
+**NEED-001 tests:** every roster builder filter and combination, explicit add/remove and deduplication, preview and publish snapshot, late department changes, session activation/expiry/revoke/reissue, QR scans outside scheduled time but within active QR, boundary geofence and 15-minute grace, duplicate and concurrent requests, manual KADIV audit and preserved source, explicit event close and absent projection, full CSV without sensitive secrets.
+
+**NEED-007 tests (later):** account login and valid active registration required, no approval gate, limited/unlimited capacity, rejection when full, concurrent overbooking attempts, cancellation returns slot if form open, cancelled participant refused check-in, Adaptif-only session/multiple manual permissions and immutable audit.
+
+**Engineering quality gate:** review SQL diffs before migration; type-check/lint/test; integration tests on disposable local database; inspect exact target and explicit approval before Supabase Development migration; UAT on appropriate devices and location conditions; stage/production backup and security review before release.
+
+**Do not** treat a new directory tree, complete markdown spec, compiled UI, or successful identity migration as proof of attendance feature readiness.
+
+## 12. Open technical/policy decisions
+
+| Decision                                                                       | Impact                                            | Owner / timing                                                 |
+| ------------------------------------------------------------------------------ | ------------------------------------------------- | -------------------------------------------------------------- |
+| SR **Inti** group source and mapping                                           | Participant builder exact resolution              | HCO + PM, before roster tests.                                 |
+| Postpublication invitee amendments / canceled/reopened events                  | Snapshot invariants, history and audit            | HCO + PM, before lifecycle implementation.                     |
+| Freeze of geofence center/radius/grace after publish                           | Historical correctness and security               | PM/HCO, before editable event policy implementation.           |
+| Radius/accuracy/TTL/grace bounds and indoor GPS tolerance                      | UX, spoof risk and field UAT                      | HCO/Adaptif as relevant + RnD.                                 |
+| Manual effective timestamp bounds                                              | Audit and backdating controls                     | HCO/PM and Adaptif policy owner.                               |
+| Shared event registry vs typed event references                                | DB ownership and FK design                        | RnD architecture review before attendance migrations.          |
+| Future multiple attendance sessions per event                                  | UI, state and analytics                           | Not needed in NEED-001 MVP; approve only when use case arises. |
+| Challenge redisplay/token signing design                                       | Stable static QR without plaintext bearer storage | Security review before QR implementation.                      |
+| Student/maba Better Auth onboarding                                            | NEED-007 authentication dependency                | Adaptif + PM + RnD before NEED-007.                            |
+| Cross-department activity creation authority                                   | MOD-06 creation RBAC                              | Adaptif + PM; attendance operator rule already final.          |
+| Privacy, raw coordinate retention, export logs, backup RPO/RTO and rate limits | NFR, production sign-off                          | PM + data owners + RnD.                                        |
+
+## 13. Related documents and consistency obligations
+
+- [System-wide PRD](prd.md): product scope, actors, owners, priorities and acceptance governance.
+- [NEED-001 module PRD](modules/need-001/prd.md): HCO internal attendance requirements; **replace stale edition with the PM-revised version** before implementation.
+- [NEED-001 acceptance scenarios](modules/need-001/acceptance-tests.md): must drop retired general-student audience tests and cover lego builder/session model.
+- [NEED-001 data model](modules/need-001/resora-need-001-data-model.md): must be revised from event-bound QR/attendance uniqueness to shared session and contextual eligibility; identity migrations remain intact.
+- [NEED-001 roadmap](modules/need-001/roadmap.md): implementation sequencing, not release approval.
+- [ADRs](decisions/README.md), especially attendance-related ADR: preserve history but mark superseded audience/event-bound schema decisions before handover.
+- [Setup and operations](setup.md): run commands, environment requirements, actual migration verification and deployment instructions.
+- `AGENTS.md`: agent/developer execution guidelines, subordinate to business decisions and repository safety gates.
+- **RESORA MAIN DOCUMENT**: approved IDs and requirement/decision mapping. Relevant official attendance FRs: NEED-001 `FR-086, FR-119–FR-130`; shared identity `FR-001, FR-094–FR-096, FR-101, FR-131–FR-132`; activity attendance NEED-007 `FR-044–FR-047, FR-133–FR-134` plus relevant registration/quotas FRs.
+
+**Handover rule:** Never initiate event/attendance domain SQL migrations until the revised module PRD, acceptance scenarios, data model, and affected ADR all agree with the master FR and these owner/eligibility boundaries. This Architecture is **not** permission to mutate Supabase Development or production.

@@ -1,197 +1,227 @@
-# PRD — NEED-001 · SR Internal Event Attendance
+# Product Requirements Document — RESORA
 
-**Product:** RESORA (working title) | **Module:** `NEED-001`, `MOD-03` (Attendance)  
-**Version:** 0.2 synchronized draft | **Updated:** 2026-10-10\
-**Pilot deadline:** **2026-10-18** (usable by actual SR; not a wireframe)  
-**PM:** final PRD/UAT/release approval | **Policy validator:** HCO  
-**Status:** CONFIRMED business baseline; proposed schema/technical choices and remaining TBDs require review. No implementation or UAT completion is claimed.
+**Document type:** System-wide Product Requirements Document  
+**Version:** 0.3.1 — repository convention clarified 2026-10-11  
+**Product:** RESORA (working name)  
+**Owner and final prioritization/release approver:** Project Manager, RnD Senior Residents  
+**Status:** Working product baseline. Business rules explicitly identified as *PM-confirmed* are agreed for planning; stakeholder UAT, deployment approval, and unvalidated modules remain pending.
 
-## 1. Business goal
+> **Document boundary:** This PRD answers **what RESORA must do, for whom, under whose authority, and in what delivery scope**. Detailed folder structures, code boundaries, API patterns, transaction design, schema constraints, and environments belong in [Technical Architecture](architecture.md). Detailed business workflows and test cases belong in each module PRD and acceptance-test specification.
 
-Digital attendance for **SR internal activities/events** (e.g., internal meetings). HCO creates the **event** and attached QR; participants authenticate as SR and record attendance in a controlled time/location window. The QR infrastructure must be reusable in later NEED-007 but event registration and character points are not part of NEED-001.
+## 1. Product overview and objectives
 
-### Definition of success for pilot
+RESORA is an integrated digital platform for operations and services related to the Telkom University dormitory and Senior Residents (SR). Its candidate domains include internal SR attendance, student activities, inspections, resident services, SR performance, inventory, content/CoD, feedback, and analytics. Public landing pages, content delivery, and management interfaces may use distinct subdomains within the same product; final hostnames remain undecided.
 
-By Oct 18, authorized HCO can create an event and use a QR, eligible SR can mark attendance on mobile and see their history, HCO can review/export all invited participants, including non-attendees, and KADIV HCO can insert/correct manual attendance with a mandatory reason and audit history. Must be backed by production-ready permission checks and UAT—not mocked data alone.
+**Problems to address:** fragmented forms and spreadsheets, inconsistent operational records, limited traceability of changes and decisions, duplicate manual processes, and access to information that is not consistently controlled. The magnitude of each problem, numerical targets, and non-SR workflow details require validation by the respective domain owner.
 
-## 2. Actors and audience are separate concepts
+**Product principles:** one coherent identity and permission model; modular ownership; reuse common capabilities rather than copying features; server-enforced authorization; privacy by design; explicit audit of sensitive mutations; independent scope and release acceptance **per NEED**, not a blanket release of every historical feature.
 
-| Entity / filter                            | Meaning                                                 | Used by                                                    |
-| ------------------------------------------ | ------------------------------------------------------- | ---------------------------------------------------------- |
-| `actor = SR`                               | Primary account actor, exclusive of `MAHASISWA`         | Initial pilot login                                        |
-| `actor = MAHASISWA`                        | General student primary account actor                   | Future login scope                                         |
-| `sr.department = HCO`                      | SR member of HCO department                             | Event create/list/export                                   |
-| `sr.position = KADIV` + `department = HCO` | KADIV HCO                                               | Insert/correct manual attendance with reason and audit         |
-| `audience = SR`                            | Any active SR account                                   | Event eligibility                                          |
-| `audience = KADIV`                         | Any active SR with `position=KADIV`, **any department** | Event eligibility                                          |
-| `audience = ALL_STUDENTS`                  | `MAHASISWA` **or** `SR`                                 | Future general student events; initial pilot login SR-only |
+**Out of current commitment:** full deployment of all 12 NEEDs, institutional single sign-on/API integration, production-ready non-SR logins, analytics warehouse, and other features without approved module scope.
 
-The same SR **belongs to exactly one primary actor** but may match several event audiences (`SR`, `ALL_STUDENTS`, and `KADIV` if appointed). Each event selects a supported audience predicate; multi-audience selection is not a confirmed requirement. Generate its participant snapshot at publication. Later assignment changes do not silently rewrite invitations or historical reports; current inactive status always blocks authentication/check-in.
+## 2. Governance and sources of truth
 
-**Pilot caveat:** The system may store audience `ALL_STUDENTS`, but student (non-SR) sign-in is not yet supported. UI must signal this limitation; do not claim full general-student events function until that actor is enabled.
+- The Project Manager (PM) sets sequencing, resolves cross-module conflicts, and approves release. Owners affected by a feature must validate their workflow, permissions, and data access before stakeholder UAT or rollout.
+- The RESORA master workbook is the register of **NEED IDs, official FR IDs, priority labels, ownership, dependencies, and decisions**. The synchronized 2026-10-11 baseline has **12 NEEDs, FR-001–FR-134 (134 FRs), and 27 backlog items**. Historical priority/release labels do **not** automatically constitute approved MVP scope.
+- This system-wide PRD covers product-wide rules and capability boundaries. Individual module PRDs describe approved feature behavior; acceptance documents describe testable outcomes; Architecture describes technical realization; ADRs preserve decisions and rationale.
+- Change control requires aligning the master FR, affected PRD, acceptance criteria, Architecture/data-model references, and ADR before development of the changed feature. Never use a stale module document to override a later explicit PM decision.
 
-## 3. Roles and permissions
+**Decision terminology**
 
-| Action | SR (non-HCO) | SR HCO member | SR KADIV HCO |
-| --- | --- | --- | --- |
-| View own invited events and attendance history | Yes | Yes | Yes |
-| Check in to invited event while active | Yes | Yes | Yes |
-| Create/configure/publish attendance event | No | Yes | Yes |
-| Activate/display/revoke event QR | No | Yes | Yes |
-| View/export all invited participants' attendance | No | Yes | Yes |
-| Insert manual attendance | No | No | **Yes**, reason + audit |
-| Correct recorded attendance | No | No | **Yes**, reason + audit |
-
-Initial superadmin has system-level privileges, **not** a fifth primary actor. Initially only superadmin may change SR department, position, building and active status. System privileges do not implicitly replace HCO/KADIV attendance checks. Enforce all permissions server-side; no routine destructive attendance overwrite/deletion.
-
-## 4. Event configuration — functional baseline
-
-| Field | Rule / status |
+| State | Meaning |
 | --- | --- |
-| Title / description | Required title; optional description (proposed storage) |
-| Scheduled start/end | Ordered instants; display Asia/Jakarta; these are not QR scan cutoffs |
-| Audience | `SR`, `KADIV`, `ALL_STUDENTS`, selected by HCO |
-| Geofence center | HCO map pin or latitude/longitude; coordinate center separate from radius |
-| Geofence radius | Default **20 meters**, configurable; permitted range **TBD** after field testing |
-| Late tolerance | Default **15 minutes**, configurable per event |
-| QR lifetime | Default **six hours from activation**, configurable per event; static, no automatic rotation |
-| Lifecycle | Explicit authorized HCO close invalidates active QR; title/description are the only confirmed published edits; audience/schedule immutable. Cancellation/reopening details **TBD** |
+| **PM-confirmed** | Business rule approved by PM; does not mean implemented or signed off by domain owner. |
+| **Proposed** | Technical approach or policy recommendation subject to review. |
+| **Implemented** | Code or migration exists; no promise of end-to-end correctness. |
+| **Validated** | Required tests/UAT have passed with recorded evidence. |
+| **Released** | Deployment, operations and PM approval completed. |
+| **TBD** | Must not be invented by the implementation team. |
 
-**CONFIRMED timing:** check-in is permitted while the QR is active, including before scheduled start and after scheduled end. `EARLY` means `attendance_at < starts_at`; `ON_TIME` means `starts_at <= attendance_at <= starts_at + late tolerance`; `LATE` means afterward. QR scans use actual server time. Event end must not automatically reject a scan while QR remains active.
+## 3. Primary actors and permission model
 
-**Presence is separate:** an attendance record means `PRESENT`; an invitee without one is `PENDING`/not yet present until the attendance window closes, then `ABSENT`. Authorized HCO **explicitly closes** the event: invalidate active QR and report invited non-attendees as ABSENT. Expiry alone does not close an event. HCO may explicitly reissue expired/revoked challenges with configured TTL (default six hours); previous challenges remain invalid. Cancellation/reopening remains TBD.
+| Primary actor | Role in RESORA | Login readiness |
+| --- | --- | --- |
+| `SR` | Senior Resident and internal operational departments | First controlled pilot actor; NIM/password flow pending implementation. |
+| `MAHASISWA` | Student/dormitory user, including eligible new students | Required for NEED-007 later; login mechanism/provisioning not finalized. |
+| `ASUS` | Dormitory operational/administrative stakeholder | Deferred. |
+| `DITMAWA` | University administration stakeholder | Deferred. |
 
-**Recommended, pending final PM confirmation:** freeze event center, geofence radius and late tolerance at publication. Do not present this safeguard as a confirmed rule.
+A user has **exactly one primary actor**. Every SR has one department, one position/jabatan, and one building assignment. Departments currently include HCO, Adaptif, Sosial, Akademik, Spiritual, Media, and RnD. `KADIV` is a position, not an actor; **Inti** is a roster group whose authoritative members/position mapping still require confirmation. `SUPERADMIN` is an explicitly granted system privilege, **not** a fifth actor or an automatic benefit of RnD membership. Only users granted that privilege may maintain SR department/position/building/active status, with audit; it does not automatically bypass attendance ownership rules.
 
-## 5. End-to-end workflows
+Backend authorization must verify active account, actor, department, relevant position, permission, and resource context on every protected action. Hiding a UI control is not access control.
 
-### 5.1 HCO creates and publishes an event
+## 4. Module ownership and responsibility boundaries
 
-1. Backend validates active SR session and HCO department.
-2. HCO selects title, schedule, audience, map pin/latitude-longitude center, radius, late tolerance and QR lifetime.
-3. Backend validates inputs and permissions. Publication generates the invited participant snapshot atomically with publication state.
-4. HCO activates an unpredictable event-bound QR and displays it directly on the event page. Default expiry is activation + six hours; no automatic rotation. Authorized HCO may revoke before expiry.
-5. Event access/check-in uses the publication snapshot plus current account active status. Reports retain all invitees after assignment changes or non-attendance. Only title/description edits are permitted after publication; audience/schedule are immutable. Reissue expired/revoked QR explicitly using configured TTL; never reactivate previous challenges. Cancellation/reopening/republication snapshot handling remains TBD.
-
-### 5.2 SR attendance via QR
-
-1. Active provisioned SR signs in with NIM/password and opens the scanner; browser requests location permission.
-2. QR carries an unpredictable event-bound token, static during its configured lifetime; no user privileges or signing secrets.
-3. Backend validates session, SR actor, current active status, invitation snapshot, token activation/expiry/revocation and uniqueness. Early and after-end scans remain valid while QR is active.
-4. Backend validates coordinate inputs and distance in meters from event center. GPS accuracy is imperfect and client location untrusted; accuracy threshold remains TBD after field testing.
-5. Use actual server attendance time, compute timing classification, and atomically insert one attendance per event/user. Duplicate/retry/concurrent submissions cannot change the original timestamp or create another row.
-6. SR sees own result/history; HCO reports all invitees. QR sharing and GPS spoofing remain risks; event binding, authentication, QR validity and backend policy are mandatory.
-
-### 5.3 Manual attendance fallback
-
-When GPS cannot verify attendance, direct the participant to KADIV HCO for manual entry. The pilot has no SR-submitted request/approval workflow.
-
-1. KADIV HCO opens an event.
-2. Searches its invited participants by name or NIM and selects a participant profile.
-3. Enters manual attendance with a **mandatory reason**.
-4. Effective `attendance_at` defaults to current server time; KADIV may override it to represent actual attendance.
-5. Backend automatically computes `EARLY`/`ON_TIME`/`LATE` from effective time and event policy.
-6. Persist effective time separately from immutable `recorded_at` (actual creation time), acting user and append-only audit history.
-7. Attendance mutation and audit insertion are atomic; unique `(event_id, user_id)` prevents duplicate manual/QR records.
-
-Allowed effective-time override bounds and handling of backdated manual entry for a now-inactive participant remain **TBD**. Inactive users themselves cannot authenticate/check in.
-
-### 5.4 Attendance correction
-
-Only KADIV HCO may correct recorded attendance, requiring reason and immutable before/after audit in the same transaction. Recalculate timing automatically from corrected effective time; preserve original `recorded_at`. If a record exists, offer correction instead of a second insertion. Corrections preserve original `QR`/`MANUAL` source and create immutable audit. No routine hard-delete or unaudited overwrite.
-
-### 5.5 Authentication and provisioning (Phase 2)
-
-- Better Auth Username Plugin with NIM/password; SR-only pilot login; no public self-registration, including direct endpoint calls.
-- Every SR has a real email. Authorized CSV import supplies **NIM, name, email, department, position, building and active status**; technical header mapping is in the canonical data model.
-- PM uploads real CSV privately before pilot UAT. Use synthetic accounts until then; no real student data or credentials in Git.
-- Securely generate/distribute initial credentials and require password change. Better Auth manages password hashing.
-- Plan backend Gmail SMTP with display name **RnD SR XIV**. Sender address and SMTP credentials remain environment variables. Password recovery and email verification belong to Phase 2; they are not current scaffold functionality.
-
-### 5.6 Attendance reporting and export
-
-HCO reports/exports start from **all invited participants**, including missing attendance records. CSV is required; XLSX optional. Include NIM/name, department/position/building as appropriate, presence (present/absent after closure; pending before closure), effective attendance timestamp, timing class, lateness duration and `QR`/`MANUAL` source where relevant. Missing records have no fabricated timestamp, timing or source. Exclude passwords, session tokens, QR secrets and raw GPS coordinates. Lateness-duration basis/rounding, filters and retention remain TBD.
-
-## 6. Main FR candidates (new NEED-001 IDs are provisional)
-
-The historic workbook does not contain dedicated QR-scan FRs for NEED-001. **Never map FR-044..047 to this module; they describe QR attendance for NEED-007 activities.** `FR-086` is an internal attendance _recap_ fragment, not the scan workflow. Assign canonical FR IDs in `03_FR Master` after approval.
-
-| ID         | Candidate requirement                                                      | State                                             |
-| ---------- | -------------------------------------------------------------------------- | ------------------------------------------------- |
-| N001-FR-01 | SR can authenticate via NIM/password; no public sign-up                    | Confirmed direction; login implementation pending |
-| N001-FR-02 | HCO can create event with audience, time, location, radius, grace period   | Confirmed main fields                             |
-| N001-FR-03 | HCO displays/revokes static event QR, default 6h from activation, configurable   | Confirmed; token protocol proposed                         |
-| N001-FR-04 | Eligible authenticated SR can check in to event via QR                     | Confirmed                                         |
-| N001-FR-05 | Server checks invitation, active status, QR validity, duplicates and geofence     | Confirmed checks; GPS threshold/radius bounds TBD   |
-| N001-FR-06 | Presence separate from EARLY/ON_TIME/LATE; 15-min default grace inclusive | Confirmed; explicit HCO close invalidates QR and reports non-attendees ABSENT |
-| N001-FR-07 | KADIV HCO searches/selects participant and inserts manual attendance/reason                    | Confirmed                                         |
-| N001-FR-08 | Effective/recorded time distinct; automatic class; insert/correction audited      | Confirmed                                         |
-| N001-FR-09 | HCO reports/exports every invitee, including non-attendees; required CSV                              | Confirmed                                         |
-| N001-FR-10 | SR can view own eligible/attended event history                            | Confirmed                                         |
-
-## 7. Data model candidates (NOT a final ERD)
-
-The [canonical NEED-001 data model](resora-need-001-data-model.md) owns the proposed ERD, columns, defaults, PK/FK relationships, constraints, indexes, snapshots and audit design. Do not duplicate those table definitions here.
-
-**Phase 2A source baseline:** Better Auth Username Plugin is enabled server-side; generated `user.username` (unique, nullable) and `display_username` accompany the four core auth tables. Drizzle defines `user_profiles`, `sr_profiles`, `departments`, `positions`, `buildings`, `system_privileges`, with deferred SR/actor/NIM integrity SQL. Phase 2A.5 validated all migrations locally; Phase 2A.6 applied and read-only verified the unchanged chain on Supabase Development after explicit approval and preflight. No event/QR/attendance tables or provisioning/auth UI flows are implemented. The data model's [repository compatibility review](resora-need-001-data-model.md#12-repository-compatibility-review-2026-10-10) records discrepancies and suggested corrections. Review before future schema generation/migrations; the [Phase 2A implementation record](resora-need-001-data-model.md#13-phase-2a-identity-foundation-implementation-record) records the original source-only state; the [local validation record](resora-need-001-data-model.md#14-phase-2a5-local-postgresql-validation) supersedes its original readiness assessment; the [Development migration record](resora-need-001-data-model.md#15-phase-2a6-supabase-development-migration) records the current applied state.
-
-## 8. Proposed tRPC procedures (contract sketch)
-
-This is a **design guide**, not a guarantee about generated router names.
-
-| Procedure                       | Auth rule                                 | Result                               |
-| ------------------------------- | ----------------------------------------- | ------------------------------------ |
-| `attendanceEvents.create`       | `SR + department HCO`                     | Create draft event                   |
-| `attendanceEvents.update`       | HCO, policy on edits after attendance TBD | Update permitted event fields        |
-| `attendanceEvents.listEligible` | active SR                                 | Eligible events only                 |
-| `attendanceEvents.get`          | HCO or eligible SR                        | Audience-scoped event details        |
-| `attendanceQr.issue`            | HCO                                       | Static event-bound QR with configured lifetime |
-| `attendanceQr.scan`             | active eligible SR                        | Check-in or safe duplicate rejection |
-| `attendance.mine`               | logged-in SR                              | Only own attendance/event history    |
-| `attendance.byEvent`            | HCO                                       | Filtered recap                       |
-| `attendance.exportByEvent`      | HCO                                       | Authenticated, auditable export      |
-| `attendanceEvents.publish`     | HCO                                       | Atomic publication + participant snapshot |
-| `attendanceQr.revoke`           | HCO                                       | Immediate QR invalidation            |
-| `attendanceManual.create`       | KADIV HCO                                 | Effective time, mandatory reason, audit |
-| `attendance.correct`            | KADIV HCO                                 | Audited correction                   |
-
-Use Zod to validate payloads and recompute all authorization and attendance rules on backend. Client data is untrusted.
-
-## 9. UI screens (minimum)
-
-1. Login NIM/password, initial password change flow, session-expired state.
-2. SR event list and event details showing eligibility/status and own attendance history.
-3. QR scan/check-in screen with permission prompt, location/accuracy feedback, duplicate status, contact KADIV HCO for manual entry.
-4. HCO create/edit event, QR display, event recap/export view.
-5. KADIV HCO event participant search/profile, manual entry with reason/effective time, correction audit history.
-6. Mobile friendly states: empty, error, loading, expired QR, poor GPS, blocked permissions and session expiry.
-
-## 10. Pilot quality and security
-
-- Geolocation API requires secure context in production (HTTPS). Browser precision can exceed chosen 20 m radius; a manual path is mandatory.
-- QR validity: configured expiry/revocation, server verification, event binding; QR is **not** a credential/attendance proof by itself.
-- Atomic uniqueness for event/user attendance with well-defined idempotency and duplicate UI response.
-- Explicit server-side authorization for HCO/KADIV; audit manual insertions/corrections and export accesses where appropriate.
-- Never ship seeded real NIM/password data, print initial credentials to logs, or expose bulk user import endpoints publicly.
-- Structured logs redact secrets, QR tokens, GPS-sensitive data.
-
-## 11. Risks / blocked decisions before PM sign-off
-
-| Key | Remaining item | Owner | Gate |
+| Area | Business/data owner | Operational authority | Exclusions / guardrail |
 | --- | --- | --- | --- |
-| OPEN-001 | Cancellation/reopening lifecycle; reissue must not silently invent a reopening policy | HCO + PM | Before lifecycle implementation |
-| OPEN-002 | Confirm recommended publication freeze for center/radius/late tolerance; republication snapshot handling | HCO + PM | Before event lifecycle implementation |
-| OPEN-003 | Permitted radius range, GPS accuracy threshold and configurable TTL/grace bounds | HCO + PM | Before validation/field UAT |
-| OPEN-004 | Manual effective-time bounds; backdated entry for now-inactive participants | KADIV HCO + PM | Before manual implementation |
-| OPEN-005 | Actual roster/building/position values and secure credential delivery | PM + RnD | Before real import/UAT |
-| OPEN-006 | Gmail sender address/credentials, recovery/verification delivery policy | PM + RnD | Phase 2 verification |
-| OPEN-007 | Lateness-duration basis/rounding, export filters/logging and retention | HCO + PM | Before reports/release |
-| INFRA-001 | VPS/domain/TLS, funding, backups and operational targets | PM + DevOps | Before deployment |
+| Core Identity / SR directory (`MOD-01`) | RnD with authoritative data source | Explicitly privileged administrators for SR assignments | Membership in RnD alone grants no `SUPERADMIN` rights. |
+| Internal SR events and attendance (`NEED-001`, `MOD-03`) | **HCO** | Authorized active HCO members: create event, select audience, QR/session, geofence, recap/CSV | No general-student event attendance operations. |
+| Manual insertion/correction for internal SR | **HCO** | **KADIV HCO only**, mandatory reason and audit | Ordinary HCO, KADIV of another department, and Adaptif cannot perform these actions. |
+| General activity registration (`NEED-007`, `MOD-06`) | **Adaptif** | Authorized Adaptif management of registration, quotas and cancellation | Rights to create activities for other departments remain a separate, unconfirmed policy. |
+| General activity attendance (`NEED-007`, `MOD-03`) | **Adaptif** | **All authorized Adaptif operators**: configure location/radius, activate/close session, QR, manual insertion/correction | HCO has **no role** in these attendance sessions; KADIV status is not required for an authorized Adaptif operator. |
+| SR KPI/performance (`NEED-005`, `MOD-07`) | HCO and SR leadership | Specific assessment permissions TBD | Attendance does not automatically determine KPI scoring. |
 
-The audience/snapshot rule, static six-hour QR default, explicit HCO close/reissue, title/description-only published edits with immutable audience/schedule, original source on correction, early/after-end scanning, inclusive timing boundary, real emails/CSV columns and direct KADIV manual workflow are **CONFIRMED**, not open policy.
+Attendance data has a **contextual owner** although its implementation is shared. Domain ownership is not interchangeable with technical custody by RnD.
 
-## 12. Acceptance, UAT & release gate
+## 5. Functional domains and delivery sequence
 
-[Acceptance tests](acceptance-tests.md) are the checklist; the [roadmap](roadmap.md) sequences implementation. Do not mark the pilot as accepted merely because the pages render. PM signs off after HCO validates business policy, credentials are distributed securely, and real SR users finish mobile tests with QR/GPS/manual correction.
+The following are candidate product NEEDs; their owners, scope, and status are not uniformly approved.
 
-**Technical baseline:** pnpm **10.33.4** package management, Bun **1.3.13** Express runtime, Next.js/tRPC, Better Auth, Drizzle and Varlock. Supabase PostgreSQL is accessed through Express only; runtime `DATABASE_URL` uses Session Pooler, migration tooling prefers `DIRECT_DB_URL` with explicit failures/alternatives. Optional local Docker PostgreSQL and planned VPS hosting remain. See [architecture](../../architecture.md), [setup](../../setup.md) and [pnpm verification](../../pnpm-migration.md).
+| NEED | Candidate capability | Initial owner | Current scope/delivery statement |
+| --- | --- | --- | --- |
+| `NEED-001` | Digital attendance for **internal SR meetings/events** | HCO | **First implementation focus; PM-confirmed feature rules**, HCO UAT pending. |
+| `NEED-002` | Resident inspection/sidak | Adaptif + Ditmawa | Further stakeholder validation. |
+| `NEED-003` | SR inspection/sidak | HCO | Further stakeholder validation. |
+| `NEED-004` | Room cleanliness checks | Adaptif + HCO | Further stakeholder validation. |
+| `NEED-005` | SR KPI / 360 evaluation | HCO + leadership | Planned subsequent/parallel candidate; scoring and privacy rules TBD. |
+| `NEED-006` | Facility complaints/incidents | Building SR + ASUS/HD | Not scheduled; handler/approval details TBD. |
+| `NEED-007` | Activity events, registration, quotas and attendance | Adaptif | PM-confirmed registration and attendance rules; student login and Adaptif UAT pending. |
+| `NEED-008` | Inventory | HCO | Not prioritized for current pilot. |
+| `NEED-009` | CoD, content and communication | Akademik/Media | Ownership/workflow details require validation. |
+| `NEED-010` | Feedback from residents/SR | TBD | Need discovery. |
+| `NEED-011` | Cross-domain reporting/analytics/data warehouse | Multiple owners/RnD | Data contracts first; full warehouse deferred. |
+| `NEED-012` | Dormitory public landing page | TBD | One platform; public subdomain design TBD. |
+
+Core reusable capabilities include identity/RBAC, verified SR roster, notifications (TBD), attendance sessions/QR/geofencing, auditing and controlled exports. They do not constitute one mandatory product-wide MVP.
+
+## 6. Shared attendance capabilities and business workflows
+
+**Three distinct concepts:**
+
+- **Event:** an activity, its owner, schedule and eligibility source.
+- **Attendance session:** when and under which location/QR policy check-in is accepted. This is **not** an authentication/login session.
+- **Attendance record:** a participant's actual recorded attendance for a particular session.
+
+**Shared behavior:** backend authentication and eligibility checks, explicit session activation/closure, verifiable QR, geofence policy, duplicate-safe check-in, timing classification where applicable, immutable privileged audit, and reporting. **One attendance engine** serves NEED-001 and NEED-007 without granting HCO permission over Adaptif data or vice versa.
+
+### 6.1 NEED-001 — internal SR attendance
+
+HCO creates an internal event and constructs its audience in **composable “lego” fashion**: all active SR; one or more departments; only **Inti**; **Inti + KADIV**; chosen individual members; or any combination. HCO may add or remove individuals from the **draft preview**, and a final deduplicated **participant snapshot** is stored atomically when the event is published. This invitation gives the SR the **right to check in**, not an automatic `PRESENT` record. Changing a user's later department/position does not rewrite the invitation history. Edit/remove after **publication** is **not yet authorized** and requires a separate amendment policy.
+
+Authorized HCO manages event, QR, radius, reporting and explicit closure. The initial NEED-001 event has **one attendance session**. Confirmed defaults and rules:
+
+| Rule | NEED-001 baseline |
+| --- | --- |
+| QR | Static, unpredictable, event/session-bound; default **6 hours from activation**, configurable, revocable/reissuable explicitly; no automatic rotation. |
+| Geofence | HCO sets map point and radius; **20 m default**, configurable. Backend calculates distance; browser GPS is an untrusted signal. |
+| Check-in time | Scan allowed **before scheduled start and after scheduled end**, as long as session and QR are still active/valid. |
+| Timing | `EARLY` before start; `ON_TIME` from start through start + grace **inclusive**; `LATE` afterward; **15-minute default grace**. |
+| Manual entry / correction | **KADIV HCO only**, mandatory reason, overridable effective `attendance_at`, immutable `recorded_at`, preserved original source and append-only before/after audit. |
+| Presence | Record exists → `PRESENT`; missing record → `PENDING` until HCO explicitly closes event, then `ABSENT`. Expired QR/end of schedule alone does not close event. |
+| Reports | HCO sees and exports **every invited SR**, including pending/absent; CSV required, XLSX optional; SR sees only own event/history. |
+
+If location access is denied, inaccurate, or out of range, there is no automatic bypass; SR must contact KADIV HCO for auditable manual handling. Only event title/description are confirmed editable after publishing; freezing location/radius/grace on publication is still recommended but not final.
+
+The **official NEED-001 FR set** is `FR-086` (recap) and `FR-119–FR-130` (event, audience builder, snapshot, QR, check-in, geofence, manual, audit and CSV). Detailed scenarios: [NEED-001 PRD](modules/need-001/prd.md) and [acceptance tests](modules/need-001/acceptance-tests.md).
+
+### 6.2 NEED-007 — Adaptif activity registration and attendance
+
+Adaptif configures the event registration form with a **positive maximum capacity** or **unlimited** capacity. A successful registration immediately establishes attendance eligibility **while not cancelled**; there is **no confirmation/approval step required** for eligibility. When a limited-capacity event is full, new registrations are **rejected automatically**, not accepted into an implicit waitlist. A cancellation releases a slot for new applicants **if registration is still open**. Concurrent requests must not exceed capacity.
+
+A participant (mahasiswa/maba, or another eligible RESORA user including SR) **must log in** and have an **active successful registration** to check in. Authorized **Adaptif** operators alone set session location/radius and manage QR/session and manual insertion/correction, with mandatory reason and audit. HCO does not take part. Attendance uses **the same MOD-03 engine**, but eligibility comes from the **MOD-06 registration domain**, not an SR invitation snapshot. The exact student onboarding/login flow and module-wide event-creation permissions remain to be specified before NEED-007 release.
+
+Applicable existing activity FRs include `FR-040`, `FR-042–FR-047`, with Adaptif-specific session/manual FRs `FR-133–FR-134`. NEED-007 is **not** implicitly included in the NEED-001 pilot deliverable.
+
+## 7. Current delivery scope, milestones and implementation state
+
+The earlier plan identifies **2026-10-18 as a target for a controlled NEED-001 pilot**. Treat this as a **planning target**, not evidence that release is feasible or approved; reassess scope, readiness and UAT against actual team capacity before committing.
+
+| Capability | Current known state | Next gate |
+| --- | --- | --- |
+| Next.js/Express/tRPC monorepo and technical scaffold | Present in repository | Keep builds, lint/type-check and configuration stable. |
+| PostgreSQL/Drizzle identity foundation | **Three reviewed migrations applied and verified on Supabase Development** (Phase 2A/2A.5/2A.6). | Do not modify applied identity migrations without reviewed follow-up migration. |
+| Better Auth SR sign-in (NIM/password), active checks and no-public-signup enforcement | **Not fully implemented/validated** | Phase 2B auth workflow/tests. |
+| Authorized CSV SR provisioning, initial password change, email recovery | **Pending** | Phase 2C and access to real roster; secure credentials delivery. |
+| NEED-001 event, roster builder, attendance sessions, QR, geofence and reporting | **Domain design only; no attendance domain migrations** | Align data model/acceptance docs, then review migration and implement. |
+| NEED-007 student login, quotas, registration and Adaptif attendance | **PM-confirmed business rules, not delivered** | Separate module specification and Adaptif UAT. |
+| Production VPS and full product release | **Planned, unverified** | Security, backup, deployment, operations and PM go/no-go. |
+
+**No database migration or production action is authorized merely by this PRD.** Migration review and explicit approval are required; local disposable DB tests and Supabase Development must be clearly distinguished from production.
+
+## 8. Authentication, authorization and data governance
+
+- Use Better Auth with Username Plugin for SR login via **NIM/password**. Preserve NIM formatting, including leading zeros; NIM is not a numerical counter.
+- **Public account registration is prohibited** for the SR pilot. Privileged import/provisioning is based on a validated CSV with NIM, name, real email, department, position, building and active status, using a secure first-credential delivery process.
+- First-login password change, authenticated sessions, disabled-account rejection and password recovery using real email are required. SMTP sender display name is planned as **RnD SR XIV**; mail credentials remain server-side. Student identity/login needed for NEED-007 is a later separate readiness gate.
+- Consent/privacy and data minimization govern personal identities and GPS; never expose password hashes, QR secrets, session tokens or raw GPS in general exports.
+- Privileged changes (assignment, manual presensi, correction and relevant exports) must be traceable; the person who records/corrects and the effective attendance time are distinct facts.
+- Business data ownership must be respected across modules even if technical administration of the database is centralized.
+
+## 9. Non-functional requirements and minimum quality gates
+
+| Quality area | Required behavior | Remaining acceptance target |
+| --- | --- | --- |
+| Security | Server-side RBAC/eligibility, TLS in production, secure session cookies, CSRF/CORS/trusted-origin policy, rate limiting, secret isolation | Security test plan and operational configuration pending. |
+| Data integrity | Atomic event publication/snapshot, duplicate-safe attendance, quota reservation/cancellation, append-only correction audit | Concurrent integration tests with test database. |
+| Privacy | Least privilege, no secrets or raw GPS in CSV, controlled access to high-sensitivity attendance and account data | Retention, legal notice and audit access TBD. |
+| Reliability | Clear failures for revoked/expired QR, denied location, unavailable DB, and rejected registration | Error-case UAT and recovery targets TBD. |
+| Accessibility | Mobile-first QR scan, permission prompts, error recovery, usable forms and keyboard access | Browser/mobile acceptance matrix TBD. |
+| Performance | Arrival bursts and concurrent registrations must not corrupt data | Numeric latency/load objective TBD. |
+| Observability | Health checks, structured backend errors, audit correlation and incident response | Logging, redaction and alerting policy TBD. |
+| Maintainability | TypeScript strict, domain separation, tested services, repeatable reviewed Drizzle migrations, automated quality checks | CI/reviewer policy TBD. |
+| Recoverability | Tested PostgreSQL backup/restore and reviewed migrations | Backup frequency, RPO/RTO, rollback/forward-fix strategy TBD. |
+
+## 10. Product success metrics
+
+For NEED-001, capture **invited SR count**, successful QR attendance, GPS failures, manual entry/correction counts, duplicate rejections, percent of missing/pending attendees at event close, and time needed to produce an accurate CSV. For NEED-007, later measure active registration count versus capacity, full-capacity rejections, cancellations/reopened slots, attendance eligibility failures and successful check-ins. Aggregates must not bypass authorization to individual records.
+
+**No numerical target is yet approved**; PM and the corresponding owner establish targets and UAT sampling before release. KPI/character points must not automatically infer outcomes from attendance data without a separately approved policy.
+
+## 11. High-level technical architecture and repository policy
+
+RESORA follows a **TypeScript modular monolith** with Next.js frontend, Express backend (Bun runtime), tRPC boundary, Better Auth, PostgreSQL/Drizzle and shared packages. The **directory standard** is:
+
+- **Frontend:** Next.js routing/layouts in `apps/web/src/app/`; **flat, feature-first, co-located** components, hooks, forms and integration in `apps/web/src/features/{domain}/` where actually needed.
+- **Backend:** thin runtime in `apps/server/`; **one folder per domain**, with router/service/policy and optional repository or Zod schema files kept **directly in** `packages/api/src/modules/{domain}/` (no mandatory one-file layer subfolders).
+- **Data and cross-cutting packages:** Better Auth in `packages/auth`, Drizzle schema/migrations in `packages/db`, reused UI primitives in `packages/ui`, and shared configuration in `packages/config`. Avoid creating abstractions or shared code before genuine reuse.
+
+**This is a target development standard, not an assertion that all folders already exist.** Folder trees, import boundaries, dependency direction and conventions are specified in [Technical Architecture §3–5](architecture.md); the PRD does not maintain a per-file repository inventory.
+
+## 12. Dependencies, risks and constraints
+
+- **Identity readiness:** NEED-001 requires login, active SR status, organization roster/Inti mapping, and correct HCO/KADIV/SUPERADMIN permissions before pilot UAT.
+- **Cross-domain attendance:** MOD-03 consumes eligible SR snapshot for NEED-001 or valid MOD-06 registration for NEED-007. Sharing an engine **does not** share its operators.
+- **GPS reliability:** browser location can be inaccurate or spoofed; particularly sensitive for short distances/indoor use. Manual fallback must remain auditable.
+- **QR security:** static tokens can be forwarded; authenticated identity, server-side eligibility, session state and short expiry are mandatory checks.
+- **Roster consistency:** snapshots prevent historical rewrites, but late participant changes after publication need a separate audited policy.
+- **Timeline/team capacity:** implementation and real UAT cannot be inferred from an aspirational date or a complete PRD.
+- **External dependencies:** official university API/SSO integration, initial roster source, mail delivery, VPS budget and operations remain separate readiness issues.
+
+## 13. Acceptance, UAT and release governance
+
+A NEED is ready for owner validation only when its official FRs map to verifiable test cases, negative permission tests pass, critical state transitions and concurrent operations are tested, data integrity is checked against the real user workflow, and privacy/security behavior is reviewed. A release additionally needs approved migration/recovery steps, backup/restore verification, operational ownership and PM sign-off.
+
+**NEED-001 UAT** must cover HCO's combined participant builder and snapshot, QR validity and session activation, distance checks, start/grace timing boundaries, duplicate scans, inactive/not-invited SR, KADIV-only manual changes with audit, explicit closure, and CSV including non-attendees. **NEED-007** has an independent Adaptif acceptance gate for successful/uncancelled registrations, quota concurrency, returned slots, login, Adaptif-only session control and manual audit.
+
+## 14. Requirements traceability and change control
+
+**Canonical traceability:** `Stakeholder NEED → FR Master → module PRD → acceptance scenario → implementation/test → UAT evidence → release decision`.
+
+When a rule changes: (1) record the PM/owner decision and affected NEED, (2) update existing FR rather than duplicating it where possible, (3) update any affected module PRD/acceptance tests, (4) update Architecture, data-model and ADR **if the solution boundary changed**, and (5) confirm old text is marked superseded or removed before handing over work. Do not delete a valid FR merely because the technical implementation is shared; use a correct `Related Module` and stakeholder-need mapping.
+
+Official reference for SR attendance: **FR-086 and FR-119–FR-130**. Core dependencies: **FR-001, FR-094–FR-096, FR-101, FR-131–FR-132**. NEED-007 activity attendance: **FR-044–FR-047 and FR-133–FR-134**, alongside activity registration/quota FRs. Actual implementation progress is tracked separately from approval of these requirements.
+
+## 15. Open decisions (do not infer answers)
+
+1. **NEED-001:** membership definition/source for **Inti**, post-publication invitee amendments, event cancellation/reopening, and the final recommendation to freeze geofence center/radius/grace after publication.
+2. **Location and manual attendance:** permissible radius range, GPS accuracy threshold, effective-time override bounds, display rounding and audit retention/access.
+3. **Identity:** complete real SR roster, secure first-credential handoff, operational password recovery/SMTP, and login/provisioning for mahasiswa/maba.
+4. **NEED-007:** creation privileges for activities outside Adaptif, full module MVP/UAT policy, and configurable registration-window edges; **capacity, cancellation and immediate eligibility rules are already confirmed**.
+5. **Product/release:** NFR numerical thresholds, privacy retention, physical hosting/domains, budgets, backup targets, UAT participants and release dates.
+6. **Other NEEDs:** domain-specific stakeholder workflows, permissions, scoring and data rights remain unapproved unless separately documented.
+
+## 16. Document map and handover references
+
+| Reference | Role |
+| --- | --- |
+| `docs/prd.md` | This system-wide business/product baseline. |
+| `docs/architecture.md` | Implementation architecture, target FE/BE folder conventions, data boundaries, environments. |
+| `docs/modules/need-001/prd.md` | Detailed HCO/SR attendance behavior; must use the revised version aligned with this PRD. |
+| `docs/modules/need-001/acceptance-tests.md` | NEED-001 test scenarios; **legacy audience cases require synchronization** before implementation. |
+| `docs/modules/need-001/resora-need-001-data-model.md` | Domain data model; **legacy event-bound attendance uniqueness and audience assumptions require synchronization** with attendance sessions/builder. |
+| `docs/modules/need-001/roadmap.md` | Sequencing and module work plan. |
+| `docs/decisions/` | ADR and historical decisions; obsolete assumptions must be superseded explicitly. |
+| `docs/setup.md` | Verified local setup and technical commands. |
+| `AGENTS.md` | Repository assistant/developer instructions. |
+| **RESORA MAIN DOCUMENT** | Official FR and NEED registry, ownership, product backlog and change notes. |
+
+**Handover rule:** The PRD, detailed NEED PRD, Architecture, FR Master and acceptance tests must agree before beginning attendance-domain migrations or event feature implementation. A document update does not change source code or authorize deployment.
