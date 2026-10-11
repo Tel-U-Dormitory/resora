@@ -1,1 +1,95 @@
 @import "@resora/ui/globals.css";
+
+/* Selected Nafi design tokens; retain shared UI tokens and dark-mode support. */
+:root {
+	--primary: #e13b30;
+	--primary-hover: #c92c22;
+	--primary-foreground: #ffffff;
+	--primary-soft: #feeceb;
+	--primary-soft-foreground: #b4231a;
+	--background: #fafafb;
+	--foreground: #0f172a;
+	--surface: #ffffff;
+	--card: var(--surface);
+	--card-foreground: var(--foreground);
+	--popover: var(--surface);
+	--popover-foreground: var(--foreground);
+	--muted: #f1f5f9;
+	--muted-foreground: #64748b;
+	--border: #e2e8f0;
+	--input: var(--border);
+	--ring: #e13b30;
+	--ink: #0f172a;
+	--ink-foreground: #f8fafc;
+	--danger: #dc2626;
+	--destructive: var(--danger);
+	--success: #10b981;
+	--warning: #f59e0b;
+}
+
+.dark {
+	--primary: #f87171;
+	--primary-hover: #ef4444;
+	--primary-foreground: #0f172a;
+	--primary-soft: #321d22;
+	--primary-soft-foreground: #fca5a5;
+	--background: #0f172a;
+	--foreground: #f8fafc;
+	--surface: #1e293b;
+	--card: var(--surface);
+	--card-foreground: var(--foreground);
+	--popover: var(--surface);
+	--popover-foreground: var(--foreground);
+	--muted: #334155;
+	--muted-foreground: #cbd5e1;
+	--border: #475569;
+	--input: var(--border);
+	--ring: #f87171;
+	--danger: #f87171;
+	--destructive: var(--danger);
+}
+
+@theme inline {
+	--font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+	--font-mono: var(--font-geist-mono), ui-monospace, monospace;
+	--color-surface: var(--surface);
+	--color-primary-hover: var(--primary-hover);
+	--color-primary-soft: var(--primary-soft);
+	--color-primary-soft-foreground: var(--primary-soft-foreground);
+	--color-ink: var(--ink);
+	--color-ink-foreground: var(--ink-foreground);
+	--color-danger: var(--danger);
+	--color-success: var(--success);
+	--color-warning: var(--warning);
+	--radius-sm: 6px;
+	--radius-md: 10px;
+	--radius-lg: 14px;
+	--radius-xl: 20px;
+	--radius-2xl: 28px;
+	--shadow-xs: 0 1px 2px rgb(15 23 42 / 0.05);
+	--shadow-sm: 0 1px 3px rgb(15 23 42 / 0.08);
+	--shadow-brand: 0 10px 24px -8px rgb(225 59 48 / 0.45);
+	--animate-shimmer: shimmer 1.6s linear infinite;
+}
+
+@keyframes shimmer {
+	from {
+		background-position: -200% 0;
+	}
+	to {
+		background-position: 200% 0;
+	}
+}
+
+@utility focus-ring {
+	&:focus-visible {
+		outline: 2px solid var(--ring);
+		outline-offset: 3px;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.animate-shimmer {
+		animation: none;
+	}
+}

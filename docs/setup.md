@@ -249,6 +249,12 @@ Stop the scratch cluster and remove temporary browser profiles/fixtures after re
 
 ## 8. Work sequence before 2026-10-18
 
+### Selective Nafi UI integration — 2026-10-11
+
+On `integration/nafi-style`, `main` (`7462d53`) remains the authority for Phase 2B auth, sessions, active-account/password gates and protected pages. Selected Nafi Button/Card/Avatar/Skeleton components, brand tokens and presentational navigation stay in `apps/web`; shared packages and backend are unchanged. Existing login/password/logout handlers are preserved. Providers, auth client, SSR session helper, home behavior, package manifests and lockfile use `main`; no extra dependency is needed. Mock profiles/auth context, role simulator, localStorage permissions, unimplemented attendance navigation and unused QR/Iconsax dependencies are excluded. Dark-mode/shared UI tokens and accessible avatar/focus states are retained.
+
+CLI regression passed: **16 auth tests, 38 identity tests, 4 smoke tests**, zero failures/skips, using only the verified local scratch database. Typecheck passed six tasks; Express/Next.js builds passed, including all three protected/auth routes. Ten frontend callbacks match `main` after ignoring formatting; backend/auth/protected-page source comparisons match. All 15 selected/edited frontend source files passed read-only Biome. Full repo lint still fails (**87 errors, 61 warnings**) in preserved main/scaffold formatting and existing lint issues; unrelated code was not reformatted. Local fixtures were removed, ten tables remain empty, history remains three entries and the scratch cluster was stopped. No browser automation, Supabase connection/mutation, migration, push or merge into `main` was performed. Visual/mobile UAT remains a separate review gate; the integration merge is left uncommitted for review.
+
 | Order | Work / gate                                                         | Responsibility |
 | ----- | ------------------------------------------------------------------- | -------------- |
 | 1     | Existing repo, Varlock and Supabase Development connectivity (Phase 1) | RnD          |

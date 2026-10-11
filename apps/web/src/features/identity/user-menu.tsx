@@ -10,12 +10,12 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@resora/ui/components/dropdown-menu";
-import { Skeleton } from "@resora/ui/components/skeleton";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { Skeleton } from "@/components/ui/skeleton";
 import { authClient } from "@/lib/auth-client";
 import { queryClient } from "@/utils/trpc";
 
