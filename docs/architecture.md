@@ -268,18 +268,18 @@ The uppercase context names above are **proposed code-level discriminators**, no
 
 Do **not** retain old `UNIQUE(event_id,user_id)` as the universal shared-engine uniqueness rule. The proposed new invariant is **`UNIQUE(session_id,user_id)`**, with a separately enforced entitlement to that session's eligible source. For one internal SR session/event, this still gives one attendance per event. This is a **conceptual design direction**, not an instruction to alter applied SQL before review.
 
-**Important model synchronization:** The existing `docs/modules/need-001/resora-need-001-data-model.md` was drafted against **single audience SR/KADEP/general-student** and **event-bound QR/attendance**. It must be reconciled with the new **SR roster builder**, **session-based shared engine**, and **Adaptif registration eligibility** before coding domain migrations. The old model/ADR is not silently assumed to be up to date.
+**Current model baseline:** [the canonical data model](modules/need-001/resora-need-001-data-model.md) now follows composable active-SR selection, immutable publication snapshots, session-bound QR/records and domain-owned eligibility. Historical sections retain prior proposals/test evidence. **Before Phase 4 schema**, approve event ownership and the physical session/event/context binding, exactly-one internal session consistency and transaction boundaries; no universal internal-event FK, shared event registry or polymorphic parent design is finalized by this documentation. Independent session closure versus event closure/reporting is also an explicit policy gate. See [open decisions](modules/need-001/resora-need-001-data-model.md#10-decisions-to-close-before-implementation--production).
 
 ### 7.2 NEED-001 event/attendance flow
 
-1. HCO drafts an event with schedule, map point and radius (default 20 m), grace period (default 15 min) and QR TTL (default 360 min). HCO selects **all SR**, one/multiple departments, **Inti**, **Inti+KADEP**, specific individuals, or combined criteria. Manual individual include/exclude applies to the **draft**.
+1. HCO drafts an event with schedule, map point and radius (default 20 m), grace period (default 15 min) and QR TTL (default 360 min). HCO selects **all active SR**, one/multiple departments, **all KADEP across departments**, specific individuals, or combined criteria. **Inti / Inti+KADEP filters remain TBD/unavailable until their official mapping is approved**. Manual individual include/exclude applies to the **draft**.
 2. A roster resolver produces a **deduplicated draft preview** from the current active SR directory and the explicit include/exclude set. The resolver must not change SR master assignments or treat an invitee as already present.
-3. **Publish** transaction freezes the resulting participants and required historical identity/organizational snapshots, then makes the event discoverable by invited SR. Only title/description are confirmed editable afterwards; postpublication roster amendments are TBD.
+3. **Publish** re-resolves the final active roster from a consistent directory view; its transaction freezes the resulting participants and required historical identity/organizational snapshots, then makes the event discoverable by invited SR. Only title/description are confirmed editable afterwards; postpublication roster amendments are TBD.
 4. HCO activates the attendance session and issues a **static verifiable QR challenge**. Default expiry = activation + six hours; configurable TTL, explicit revoke/reissue; no automatic rotation. QR expiration alone does not close the event.
 5. QR scan validates live authenticated SR account, snapshot, session active state, **current** QR challenge, validity, location and uniqueness. The server chooses attendance timestamp; it may accept scans before scheduled start/after scheduled end **while both session and QR are valid**.
 6. Presence record has `PRESENT` plus `EARLY`/`ON_TIME`/`LATE` using event start and configured grace; 15-minute grace boundary is **inclusive**. Missing invitees are `PENDING` until HCO **explicitly closes event**, then `ABSENT` is derived from no record.
 7. KADEP HCO only may insert/correct manually for an invitee, using reason, effective time and append-only audit. Original record timestamp and source stay immutable; enforce transaction atomicity.
-8. HCO recap/CSV begins from **all participant snapshot rows**, not merely attendance records. Exclude tokens, credentials and raw GPS from exported data.
+8. HCO explicit event closure atomically closes its one attendance session and invalidates the current QR; session activation/closure is distinct from event publication/scheduled end. Standalone session-close reporting/reopen behavior remains TBD. HCO recap/CSV begins from **all participant snapshot rows**, resolving the event's one session and joining records on `(session_id, user_id)`, not merely listing attendance records. Exclude tokens, credentials and raw GPS from exported data.
 
 **Geolocation:** The browser provides a location measurement and its accuracy; the backend verifies distance (meters) from configured center (latitude/longitude). Client data and GPS can be spoofed; accuracy/radius thresholds still need HCO field UAT. Location failures do not create a record; KADEP HCO manual correction is the controlled fallback.
 
@@ -320,18 +320,18 @@ Four Better Auth core tables plus six identity-domain tables are part of the **a
 ### 9.2 Domain schema **proposals, not applied**
 
 - `events`: business context/type and lifecycle, schedule and HCO-specific config as applicable; generalized ownership model to be designed carefully with MOD-06.
-- `event_participants`: one row per SR invitee/event at publish, with optional historical data snapshot for reports.
+- `event_participants`: one row per SR invitee/event at publish, with required publish-time SR identity/organization snapshot for reports; exact field representation is proposed.
 - `activity_registrations`: active/cancelled participant registration per activity and a capacity-invariant strategy; source for NEED-007 eligibility.
 - `attendance_sessions`: event/context reference, status, geofence center/radius, TTL/grace policy and activation/closure.
-- `qr_challenges`: a token hash/HMAC or other secure redisplay mechanism after technical review; only current, active challenge accepted.
+- `qr_challenges`: NN session FK; partial unique current challenge per session; reviewed secure mechanism that redisplays the same static QR. A one-way token hash alone is insufficient for redisplay; only current/unexpired/unrevoked challenges on active sessions are accepted.
 - `attendance_records`: uniqueness on `(session_id,user_id)`, immutable origin/source and operation time, corrected effective attendance time and timing classification.
-- `attendance_audit_logs`: append-only event/record/actor, original/updated values and mandatory reasons for privileged operations.
+- `attendance_audit_logs`: append-only session/record/actor, original/updated values and mandatory reasons for privileged operations.
 
-The old event-centric FK from attendance to `event_participants` is insufficient by itself for NEED-007. Design eligibility through a **context-aware service/constraint combination**; keep hard database uniqueness and foreign keys where possible, without pretending a general FK can reference both event participants and activity registrations automatically.
+A universal attendance FK to `event_participants` is not part of the shared-engine baseline: NEED-007 eligibility is owned by Activity. Design eligibility through a **context-aware service/constraint combination**; keep hard database uniqueness and foreign keys where possible, without pretending a general FK can reference both event participants and activity registrations automatically.
 
 **Atomic operations and race-safety:**
 
-- Publish event and its SR snapshot in one transaction. Concurrent changes to group membership need a defined snapshot consistency strategy.
+- Publish event and its final active SR snapshot in one transaction, preserving preview/publish distinction. Review concurrent membership consistency and one-session association enforcement with the parent binding.
 - Create QR/reissue with transaction-safe “current challenge” behavior. Never accept an expired or revoked challenge, and never expose the raw token in logs/exports.
 - Check authorization + active eligibility and insert attendance idempotently; use DB uniqueness to guard racing scans/manual entries. Avoid replacing the original `attendance_at` or `recorded_at` on duplicates.
 - Capacity-limited registration cannot be implemented as an unprotected `COUNT(*)` followed by `INSERT`; use a transaction-safe locking/counter approach with clear cancellation semantics. Reject overflow.
@@ -386,11 +386,11 @@ The old event-centric FK from attendance to `event_participants` is insufficient
 ## 13. Related documents and consistency obligations
 
 - [System-wide PRD](prd.md): product scope, actors, owners, priorities and acceptance governance.
-- [NEED-001 module PRD](modules/need-001/prd.md): HCO internal attendance requirements; **replace stale edition with the PM-revised version** before implementation.
-- [NEED-001 acceptance scenarios](modules/need-001/acceptance-tests.md): must drop retired general-student audience tests and cover lego builder/session model.
-- [NEED-001 data model](modules/need-001/resora-need-001-data-model.md): must be revised from event-bound QR/attendance uniqueness to shared session and contextual eligibility; identity migrations remain intact.
+- [NEED-001 module PRD](modules/need-001/prd.md): current HCO internal attendance, composable roster and single-session requirements; Inti/lifecycle policies remain open.
+- [NEED-001 acceptance scenarios](modules/need-001/acceptance-tests.md): active roster/session specifications aligned; dated identity test evidence retained; unbuilt domain tests await implementation.
+- [NEED-001 data model](modules/need-001/resora-need-001-data-model.md): current roster/session/contextual eligibility proposal; event-reference storage and policy gates must be reviewed before Phase 4. Identity migrations remain intact.
 - [NEED-001 roadmap](modules/need-001/roadmap.md): implementation sequencing, not release approval.
-- [ADRs](decisions/README.md), especially attendance-related ADR: preserve history but mark superseded audience/event-bound schema decisions before handover.
+- [ADRs](decisions/README.md), especially attendance-related ADR: active roster/session decisions synchronized while dated Phase 2–3 history is preserved.
 - [Setup and operations](setup.md): run commands, environment requirements, actual migration verification and deployment instructions.
 - `AGENTS.md`: agent/developer execution guidelines, subordinate to business decisions and repository safety gates.
 - **RESORA MAIN DOCUMENT**: approved IDs and requirement/decision mapping. Relevant official attendance FRs: NEED-001 `FR-086, FR-119–FR-130`; shared identity `FR-001, FR-094–FR-096, FR-101, FR-131–FR-132`; activity attendance NEED-007 `FR-044–FR-047, FR-133–FR-134` plus relevant registration/quotas FRs.

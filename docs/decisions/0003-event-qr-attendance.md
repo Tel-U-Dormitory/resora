@@ -1,16 +1,16 @@
-# ADR-0003: Event-scoped reusable QR challenge with location and audited manual entry
+# ADR-0003: Session-bound reusable QR challenge with location and audited manual entry
 
-**Date:** 2026-10-10 | **Status:** Accepted business rules; token protocol/storage Proposed
+**Date:** 2026-10-10 | **Status:** Accepted roster/session behavior; token protocol and cross-module reference storage Proposed/TBD
 
 ## Decision
 
-HCO creates/configures attendance events for `SR`, `KADEP` or `ALL_STUDENTS` (includes SR); participant snapshots are generated at publication and reports include all invitees, even without attendance. Current inactive status always blocks authentication/check-in.
+HCO creates internal SR events with composable selection of all active SR, one/multiple departments, all KADEP across departments and individuals, plus manual include/exclude and deduplication. Inti is TBD pending official mapping. Preview uses current active SR; publish atomically saves immutable `(event_id, user_id)` invitation snapshots, and reports include all invitees. Later assignment changes do not rewrite the snapshot; live inactive status still blocks authentication/check-in. A single audience enum is superseded as the primary model.
 
 HCO selects the geofence center by map pin or latitude/longitude; radius default **20 meters**, configurable separately. Backend validates distance from untrusted/imperfect browser location. GPS failure leads to direct KADEP HCO entry, with mandatory reason, overridable effective time defaulting to server now, immutable creation time and audit of every insertion/correction.
 
-QR has an unpredictable event-bound token, static for a configurable lifetime, default **six hours from activation**, without automatic rotation. HCO displays it on the event page and may revoke before expiration. Reject expired/revoked tokens. QR infrastructure remains reusable by NEED-007 without importing its business logic.
+NEED-001 has one attendance session per event, separate from publication and schedule. QR references that session with an unpredictable session-bound token and validated event/context association, static for a configurable lifetime, default **six hours from activation**, without automatic rotation. HCO displays it on the event page and may revoke before expiration. Reject expired/revoked tokens. QR infrastructure remains reusable by NEED-007 without importing its business logic.
 
-Scan while QR active, including before scheduled start and after scheduled end. Actual server scan time determines `EARLY` before start, `ON_TIME` through start + configured tolerance inclusive (default **15 minutes**), `LATE` afterward. Presence is separate: missing attendance pending until **explicit authorized HCO closure**, then absent; closure invalidates active QR. Scheduled end cannot cut off an active QR.
+Scan only while attendance session and current QR are active/valid, including before internal scheduled start and after scheduled end. Actual server scan time determines `EARLY` before start, `ON_TIME` through start + configured tolerance inclusive (default **15 minutes**), `LATE` afterward. Presence is separate: missing attendance pending until **explicit authorized HCO closure**, then absent; event closure atomically closes its session and invalidates active QR. QR expiry/revocation and scheduled end do not close event/session automatically. Standalone session-closure/reporting semantics are still TBD.
 
 ## Additional confirmed decisions (Phase 2A review)
 
@@ -24,13 +24,15 @@ These are future NEED-001 rules only; Phase 2A implements identity definitions, 
 
 ## Proposed technical choices (not HCO-approved rules)
 
-The [canonical data model](../modules/need-001/resora-need-001-data-model.md) proposes HMAC-based static redisplay, challenge storage, participant composite keys, attendance unique/composite FK and append-only before/after audit. These are technical proposals awaiting schema review. Authorization, active-account/participant checks, QR/geofence validation and timestamp/classification are server-side; attendance mutation/audit is atomic. GPS alone does not prove presence.
+The [canonical data model](../modules/need-001/resora-need-001-data-model.md) proposes HMAC-based static redisplay, session-bound challenge storage/current-challenge uniqueness, participant composite keys, attendance unique `(session_id, user_id)` and append-only before/after audit. No universal attendance FK to invitation snapshots is proposed: internal entitlement uses the published snapshot; general entitlement uses Activity's public backend registration interface. These are technical proposals awaiting schema review. Authorization, active-account/participant checks, QR/geofence validation and timestamp/classification are server-side; attendance mutation/audit is atomic. GPS alone does not prove presence.
 
 ## Open policy
 
-Cancellation/reopening/republication snapshot handling, final approval of center/radius/late-tolerance freeze, GPS accuracy/radius and configurable TTL/grace bounds, manual override limits/now-inactive backdating, lateness-duration basis/rounding and retention remain TBD. Snapshot publication, QR defaults/static behavior, early/after-end scans and direct KADEP manual workflow are confirmed.
+Physical session/event/context binding and event ownership across modules, one-internal-session publication integrity, independent session-close reporting/manual lifecycle, cancellation/reopening/republication snapshot handling, final approval of center/radius/late-tolerance freeze, GPS accuracy/radius and configurable TTL/grace bounds, manual override limits/now-inactive backdating, lateness-duration basis/rounding and retention remain TBD. Snapshot publication, QR defaults/static behavior, early/after-end scans and direct KADEP manual workflow are confirmed.
 
 
 **Synchronization (2026-10-10):** updated in place for the explicitly confirmed Phase 1/pnpm and NEED-001 decisions; prior Bun package-manager/local-only DB assumptions and manual request/approval direction are superseded where applicable. Acceptance does not imply implementation.
 
 **Phase 3 PM update (2026-10-11):** active jabatan/audience terminology uses KADEP, replacing KADIV without an input alias or automatic legacy conversion. See [canonical organization/policy baseline](../modules/need-001/resora-need-001-data-model.md#8-server-side-authorization-phase-3). Event/attendance implementation and reconciliation with the current roster/session PRD remain later work.
+
+**Documentation synchronization (2026-10-11, after Phase 3):** active sections now use the roster/session baseline. Earlier Phase 2A/3 dated notes remain historical. No event/attendance code or migration is implemented. Event/context reference architecture requires review before Phase 4; tRPC remains the frontend/backend entry point, public backend interfaces connect domains, and authorization stays domain-owned.

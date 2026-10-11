@@ -95,13 +95,13 @@ Core reusable capabilities include identity/RBAC, verified SR roster, notificati
 
 ### 6.1 NEED-001 — internal SR attendance
 
-HCO creates an internal event and constructs its audience in **composable “lego” fashion**: all active SR; one or more departments; only **Inti**; **Inti + KADEP**; chosen individual members; or any combination. HCO may add or remove individuals from the **draft preview**, and a final deduplicated **participant snapshot** is stored atomically when the event is published. This invitation gives the SR the **right to check in**, not an automatic `PRESENT` record. Changing a user's later department/position does not rewrite the invitation history. Edit/remove after **publication** is **not yet authorized** and requires a separate amendment policy.
+HCO creates an internal event and constructs its audience in **composable “lego” fashion**: all active SR; one or more departments; all **KADEP across departments**; chosen individual members; or any combination. **Inti / Inti + KADEP remain unavailable/TBD until their authoritative mapping is approved**, not inferred from executive titles. HCO may add or remove individuals from the **draft preview**, and a final deduplicated **participant snapshot** is stored atomically when the event is published. This invitation gives the SR the **right to check in**, not an automatic `PRESENT` record. Changing a user's later department/position does not rewrite the invitation history. Edit/remove after **publication** is **not yet authorized** and requires a separate amendment policy.
 
-Authorized HCO manages event, QR, radius, reporting and explicit closure. The initial NEED-001 event has **one attendance session**. Confirmed defaults and rules:
+Authorized HCO manages event, QR, radius, reporting and explicit closure. The initial NEED-001 event has **one attendance session**, distinct from event publication/schedule and login sessions. QR challenges belong to that session; shared attendance uniqueness is **`(session_id, user_id)`**. Explicit HCO event closure closes its session and invalidates the QR atomically. The physical cross-module event/session reference and standalone session-closure effect remain open architectural/policy decisions, not permission to create a shared event registry. Confirmed defaults and rules:
 
 | Rule | NEED-001 baseline |
 | --- | --- |
-| QR | Static, unpredictable, event/session-bound; default **6 hours from activation**, configurable, revocable/reissuable explicitly; no automatic rotation. |
+| QR | Static, unpredictable, session-bound with validated event/context association; default **6 hours from activation**, configurable, revocable/reissuable explicitly; no automatic rotation. |
 | Geofence | HCO sets map point and radius; **20 m default**, configurable. Backend calculates distance; browser GPS is an untrusted signal. |
 | Check-in time | Scan allowed **before scheduled start and after scheduled end**, as long as session and QR are still active/valid. |
 | Timing | `EARLY` before start; `ON_TIME` from start through start + grace **inclusive**; `LATE` afterward; **15-minute default grace**. |
@@ -133,7 +133,7 @@ The earlier plan identifies **2026-10-18 as a target for a controlled NEED-001 p
 | Internal CSV SR provisioning | **Implemented/tested locally with synthetic data in Phase 2C** | Dry-run/apply, Better Auth hashing, private credentials export; real imports/distribution require approval. |
 | Organization/RBAC foundation | **Phase 3 implemented/tested locally** | [Canonical 7/7/18 codes](resora-need-001-data-model.md#42-departments-positions-buildings--canonical-organization-dictionaries) and [authorization matrix](resora-need-001-data-model.md#8-server-side-authorization-phase-3); real resource checks belong to future endpoints. KADEP replaces KADIV without legacy mutation. |
 | Email recovery/verification | **Pending** | Gmail SMTP and operational delivery are outside Phase 2C. |
-| NEED-001 event, roster builder, attendance sessions, QR, geofence and reporting | **Domain design only; no attendance domain migrations** | Align data model/acceptance docs, then review migration and implement. |
+| NEED-001 event, roster builder, attendance sessions, QR, geofence and reporting | **Domain design only; no attendance domain migrations** | Roster/session design synchronized; resolve parent binding and lifecycle/policy gates, then review proposed schema/migration before implementation. |
 | NEED-007 student login, quotas, registration and Adaptif attendance | **PM-confirmed business rules, not delivered** | Separate module specification and Adaptif UAT. |
 | Production VPS and full product release | **Planned, unverified** | Security, backup, deployment, operations and PM go/no-go. |
 
@@ -207,7 +207,8 @@ Official reference for SR attendance: **FR-086 and FR-119–FR-130**. Core depen
 1. **NEED-001:** membership definition/source for **Inti**, post-publication invitee amendments, event cancellation/reopening, and the final recommendation to freeze geofence center/radius/grace after publication.
 2. **Location and manual attendance:** permissible radius range, GPS accuracy threshold, effective-time override bounds, display rounding and audit retention/access.
 3. **Identity:** complete real SR roster, secure first-credential handoff, operational password recovery/SMTP, and login/provisioning for mahasiswa/maba.
-4. **NEED-007:** creation privileges for activities outside Adaptif, full module MVP/UAT policy, and configurable registration-window edges; **capacity, cancellation and immediate eligibility rules are already confirmed**.
+4. **Shared attendance architecture:** event ownership and physical session-to-event/context reference, one-internal-session publication integrity and domain eligibility consistency; standalone session closure/reporting semantics remain open. No universal cross-module FK is selected.
+5. **NEED-007:** creation privileges for activities outside Adaptif, full module MVP/UAT policy, and configurable registration-window edges; **capacity, cancellation and immediate eligibility rules are already confirmed**.
 5. **Product/release:** NFR numerical thresholds, privacy retention, physical hosting/domains, budgets, backup targets, UAT participants and release dates.
 6. **Other NEEDs:** domain-specific stakeholder workflows, permissions, scoring and data rights remain unapproved unless separately documented.
 
@@ -218,8 +219,8 @@ Official reference for SR attendance: **FR-086 and FR-119–FR-130**. Core depen
 | `docs/prd.md` | This system-wide business/product baseline. |
 | `docs/architecture.md` | Implementation architecture, target FE/BE folder conventions, data boundaries, environments. |
 | `docs/modules/need-001/prd.md` | Detailed HCO/SR attendance behavior; must use the revised version aligned with this PRD. |
-| `docs/modules/need-001/acceptance-tests.md` | NEED-001 test scenarios; **legacy audience cases require synchronization** before implementation. |
-| `docs/modules/need-001/resora-need-001-data-model.md` | Domain data model; **legacy event-bound attendance uniqueness and audience assumptions require synchronization** with attendance sessions/builder. |
+| `docs/modules/need-001/acceptance-tests.md` | NEED-001 roster/session scenarios and historical identity test evidence; unbuilt domain scenarios await implementation/UAT. |
+| `docs/modules/need-001/resora-need-001-data-model.md` | Canonical roster-builder and session-based domain proposal; physical event/context binding and listed policy gates remain open. |
 | `docs/modules/need-001/roadmap.md` | Sequencing and module work plan. |
 | `docs/decisions/` | ADR and historical decisions; obsolete assumptions must be superseded explicitly. |
 | `docs/setup.md` | Verified local setup and technical commands. |

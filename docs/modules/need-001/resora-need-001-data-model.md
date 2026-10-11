@@ -1,11 +1,13 @@
 # RESORA — Data Model & Schema Specification (NEED-001)
 
-**Version:** 0.4 · **Updated:** 2026-10-11 · **Status:** Phase 2A.6 identity migrations applied; Phase 2B/2C and Phase 3 identity policies/reference seed tested locally without schema changes; future domain schema remains proposed\
+**Version:** 0.5 · **Updated:** 2026-10-11 · **Status:** Phase 2–3 identity foundation unchanged; active domain design synchronized to roster builder/shared attendance sessions; domain storage proposals require review before Phase 4\
 **Target:** pilot presensi internal SR, 2026-10-18  
 **Canonical repository path:** `docs/modules/need-001/resora-need-001-data-model.md`\
 **Companion:** [NEED-001 PRD](prd.md), [architecture](../../architecture.md), [acceptance tests](acceptance-tests.md), [roadmap](roadmap.md)
 
 > **Scope:** logical PostgreSQL/Drizzle design, **not executable migration SQL**. Do not run migrations from this document. Better Auth's **actual generated schema** takes precedence for its own four tables. Preserve pnpm 10.33.4 package management, Bun 1.3.13 Express runtime, Next.js/tRPC/Drizzle/Better Auth and Varlock; Supabase is managed PostgreSQL accessed **through Express only**. Do not use Supabase Auth or direct browser/database connections.
+
+Sections 1–11 describe the current design baseline. Sections 12–18 preserve historical Phase 2–3 reviews and test evidence, including superseded audience/event-bound proposals; they are not the current domain schema specification. No event/session/QR/attendance table is implemented by this documentation update.
 
 ## 1. Decisions and semantics
 
@@ -14,12 +16,13 @@
 | Identity          | Exactly one primary actor per account (`SR`, `MAHASISWA`, `ASUS`, `DITMAWA`); only SR can sign in at pilot                                                                                           | Confirmed                                            |
 | SR                | One department, one position, one building, active state; NIM login through Better Auth Username Plugin                                                                                              | Confirmed                                            |
 | System permission | `SUPERADMIN` granted to a specifically authorized account; **not** a fifth actor. Initially only superadmin changes SR assignments and active status | Confirmed |
-| Event audience    | One of `SR`, `KADEP`, `ALL_STUDENTS`; `KADEP` means position KADEP in **any** department; `ALL_STUDENTS` includes SR and MAHASISWA                                                                              | Confirmed                                            |
+| Event audience    | Composable roster of active SR: all SR, one/multiple departments, all KADEP across departments, individuals, explicit include/exclude and deduplication; Inti mapping remains TBD | Confirmed builder; Inti unresolved |
 | Event organizer   | SR belonging to HCO can create event, show QR, view/export attendance; only **KADEP HCO** can input/correct manual attendance                                                                        | Confirmed                                            |
 | Participant list  | Persist per-event eligible participant roster **at publication** to preserve historical reports and absent invitees                                                                                  | **Confirmed business rule; table design proposed**    |
-| Attendance scan   | Valid while event is published and challenge is active/unexpired/unrevoked, including before `starts_at` and after `ends_at`                                                                         | Confirmed                                            |
+| Attendance session | NEED-001 has one session per event, with explicit activation/closure separate from publication/schedule; shared engine for later Adaptif activities | Confirmed direction; cross-module reference storage TBD |
+| Attendance scan   | Valid for an eligible authenticated user while attendance session and current QR are active/valid; NEED-001 allows scans before `starts_at` and after `ends_at` | Confirmed |
 | Timing            | `EARLY` if before event start; `ON_TIME` from start through 15-minute grace (configurable); `LATE` after grace                                                                                       | Confirmed                                            |
-| QR                | Static within a configurable lifetime; default 6 hours since activation; no periodic rotation; HCO can revoke manually                                                                               | Confirmed                                            |
+| QR                | Challenge belongs to an attendance session; static/redisplayable during configured TTL, default 360 minutes from challenge activation; explicit revoke/reissue, no automatic rotation | Confirmed behavior; token protocol proposed |
 | Geofence          | HCO selects map pin or latitude/longitude center; separate configurable radius, **20 m confirmed default**; browser requests location; backend validates distance from untrusted/imperfect GPS | Confirmed; accuracy threshold/radius bounds TBD |
 | Manual entry      | KADEP HCO selects an invited person by name/NIM; `attendance_at` defaults to server time but can be overridden; `recorded_at` is actual immutable server write time, plus mandatory reason and actor | Confirmed                                            |
 | Non-attendees     | Record absence via a report **LEFT JOIN** over invited participants; do not insert fake attendance rows                                                                                              | Recommended                                          |
@@ -32,7 +35,7 @@
 - All authorization, QR token verification, event eligibility, duplicate checks, and geofence distance checks happen on the **backend**. The specific HMAC protocol below is proposed.
 - Runtime uses `DATABASE_URL` (Supabase Session Pooler); migration tooling prefers `DIRECT_DB_URL`, reports IPv6/network failures explicitly and never silently retries another connection. [Setup](../../setup.md) documents deliberate pooler alternatives. Local Docker PostgreSQL is optional; VPS deployment planned.
 - `attendance_at` is the **effective time of attendance**; `recorded_at` is **when the record was actually written**, including manual late entry.
-- Data changes by KADEP must create append-only audit records. Do not use destructive delete as a routine correction.
+- Manual insertions/corrections require append-only audit: KADEP HCO for internal SR, authorized Adaptif for general activities. Do not use destructive delete as a routine correction.
 - Do not store plaintext passwords, QR bearer tokens, Gmail app passwords or raw GPS coordinates in event reports.
 - Include unique constraints and transactions at the **database** level, not only client-side checks.
 
@@ -49,9 +52,10 @@ erDiagram
     BA_USER ||--o{ EVENTS : creates
     EVENTS ||--o{ EVENT_PARTICIPANTS : invites
     BA_USER ||--o{ EVENT_PARTICIPANTS : invited
-    EVENTS ||--o{ QR_CHALLENGES : issues
-    EVENTS ||--o{ ATTENDANCE_RECORDS : records
-    EVENT_PARTICIPANTS ||--o| ATTENDANCE_RECORDS : may_have_one
+    EVENTS ||--|| ATTENDANCE_SESSIONS : one_internal_session
+    ATTENDANCE_SESSIONS ||--o{ QR_CHALLENGES : issues
+    ATTENDANCE_SESSIONS ||--o{ ATTENDANCE_RECORDS : records
+    BA_USER ||--o{ ATTENDANCE_RECORDS : attends
     ATTENDANCE_RECORDS ||--o{ ATTENDANCE_AUDIT_LOGS : changes
     BA_USER ||--o{ ATTENDANCE_AUDIT_LOGS : performs
     BA_USER ||--o{ BA_SESSION : authenticates
@@ -95,10 +99,17 @@ erDiagram
     EVENTS {
       uuid id PK
       text title
-      enum audience
-      enum status
+      jsonb roster_criteria "proposed draft builder storage"
+      text status "logical state; SQL representation pending"
       timestamptz starts_at
       timestamptz ends_at
+    }
+    ATTENDANCE_SESSIONS {
+      uuid id PK
+      string event_context_reference "binding storage TBD"
+      text status "INACTIVE / ACTIVE / CLOSED proposed"
+      timestamptz activated_at
+      timestamptz closed_at
       numeric center_lat
       numeric center_lng
       int geofence_radius_m
@@ -115,7 +126,7 @@ erDiagram
     }
     QR_CHALLENGES {
       uuid id PK
-      uuid event_id FK
+      uuid session_id FK
       timestamptz activated_at
       timestamptz expires_at
       timestamptz revoked_at
@@ -123,7 +134,7 @@ erDiagram
     }
     ATTENDANCE_RECORDS {
       uuid id PK
-      uuid event_id FK
+      uuid session_id FK
       text user_id FK
       timestamptz attendance_at
       timestamptz recorded_at
@@ -133,6 +144,7 @@ erDiagram
     ATTENDANCE_AUDIT_LOGS {
       uuid id PK
       uuid attendance_id FK
+      uuid session_id FK
       text actor_user_id FK
       enum action
       jsonb before_state
@@ -140,7 +152,7 @@ erDiagram
     }
 ```
 
-**Mermaid note:** `BA_*` represent existing Better Auth-managed tables, not new copies. The composite relationship between `event_participants` and `attendance_records` is enforced explicitly in migration with `(event_id, user_id)`; the ERD is a conceptual view.
+**Mermaid note:** `BA_*` represent existing Better Auth-managed tables, not new copies. The event→session edge is the **logical NEED-001 one-session association**, not a finalized universal cross-module FK. Shared QR/record storage references `attendance_sessions.id`; record uniqueness is `(session_id, user_id)`. Internal entitlement comes from `event_participants` through the validated session→event binding; general-activity entitlement comes from Activity's public backend interface. Activity-owned tables are deliberately not represented as Attendance-owned tables or universal record FKs. See §4.7 for the unresolved binding contract.
 
 ## 3. Existing Better Auth tables — reuse, do not duplicate
 
@@ -155,7 +167,7 @@ erDiagram
 
 ## 4. Domain tables and columns — identity implemented; later domains proposed
 
-Notation: **PK** primary key; **FK** foreign key; **UK** unique; **NN** not null. `timestamptz` = PostgreSQL timestamp with time zone. Defaults/constraints listed separately. Sections 4.1–4.4 are the authorized Phase 2A baseline defined in Drizzle, validated locally in Phase 2A.5 and applied/verified on Supabase Development in Phase 2A.6 (§15). Sections 4.5–4.9 remain future designs.
+Notation: **PK** primary key; **FK** foreign key; **UK** unique; **NN** not null. `timestamptz` = PostgreSQL timestamp with time zone. Defaults/constraints listed separately. Sections 4.1–4.4 are the authorized Phase 2A baseline defined in Drizzle, validated locally in Phase 2A.5 and applied/verified on Supabase Development in Phase 2A.6 (§15). Sections 4.5–4.10 are future storage proposals, not applied SQL. Logical rules are confirmed only where explicitly stated; proposed columns/SQL representations still require review.
 
 ### 4.1 `user_profiles` — exclusive actor and account operational status
 
@@ -253,117 +265,121 @@ NIM comes from `user.username` (Better Auth Username Plugin). Do **not** duplica
 
 **Composite PK:** `(user_id, privilege_code)`. Bootstrap superadmin through audited, non-public mechanism. `SUPERADMIN` allows SR master maintenance **only as explicitly authorized**; do not implicitly bypass every HCO rule.
 
-### 4.5 `events` — HCO-created internal event
+### 4.5 `events` — HCO internal event and draft roster builder
 
-| Column               | PG type               | Constraint/default  | Note                                                   |
-| -------------------- | --------------------- | ------------------- | ------------------------------------------------------ |
-| `id`                 | `uuid`                | PK, generated       |                                                        |
-| `title`              | `text`                | NN                  | Non-empty after trim                                   |
-| `description`        | `text`                | nullable            |                                                        |
-| `created_by_user_id` | `text`                | NN, FK → `user.id`  | Backend verifies SR in HCO                             |
-| `audience`           | `event_audience` enum | NN                  | `SR`, `KADEP`, `ALL_STUDENTS`                          |
-| `status`             | `event_status` enum   | NN, default `DRAFT` | `DRAFT`, `PUBLISHED`, `CLOSED`, `CANCELLED`            |
-| `starts_at`          | `timestamptz`         | NN                  | Scheduled start, **not** QR opening limit              |
-| `ends_at`            | `timestamptz`         | NN                  | Scheduled end, **not** QR expiry limit                 |
-| `center_lat`         | `numeric(9,6)`        | NN                  | −90 to 90                                              |
-| `center_lng`         | `numeric(9,6)`        | NN                  | −180 to 180                                            |
-| `geofence_radius_m`  | `integer`             | NN, default 20      | Allowed min/max **TBD**                                |
-| `late_grace_minutes` | `integer`             | NN, default 15      | Must be ≥ 0; max TBD                                   |
-| `qr_ttl_minutes`     | `integer`             | NN, default 360     | 6h default; bounds TBD                                 |
-| `published_at`       | `timestamptz`         | nullable            | Set on publish and snapshot creation                   |
-| `closed_at`          | `timestamptz`         | nullable            | Set on explicit authorized HCO close; QR invalidated atomically |
-| `created_at`         | `timestamptz`         | NN, default now     |                                                        |
-| `updated_at`         | `timestamptz`         | NN, default now     |                                                        |
+| Proposed column | PG type | Constraint/default | Meaning |
+| --- | --- | --- | --- |
+| `id` | `uuid` | Generated PK | Internal SR event identity |
+| `title` / `description` | `text` | Title NN/nonblank; description nullable | Only confirmed editable fields after publication |
+| `created_by_user_id` | `text` | NN FK to `user.id` | Active HCO creator; ownership/state checked server-side |
+| `roster_criteria` | `jsonb` | Proposed draft representation; validated structure | Composable SR selection, not a single audience enum |
+| `status` | Logical state; SQL representation proposed | `DRAFT`, `PUBLISHED`, `CLOSED` | Cancellation/reopening/republication states/transitions TBD |
+| `starts_at` / `ends_at` | `timestamptz` | NN; end > start | Scheduled event times, never automatic scan boundaries |
+| `published_at` / `closed_at` | `timestamptz` | Nullable until explicit action | Publication/snapshot and event closure |
+| `created_at` / `updated_at` | `timestamptz` | NN, default now; update on mutation | Event metadata |
 
-**Proposed storage constraints:** `ends_at > starts_at`; `geofence_radius_m > 0`; `qr_ttl_minutes > 0`; `late_grace_minutes >= 0`; coordinate range checks. After publication only title/description edits are confirmed; audience and schedule are immutable and participant snapshots retained. **Recommended, pending PM confirmation:** freeze center/radius/late tolerance. Authorized HCO explicitly closes the event, atomically invalidating its active QR and projecting missing attendance as ABSENT. Manual correction after closure and cancellation/reopening remain pending policy review. Do not automatically set `CLOSED` simply because scheduled `ends_at` passed.
+**Confirmed roster capabilities:** select all current active SR; one or several official departments; all `position_code=KADEP` across departments; chosen individuals; or combine those selections. Apply explicit manual include/exclude and deduplicate by `user_id`. Preview resolves current active SR and organizational assignments, including individually selected users; an inactive/non-SR account cannot be made eligible by manual inclusion. A minimal proposed set expression is `unique(selected groups UNION manual includes) MINUS manual excludes`; validation must make conflicts visible. The exact criteria JSON shape is a technical proposal for Phase 4 review, not a new approved business rule or a generic filter language.
 
-### 4.6 `event_participants` — roster snapshot at publication
+**Inti is TBD:** do not implement an Inti predicate or assume executive positions define it until an authoritative mapping is approved. The old single `event_audience` enum (`SR/KADEP/ALL_STUDENTS`) is superseded as the main NEED-001 model; this pilot builds an SR roster, not a general-student audience. General activities will use registration eligibility, not that enum.
 
-| Column                | PG type           | Constraint/default   | Note                                                   |
-| --------------------- | ----------------- | -------------------- | ------------------------------------------------------ |
-| `event_id`            | `uuid`            | NN, FK → `events.id` |                                                        |
-| `user_id`             | `text`            | NN, FK → `user.id`   |                                                        |
-| `invited_at`          | `timestamptz`     | NN, default now      |                                                        |
-| `snapshot_actor`      | `actor_type` enum | NN                   | Historical actor                                       |
-| `snapshot_nim`        | `text`            | nullable             | Historical NIM; nullable for future actors lacking NIM |
-| `snapshot_name`       | `text`            | NN                   | Historical display name                                |
-| `snapshot_department` | `text`            | nullable             | Name/code at publication                               |
-| `snapshot_position`   | `text`            | nullable             | For KADEP events/report                                |
-| `snapshot_building`   | `text`            | nullable             | Human-readable value at publication                    |
+At publish, resolve the criteria again from a consistent current active SR view and atomically save the final deduplicated invitation snapshot plus publication state. A preview is not a reservation or attendance record. Criteria and schedule become immutable after publish; post-publication invitee amendments remain TBD. Title/description may be edited. Location, radius, grace and QR TTL belong to the associated attendance session's configuration; default values are set in draft configuration. Freezing center/radius/grace at publication remains recommended pending PM confirmation; moving the fields to a session must not imply permission to edit them freely after publication.
 
-**Composite PK:** `(event_id, user_id)`. Index `(user_id, event_id)`. Publish event + insert eligible current **active** users into `event_participants` **in a transaction**. This supports stable “invited but absent” reporting even if positions change afterward. Confirmed inactive/deactivated users cannot sign in/check in even when previously snapshotted.
+### 4.6 `event_participants` — historical internal SR invitation snapshot
 
-**Audience filter at publication:** `SR` = active actor SR; `KADEP` = active actor SR + `position_code=KADEP` across departments; `ALL_STUDENTS` = active actor in {SR, MAHASISWA}. Pilot may list only currently provisioned SR; do not imply MAHASISWA login works yet.
+| Proposed column | PG type | Constraint/default | Meaning |
+| --- | --- | --- | --- |
+| `event_id` | `uuid` | NN FK to `events.id` | Published internal event |
+| `user_id` | `text` | NN FK to `user.id` | Invited SR identity |
+| `invited_at` | `timestamptz` | NN, default now | Publication-time invitation |
+| `snapshot_actor` | `actor_type` | NN | `SR` for NEED-001 |
+| `snapshot_nim` / `snapshot_name` | `text` | NN for internal SR; nonblank NIM | Publish-time identity for reports |
+| `snapshot_department` / `snapshot_position` / `snapshot_building` | `text` | NN for internal SR | Publish-time organization values; exact code/name DTO reviewed before migration |
 
-### 4.7 `qr_challenges` — fixed event QR, server-verifiable token
+**PK `(event_id, user_id)`**, index `(user_id, event_id)`. Publish and snapshot writes are one transaction, with a consistent directory view under concurrent active-status/assignment changes. Changing assignment later never refreshes the historical invitation or its identity/organization values. Inactive accounts remain blocked from authentication/check-in despite an invitation. Snapshot records eligibility, not presence; all invitees remain in recap, including people without records. NEED-007 does not populate this table as a substitute for Activity registration.
 
-| Column              | PG type       | Constraint/default   | Note                                                       |
-| ------------------- | ------------- | -------------------- | ---------------------------------------------------------- |
-| `id`                | `uuid`        | PK, generated        | Unpredictable challenge identifier                         |
-| `event_id`          | `uuid`        | NN, FK → `events.id` |                                                            |
-| `activated_at`      | `timestamptz` | NN, server time      | QR begins here; **not** at event start                     |
-| `expires_at`        | `timestamptz` | NN                   | Activation + configured TTL                                |
-| `revoked_at`        | `timestamptz` | nullable             | Manual immediate invalidation                              |
-| `is_current`        | `boolean`     | NN, default `true`   | Reissue only through explicit HCO action; no auto-rotation |
-| `issued_by_user_id` | `text`        | NN, FK → `user.id`   | HCO issuer                                                 |
-| `created_at`        | `timestamptz` | NN, default now      |                                                            |
+### 4.7 `attendance_sessions` — shared attendance window/policy
 
-**Partial unique index:** one `is_current = true` challenge per event. In explicit replacement/reissue transaction, mark previous challenge non-current, then issue a new one. Default TTL 360 minutes; no automatic rotation.
+An attendance session is distinct from an Event and from a Better Auth login session. NEED-001 has **one session per internal event**; enforce that association uniquely and ensure exactly one session is available for a published event. Exact creation timing and physical binding are storage proposals to review before migration. Do not introduce multiple internal sessions or a generic event registry without an approved requirement.
 
-**Crucial redisplay design:** HCO needs to display the **same QR across refreshes**. Do **not** store an unencrypted bearer token and do **not** rely solely on saving a one-way token hash (which cannot regenerate the same QR). Recommended stateless reconstruction: QR encodes a URL with a version, `challenge_id`, and an HMAC signature generated from the ID using a dedicated backend-held `QR_SIGNING_SECRET`. The server regenerates the _same_ signed QR for authorized HCO display; verification checks signature + database challenge status, expiry, revocation, `is_current`, authenticated user, event audience, geofence and uniqueness. Use constant-time MAC verification. Never expose signing key. Prevent leaking QR payload through logs/referrers; consider URL fragments for client handoff. This supports reusable QR infrastructure for NEED-007 without embedding attendance policy in the QR primitive.
+| Proposed field | PG type / representation | Constraint/default | Meaning |
+| --- | --- | --- | --- |
+| `id` | `uuid` | Generated PK | QR/record parent |
+| Event/context association | **TBD physical columns/FKs** | Valid parent and unique one-session binding for NEED-001 | Logical `SR_INTERNAL` vs future `GENERAL_ACTIVITY`; code labels are proposed, not an approved DB enum |
+| `status` | Logical state; SQL representation proposed | `INACTIVE` initially, explicit `ACTIVE` / `CLOSED` | Attendance lifecycle separate from event publication/schedule |
+| `activated_at` / `closed_at` | `timestamptz` | Nullable until explicit action | Actual session actions, not QR expiry |
+| `center_lat` / `center_lng` | `numeric(9,6)` | Required for NEED-001; latitude -90..90, longitude -180..180 | Geofence center chosen by map pin/coordinates |
+| `geofence_radius_m` | `integer` | Positive, default 20 | Separate meter radius; bounds/GPS accuracy TBD |
+| `late_grace_minutes` | `integer` | Nonnegative, default 15 for NEED-001 | Inclusive grace measured from internal event start; general-activity timing applicability TBD |
+| `qr_ttl_minutes` | `integer` | Positive, default 360 | Each issued challenge expires relative to its own activation |
+| `created_at` / `updated_at` | `timestamptz` | NN, default now; update on mutation | Session metadata |
 
-**Constraint:** `expires_at > activated_at`. HCO may explicitly reissue expired or revoked QR: previous challenges remain invalid; new activation + configured TTL (default six hours). No automatic rotation. Reissue must not silently invent a reopening policy for closed events.
+**Open architectural decision before Phase 4 schema:** approve event ownership and the session-to-event/context reference contract across Attendance and Activity, including association cardinality, integrity constraints and internal-event publication/closure transactions. This document does **not** choose a universal FK to internal `events`, a shared cross-module event table, dual parent columns or a polymorphic reference. The ERD association is conceptual until that decision. Whatever representation is reviewed must ensure a session cannot be rebound to another event/context and reused to bypass its authorization/eligibility boundary. Other session cardinalities for general activities are not specified here.
 
-### 4.8 `attendance_records` — one confirmed attendance per event/user
+Attendance owns session, challenge, record and audit mechanics. The owning business domain resolves the session's event/context and eligibility through a typed **public backend interface**. Internal SR entitlement uses the published snapshot; future Adaptif entitlement uses a successful active/not-cancelled registration exposed by Activity. Attendance must not query Activity's private tables or import its business logic. Frontend uses tRPC through Express, never backend interfaces/DB directly. Domain authorization remains HCO/internal versus Adaptif/general, with no SUPERADMIN operational bypass.
 
-| Column                | PG type                  | Constraint/default            | Note                                                                        |
-| --------------------- | ------------------------ | ----------------------------- | --------------------------------------------------------------------------- |
-| `id`                  | `uuid`                   | PK, generated                 |                                                                             |
-| `event_id`            | `uuid`                   | NN, FK → `events.id`          |                                                                             |
-| `user_id`             | `text`                   | NN, FK → `user.id`            | Must be invited via composite FK                                            |
-| `attendance_at`       | `timestamptz`            | NN                            | Effective attendance instant; scan: server time; manual: override permitted |
-| `recorded_at`         | `timestamptz`            | NN, default now               | Immutable actual server insert time                                         |
-| `source`              | `attendance_source` enum | NN                            | `QR`, `MANUAL`; original source retained on corrections |
-| `timing_class`        | `attendance_timing` enum | NN                            | `EARLY`, `ON_TIME`, `LATE` from event policy; tolerance freeze awaiting PM confirmation |
-| `recorded_by_user_id` | `text`                   | NN, FK → `user.id`            | QR: same as user_id; manual: KADEP HCO                                      |
-| `manual_reason`       | `text`                   | nullable; required for manual | Audit/business explanation                                                  |
-| `updated_at`          | `timestamptz`            | NN, default now               | Update only via audited correction                                          |
+### 4.8 `qr_challenges` — static session-bound QR
 
-**UK `(event_id, user_id)`**, and **composite FK** `(event_id, user_id)` → `event_participants(event_id, user_id)`; index `(user_id, attendance_at DESC)`. Application + SQL check for `source=MANUAL` requiring nonblank reason, and server verified KADEP HCO.
+| Proposed column | PG type | Constraint/default | Meaning |
+| --- | --- | --- | --- |
+| `id` | `uuid` | Generated PK | Unpredictable challenge identifier; not sufficient alone as a bearer token |
+| `session_id` | `uuid` | NN FK to `attendance_sessions.id` | Required session binding; event is resolved through the validated session association |
+| `activated_at` / `expires_at` | `timestamptz` | NN; expiry > activation | Challenge activation + configured TTL, default 360 minutes |
+| `revoked_at` | `timestamptz` | Nullable | Explicit immediate revocation |
+| `is_current` | `boolean` | NN, default true | Only the current challenge may be used |
+| `issued_by_user_id` | `text` | NN FK to `user.id` | Authorized operator for that session's domain |
+| `created_at` | `timestamptz` | NN, default now | Issuance record |
 
-**QR:** `attendance_at = recorded_at = server time`, `recorded_by_user_id=user_id`. **Manual:** `recorded_at = immutable server insertion time`, `attendance_at = KADEP supplied effective time or server time`, `recorded_by_user_id=KADEP`; no trust in a timestamp from a QR scan request.
+**Partial unique index `(session_id) WHERE is_current=true`**. Explicit revoke invalidates immediately; expiry invalidates without a lifecycle change. Explicit reissue marks prior challenge non-current and creates a new challenge atomically, using its activation time and configured TTL. Previous tokens stay invalid, even if their original expiry has not passed. No automatic rotation, new session or event reopening is implied. Closed sessions cannot accept scans or receive replacement challenges unless a future approved reopening policy allows it.
 
-Do not store a separate `PRESENT` boolean: existence of an attendance record means present. Missing attendance states are computed on the invitation/report query (see §5). Avoid hard deleting attendance; correction service updates record and inserts immutable audit in one transaction. Prevent concurrent check-ins/manual inserts using the database unique constraint, not a read-then-write race.
+Authorized operators redisplay the **same QR for the same challenge** after refresh. Do not store an unencrypted token or rely solely on a one-way hash that cannot support redisplay. **Proposed protocol, still requiring technical review:** signed payload/version, `session_id` and `challenge_id`, using backend-held `QR_SIGNING_SECRET` and a constant-time verified HMAC. Resolve challenge to its actual session and validate signed binding, current/revoked/expiry state, live identity, domain eligibility and geofence. Keep signing material/payload out of logs and exports. Cryptographic QR mechanics contain no HCO/Adaptif registration logic.
 
-### 4.9 `attendance_audit_logs` — immutable manual/correction history
+### 4.9 `attendance_records` — one confirmed attendance per session/user
 
-| Column          | PG type                        | Constraint/default               | Note                                                           |
-| --------------- | ------------------------------ | -------------------------------- | -------------------------------------------------------------- |
-| `id`            | `uuid`                         | PK, generated                    |                                                                |
-| `attendance_id` | `uuid`                         | NN, FK → `attendance_records.id` |                                                                |
-| `event_id`      | `uuid`                         | NN, FK → `events.id`             | Denormalized for event audit lookup                            |
-| `user_id`       | `text`                         | NN, FK → `user.id`               | Subject of attendance                                          |
-| `actor_user_id` | `text`                         | NN, FK → `user.id`               | KADEP HCO acting                                               |
-| `action`        | `attendance_audit_action` enum | NN                               | `MANUAL_CREATED`, `ATTENDANCE_CORRECTED`                       |
-| `before_state`  | `jsonb`                        | nullable                         | Null on first manual creation; no credentials/location secrets |
-| `after_state`   | `jsonb`                        | NN                               | Safe changed attendance fields only                            |
-| `reason`        | `text`                         | NN                               | Mandatory, non-empty                                           |
-| `created_at`    | `timestamptz`                  | NN, default now                  | Append-only timestamp                                          |
+| Proposed column | PG type | Constraint/default | Meaning |
+| --- | --- | --- | --- |
+| `id` | `uuid` | Generated PK | Attendance identity |
+| `session_id` | `uuid` | NN FK to `attendance_sessions.id` | Shared-engine scope |
+| `user_id` | `text` | NN FK to `user.id` | Domain-eligible participant |
+| `attendance_at` | `timestamptz` | NN | Effective attendance time; QR uses server clock; authorized manual override permitted |
+| `recorded_at` | `timestamptz` | NN, default now; immutable | Actual original record creation |
+| `source` | Proposed `attendance_source` | NN, `QR` / `MANUAL`; immutable origin | Correction preserves original source |
+| `timing_class` | Proposed `attendance_timing` | EARLY/ON_TIME/LATE required for NEED-001; general-context applicability/nullability TBD | Derived from internal event start and session grace |
+| `recorded_by_user_id` | `text` | NN FK to `user.id` | QR: participant; manual: domain-authorized operator |
+| `manual_reason` | `text` | Required/nonblank on manual creation | Correction reasons belong to immutable audit |
+| `updated_at` | `timestamptz` | NN, default now; update on correction | Does not replace original creation time |
 
-Index `(attendance_id, created_at)` and `(event_id, created_at)`; actor can INSERT only through approved backend services. Routine UPDATE/DELETE denied (ideally database role/trigger policy too). Audit insertion must happen **in the same transaction** as manual record creation or correction.
+**Unique `(session_id, user_id)`**; index `(user_id, attendance_at DESC)`. There is no universal attendance `(event_id, user_id)` key or FK to `event_participants`: registration participants are not internal invitees. Through the validated session binding, internal checks require `(event_id, user_id)` in the snapshot; general checks require Activity's active-registration public interface. These checks must be race-safe in the record transaction. Any additional internal-only DB constraint and the registration-cancellation consistency contract need review with the parent binding; do not pretend one FK targets both eligibility sources.
+
+QR sets effective time to actual server scan time and records creation at server write time; client timestamps cannot override it. Manual entry defaults effective time to current server time, with authorized override and mandatory reason. Do not store synthetic absent records or a separate PRESENT boolean. Correction changes permitted effective fields and inserts immutable before/after audit **in one transaction**, preserving original `source` and `recorded_at`. Duplicate requests never replace timestamps/source; database uniqueness handles concurrent scans/manual entries.
+
+### 4.10 `attendance_audit_logs` — immutable manual/correction history
+
+| Proposed column | PG type | Constraint/default | Meaning |
+| --- | --- | --- | --- |
+| `id` | `uuid` | Generated PK | Audit identity |
+| `attendance_id` | `uuid` | NN FK to `attendance_records.id` | Audited record |
+| `session_id` | `uuid` | NN FK to `attendance_sessions.id`; must match record parent | Context/report scope; consistency constraint reviewed with SQL |
+| `user_id` / `actor_user_id` | `text` | NN FKs to `user.id` | Participant / authorized operator |
+| `action` | Proposed `attendance_audit_action` | NN, `MANUAL_CREATED` / `ATTENDANCE_CORRECTED` | Audited action |
+| `before_state` / `after_state` | `jsonb` | Before nullable on creation; after NN | Reviewed fields only, no credentials/QR/GPS secrets |
+| `reason` | `text` | NN/nonblank | Required business explanation |
+| `created_at` | `timestamptz` | NN, default now; immutable | Audit write timestamp |
+
+Indexes `(attendance_id, created_at)` and `(session_id, created_at)`. Only domain-authorized backend insert/correction services append entries; ordinary UPDATE/DELETE is prohibited. Record mutation and audit insertion succeed/fail together. General Adaptif operators do not inherit HCO's KADEP requirement; internal manual operations remain KADEP HCO only.
 
 ## 5. State and classification rules
 
-### 5.1 Timing formula
+### 5.1 Timing formula (NEED-001)
 
-Using immutable **event start** and configurable grace period:
+Use the internal event's immutable schedule and associated session's configured late grace. Publication-time policy freeze remains TBD; do not silently change already recorded classifications if policy changes. Other contexts' timing rules are not inferred from NEED-001.
 
 ```text
 seconds_from_start = attendance_at - events.starts_at   (signed seconds)
+grace_seconds = attendance_sessions.late_grace_minutes * 60
 
-if attendance_at < starts_at:
+if attendance_at < events.starts_at:
     timing_class = EARLY
-else if attendance_at <= starts_at + late_grace_minutes:
+else if attendance_at <= events.starts_at + grace_seconds:
     timing_class = ON_TIME
 else:
     timing_class = LATE
@@ -372,54 +388,62 @@ minutes_after_start = max(0, floor(seconds_from_start / 60))
 minutes_past_grace = max(0, ceil((seconds_from_start - grace_seconds) / 60))
 ```
 
-**Display policy recommended:** show both **“Menit setelah mulai”** (e.g. 25 min) and **“Terlambat melewati toleransi”** (e.g. 10 min for a 15-min grace). This removes ambiguity from the word _keterlambatan_. For early scans, display signed early offset separately. Exact rounding/unit display to confirm with PM; server calculation must be consistent.
+The EARLY/ON_TIME/LATE boundary is confirmed; display rounding above is **proposed**. Show effective attendance time separately from creation/audit time. Presence and timing are separate; missing attendance has no invented timestamp/class/source.
 
-### 5.2 Presence state (report projection, not a table)
+### 5.2 Event, session and challenge lifecycle
 
-| Situation                          | Derived presence state     | Timing class               |
-| ---------------------------------- | -------------------------- | -------------------------- |
-| Has `attendance_records` row       | `PRESENT` / Hadir          | `EARLY`, `ON_TIME`, `LATE` |
-| No row, event not closed/cancelled | `PENDING` / Belum presensi | —                          |
-| No row, event `CLOSED`             | `ABSENT` / Tidak hadir     | —                          |
-| Event `CANCELLED`                  | `CANCELLED` / Dibatalkan   | —                          |
+```text
+Internal event:    DRAFT -- publish + snapshot atomically --> PUBLISHED
+                         PUBLISHED -- explicit HCO close --> CLOSED
+Attendance window: INACTIVE -- explicit operator activate --> ACTIVE
+                           ACTIVE -- explicit operator close --> CLOSED
+QR challenge:     issue -- static/current until expiry, revoke or replacement
+```
 
-Compute with `event_participants LEFT JOIN attendance_records`; participants without records remain visible. **CONFIRMED:** authorized HCO closes explicitly, invalidating active QR; missing attendance becomes ABSENT. QR expiration/revocation or scheduled end alone does not close an event. Cancellation/reopening projection remains TBD.
+State names are proposed storage labels; confirmed behavior is explicit activation/closure. Publication does not automatically activate scans. Activation requires a valid published internal event; the one-session invariant must hold. Session closure disables check-in and invalidates its QR independently of scheduled end. **Internal event closure** must atomically close its associated session and invalidate the current challenge. Expiry/revoke alone does not close session/event. Reissue is an explicit action in an active session and never reopens a closed session/event. No cancel/reopen/republication transitions are invented. Independent session closure's effect on an otherwise-open internal event/report, and any permitted pre-activation manual entry, remain explicit open policy items (?10).
 
-### 5.3 Scan decision flow
+### 5.3 Presence and reporting (NEED-001 projection)
 
-1. Validate Better Auth session and active `user_profiles` with actor SR.
-2. Parse/verify QR HMAC, ensure current, published event, activated, unexpired, unrevoked challenge.
-3. Confirm `(event_id,user_id)` exists in `event_participants`; evaluate account active and current policy constraints.
-4. Request browser coordinates + accuracy and validate geofence on backend; handle bad accuracy as an explicit manual-fallback case.
-5. Use **server clock**, compute timing class, perform atomic insert with unique `(event_id,user_id)` enforcement.
-6. Duplicate requests return stable “already recorded” response without changing existing timestamp.
+| Situation | Derived presence | Timing |
+| --- | --- | --- |
+| Has record for the event's one session | `PRESENT` | EARLY/ON_TIME/LATE |
+| No record, event not explicitly closed | `PENDING` | None |
+| No record, HCO explicitly closed event/session | `ABSENT` | None |
+| Cancel/reopen or standalone session close before event close | **TBD; do not infer transitions/report projection** | TBD |
 
-**Never** rely on GPS location alone as proof. On GPS denial, poor accuracy, or out of radius, show _hubungi KADEP HCO untuk input manual_, not a public bypass or unapproved SR request workflow.
+Start from **every `event_participants` row**, resolve the event's unique session and LEFT JOIN records by `(session_id, user_id)`. Later organization changes do not change snapshot report values. QR expiry/scheduled end cannot silently produce ABSENT. General-activity reporting/roster comes through Activity's public interface, not this internal invitation table; cancellation must not silently erase recorded attendance/audit.
 
-### 5.4 Manual upsert / correction
+### 5.4 Publish/scan/manual decision flow
 
-1. KADEP HCO selects an **invited participant** from this event's snapshot by NIM/name.
-2. If no attendance exists, create a `MANUAL` record with `attendance_at = current server time` unless KADEP supplies actual effective time; `recorded_at` remains current server time.
-3. If attendance exists, present a **correction** action (not a second insert); require reason, save before and after.
-4. Validate effective timestamps and audit overrides. Allowed historical/future bounds are **TBD**; rejecting future timestamps is a **PROPOSED** safeguard, not a confirmed rule.
-5. Perform attendance mutation + append-only audit atomically; preserve original `recorded_at` **and original source** on corrections, and record later correction timestamp in audit.
-6. Recalculate timing classification from corrected `attendance_at` and frozen event policy.
+**Preview/publish:** validate HCO through existing protected procedures and live DB identity; resolve active SR plus composable criteria/include/exclude, deduplicate, show preview; revalidate in publication transaction, write `(event_id, user_id)` snapshots and publication state together. Required session association is enforced using the reviewed parent-binding strategy, not a client-provided context.
 
-## 6. Constraints and required indexes (migration checklist)
+**QR scan:**
 
-- [ ] Unique Better Auth username/NIM and email after plugin generation; no duplicate NIM source of truth.
-- [ ] `user_profiles.user_id` PK and actor enum (single primary actor).
-- [ ] `sr_profiles.user_id` PK; NOT NULL department, position, building FKs.
-- [ ] `system_privileges` composite PK `(user_id, privilege_code)`.
-- [ ] `events`: start < end, coordinates within bounds, positive radius/TTL, nonnegative grace.
-- [ ] `event_participants` PK `(event_id, user_id)`; `(user_id,event_id)` index for own events.
-- [ ] `qr_challenges`: partial unique `(event_id) WHERE is_current = true`; expiration > activation.
-- [ ] `attendance_records`: unique `(event_id, user_id)` and composite FK to `event_participants`; own-history index.
-- [ ] `attendance_audit_logs`: append-only with event and record indexes; mandatory reason.
-- [ ] All inserts and privileged updates enforce authorized user/department/position on server.
-- [ ] Event publication + participant snapshot transaction; QR reissue transaction; manual insert/correction + audit transaction.
-- [ ] Avoid cascade deleting historical events/participants/attendance; soft archive where necessary.
-- [ ] Generated Drizzle SQL/migrations reviewed and committed before applying to **Supabase Development**.
+1. Validate Better Auth session, live eligibility and password-change gate. NEED-001 requires active SR; student onboarding for general activities is a separate future dependency.
+2. Verify token protocol/session binding and derive domain event/context from trusted backend data. For internal SR, require published/nonclosed event; for every context require active attendance session plus current, unexpired, unrevoked QR.
+3. Internal: require published invitation for that session's event. General: use Activity's public backend interface to require current successful/not-cancelled registration. Do not accept client department, owner, registration or eligibility claims.
+4. Validate browser location/accuracy against the session's geofence on backend. Treat it as untrusted; GPS failure leads to domain-authorized manual handling, not automatic bypass.
+5. Within the race-safe record transaction, validate relevant state/eligibility, use server time, classify internal timing and insert with unique `(session_id, user_id)`. Before-start/after-end internal scans are allowed while session and QR remain valid.
+6. Duplicate/retry returns stable already-recorded result without changing original fields.
+
+**Manual/correction:** KADEP HCO selects an invited internal participant by NIM/name; Adaptif resolves an eligible general participant through Activity. Use the target session, validate domain/state/participant, require reason and default effective time to current server time. An allowed override changes `attendance_at`, not immutable `recorded_at`; compute internal classification automatically. Correct an existing record instead of adding a second row and append before/after audit atomically, preserving source. Pre-activation/post-closure manual rules, override bounds and now-inactive historical targets remain TBD. Never treat a SUPERADMIN grant as an operational bypass.
+
+## 6. Constraints and required indexes (future migration review checklist)
+
+Identity constraints are already implemented/applied in Phase 2A; keep their migrations unchanged. The items below concern **future proposed domain SQL**, not permission to implement/apply it.
+
+- [ ] Events: valid schedule order; validated composable criteria and allowed published-field changes; **no single audience enum** as NEED-001 selection model.
+- [ ] Participants: PK `(event_id, user_id)`, event/user FKs, index `(user_id, event_id)`; populated SR snapshots; atomic consistent publication without silent later refresh.
+- [ ] Sessions: UUID PK; reviewed event/context binding/FKs and unique one-session-per-internal-event enforcement, including publication consistency; active/closed timestamps; no rebinding.
+- [ ] Session policy: coordinate ranges, positive radius/TTL, nonnegative internal grace and confirmed defaults; finalize policy freeze and permitted bounds before dependent mutations.
+- [ ] QR: `session_id` FK, partial unique `(session_id) WHERE is_current=true`, expiry > activation; signed unpredictable binding and stable redisplay; revoke/reissue/closure concurrency.
+- [ ] Records: `session_id`/user FKs, unique `(session_id, user_id)`, own-history index; reviewed context-specific eligibility enforcement, **not a universal FK to invitations**.
+- [ ] Audit: record/session/user/actor consistency and indexes, nonblank reason, immutable source/creation, append-only audit; atomic manual mutation/audit.
+- [ ] Live session/active-identity/password gate plus HCO, KADEP HCO or Adaptif domain policy; no frontend claims or SUPERADMIN operational bypass.
+- [ ] Race-safe publish, session/QR activation/reissue, explicit event/session closure and check-in; registration consistency via Activity public interface for future NEED-007.
+- [ ] Internal recap: all invitation snapshots LEFT JOIN the event's one session's records; no fake absent rows; exports exclude secrets/raw GPS.
+- [ ] No cascade deletion of historical invitation/attendance/audit as routine operation; cancellation/reopening policy must be approved first.
+- [ ] Proposed Drizzle definitions/SQL reviewed only after open binding/policy decisions; separate explicit approval before any remote migration. No changes to applied Phase 2 migrations.
 
 ## 7. CSV import contract
 
@@ -449,7 +473,7 @@ Disallow raw browser DB access; runtime queries go through Express/Drizzle. No S
 
 1. **F2 auth:** Better Auth Username Plugin, generated auth schema, `user_profiles`, SR dictionary, `sr_profiles`, `system_privileges`, import from synthetic roster; password flows + Gmail SMTP later in F2.
 2. **F3 RBAC:** identity context, HCO/KADEP HCO/Adaptif/explicit SUPERADMIN policies and local official dictionary seed implemented; domain endpoints remain future work.
-3. **F4 event:** `events`, `event_participants` snapshot on publish, `qr_challenges`, event challenge issue/display/revoke.
+3. **F4 event/session:** review parent binding and unresolved policies first; composable roster criteria, atomic `event_participants` snapshot, one `attendance_sessions` per internal event and session-bound QR issue/display/revoke. No Phase 4 implementation is authorized by this document.
 4. **F5 scan:** `attendance_records`, HMAC verification, geofence and timing classification, idempotent insertion.
 5. **F6 manual/export:** `attendance_audit_logs`, effective vs recorded time, event participant LEFT JOIN report and CSV export.
 6. **F7–F8:** integration tests, real GPS mobile test, email/send safety checks, migration repeatability, deploy/UAT.
@@ -467,13 +491,16 @@ Do not implement every table at once if incremental migrations can be safely dep
 | D-05 | Manual time override allowed range and whether corrected effective time can precede event start by days | Audit and fraud controls                              |
 | D-06 | Gmail SMTP sender configuration, recovery/verification policy and secure temporary password delivery      | Account readiness                                     |
 | D-07 | Inti membership mapping, actual SR roster and approved distribution; optional default center presets     | Pilot real-data import                                |
-| D-08 | Attendance data retention, export access logging, and timezone/rounding display                         | Compliance and historical reporting                   |
+| D-08 | Attendance data retention, export access logging, and timezone/rounding display | Compliance and historical reporting |
+| D-09 | Event ownership and physical session/event/context binding across Attendance and Activity; exact parent/one-session/publication constraints and race-safe eligibility contract | **Before Phase 4 schema**; no universal parent FK selected |
+| D-10 | Independent attendance-session closure vs internal event closure/reporting; pre-activation/post-closure manual operations and reactivation/reopen handling | **Before affected lifecycle endpoints**; no implicit absence/reopen rule |
+| D-11 | General-activity timing applicability and eligible report interface; exact registration-cancellation/check-in consistency | NEED-007 later; do not force internal invitation/timing rules |
 
 Until approved, don't silently convert these proposal-level details into product requirements. Implementation may use safe technical defaults with explicit review gates only where user-approved behavior is not affected.
 
 ## 11. Acceptance data examples (synthetic)
 
-Event starts **13:00 Asia/Jakarta**, grace **15 min**, QR activated 12:00 and expires 18:00. All examples satisfy auth, eligibility, geofence and token checks.
+Internal event `E` starts **13:00 Asia/Jakarta**; its sole attendance session `S` has **15 min** grace and is activated at 12:00. Challenge `Q1` references `S`, activates at 12:00 and expires 18:00 (360 min). All examples satisfy live auth/password gate, invitation `(E, U)`, active session, geofence and token checks. Attendance uniqueness is `(S, U)`, not a universal event/user key.
 
 | Effective attendance  | Presence | Timing  | Minutes after start | Minutes past grace | Source |
 | --------------------- | -------- | ------- | ------------------: | -----------------: | ------ |
@@ -486,7 +513,9 @@ Event starts **13:00 Asia/Jakarta**, grace **15 min**, QR activated 12:00 and ex
 | No scan, event open   | PENDING  | —       |                   — |                  — | —      |
 | No scan, event closed | ABSENT   | —       |                   — |                  — | —      |
 
-Manual example: KADEP saves at 17:00 but sets effective presence at 13:05. Persist `attendance_at=13:05`, `recorded_at=17:00`, `source=MANUAL`, `timing_class=ON_TIME`, actor KADEP HCO, non-empty reason, and immutable audit row. Never retroactively rewrite the initial `recorded_at`.
+If HCO revokes Q1 and explicitly issues Q2 for the same active session, Q1 stays invalid and Q2 receives activation + configured TTL; refreshing Q2 redisplays the same QR. This does not create another session or permit another `(S, U)` record. Closing E closes S and invalidates Q2 atomically; absent reporting still begins from all `(E, U)` invitation snapshots.
+
+Manual example: KADEP HCO saves at 17:00 but sets effective presence at 13:05. Persist `attendance_at=13:05`, `recorded_at=17:00`, `source=MANUAL`, `timing_class=ON_TIME`, actor KADEP HCO, non-empty reason, and immutable audit row. Never retroactively rewrite the initial `recorded_at`.
 
 ## 12. Repository compatibility review (2026-10-10)
 

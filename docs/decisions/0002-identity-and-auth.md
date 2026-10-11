@@ -8,7 +8,7 @@ Only SR accounts log in for NEED-001. User logs in with **NIM/password**, create
 
 ## Important nuance
 
-An event audience is not an account role. `ALL_STUDENTS` includes SR and Mahasiswa while an account has only one primary actor. `KADEP` audience includes position=KADEP across all departments; only _department=HCO and position=KADEP_ grants manual attendance insertion/correction, requiring reason and audit.
+An event audience is not an account role. NEED-001 uses a composable active-SR roster (all SR, departments, all KADEP across departments, individuals, include/exclude and deduplication), not a single audience enum; Inti mapping remains TBD. General-activity eligibility later comes from active Activity registration. Only _department=HCO and position=KADEP_ grants internal manual attendance insertion/correction, requiring reason and audit. Active Adaptif operators govern general activity attendance without a KADEP requirement; SUPERADMIN does not bypass either operational policy.
 
 ## Security and unresolved work
 
@@ -32,3 +32,5 @@ Plan Gmail SMTP, sender display name **RnD SR XIV**; sender address and SMTP cre
 PM approved **KADEP replacing KADIV** in new inputs and active policies; no alias or automatic legacy data conversion. [Canonical dictionaries and relations](../modules/need-001/resora-need-001-data-model.md#42-departments-positions-buildings--canonical-organization-dictionaries) define 7 departments, 7 independent positions and 18 TEXT-coded buildings. Inti mapping remains TBD.
 
 Live DB identity and [simple policies](../modules/need-001/resora-need-001-data-model.md#8-server-side-authorization-phase-3) are implemented/tested locally: HCO internal operations, HCO + KADEP manual correction, ADAPTIF general operations/manual without KADEP, explicit SUPERADMIN identity administration only. No extra operator role, operational admin bypass, endpoint or schema migration is introduced. Existing auth/password/provisioning behavior is retained.
+
+**Documentation synchronization (2026-10-11, after Phase 3):** active roster/session references are now aligned with the current PRD and [canonical model](../modules/need-001/resora-need-001-data-model.md). The earlier dated discrepancy note records the Phase 2B audit state. Cross-module event/session binding and unresolved lifecycle/policy decisions still block dependent Phase 4 implementation; no code/schema change is made here.

@@ -1,5 +1,7 @@
 # NEED-001 — Acceptance Criteria & UAT Scenarios
 
+**Current domain baseline (2026-10-11):** composable active-SR roster and session-based shared attendance; [canonical model](resora-need-001-data-model.md). Domain cases below are future acceptance specifications, not executed Phase 4 tests. Physical event/session binding, standalone session-close/reporting and other TBD cases require approval before dependent implementation. Historical Phase 2B/3 evidence below records its original state.
+
 **Status:** Identity authentication cases tested locally in Phase 2B; domain execution/pilot UAT pending. Only explicitly marked policy details remain `TBD`.
 
 Sources: [NEED-001 PRD](prd.md) and [canonical data model/repository review](resora-need-001-data-model.md#12-repository-compatibility-review-2026-10-10). Phase 2A identity definitions/migrations were validated locally in Phase 2A.5 and applied/read-only verified on Supabase Development in [Phase 2A.6](resora-need-001-data-model.md#15-phase-2a6-supabase-development-migration); event/QR/attendance schema and application behavior remain future work. Use synthetic accounts only in authorized development testing until the private CSV arrives; no accounts were created in Phase 2A.6.
@@ -11,16 +13,16 @@ Sources: [NEED-001 PRD](prd.md) and [canonical data model/repository review](res
 | AT-003 | SR in department HCO                                             | Create attendance event with audience SR, radius 20m, grace 15m | Event saved; HCO can display event QR                              | Confirmed fields                                      |
 | AT-004 | Ordinary SR not in HCO                                           | Try create event/issue QR/export via direct tRPC request        | Server refuses, regardless of UI                                   | Confirmed                                             |
 | AT-005 | KADEP of Adaptif (not HCO) | Attempt manual insertion/correction | Server rejects | Confirmed |
-| AT-006 | KADEP HCO, invited participant without attendance | Open event, search name/NIM, select profile, enter reason | One MANUAL record, default effective server time, immutable creation time and audit | Confirmed |
+| AT-006 | KADEP HCO, invited participant without attendance | Open event, search name/NIM, select profile, enter reason | One MANUAL record, default effective server time for the target session, immutable creation time and audit | Confirmed |
 | AT-007 | HCO member who is not KADEP | Attempt manual insertion/correction via direct request | Server rejects | Confirmed |
 | AT-008 | SR event                                                         | Match event audience `SR`                                       | Can see/check in when all other conditions valid                   | Confirmed                                             |
-| AT-009 | KADEP event                                                      | SR `position=KADEP`, any department                             | Eligible                                                           | Confirmed                                             |
-| AT-010 | KADEP event                                                      | SR ordinary member                                              | Ineligible, cannot bypass with forged request                      | Confirmed                                             |
-| AT-011 | ALL_STUDENTS event                                               | Authenticated SR                                                | Included by audience rule despite only one actor                   | Confirmed                                             |
-| AT-012 | ALL_STUDENTS event                                               | Non-SR student during pilot                                     | No login / cannot check in until student actor implemented         | Explicit MVP limitation                               |
-| AT-013 | Active invited SR, valid QR and location | Scan while QR active, including before start/after end | One PRESENT record with actual server timestamp and EARLY/ON_TIME/LATE timing | Confirmed |
-| AT-014 | Same user scans same QR twice                                    | Scan twice or concurrent requests                               | Exactly **one** confirmed attendance; stable duplicate result      | Confirmed                                             |
-| AT-015 | Revoked or expired event QR | Scan despite event still in progress | Denied; no attendance change or attendee data leakage | Confirmed |
+| AT-009 | Draft selects all KADEP across departments | Preview active SR KADEP from HCO, RND and other departments | All eligible KADEP selected; position is not a primary actor | Confirmed roster builder; future implementation |
+| AT-010 | Draft selects only KADEP, no individual includes | Ordinary active SR attempts scan after publication | Not invited; forged department/position cannot bypass snapshot | Confirmed; future implementation |
+| AT-011 | Draft combines HCO department, all KADEP and individual includes/excludes | Preview overlapping SR and explicit exclusions | Deduplicated by user_id; excluded users absent; inclusion does not create presence | Confirmed capabilities; criteria representation proposed |
+| AT-012 | Non-SR or inactive account selected individually | Preview/publish and direct check-in | Cannot enter active-SR roster or gain pilot login/check-in; Inti filter unavailable until mapping approved | Confirmed pilot boundary; Inti TBD |
+| AT-013 | Active invited SR, valid session QR and location | Scan while session and QR active, including before start/after end | One PRESENT record with actual server timestamp and EARLY/ON_TIME/LATE timing | Confirmed |
+| AT-014 | Same user and attendance session, valid QR | Retry or concurrent requests | Exactly one record via unique `(session_id, user_id)`; stable duplicate response without timestamp changes | Required shared-engine integrity |
+| AT-015 | Revoked or expired session QR | Scan despite event still in progress | Denied; no attendance change or attendee data leakage | Confirmed |
 | AT-016 | Participant beyond configured radius | Try scan | No automatic attendance; direct participant to KADEP HCO for manual entry | Confirmed |
 | AT-017 | Location denied/unverifiable GPS accuracy | Try scan | No automatic attendance; contact KADEP HCO for manual entry | Confirmed fallback; accuracy threshold TBD |
 | AT-018 | KADEP HCO manual entry | Submit without reason or with blank reason | Rejected; no attendance or partial audit write | Confirmed |
@@ -28,15 +30,15 @@ Sources: [NEED-001 PRD](prd.md) and [canonical data model/repository review](res
 | AT-020 | Event grace configured to 30 min | Scan at start +30min and +30min 1sec | ON_TIME at inclusive boundary, then LATE; presence remains PRESENT | Confirmed |
 | AT-021 | HCO report includes every published invitee | View/export CSV | NIM/name, organization fields, presence, effective time, timing, duration, source; include missing records; exclude secrets/raw GPS | Confirmed columns; duration/retention TBD |
 | AT-022 | SR accesses other's attendance record                            | Direct request                                                  | Forbidden, own-history only                                        | Confirmed                                             |
-| AT-023 | QR and KADEP manual insertion for same event/user | Concurrent requests reach DB | One attendance row; successful manual mutation audited atomically; no duplicate or orphan audit | Required integrity |
+| AT-023 | QR and KADEP HCO manual insertion for same session/user | Concurrent requests | One attendance row; manual mutation/audit atomic; no duplicates/orphans | Required integrity; future implementation |
 | AT-024 | Malformed center/radius/schedule | Save event | Reject malformed coordinates, nonpositive radius/TTL or unordered schedule; permitted configurable bounds reviewed separately | Validation design; radius/TTL/grace limits TBD |
 | AT-025 | Actual SR on common smartphone and campus network                | End-to-end pilot                                                | Login, QR, GPS, fallback and history usable with HTTPS             | Mandatory UAT                                         |
 | AT-026 | Event starts 13:00, grace 15min, QR active | Scan at 12:59:59 /13:00/13:15/13:15:01 | EARLY /ON_TIME/ON_TIME/LATE; all PRESENT; server time authoritative | Confirmed |
-| AT-027 | Event ends 14:00, QR active until 18:00 | Scan at 15:00 with all other checks valid | Allowed, PRESENT and LATE; scheduled end is not a cutoff | Confirmed |
-| AT-028 | HCO activates QR at 12:00 with default lifetime | Display QR at activation and refresh before expiry | Same token/QR, expires 18:00, no automatic rotation | Confirmed; redisplay protocol proposed |
-| AT-029 | Event QR configured for another lifetime | Activate, then authorized HCO revokes early | Configured expiration from activation; revoked token immediately unusable | Confirmed; lifetime bounds TBD |
-| AT-030 | Attacker substitutes another event/token or forges privileges/time | Submit check-in | Backend rejects invalid binding/token; never trusts client classification/time/permissions | Confirmed |
-| AT-031 | Event audience selects eligible active roster | Publish event | Participant snapshot committed with publication; only invitees may check in | Confirmed; storage proposed |
+| AT-027 | Event ends 14:00, attendance session active and QR valid until 18:00 | Scan at 15:00 with all other checks valid | Allowed, PRESENT and LATE; scheduled end is not a cutoff | Confirmed |
+| AT-028 | HCO activates attendance session and its QR at 12:00 with default TTL | Display QR at activation and refresh before expiry | Same token/QR, expires 18:00, no automatic rotation | Confirmed; redisplay protocol proposed |
+| AT-029 | Session QR configured for another lifetime | Activate, then authorized HCO revokes early | Configured expiration from activation; revoked token immediately unusable | Confirmed; lifetime bounds TBD |
+| AT-030 | Attacker substitutes another session/challenge or forges event/context/privilege/time | Submit check-in | Backend validates challenge-session-parent binding and domain eligibility; ignores client authority/time | Confirmed boundary; protocol/storage proposed |
+| AT-031 | Composable active-SR draft preview | Publish after directory changes | Resolve current eligible roster again from consistent view; snapshot/publication commit together or neither | Confirmed snapshot; transaction design review |
 | AT-032 | Invited SR changes department/position/building after publication | View historical event report | Invitation and organization snapshot retained; do not silently refresh roster | Confirmed snapshot; cancellation/republication handling TBD |
 | AT-033 | Invitee is later inactive, including a stored session | Attempt login or QR check-in | Both rejected regardless of participant snapshot; historical invitation retained | Confirmed |
 | AT-034 | Invited participant has no attendance record | Report before closure, then after confirmed window closure | PENDING/not yet present, then ABSENT; no fabricated attendance timestamp/class/source | Confirmed: explicit authorized HCO closure |
@@ -48,13 +50,17 @@ Sources: [NEED-001 PRD](prd.md) and [canonical data model/repository review](res
 | AT-040 | User calls public signup directly | Submit signup despite hidden UI | Backend rejects; no public account created | Confirmed |
 | AT-041 | Phase 2 Gmail SMTP configured with synthetic/test recipient | Verify recovery/email-verification flows and sender identity | Display name RnD SR XIV; address/credentials environment-only; secrets absent from docs/logs | Confirmed direction; operational policy TBD |
 | AT-042 | QR or MANUAL present participant and absent invitee | Export CSV | Attendance source/timing/time only where relevant; all invitees included; no passwords/sessions/QR secrets/raw GPS | Confirmed; XLSX optional |
-| AT-043 | QR reused by different invited active users during its lifetime | Each checks in once | Same static QR valid for each invitee; duplicates per event/user rejected | Confirmed |
-| AT-044 | Published event | HCO edits title/description, then attempts audience/start/end edits via direct request | Title/description edits allowed; audience/schedule changes rejected; existing participant snapshot retained | Confirmed; future implementation |
-| AT-045 | Published event with active QR and invited non-attendee | Authorized HCO explicitly closes event | Active QR invalidated atomically; scans denied; non-attendee reported ABSENT; existing attendance retained | Confirmed; future implementation |
-| AT-046 | Expired or revoked QR, event not explicitly closed | HCO reissues challenge | New activation + configured TTL (default six hours); previous challenges remain invalid; no automatic rotation | Confirmed; future implementation |
+| AT-043 | Current static session QR used by different invited active SR | Each checks in once | Same QR valid per invitee while session active; duplicates per session/user rejected | Confirmed |
+| AT-044 | Published event | HCO edits title/description, then attempts roster criteria/invitees/start/end edits via direct request | Title/description edits allowed; roster/schedule changes rejected; existing participant snapshot retained | Confirmed; future implementation |
+| AT-045 | Published event with one active attendance session/QR and invited non-attendee | Authorized HCO closes event | Event/session close and challenge invalidation atomic; scans denied; non-attendee ABSENT; records/snapshot retained | Confirmed; future implementation |
+| AT-046 | Expired/revoked QR on active session of nonclosed event | HCO explicitly reissues | New challenge for same session, activation + configured TTL; old challenge invalid; no automatic rotation/reopening | Confirmed; future implementation |
 | AT-047 | No attendance record and QR expired | Report before HCO explicitly closes, then after close | Pending before closure; ABSENT after close, regardless of scheduled end | Confirmed; future implementation |
 | AT-048 | Attendance originally sourced QR or MANUAL | KADEP HCO corrects effective time/reason | Original source and recorded_at preserved; immutable audit captures correction; automatic timing recalculation | Confirmed; future implementation |
 | AT-049 | Published event center/radius/late tolerance | Attempt edit after publication | Freeze recommended; executable expectation awaits final PM confirmation | PROPOSED safeguard, not an approved acceptance gate |
+| AT-050 | Draft preview, inactive include, duplicate and excluded identities | Preview/publish | Only current active SR, include/exclude applied with visible conflicts and deduplication; assignment/master data unchanged | Confirmed capabilities; conflict UI design proposed |
+| AT-051 | Published event E with its one session S and valid QR | Try check-in before session activation, after session close, or with foreign session/token | Rejected; publication/schedule alone does not activate attendance; binding and active state checked server-side | Confirmed boundary; reference storage TBD |
+| AT-052 | General Adaptif activity (future NEED-007) | Shared engine asks Activity public backend interface about registration | Successful active/noncancelled registration required; no internal invitation FK or private Activity table access; HCO denied, authorized Adaptif manual allowed without KADEP | Future interface boundary; consistency contract TBD |
+| AT-053 | Standalone session close while internal event remains open; attempted reopen/cancel | Specify transition/report/manual behavior | Do not infer ABSENT/reopen/manual policy; approve explicitly before dependent endpoint tests | TBD, not passing |
 
 ## Phase 2B authentication execution (2026-10-11)
 
@@ -88,7 +94,7 @@ Headless Edge with isolated temporary profile, production Next.js and local Expr
 | Official dictionaries and rerun | 7/7/18, unchanged UUIDs/assignments; conflicts roll back | Organization integration tests |
 | CSV A/F/1/12 and KADEP; KADIV/unknown codes | Official codes resolve active DB references; legacy/unknown rejected | Provisioning unit/integration tests |
 
-These validate the policy/seed foundation, not unbuilt event/attendance workflows above. [Canonical codes/matrix](resora-need-001-data-model.md#8-server-side-authorization-phase-3); Inti mapping and domain model alignment remain open.
+These validate the policy/seed foundation, not unbuilt event/attendance workflows above. [Canonical codes/matrix](resora-need-001-data-model.md#8-server-side-authorization-phase-3); Inti mapping and physical cross-module binding/lifecycle policy remain open; current roster/session documentation is synchronized.
 
 ## Approval fields
 
