@@ -1,136 +1,74 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { createContext, useContext } from "react";
 import { authClient } from "@/lib/auth-client";
+import { queryClient, trpc } from "@/utils/trpc";
 import type { UserProfile, UserRolePermissions } from "./auth-types";
 
-export const MOCK_PROFILES: Record<string, UserProfile> = {
-  kadiv_hco: {
-    id: "usr_hco_001",
-    nim: "1301213001",
-    name: "Fadhil Rahmat (KADIV HCO)",
-    email: "fadhil.hco@telkomuniversity.ac.id",
-    actor: "SR",
-    departmentCode: "HCO",
-    departmentName: "Human Capital & Organization",
-    positionCode: "KADIV",
-    positionName: "Ketua Divisi HCO",
-    buildingName: "Gedung Asrama Utama",
-    isActive: true,
-  },
-  staff_hco: {
-    id: "usr_hco_002",
-    nim: "1301213002",
-    name: "Aisyah Putri (Staff HCO)",
-    email: "aisyah.hco@telkomuniversity.ac.id",
-    actor: "SR",
-    departmentCode: "HCO",
-    departmentName: "Human Capital & Organization",
-    positionCode: "STAFF",
-    positionName: "Staff HCO",
-    buildingName: "Gedung Asrama Putri",
-    isActive: true,
-  },
-  sr_adaptif: {
-    id: "usr_adaptif_001",
-    nim: "1301213055",
-    name: "Nabil Fikry (Staff Adaptif)",
-    email: "nabil.adaptif@telkomuniversity.ac.id",
-    actor: "SR",
-    departmentCode: "Adaptif",
-    departmentName: "Divisi Adaptif & Hubungan Luar",
-    positionCode: "STAFF",
-    positionName: "Staff Adaptif",
-    buildingName: "Gedung Asrama Putra",
-    isActive: true,
-  },
-};
-
 interface AuthContextValue {
-  user: UserProfile;
-  permissions: UserRolePermissions;
-  currentRoleKey: string;
-  switchRole: (roleKey: string) => void;
-  isLoading: boolean;
-  logout: () => void;
+	user: UserProfile | null;
+	permissions: UserRolePermissions | null;
+	isLoading: boolean;
+	error: string | null;
+	isUnauthenticated: boolean;
+	retry: () => void;
+	logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [currentRoleKey, setCurrentRoleKey] = useState<string>("kadiv_hco");
-  const [user, setUser] = useState<UserProfile>(MOCK_PROFILES.kadiv_hco);
-  const [isLoading, setIsLoading] = useState(false);
+	const session = authClient.useSession();
+	const profile = useQuery(
+		trpc.identity.me.queryOptions(undefined, {
+			enabled: !!session.data?.session,
+			retry: false,
+			staleTime: 0,
+			refetchOnWindowFocus: true,
+		}),
+	);
+	const validProfile =
+		!session.error &&
+		!profile.isError &&
+		profile.data?.user.id === session.data?.user.id
+			? profile.data
+			: null;
 
-  // Load saved emulated role if available in local storage
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("resora_emulated_role");
-      if (saved && MOCK_PROFILES[saved]) {
-        setCurrentRoleKey(saved);
-        setUser(MOCK_PROFILES[saved]);
-      }
-    } catch {
-      // fallback
-    }
-  }, []);
+	async function logout() {
+		const result = await authClient.signOut();
+		if (result.error) throw new Error("Gagal keluar. Silakan coba lagi.");
+		queryClient.clear();
+		window.location.replace("/login");
+	}
 
-  const switchRole = (roleKey: string) => {
-    if (MOCK_PROFILES[roleKey]) {
-      setCurrentRoleKey(roleKey);
-      setUser(MOCK_PROFILES[roleKey]);
-      try {
-        localStorage.setItem("resora_emulated_role", roleKey);
-      } catch {
-        // ignore
-      }
-    }
-  };
-
-  const permissions = useMemo<UserRolePermissions>(() => {
-    const isHCO = user.actor === "SR" && user.departmentCode === "HCO";
-    const isKadivHCO = isHCO && user.positionCode === "KADIV";
-
-    return {
-      isHCO,
-      isKadivHCO,
-      canCreateEvent: isHCO,
-      canManageQR: isHCO,
-      canCloseEvent: isHCO,
-      canManualEntry: isKadivHCO, // Sesuai PRD: HANYA KADIV HCO yang boleh input/koreksi manual
-      canExportReport: isHCO,
-    };
-  }, [user]);
-
-  const logout = () => {
-    try {
-      authClient.signOut();
-    } catch {
-      // ignore
-    }
-    window.location.href = "/login";
-  };
-
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        permissions,
-        currentRoleKey,
-        switchRole,
-        isLoading,
-        logout,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
+	return (
+		<AuthContext.Provider
+			value={{
+				user: validProfile?.user ?? null,
+				permissions: validProfile?.permissions ?? null,
+				isLoading: session.isPending || (!!session.data && profile.isPending),
+				error: session.error
+					? "Tidak dapat memeriksa sesi. Silakan coba lagi."
+					: (profile.error?.message ?? null),
+				isUnauthenticated:
+					!session.isPending &&
+					!session.error &&
+					(!session.data || profile.error?.data?.code === "UNAUTHORIZED"),
+				retry: () => {
+					void session.refetch();
+					void profile.refetch();
+				},
+				logout,
+			}}
+		>
+			{children}
+		</AuthContext.Provider>
+	);
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
+	const context = useContext(AuthContext);
+	if (!context) throw new Error("useAuth must be used within an AuthProvider");
+	return context;
 }

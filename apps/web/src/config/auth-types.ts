@@ -1,37 +1,6 @@
-export type PrimaryActor = "SR" | "MAHASISWA" | "ASUS" | "DITMAWA";
+import type { AppRouter } from "@resora/api/routers/index";
+import type { inferRouterOutputs } from "@trpc/server";
 
-export type DepartmentCode =
-  | "HCO"
-  | "Adaptif"
-  | "Sosial"
-  | "Akademik"
-  | "Spiritual"
-  | "Media"
-  | "RnD";
-
-export type PositionCode = "KADIV" | "STAFF" | "INTI" | "ANGGOTA";
-
-export interface UserProfile {
-  id: string;
-  nim: string;
-  name: string;
-  email: string;
-  actor: PrimaryActor;
-  departmentCode?: DepartmentCode;
-  departmentName?: string;
-  positionCode?: PositionCode;
-  positionName?: string;
-  buildingName?: string;
-  avatarUrl?: string;
-  isActive: boolean;
-}
-
-export interface UserRolePermissions {
-  isHCO: boolean;
-  isKadivHCO: boolean;
-  canCreateEvent: boolean;
-  canManageQR: boolean;
-  canCloseEvent: boolean;
-  canManualEntry: boolean;
-  canExportReport: boolean;
-}
+type Identity = inferRouterOutputs<AppRouter>["identity"]["me"];
+export type UserProfile = Identity["user"];
+export type UserRolePermissions = Identity["permissions"];

@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:is(.dark *));
 
 /* =====================================================================
    SIASTRA DESIGN SYSTEM — TOKENS
@@ -43,6 +44,22 @@
 
   /* Focus ring */
   --ring: rgb(225 59 48 / 0.35);
+}
+
+.dark {
+  --background: #0b1220;
+  --foreground: #f1f5f9;
+  --surface: #111c2e;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+  --border: #334155;
+  --input: #334155;
+  --primary-soft: #3b1c20;
+  --primary-soft-foreground: #fca5a5;
+  --success-soft: #063c32;
+  --warning-soft: #422b0a;
+  --info-soft: #082f49;
+  --danger-soft: #3b171f;
 }
 
 @theme inline {

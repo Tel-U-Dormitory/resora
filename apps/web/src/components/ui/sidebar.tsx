@@ -233,6 +233,8 @@ export const Sidebar = React.forwardRef<HTMLDivElement, SidebarProps>(
             dir={dir}
             data-sidebar="sidebar"
             data-mobile="true"
+            inert={!openMobile}
+            aria-label="Navigasi utama"
             data-state={openMobile ? "open" : "closed"}
             className={cn(
               "fixed inset-y-0 z-50 flex h-full min-h-0 w-[var(--sidebar-width-mobile,18rem)] max-w-[85vw] flex-col overflow-hidden bg-surface border-r border-border shadow-2xl transition-transform duration-300 ease-in-out",
@@ -249,6 +251,7 @@ export const Sidebar = React.forwardRef<HTMLDivElement, SidebarProps>(
           >
             <div className="absolute right-3 top-3 z-10 sm:hidden">
               <button
+                type="button"
                 onClick={() => setOpenMobile(false)}
                 className="p-1 rounded-md text-slate-400 hover:text-foreground"
                 aria-label="Tutup Menu"
