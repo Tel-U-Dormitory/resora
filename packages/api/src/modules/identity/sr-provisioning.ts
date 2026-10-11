@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomInt } from "node:crypto";
 import { type AuthConfig, createAuth } from "@resora/auth";
 import type { Database, DatabaseTransaction } from "@resora/db";
 import { account, user } from "@resora/db/schema/auth";
@@ -23,6 +23,8 @@ import {
 } from "./provisioning-csv";
 
 type Source = Database | DatabaseTransaction;
+const temporaryPasswordAlphabet =
+	"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 export type ProvisioningResult = {
 	mode: "dry-run" | "apply";
 	created: number;
@@ -239,7 +241,11 @@ export async function provisionSrAccounts(
 			for (const candidate of preview.candidates) {
 				let password: string;
 				do {
-					password = `R!${randomBytes(32).toString("base64url")}`;
+					password = Array.from({ length: 8 }, () =>
+						temporaryPasswordAlphabet.charAt(
+							randomInt(temporaryPasswordAlphabet.length),
+						),
+					).join("");
 				} while (passwords.has(password));
 				passwords.add(password);
 				entries.push({

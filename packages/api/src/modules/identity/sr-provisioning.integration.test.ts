@@ -283,6 +283,7 @@ async function rejected(operation: Promise<unknown>, code: string) {
 			const entry = rows[0];
 			const temporary = entry?.[3];
 			if (!temporary) throw new Error("Missing initial credential");
+			expect(/^[A-Za-z0-9]{8}$/.test(temporary)).toBe(true);
 			expect(output.includes(temporary)).toBe(false);
 			expect(entry?.[0]).toBe(nims[0]);
 			const records = await db
@@ -348,6 +349,18 @@ async function rejected(operation: Promise<unknown>, code: string) {
 				await rpc(cookie, "identity.session")
 			).json()) as { result: { data: { mustChangePassword: boolean } } };
 			expect(session.result.data.mustChangePassword).toBe(true);
+			expect((await auth.$context).password.config.minPasswordLength).toBe(8);
+			const tooShort = "A1b2C";
+			const rejectedChange = await native(
+				"change-password",
+				{ currentPassword: temporary, newPassword: tooShort },
+				cookie,
+			);
+			expect(rejectedChange.status).toBe(400);
+			expect(((await rejectedChange.json()) as { code: string }).code).toBe(
+				"PASSWORD_TOO_SHORT",
+			);
+			expect((await rpc(cookie)).status).toBe(403);
 			const newPassword = `R!${randomBytes(32).toString("base64url")}`;
 			const changed = await native(
 				"change-password",
@@ -435,9 +448,9 @@ async function rejected(operation: Promise<unknown>, code: string) {
 			const rows = await exported(result.credentialsFile);
 			expect(rows.length).toBe(2);
 			expect(new Set(rows.map((row) => row[3])).size).toBe(2);
-			expect(
-				rows.every((row) => /^R![A-Za-z0-9_-]{43}$/.test(row[3] ?? "")),
-			).toBe(true);
+			expect(rows.every((row) => /^[A-Za-z0-9]{8}$/.test(row[3] ?? ""))).toBe(
+				true,
+			);
 		}, 20_000);
 		test("invalid CSV, duplicate identity and missing organization mutate nothing", async () => {
 			await rejected(
