@@ -7,6 +7,11 @@ export const identityRouter = router({
 		if (!ctx.session) return null;
 		const identity = await getActiveSr(ctx.db, ctx.session.user.id);
 		if (!identity) return null;
-		return { ...identity, name: ctx.session.user.name };
+		return {
+			userId: identity.userId,
+			nim: identity.nim,
+			mustChangePassword: identity.mustChangePassword,
+			name: ctx.session.user.name,
+		};
 	}),
 });

@@ -257,6 +257,18 @@ Use `pnpm run test:ui` for CLI component and server-URL regression tests, alongs
 
 Lint cleanup verification on `chore/lint-cleanup`: repository diagnostics decreased from **102 errors/61 warnings to zero**. Workspace typecheck and Express/Next.js production builds passed. **10 UI/URL, 16 auth, 38 identity and 4 smoke tests passed**, with no skips. Auth/identity suites reused the retained loopback scratch database, without migrations; synthetic accounts/profiles were cleaned up, migration history remained three entries and the cluster was stopped. No Supabase access, dependency upgrade, commit, push or deployment was performed. Manual visual/keyboard UAT is still a separate review gate.
 
+### Phase 3: local organization dictionary seed
+
+Set `RESORA_IDENTITY_TEST_DB_URL` privately to a migrated loopback `resora_identity_test_*` database. Like provisioning, this CLI loads no `.env`, never falls back to runtime/migration URLs and verifies actual server host/port/database before writes.
+
+```powershell
+pnpm.cmd run org:seed               # preview; no reference writes
+pnpm.cmd run org:seed -- --apply     # explicit local insert of missing references
+pnpm.cmd run test:rbac
+```
+
+The seed ensures the [canonical dictionaries](modules/need-001/resora-need-001-data-model.md#42-departments-positions-buildings--canonical-organization-dictionaries) (7 departments, 7 positions, 18 buildings). Rerun inserts zero rows and preserves building UUIDs/assignments. Legacy codes (including KADIV), mismatched names or inactive entries abort atomically with explicit conflict codes; review existing data rather than deleting or overwriting it. The old retained Phase 2A.5 scratch database has synthetic legacy references; Phase 3 uses separate `resora_identity_test_phase3_20261011`. No Supabase seed/import or new migration is authorized.
+
 ### Phase 2C: internal CSV provisioning (local synthetic imports only)
 
 Use a disposable loopback PostgreSQL database named `resora_identity_test_*` with the three existing migrations. Set `RESORA_IDENTITY_TEST_DB_URL` privately in the process, as for the guarded integration suites. The CLI checks both the URL and actual server host/database/port before account writes. It ignores `DATABASE_URL`/`DIRECT_DB_URL`, loads no `.env` files, and rejects remote targets. No migrations are part of provisioning. An authorized real-environment rollout is a later approval gate, not a current CLI option.
@@ -265,10 +277,10 @@ UTF-8 input (optional BOM, RFC CSV quoting, maximum 5 MiB/5,000 accounts):
 
 ```csv
 nim,name,email,department,position,building,is_active
-000260000001,Synthetic SR,synthetic-sr@example.invalid,HCO,MEMBER,TEST_BUILDING,true
+000260000001,Synthetic SR,synthetic-sr@example.invalid,HCO,ANGGOTA,A,true
 ```
 
-These organization **codes** must already exist and be active in the local dictionaries; the importer never creates or changes organization records. Header order may vary, but all seven columns are mandatory, with no extra columns. NIM stays a string using the configured Username Plugin validation. Email is normalized to lowercase; `is_active` accepts `true`, `false`, `1`, `0`. Do not open/save the roster through spreadsheet number coercion; import NIM as text. Use only synthetic names/emails in this phase.
+Use the [canonical 7/7/18 organization codes](modules/need-001/resora-need-001-data-model.md#42-departments-positions-buildings--canonical-organization-dictionaries), including KADEP instead of legacy KADIV and separate buildings A–F / 1–12. These organization **codes** must already exist and be active in the local dictionaries; the importer never creates or changes organization records. Header order may vary, but all seven columns are mandatory, with no extra columns. NIM stays a string using the configured Username Plugin validation. Email is normalized to lowercase; `is_active` accepts `true`, `false`, `1`, `0`. Do not open/save the roster through spreadsheet number coercion; import NIM as text. Use only synthetic names/emails in this phase.
 
 ```powershell
 # Run from repository root; privately set RESORA_IDENTITY_TEST_DB_URL first.
@@ -307,7 +319,7 @@ CLI regression passed: **16 auth tests, 38 identity tests, 4 smoke tests**, zero
 | 2     | Review remaining closure/override bounds; field-test GPS limits                  | PM + HCO       |
 | 3     | Create initial department/building/SR import plan and username auth | PM + RnD       |
 | 4     | Implement event + reusable QR service + attendance DB and tRPC      | RnD            |
-| 5     | Implement SR flow, HCO event/recap/export, KADIV correction         | RnD            |
+| 5     | Implement SR flow, HCO event/recap/export, KADEP correction         | RnD            |
 | 6     | Security and load tests; real mobile/GPS trial                      | QA + HCO       |
 | 7     | Backup, deployment, HTTPS and UAT approval                          | DevOps + PM    |
 
@@ -317,9 +329,9 @@ This is a dependency sequence, **not** a fabricated daily sprint schedule.
 
 - [ ] No public self-registration; only authorized SR imported.
 - [ ] Credentials distributed securely; forced change and recovery policy verified.
-- [ ] HCO/KADIV/other SR permission matrix tested.
+- [ ] HCO/KADEP/other SR permission matrix tested.
 - [ ] Map-selected center, 20 m radius, 15 min inclusive tolerance and configurable static six-hour QR lifetime verified; scan allowed before/after schedule while QR active.
-- [ ] Expired/revoked QR, duplicate, inactive account and GPS denial cases pass; KADIV HCO manual insert/correction, effective/recorded time and immutable audit verified.
+- [ ] Expired/revoked QR, duplicate, inactive account and GPS denial cases pass; KADEP HCO manual insert/correction, effective/recorded time and immutable audit verified.
 - [ ] Publication snapshots and exports include all invited non-attendees; pending becomes absent on explicit authorized HCO closure, which invalidates the active QR.
 - [ ] PostgreSQL backup and restore tested; secrets rotated from defaults; HTTPS active.
 - [ ] UAT signed off by PM and HCO policy owner.

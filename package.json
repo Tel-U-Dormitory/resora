@@ -30,6 +30,8 @@
 		"test:auth": "bun test packages/auth/src/pilot.test.ts packages/auth/src/pilot.integration.test.ts",
 		"test:provision": "bun test packages/api/src/modules/identity/provisioning-csv.test.ts packages/api/src/modules/identity/sr-provisioning.integration.test.ts",
 		"sr:provision": "pnpm --dir apps/server run sr:provision",
+		"org:seed": "pnpm --dir apps/server run org:seed",
+		"test:rbac": "bun test packages/api/src/modules/identity/identity-policy.test.ts packages/api/src/modules/identity/identity-policy.integration.test.ts packages/db/src/organization.integration.test.ts",
 		"test:ui": "bun test packages/ui/src/components/input-group.test.tsx apps/web/src/utils/server-url.test.ts",
 		"lint": "biome check .",
 		"check": "biome check --write ."

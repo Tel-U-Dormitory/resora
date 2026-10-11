@@ -1,6 +1,6 @@
 # RESORA — Data Model & Schema Specification (NEED-001)
 
-**Version:** 0.3 · **Updated:** 2026-10-11 · **Status:** Phase 2A.6 identity migrations applied; Phase 2B SR auth tested locally without schema changes; future domain schema remains proposed\
+**Version:** 0.4 · **Updated:** 2026-10-11 · **Status:** Phase 2A.6 identity migrations applied; Phase 2B/2C and Phase 3 identity policies/reference seed tested locally without schema changes; future domain schema remains proposed\
 **Target:** pilot presensi internal SR, 2026-10-18  
 **Canonical repository path:** `docs/modules/need-001/resora-need-001-data-model.md`\
 **Companion:** [NEED-001 PRD](prd.md), [architecture](../../architecture.md), [acceptance tests](acceptance-tests.md), [roadmap](roadmap.md)
@@ -14,14 +14,14 @@
 | Identity          | Exactly one primary actor per account (`SR`, `MAHASISWA`, `ASUS`, `DITMAWA`); only SR can sign in at pilot                                                                                           | Confirmed                                            |
 | SR                | One department, one position, one building, active state; NIM login through Better Auth Username Plugin                                                                                              | Confirmed                                            |
 | System permission | `SUPERADMIN` granted to a specifically authorized account; **not** a fifth actor. Initially only superadmin changes SR assignments and active status | Confirmed |
-| Event audience    | One of `SR`, `KADIV`, `ALL_STUDENTS`; `KADIV` means position KADIV in **any** department; `ALL_STUDENTS` includes SR and MAHASISWA                                                                              | Confirmed                                            |
-| Event organizer   | SR belonging to HCO can create event, show QR, view/export attendance; only **KADIV HCO** can input/correct manual attendance                                                                        | Confirmed                                            |
+| Event audience    | One of `SR`, `KADEP`, `ALL_STUDENTS`; `KADEP` means position KADEP in **any** department; `ALL_STUDENTS` includes SR and MAHASISWA                                                                              | Confirmed                                            |
+| Event organizer   | SR belonging to HCO can create event, show QR, view/export attendance; only **KADEP HCO** can input/correct manual attendance                                                                        | Confirmed                                            |
 | Participant list  | Persist per-event eligible participant roster **at publication** to preserve historical reports and absent invitees                                                                                  | **Confirmed business rule; table design proposed**    |
 | Attendance scan   | Valid while event is published and challenge is active/unexpired/unrevoked, including before `starts_at` and after `ends_at`                                                                         | Confirmed                                            |
 | Timing            | `EARLY` if before event start; `ON_TIME` from start through 15-minute grace (configurable); `LATE` after grace                                                                                       | Confirmed                                            |
 | QR                | Static within a configurable lifetime; default 6 hours since activation; no periodic rotation; HCO can revoke manually                                                                               | Confirmed                                            |
 | Geofence          | HCO selects map pin or latitude/longitude center; separate configurable radius, **20 m confirmed default**; browser requests location; backend validates distance from untrusted/imperfect GPS | Confirmed; accuracy threshold/radius bounds TBD |
-| Manual entry      | KADIV HCO selects an invited person by name/NIM; `attendance_at` defaults to server time but can be overridden; `recorded_at` is actual immutable server write time, plus mandatory reason and actor | Confirmed                                            |
+| Manual entry      | KADEP HCO selects an invited person by name/NIM; `attendance_at` defaults to server time but can be overridden; `recorded_at` is actual immutable server write time, plus mandatory reason and actor | Confirmed                                            |
 | Non-attendees     | Record absence via a report **LEFT JOIN** over invited participants; do not insert fake attendance rows                                                                                              | Recommended                                          |
 | Export            | Include every invited participant, attendance timestamp/status, time classification and lateness; exclude secrets and raw GPS coordinates                                                            | Confirmed                                            |
 | Email             | Real SR email; planned backend Gmail SMTP display name `RnD SR XIV`; sender address/credentials in env. Recovery/verification in Phase 2 | Confirmed; operational setup TBD |
@@ -32,7 +32,7 @@
 - All authorization, QR token verification, event eligibility, duplicate checks, and geofence distance checks happen on the **backend**. The specific HMAC protocol below is proposed.
 - Runtime uses `DATABASE_URL` (Supabase Session Pooler); migration tooling prefers `DIRECT_DB_URL`, reports IPv6/network failures explicitly and never silently retries another connection. [Setup](../../setup.md) documents deliberate pooler alternatives. Local Docker PostgreSQL is optional; VPS deployment planned.
 - `attendance_at` is the **effective time of attendance**; `recorded_at` is **when the record was actually written**, including manual late entry.
-- Data changes by KADIV must create append-only audit records. Do not use destructive delete as a routine correction.
+- Data changes by KADEP must create append-only audit records. Do not use destructive delete as a routine correction.
 - Do not store plaintext passwords, QR bearer tokens, Gmail app passwords or raw GPS coordinates in event reports.
 - Include unique constraints and transactions at the **database** level, not only client-side checks.
 
@@ -151,7 +151,7 @@ erDiagram
 | `account`      | Credentials; its `password` column is auth-managed hashed credential                        | Never write raw passwords directly; use supported Better Auth APIs                                                     |
 | `verification` | Auth/email verification/reset tokens                                                        | Better Auth-managed                                                                                                    |
 
-**Phase 2A:** server Username Plugin and compatible generated `username` (nullable, unique) / `display_username` (nullable) fields are present in `packages/db/src/schema/auth.ts`. Plugin normalization is disabled to preserve NIM text; immutableUsername is enabled. Client integration and complete authentication enforcement remain later work. Phase 2A.6 applied and verified the foundation migrations on Development (§15); review any future unapplied migrations before application. Do not add a second application-level NIM column as a competing source of truth unless migration requirements dictate it.
+**Phase 2A:** server Username Plugin and compatible generated `username` (nullable, unique) / `display_username` (nullable) fields are present in `packages/db/src/schema/auth.ts`. Plugin normalization is disabled to preserve NIM text; immutableUsername is enabled. Phase 2B implements client integration and active-SR authentication enforcement; Phase 2C implements transaction-bound CSV provisioning. Phase 2A.6 applied and verified the foundation migrations on Development (§15); review any future unapplied migrations before application. Do not add a second application-level NIM column as a competing source of truth unless migration requirements dictate it.
 
 ## 4. Domain tables and columns — identity implemented; later domains proposed
 
@@ -168,17 +168,64 @@ Notation: **PK** primary key; **FK** foreign key; **UK** unique; **NN** not null
 | `created_at`           | `timestamptz`     | NN, default now                |                                                                       |
 | `updated_at`           | `timestamptz`     | NN, default now                | Update on mutation                                                    |
 
-Database invariant: actor=`SR` has exactly one `sr_profiles` row and a nonblank auth-owned username; other actors have no SR profile. Phase 2A adds deferred constraint triggers checking final transactional state on actor/assignment mutations and auth username updates. Transactional provisioning remains future work; an ordinary FK alone cannot enforce the inverse relationship. Auth-only scaffold rows may remain unprovisioned without a profile; every provisioned identity must receive exactly one profile. Authentication authorization is not supplied by these storage constraints.
+Database invariant: actor=`SR` has exactly one `sr_profiles` row and a nonblank auth-owned username; other actors have no SR profile. Phase 2A adds deferred constraint triggers checking final transactional state on actor/assignment mutations and auth username updates. Phase 2C supplies transactional provisioning; an ordinary FK alone cannot enforce the inverse relationship. Auth-only scaffold rows may remain unprovisioned without a profile; every provisioned identity must receive exactly one profile. Authentication authorization is not supplied by these storage constraints.
 
-### 4.2 `departments`, `positions`, `buildings` — SR dictionary data
+### 4.2 `departments`, `positions`, `buildings` — canonical organization dictionaries
 
-| Table         | Column                            | PG type                           | Constraint / note                                                                                                             |
-| ------------- | --------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `departments` | `code`, `name`, `is_active`       | `text`, `text`, `boolean`         | `code` PK; name NN; active NN default true. Seed HCO, Adaptif, Sosial, Akademik, Spiritual, Media, RnD                        |
-| `positions`   | `code`, `name`, `is_active`       | `text`, `text`, `boolean`         | `code` PK; name NN; active NN default true. `KADIV` required, other position codes taken from roster—do not invent final list |
-| `buildings`   | `id`, `code`, `name`, `is_active` | `uuid`, `text`, `text`, `boolean` | id UUID PK default generated; code UK/NN, name NN; code/name nonblank; active NN default true. Exact building names/codes from PM's CSV                                              |
+| Table | Columns/types | Existing constraints |
+| --- | --- | --- |
+| `departments` | `code` TEXT, `name` TEXT, `is_active` boolean | Code PK; nonblank code/name; active default true |
+| `positions` | `code` TEXT, `name` TEXT, `is_active` boolean | Code PK; nonblank code/name; active default true |
+| `buildings` | `id` UUID, `code` TEXT, `name` TEXT, `is_active` boolean | Generated UUID PK; unique nonblank code; nonblank name; active default true |
 
-For all dictionaries, avoid hard-delete while referenced. Dictionary editing restricted to `SUPERADMIN` in pilot.
+**PM-approved Phase 3 codes:** these lists are the canonical reference for DB dictionaries and CSV inputs, implemented in `packages/db/src/organization.ts`. No new enum, table or migration is required.
+
+| Department code | Name |
+| --- | --- |
+| `ADAPTIF` | Adaptif |
+| `SOSIAL` | Sosial |
+| `AKADEMIK` | Akademik |
+| `SPIRITUAL` | Spiritual |
+| `HCO` | HCO |
+| `MEDIA` | Media |
+| `RND` | RnD |
+
+| Position code | Name |
+| --- | --- |
+| `KETUM` | Ketum |
+| `WAKETUM` | Waketum |
+| `SEKRETARIS` | Sekretaris |
+| `BENDAHARA` | Bendahara |
+| `KADEP` | Kadep |
+| `SEKDEP` | Sekdep |
+| `ANGGOTA` | Anggota |
+
+| Building code (TEXT) | Name |
+| --- | --- |
+| `A` | Gedung A |
+| `B` | Gedung B |
+| `C` | Gedung C |
+| `D` | Gedung D |
+| `E` | Gedung E |
+| `F` | Gedung F |
+| `1` | Gedung 1 |
+| `2` | Gedung 2 |
+| `3` | Gedung 3 |
+| `4` | Gedung 4 |
+| `5` | Gedung 5 |
+| `6` | Gedung 6 |
+| `7` | Gedung 7 |
+| `8` | Gedung 8 |
+| `9` | Gedung 9 |
+| `10` | Gedung 10 |
+| `11` | Gedung 11 |
+| `12` | Gedung 12 |
+
+There are **7 departments, 7 positions, 18 separate buildings**; numeric-looking building codes remain text. `A1`, `GEDUNG_A` and similar combinations are invalid. Department and position are independent: any official position can belong to any official department.
+
+**KADEP replaces KADIV** for new data and active policies, including cross-department KADEP audience and “Inti + KADEP”. New CSV input has no KADIV alias. Existing legacy rows/assignments are not converted automatically; report and review before adjustment. Historical migration/test evidence below retains its original terminology. **Inti membership/position mapping remains TBD**; the four executive titles do not define it automatically.
+
+The local `org:seed` CLI defaults to preview and requires explicit `--apply`; it uses the existing guarded loopback scratch target. It inserts missing official references transactionally, preserves UUIDs and SR assignments, and reruns without duplicates. Unknown/legacy codes, mismatched names or inactive references abort the whole seed with explicit conflict reasons; nothing is silently overwritten/reactivated/deleted. Dictionary maintenance and assignment/status administration require explicit `SUPERADMIN`; no management endpoint is delivered in Phase 3. Remote seeding requires separate PM approval.
 
 ### 4.3 `sr_profiles` — SR organizational assignment
 
@@ -186,10 +233,12 @@ For all dictionaries, avoid hard-delete while referenced. Dictionary editing res
 | ----------------- | ------------- | -------------------------------- | -------------------------------------- |
 | `user_id`         | `text`        | PK, FK → `user_profiles.user_id` | Every SR has one current assignment    |
 | `department_code` | `text`        | NN, FK → `departments.code`      | Exactly one department                 |
-| `position_code`   | `text`        | NN, FK → `positions.code`        | `KADIV` is a position, not actor       |
+| `position_code`   | `text`        | NN, FK → `positions.code`        | `KADEP` is a position, not actor       |
 | `building_id`     | `uuid`        | NN, FK → `buildings.id`          | Exactly one building                   |
 | `created_at`      | `timestamptz` | NN, default now                  |                                        |
 | `updated_at`      | `timestamptz` | NN, default now                  | Only superadmin may change assignments |
+
+CSV uses official `department` / `position` codes and `building` TEXT code; the importer resolves the active `buildings.code` to the existing UUID `sr_profiles.building_id`. All existing foreign keys remain unchanged.
 
 NIM comes from `user.username` (Better Auth Username Plugin). Do **not** duplicate NIM in `sr_profiles` unless an independently justified immutable institutional-id requirement emerges.
 
@@ -212,7 +261,7 @@ NIM comes from `user.username` (Better Auth Username Plugin). Do **not** duplica
 | `title`              | `text`                | NN                  | Non-empty after trim                                   |
 | `description`        | `text`                | nullable            |                                                        |
 | `created_by_user_id` | `text`                | NN, FK → `user.id`  | Backend verifies SR in HCO                             |
-| `audience`           | `event_audience` enum | NN                  | `SR`, `KADIV`, `ALL_STUDENTS`                          |
+| `audience`           | `event_audience` enum | NN                  | `SR`, `KADEP`, `ALL_STUDENTS`                          |
 | `status`             | `event_status` enum   | NN, default `DRAFT` | `DRAFT`, `PUBLISHED`, `CLOSED`, `CANCELLED`            |
 | `starts_at`          | `timestamptz`         | NN                  | Scheduled start, **not** QR opening limit              |
 | `ends_at`            | `timestamptz`         | NN                  | Scheduled end, **not** QR expiry limit                 |
@@ -239,12 +288,12 @@ NIM comes from `user.username` (Better Auth Username Plugin). Do **not** duplica
 | `snapshot_nim`        | `text`            | nullable             | Historical NIM; nullable for future actors lacking NIM |
 | `snapshot_name`       | `text`            | NN                   | Historical display name                                |
 | `snapshot_department` | `text`            | nullable             | Name/code at publication                               |
-| `snapshot_position`   | `text`            | nullable             | For KADIV events/report                                |
+| `snapshot_position`   | `text`            | nullable             | For KADEP events/report                                |
 | `snapshot_building`   | `text`            | nullable             | Human-readable value at publication                    |
 
 **Composite PK:** `(event_id, user_id)`. Index `(user_id, event_id)`. Publish event + insert eligible current **active** users into `event_participants` **in a transaction**. This supports stable “invited but absent” reporting even if positions change afterward. Confirmed inactive/deactivated users cannot sign in/check in even when previously snapshotted.
 
-**Audience filter at publication:** `SR` = active actor SR; `KADIV` = active actor SR + `position_code=KADIV` across departments; `ALL_STUDENTS` = active actor in {SR, MAHASISWA}. Pilot may list only currently provisioned SR; do not imply MAHASISWA login works yet.
+**Audience filter at publication:** `SR` = active actor SR; `KADEP` = active actor SR + `position_code=KADEP` across departments; `ALL_STUDENTS` = active actor in {SR, MAHASISWA}. Pilot may list only currently provisioned SR; do not imply MAHASISWA login works yet.
 
 ### 4.7 `qr_challenges` — fixed event QR, server-verifiable token
 
@@ -276,13 +325,13 @@ NIM comes from `user.username` (Better Auth Username Plugin). Do **not** duplica
 | `recorded_at`         | `timestamptz`            | NN, default now               | Immutable actual server insert time                                         |
 | `source`              | `attendance_source` enum | NN                            | `QR`, `MANUAL`; original source retained on corrections |
 | `timing_class`        | `attendance_timing` enum | NN                            | `EARLY`, `ON_TIME`, `LATE` from event policy; tolerance freeze awaiting PM confirmation |
-| `recorded_by_user_id` | `text`                   | NN, FK → `user.id`            | QR: same as user_id; manual: KADIV HCO                                      |
+| `recorded_by_user_id` | `text`                   | NN, FK → `user.id`            | QR: same as user_id; manual: KADEP HCO                                      |
 | `manual_reason`       | `text`                   | nullable; required for manual | Audit/business explanation                                                  |
 | `updated_at`          | `timestamptz`            | NN, default now               | Update only via audited correction                                          |
 
-**UK `(event_id, user_id)`**, and **composite FK** `(event_id, user_id)` → `event_participants(event_id, user_id)`; index `(user_id, attendance_at DESC)`. Application + SQL check for `source=MANUAL` requiring nonblank reason, and server verified KADIV HCO.
+**UK `(event_id, user_id)`**, and **composite FK** `(event_id, user_id)` → `event_participants(event_id, user_id)`; index `(user_id, attendance_at DESC)`. Application + SQL check for `source=MANUAL` requiring nonblank reason, and server verified KADEP HCO.
 
-**QR:** `attendance_at = recorded_at = server time`, `recorded_by_user_id=user_id`. **Manual:** `recorded_at = immutable server insertion time`, `attendance_at = KADIV supplied effective time or server time`, `recorded_by_user_id=KADIV`; no trust in a timestamp from a QR scan request.
+**QR:** `attendance_at = recorded_at = server time`, `recorded_by_user_id=user_id`. **Manual:** `recorded_at = immutable server insertion time`, `attendance_at = KADEP supplied effective time or server time`, `recorded_by_user_id=KADEP`; no trust in a timestamp from a QR scan request.
 
 Do not store a separate `PRESENT` boolean: existence of an attendance record means present. Missing attendance states are computed on the invitation/report query (see §5). Avoid hard deleting attendance; correction service updates record and inserts immutable audit in one transaction. Prevent concurrent check-ins/manual inserts using the database unique constraint, not a read-then-write race.
 
@@ -294,7 +343,7 @@ Do not store a separate `PRESENT` boolean: existence of an attendance record mea
 | `attendance_id` | `uuid`                         | NN, FK → `attendance_records.id` |                                                                |
 | `event_id`      | `uuid`                         | NN, FK → `events.id`             | Denormalized for event audit lookup                            |
 | `user_id`       | `text`                         | NN, FK → `user.id`               | Subject of attendance                                          |
-| `actor_user_id` | `text`                         | NN, FK → `user.id`               | KADIV HCO acting                                               |
+| `actor_user_id` | `text`                         | NN, FK → `user.id`               | KADEP HCO acting                                               |
 | `action`        | `attendance_audit_action` enum | NN                               | `MANUAL_CREATED`, `ATTENDANCE_CORRECTED`                       |
 | `before_state`  | `jsonb`                        | nullable                         | Null on first manual creation; no credentials/location secrets |
 | `after_state`   | `jsonb`                        | NN                               | Safe changed attendance fields only                            |
@@ -345,12 +394,12 @@ Compute with `event_participants LEFT JOIN attendance_records`; participants wit
 5. Use **server clock**, compute timing class, perform atomic insert with unique `(event_id,user_id)` enforcement.
 6. Duplicate requests return stable “already recorded” response without changing existing timestamp.
 
-**Never** rely on GPS location alone as proof. On GPS denial, poor accuracy, or out of radius, show _hubungi KADIV HCO untuk input manual_, not a public bypass or unapproved SR request workflow.
+**Never** rely on GPS location alone as proof. On GPS denial, poor accuracy, or out of radius, show _hubungi KADEP HCO untuk input manual_, not a public bypass or unapproved SR request workflow.
 
 ### 5.4 Manual upsert / correction
 
-1. KADIV HCO selects an **invited participant** from this event's snapshot by NIM/name.
-2. If no attendance exists, create a `MANUAL` record with `attendance_at = current server time` unless KADIV supplies actual effective time; `recorded_at` remains current server time.
+1. KADEP HCO selects an **invited participant** from this event's snapshot by NIM/name.
+2. If no attendance exists, create a `MANUAL` record with `attendance_at = current server time` unless KADEP supplies actual effective time; `recorded_at` remains current server time.
 3. If attendance exists, present a **correction** action (not a second insert); require reason, save before and after.
 4. Validate effective timestamps and audit overrides. Allowed historical/future bounds are **TBD**; rejecting future timestamps is a **PROPOSED** safeguard, not a confirmed rule.
 5. Perform attendance mutation + append-only audit atomically; preserve original `recorded_at` **and original source** on corrections, and record later correction timestamp in audit.
@@ -372,37 +421,34 @@ Compute with `event_participants LEFT JOIN attendance_records`; participants wit
 - [ ] Avoid cascade deleting historical events/participants/attendance; soft archive where necessary.
 - [ ] Generated Drizzle SQL/migrations reviewed and committed before applying to **Supabase Development**.
 
-## 7. CSV import contract (PM delivers later)
+## 7. CSV import contract
 
-| CSV field         | Required | Destination / handling                                               |
-| ----------------- | -------- | -------------------------------------------------------------------- |
-| `nim`             | Yes      | Better Auth `user.username`; trim/validate, preserve leading zeros   |
-| `name`            | Yes      | `user.name` and future `event_participants.snapshot_name`            |
-| `email`           | Yes      | `user.email`; unique, real user-owned address; verification separate |
-| `department_code` | Yes      | FK `sr_profiles.department_code`; existing dictionary                |
-| `position_code`   | Yes      | FK `sr_profiles.position_code`; codes from PM's actual list          |
-| `building_code`   | Yes      | Resolve `buildings.code` → `sr_profiles.building_id`                 |
-| `is_active`       | Yes      | `user_profiles.is_active`; true/false parse strictly                 |
+Input headers are exactly `nim,name,email,department,position,building,is_active` (order may vary). NIM is text with leading zeros preserved; email is normalized lowercase; active status accepts `true`, `false`, `1`, `0`. Organization codes must match §4.2 and active DB references. `department` and `position` resolve code FKs; `building` resolves code to UUID, never an integer or concatenated building identifier.
 
-Use **synthetic data** until real CSV arrives. Production import must be idempotent, preview/report invalid rows before committing, validate duplicates both in-file and against DB, and provision account/password via Better Auth's supported server API. Passwords never appear in source-controlled CSV. Secure delivery channel for initial credentials is TBD. The seven business columns are confirmed; technical headers shown above and casing/normalization rules remain a proposed import mapping. CSV is needed before final UAT, not to unblock schema implementation.
+Phase 2C provisions through supported internal Better Auth APIs in one transaction with actor `SR`, imported active status and `must_change_password=true`. Dry-run does not mutate data; repeated identical imports skip existing accounts without resetting passwords or exporting old credentials. Conflicts reject the entire batch. Each new account receives an exactly eight-character cryptographically random alphanumeric temporary password; the single private/ignored `credentials.csv` contains `nim,name,email,temporary_password`. Existing write-before-commit/recovery handling and permanent-password policy are unchanged. See [setup/provisioning](../../setup.md#phase-2c-internal-csv-provisioning-local-synthetic-imports-only). Real imports/distribution remain an explicit approval gate; use synthetic data locally.
 
-## 8. Ownership and authorization (pilot)
+## 8. Server-side authorization (Phase 3)
 
-| Object / operation                         | SR  | HCO SR | KADIV HCO | SUPERADMIN                                         |
-| ------------------------------------------ | --- | ------ | --------- | -------------------------------------------------- |
-| Own invited event, own attendance          | Yes | Yes    | Yes       | Only if eligible, unless separately approved       |
-| Create/publish event and QR, revoke QR     | No  | Yes    | Yes       | Not automatically                                  |
-| See/export attendance for HCO event        | No  | Yes    | Yes       | Not automatically                                  |
-| Manual attendance create/correct           | No  | No     | Yes       | Not automatically                                  |
-| Manage SR assignments / account activation | No  | No     | No        | Yes                                                |
-| Grant system privileges                    | No  | No     | No        | Controlled bootstrap/explicit grant procedure only |
+Every policy requires a valid Better Auth session, an active primary actor `SR` with complete SR identity, and completion of mandatory password change. `sessionProcedure` reloads current identity from Drizzle; `protectedProcedure` enforces the password gate before a domain policy uses `ctx.identity`. Client role/organization/privilege claims are never authority.
 
-Disallow broad raw DB access from browser. Server executes privileged queries using restricted application credentials; **Supabase `service_role` or public client keys are not required** for Drizzle PostgreSQL connectivity.
+| Operation | Required DB identity beyond the shared gate |
+| --- | --- |
+| Personal SR features | No additional organizational privilege |
+| Manage internal SR events, roster, QR/session, view/export internal recap | `department_code=HCO` |
+| Insert/correct internal SR attendance manually | `department_code=HCO` **and** `position_code=KADEP` |
+| Operate general Adaptif activities, including manual attendance/correction | `department_code=ADAPTIF`; KADEP is not required |
+| Administer SR assignments/active status | Explicit `SUPERADMIN` row in `system_privileges` |
+
+`SUPERADMIN` is neither an actor nor an inferred position/department benefit. RnD membership alone grants nothing; SUPERADMIN never bypasses HCO/Adaptif operational policy. KADEP from another department cannot perform HCO corrections; HCO ANGGOTA/SEKDEP cannot either. HCO and Adaptif have separate operational scopes.
+
+Implemented pure functions are `canAccessPersonalSr`, `canManageInternalEvent` (shared HCO foundation for roster/QR/recap), `canManageInternalAttendanceManually`, `canOperateGeneralActivity`, and `hasSuperadminPrivilege` in `packages/api/src/modules/identity/identity-policy.ts`. These consume server-validated identity after protected procedures, not client input. No event/attendance or identity-admin endpoint is added merely to exercise them. Resource ownership/context, event state, invited/registered participants, reasons and immutable audit remain mandatory checks when real modules are implemented.
+
+Disallow raw browser DB access; runtime queries go through Express/Drizzle. No Supabase Auth, service-role key or frontend DB client is introduced.
 
 ## 9. Implementation sequence (for Codex after schema approval)
 
 1. **F2 auth:** Better Auth Username Plugin, generated auth schema, `user_profiles`, SR dictionary, `sr_profiles`, `system_privileges`, import from synthetic roster; password flows + Gmail SMTP later in F2.
-2. **F3 RBAC:** server-side active actor, HCO department, KADIV position, superadmin checks.
+2. **F3 RBAC:** identity context, HCO/KADEP HCO/Adaptif/explicit SUPERADMIN policies and local official dictionary seed implemented; domain endpoints remain future work.
 3. **F4 event:** `events`, `event_participants` snapshot on publish, `qr_challenges`, event challenge issue/display/revoke.
 4. **F5 scan:** `attendance_records`, HMAC verification, geofence and timing classification, idempotent insertion.
 5. **F6 manual/export:** `attendance_audit_logs`, effective vs recorded time, event participant LEFT JOIN report and CSV export.
@@ -420,7 +466,7 @@ Do not implement every table at once if incremental migrations can be safely dep
 | D-04 | Closed-event reopening policy (explicit expired/revoked QR reissue is already confirmed)                                                            | HCO event operations                                  |
 | D-05 | Manual time override allowed range and whether corrected effective time can precede event start by days | Audit and fraud controls                              |
 | D-06 | Gmail SMTP sender configuration, recovery/verification policy and secure temporary password delivery      | Account readiness                                     |
-| D-07 | Exact SR CSV values (buildings/positions); optional default center presets (HCO selects map/lat-lng)     | Pilot real-data import                                |
+| D-07 | Inti membership mapping, actual SR roster and approved distribution; optional default center presets     | Pilot real-data import                                |
 | D-08 | Attendance data retention, export access logging, and timezone/rounding display                         | Compliance and historical reporting                   |
 
 Until approved, don't silently convert these proposal-level details into product requirements. Implementation may use safe technical defaults with explicit review gates only where user-approved behavior is not affected.
@@ -440,7 +486,7 @@ Event starts **13:00 Asia/Jakarta**, grace **15 min**, QR activated 12:00 and ex
 | No scan, event open   | PENDING  | —       |                   — |                  — | —      |
 | No scan, event closed | ABSENT   | —       |                   — |                  — | —      |
 
-Manual example: KADIV saves at 17:00 but sets effective presence at 13:05. Persist `attendance_at=13:05`, `recorded_at=17:00`, `source=MANUAL`, `timing_class=ON_TIME`, actor KADIV HCO, non-empty reason, and immutable audit row. Never retroactively rewrite the initial `recorded_at`.
+Manual example: KADEP saves at 17:00 but sets effective presence at 13:05. Persist `attendance_at=13:05`, `recorded_at=17:00`, `source=MANUAL`, `timing_class=ON_TIME`, actor KADEP HCO, non-empty reason, and immutable audit row. Never retroactively rewrite the initial `recorded_at`.
 
 ## 12. Repository compatibility review (2026-10-10)
 
@@ -658,3 +704,16 @@ PostgreSQL 18.3 native Windows scratch database `resora_identity_test_phase2a5`,
 Initial sandbox dependency/startup failures required explicit escalation. Negative-test `rejects.toThrow` matchers could block Bun/pg I/O; awaiting/catching rejection before matching fixed test timeouts, without relaxing application/database constraints. Transaction queries now run sequentially on their single pg client. An early standalone smoke misread Bun's initially undefined child `exitCode`; the corrected readiness/cleanup check passed using the actual standalone artifact. Restricted `.private` directory permissions also required explicit traversal exclusions for Git/Biome, without weakening ACLs.
 
 **Remaining approval gates:** real roster/organization setup, authorized target expansion and secure credential handoff/retention; Gmail SMTP/recovery/verification; mobile/HTTPS/pilot UAT and subsequent RBAC. The mechanism supports bounded multi-row batches technically today; real data is not a prerequisite for this local implementation. No commit, push, merge or deployment is part of Phase 2C verification.
+
+## 18. Phase 3 RBAC and organization standardization (2026-10-11)
+
+**Implemented/tested locally; PM review/merge pending.** Branch `feat/identity-rbac` was created from clean/up-to-date main after Phase 2C. No schema, applied SQL/snapshot/history, dependency, runtime, public signup or password-policy change.
+
+- Canonical references (section 4.2): 7 departments, 7 independent positions, 18 separate TEXT-coded buildings. KADEP supersedes KADIV for active policy/new CSV; Inti remains TBD. The importer still resolves active DB references and building UUID, preserving transactions, eight-character secure temporary passwords, credentials output and repeat-import behavior.
+- One live identity query supplies organization and explicit SUPERADMIN; existing session/active-SR/password gates remain. Pure policies (section 8) are server foundations, without event/attendance/admin endpoints or UI. No implicit RnD grant or SUPERADMIN operational bypass.
+- Native PostgreSQL 18.3, loopback `127.0.0.1:55432`, disposable `resora_identity_test_phase3_20261011`. Initialized with the unchanged three versioned migrations. Seed preview reported 7/7/18 missing, apply inserted them, rerun inserted zero. Final counts: 7/7/18 references, zero users/SR profiles/privileges, three migration entries. Synthetic test users were cleaned up; official reference data is retained locally.
+- Retained older `resora_identity_test_phase2a5` has synthetic legacy references `SYN_HCO`, `SYN_KADIV`, `SYN_BUILDING` and one assignment/account. These are reported, not converted/deleted or reseeded. Name/legacy/inactive conflicts are tested transactionally on the new scratch database and rolled back.
+- `pnpm run test:rbac`: **21 passed**; `test:provision`: **19 passed**; `test:auth`: **16 passed**; `test:identity`: **38 passed**; zero failures/skips. Coverage includes live DB grant/revoke/assignment/deactivation, forged client claims, session/password gate, seed idempotency/conflicts/assignment preservation, official CSV codes, import/password/recovery regression.
+- `pnpm exec biome check .`: **114 files, zero errors/warnings**; `pnpm run check-types`: **6 successful tasks**; production Express/Next.js `pnpm run build`: **2 successful tasks**. Initial sandbox build could not fetch Google Fonts; the same command passed after explicit network permission. Initial test type inference and two new-test formatting findings were corrected; `git diff --check` passes.
+
+No Supabase connection/mutation, new migration, real SR import, browser automation, deployment or commit/push/merge. Event/attendance resource-state/ownership/audit checks and old domain-model reconciliation remain Phase 4+ work; this validation does not certify those unbuilt workflows or production/UAT readiness.

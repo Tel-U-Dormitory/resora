@@ -172,7 +172,7 @@ Frontend still follows the established NEED boundaries: HCO event/roster screens
 | Transport       | `attendance.router.ts`         | Typed tRPC procedures, input parsing, authenticated context and permission entry points.                                                         |
 | Use cases       | `attendance.service.ts`        | State transitions, eligibility enforcement, orchestration and transactions.                                                                      |
 | Persistence     | `attendance.repository.ts`     | Domain-owned reusable Drizzle queries. **Optional**, not a universal mandatory layer.                                                            |
-| Access policy   | `attendance.policy.ts`         | HCO/Adaptif operator rules, KADIV HCO restrictions, invitation/registration eligibility. Extract when policy complexity merits a dedicated file. |
+| Access policy   | `attendance.policy.ts`         | HCO/Adaptif operator rules, KADEP HCO restrictions, invitation/registration eligibility. Extract when policy complexity merits a dedicated file. |
 | Input contracts | `attendance.schema.ts`         | Zod validation/input/output; not the Drizzle database schema.                                                                                    |
 | Tests           | `attendance.service.test.ts`   | Unit/integration tests next to the implemented unit; cross-domain E2E tests can be grouped by actual test suite later.                           |
 
@@ -206,27 +206,31 @@ Frontend still follows the established NEED boundaries: HCO event/roster screens
 
 - Use Better Auth with Username Plugin: **SR `username = NIM`**, preserving leading zeros as a string. Confirm status for a user before permitting protected actions; session alone is not an active-account guarantee.
 - The user has one primary actor: `SR`, `MAHASISWA`, `ASUS`, or `DITMAWA`. SR attributes include exactly one department, one position and one building; **Inti** membership is an organizational grouping that needs an authoritative mapping.
-- Initial pilot has **SR logins only**. Prevent public sign-up on backend, not merely UI. Authorized CSV provisioning and temporary credential flow are still required; use real email addresses for eventual recovery, with SMTP settings only in server environment.
+- Initial pilot has **SR logins only**. Prevent public sign-up on backend, not merely UI. Phase 2C supplies guarded local CSV provisioning and temporary credentials; real imports/distribution still require approval; use real email addresses for eventual recovery, with SMTP settings only in server environment.
 - `SUPERADMIN` is an explicitly assigned system privilege, separate from `actor=SR` and any department membership. It does not bypass HCO/Adaptif attendance data rules by default.
-- Phase 2B enforces `user_profiles.must_change_password` on protected tRPC procedures and dashboard routes; Better Auth verifies the old password, rotates sessions and then clears the existing flag. Secure provisioning and credential recovery remain Phase 2C work.
+- Phase 2B enforces `user_profiles.must_change_password` on protected tRPC procedures and dashboard routes; Better Auth verifies the old password, rotates sessions and then clears the existing flag. Phase 2C implements local synthetic provisioning and credential output/recovery; SMTP/password recovery remain deferred Phase 2D work.
 
 **Phase 2B implementation:** `apps/web/src/features/identity` contains login, password-change, dashboard, session and account-menu files; App Router pages compose them. `packages/api/src/modules/identity/identity.router.ts` exposes a minimal identity DTO. `packages/auth/src/sr-access.ts` reads current identity through Drizzle; Express injects initialized services into its application/context. SSR also calls Express/tRPC and never imports a database client. See [validation evidence](modules/need-001/resora-need-001-data-model.md#16-phase-2b-sr-authentication).
 
 Public auth POST requests require a configured trusted Origin. Signup and email login are unavailable; NIM uses the Username Plugin. Better Auth's in-memory limiter allows five login/password-change requests per minute per socket address; Express overwrites incoming IP headers. Behind a future reverse proxy this conservatively groups clients by proxy address until a trusted proxy boundary is reviewed. Cookies are HttpOnly, SameSite=Lax, and Secure for HTTPS auth URLs; frontend/backend must be same-site. Cross-site domains, multiple workers, HTTPS and production proxy behavior require deployment review, not relaxed cookie/origin/IP validation.
 
+**Phase 3 implementation:** `getActiveSr` reloads actor, active state, password-change flag, department/position/building and explicit SUPERADMIN in one indexed Drizzle join. `sessionProcedure` rejects invalid sessions/ineligible SR; `protectedProcedure` blocks pending password change. Pure functions in `packages/api/src/modules/identity/identity-policy.ts` consume this server identity after those gates. The public `identity.session` DTO stays unchanged. HCO membership grants internal operations; HCO + KADEP alone grants manual internal correction; ADAPTIF membership grants general operations/manual attendance without a KADEP requirement. No extra operator flag, generic permission engine, parallel session/provider or dummy endpoint is added. SUPERADMIN grants identity administration only, not an operational bypass.
+
+Organization code definitions and idempotent seed live in `packages/db/src/organization.ts`; the local-only server CLI reuses the provisioning target guard. CSV validates official codes plus active DB references and resolves building TEXT code to UUID. See [canonical lists](modules/need-001/resora-need-001-data-model.md#42-departments-positions-buildings--canonical-organization-dictionaries) and [matrix](modules/need-001/resora-need-001-data-model.md#8-server-side-authorization-phase-3). Inti mapping is still TBD. No schema/dependency/runtime changes.
+
 ### 6.2 Authorization matrix for attendance
 
 | Protected operation                                             | Needed principal + contextual permission                                                                                                           |
 | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Create, configure, publish, close internal SR event             | Active `SR`, department **HCO**, HCO event-operator permission.                                                                                    |
+| Create, configure, publish, close internal SR event             | Active `SR`, department **HCO**, HCO membership, followed by resource/state checks.                                                                                    |
 | Build/select internal SR participant roster and preview         | Same HCO permission, limited to eligible active SR roster.                                                                                         |
 | Issue/revoke/reissue internal SR QR; view/export complete recap | Authorized active HCO operator and event of **SR_INTERNAL** context.                                                                               |
 | Scan SR internal QR                                             | Active authenticated **SR**, present in **published event snapshot**, valid session/QR/location, not already checked in.                           |
-| Manual insert/correct internal SR                               | Active SR with **department HCO and position KADIV**, relevant permission, invited target and mandatory audit reason.                              |
+| Manual insert/correct internal SR                               | Active SR with **department HCO and position KADEP**, relevant permission, invited target and mandatory audit reason.                              |
 | Create/update/cancel activity registration                      | Authenticated eligible RESORA user, controlled by open registration window and MOD-06 rules.                                                       |
 | Configure/activate/revoke/close general activity attendance     | Active authorized **Adaptif** operator, event of **GENERAL_ACTIVITY** context.                                                                     |
 | General activity QR check-in                                    | Authenticated account, **successful active/non-cancelled MOD-06 registration**, valid QR/session/location, not previously checked in this session. |
-| Manual insert/correct general activity attendance               | **Any authorized Adaptif operator**, valid registration target, mandatory reason and immutable audit; no KADIV requirement.                        |
+| Manual insert/correct general activity attendance               | **Any authorized Adaptif operator**, valid registration target, mandatory reason and immutable audit; no KADEP requirement.                        |
 | Update SR department/position/building/account active flag      | Explicit `SUPERADMIN` privilege with audit; HCO/Adaptif/ordinary RnD membership alone insufficient.                                                |
 
 The uppercase context names above are **proposed code-level discriminators**, not confirmed persisted database enum names. Backend policy must check resource context, not just who owns the QR link or which page rendered the form. Policy tests include direct tRPC requests with forged department/position or another event ID.
@@ -264,20 +268,20 @@ The uppercase context names above are **proposed code-level discriminators**, no
 
 Do **not** retain old `UNIQUE(event_id,user_id)` as the universal shared-engine uniqueness rule. The proposed new invariant is **`UNIQUE(session_id,user_id)`**, with a separately enforced entitlement to that session's eligible source. For one internal SR session/event, this still gives one attendance per event. This is a **conceptual design direction**, not an instruction to alter applied SQL before review.
 
-**Important model synchronization:** The existing `docs/modules/need-001/resora-need-001-data-model.md` was drafted against **single audience SR/KADIV/general-student** and **event-bound QR/attendance**. It must be reconciled with the new **SR roster builder**, **session-based shared engine**, and **Adaptif registration eligibility** before coding domain migrations. The old model/ADR is not silently assumed to be up to date.
+**Important model synchronization:** The existing `docs/modules/need-001/resora-need-001-data-model.md` was drafted against **single audience SR/KADEP/general-student** and **event-bound QR/attendance**. It must be reconciled with the new **SR roster builder**, **session-based shared engine**, and **Adaptif registration eligibility** before coding domain migrations. The old model/ADR is not silently assumed to be up to date.
 
 ### 7.2 NEED-001 event/attendance flow
 
-1. HCO drafts an event with schedule, map point and radius (default 20 m), grace period (default 15 min) and QR TTL (default 360 min). HCO selects **all SR**, one/multiple departments, **Inti**, **Inti+KADIV**, specific individuals, or combined criteria. Manual individual include/exclude applies to the **draft**.
+1. HCO drafts an event with schedule, map point and radius (default 20 m), grace period (default 15 min) and QR TTL (default 360 min). HCO selects **all SR**, one/multiple departments, **Inti**, **Inti+KADEP**, specific individuals, or combined criteria. Manual individual include/exclude applies to the **draft**.
 2. A roster resolver produces a **deduplicated draft preview** from the current active SR directory and the explicit include/exclude set. The resolver must not change SR master assignments or treat an invitee as already present.
 3. **Publish** transaction freezes the resulting participants and required historical identity/organizational snapshots, then makes the event discoverable by invited SR. Only title/description are confirmed editable afterwards; postpublication roster amendments are TBD.
 4. HCO activates the attendance session and issues a **static verifiable QR challenge**. Default expiry = activation + six hours; configurable TTL, explicit revoke/reissue; no automatic rotation. QR expiration alone does not close the event.
 5. QR scan validates live authenticated SR account, snapshot, session active state, **current** QR challenge, validity, location and uniqueness. The server chooses attendance timestamp; it may accept scans before scheduled start/after scheduled end **while both session and QR are valid**.
 6. Presence record has `PRESENT` plus `EARLY`/`ON_TIME`/`LATE` using event start and configured grace; 15-minute grace boundary is **inclusive**. Missing invitees are `PENDING` until HCO **explicitly closes event**, then `ABSENT` is derived from no record.
-7. KADIV HCO only may insert/correct manually for an invitee, using reason, effective time and append-only audit. Original record timestamp and source stay immutable; enforce transaction atomicity.
+7. KADEP HCO only may insert/correct manually for an invitee, using reason, effective time and append-only audit. Original record timestamp and source stay immutable; enforce transaction atomicity.
 8. HCO recap/CSV begins from **all participant snapshot rows**, not merely attendance records. Exclude tokens, credentials and raw GPS from exported data.
 
-**Geolocation:** The browser provides a location measurement and its accuracy; the backend verifies distance (meters) from configured center (latitude/longitude). Client data and GPS can be spoofed; accuracy/radius thresholds still need HCO field UAT. Location failures do not create a record; KADIV HCO manual correction is the controlled fallback.
+**Geolocation:** The browser provides a location measurement and its accuracy; the backend verifies distance (meters) from configured center (latitude/longitude). Client data and GPS can be spoofed; accuracy/radius thresholds still need HCO field UAT. Location failures do not create a record; KADEP HCO manual correction is the controlled fallback.
 
 **Published policy:** The business rule currently confirms only title/description edits after publication and locks audience/schedule. A complete center/radius/grace freeze is **recommended but not PM-confirmed**. Do not allow unrestricted modification of those fields or silently recalculate historical timing before the policy is decided.
 
@@ -286,7 +290,7 @@ Do **not** retain old `UNIQUE(event_id,user_id)` as the universal shared-engine 
 1. Adaptif configures a registration window and **limited positive integer capacity** or **unlimited** capacity. Successful registration immediately makes the participant eligible for attendance, until cancelled.
 2. On a limited-capacity event, count/reserve seats **atomically** under concurrent requests. Full capacity → new request **rejected**, not queued or silently accepted. An eligible cancellation releases capacity; fresh applicants may register again **only while the registration form is open**.
 3. Activity domain exposes a typed, backend-only **eligibility check for a given event and logged-in user**. A cancelled or nonexistent registration must fail. The student/maba login and account-provisioning mechanism is a separate dependency, not delivered by NEED-001.
-4. **Authorized Adaptif operators** configure session location/radius, issue/revoke QR, activate/close sessions, and perform manual attendance/corrections with reasons and append-only audit. HCO is not in this workflow. Adaptif operator authority comes from membership **and permission**, not a mandatory `KADIV` title.
+4. **Authorized Adaptif operators** configure session location/radius, issue/revoke QR, activate/close sessions, and perform manual attendance/corrections with reasons and append-only audit. HCO is not in this workflow. Adaptif operator authority comes from active SR membership in `ADAPTIF`, not a mandatory `KADEP` title.
 5. Check-in uses the shared Attendance service, but replaces SR snapshot eligibility with **current successful, uncancelled registration**. No duplicate records per session.
 
 **Boundary:** Registration form, capacity and cancellation are implemented in `activity`; QR/geofence/check-in/manual audit in `attendance`. Shared code must not force registration on SR-internal meetings or invitee snapshots on Adaptif activities. Attendance for NEED-007 must be blocked until the non-SR authentication and registration lifecycle is ready.
@@ -305,7 +309,7 @@ Procedure names are **illustrative, not already implemented** and may be adjuste
 | `activity.events`        | Manage activity fields, registration-window and quota (subject to activity creation policy).             |
 | `activity.registrations` | `register`, `cancel`, `getOwn`, internal `isEligibleForAttendance`.                                      |
 
-**Transport pattern:** `protectedProcedure` authenticates, Zod validates, domain service enforces operator/context/row policy, and repository/transaction enforces persistence invariants. Use typed DTOs; avoid accepting `actor`, department, KADIV status or target owner supplied by the client as authority. Separate API public types from raw DB row types. Add pagination/filtering and export streaming limits if volume requires them.
+**Transport pattern:** `protectedProcedure` authenticates, Zod validates, domain service enforces operator/context/row policy, and repository/transaction enforces persistence invariants. Use typed DTOs; avoid accepting `actor`, department, KADEP status or target owner supplied by the client as authority. Separate API public types from raw DB row types. Add pagination/filtering and export streaming limits if volume requires them.
 
 ## 9. Database integrity, transactions and audit
 
@@ -353,9 +357,9 @@ The old event-centric FK from attendance to `event_participants` is insufficient
 
 ## 11. Testing strategy and release gates
 
-**Identity/RBAC tests:** deny public signup, invalid NIM, inactive user with an old session, direct request from non-HCO, ordinary HCO manual attempt, KADIV of another department, Adaptif attempting internal HCO operations, HCO attempting Adaptif events, unprivileged RnD attempting superadmin updates, forged client role fields.
+**Identity/RBAC tests:** deny public signup, invalid NIM, inactive user with an old session, direct request from non-HCO, ordinary HCO manual attempt, KADEP of another department, Adaptif attempting internal HCO operations, HCO attempting Adaptif events, unprivileged RnD attempting superadmin updates, forged client role fields.
 
-**NEED-001 tests:** every roster builder filter and combination, explicit add/remove and deduplication, preview and publish snapshot, late department changes, session activation/expiry/revoke/reissue, QR scans outside scheduled time but within active QR, boundary geofence and 15-minute grace, duplicate and concurrent requests, manual KADIV audit and preserved source, explicit event close and absent projection, full CSV without sensitive secrets.
+**NEED-001 tests:** every roster builder filter and combination, explicit add/remove and deduplication, preview and publish snapshot, late department changes, session activation/expiry/revoke/reissue, QR scans outside scheduled time but within active QR, boundary geofence and 15-minute grace, duplicate and concurrent requests, manual KADEP audit and preserved source, explicit event close and absent projection, full CSV without sensitive secrets.
 
 **NEED-007 tests (later):** account login and valid active registration required, no approval gate, limited/unlimited capacity, rejection when full, concurrent overbooking attempts, cancellation returns slot if form open, cancelled participant refused check-in, Adaptif-only session/multiple manual permissions and immutable audit.
 

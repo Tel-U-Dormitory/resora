@@ -6,7 +6,7 @@
 
 ## 1. Tujuan dan aturan pelaksanaan
 
-**Target 18 Oktober:** SR sungguhan bisa login menggunakan NIM/password, melihat event yang sesuai, scan QR untuk absensi, melihat riwayat; HCO bisa membuat event/QR dan melihat/mengekspor rekap; KADIV HCO bisa mengisi/mengoreksi absensi manual dengan alasan wajib, waktu efektif dan audit immutable.
+**Target 18 Oktober:** SR sungguhan bisa login menggunakan NIM/password, melihat event yang sesuai, scan QR untuk absensi, melihat riwayat; HCO bisa membuat event/QR dan melihat/mengekspor rekap; KADEP HCO bisa mengisi/mengoreksi absensi manual dengan alasan wajib, waktu efektif dan audit immutable.
 
 - **Source of truth:** `docs/prd.md`, `docs/modules/need-001/prd.md`, `docs/modules/need-001/acceptance-tests.md`, `docs/architecture.md`, `docs/decisions/`, dan `AGENTS.md`. Bila kode dan PRD konflik, klarifikasi sebelum mengubah perilaku bisnis.
 - **Tracking eksekusi:** spreadsheet logbook NEED-001 yang terpisah; dokumen ini adalah roadmap teknis, **bukan** duplikasi task logbook.
@@ -19,14 +19,14 @@
 | Topik         | Keputusan                                                                                                                               |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | Account       | Satu aktor utama per akun; pilot hanya akun SR; login NIM + password; tidak ada registrasi publik                                       |
-| SR            | Satu departemen + satu gedung + jabatan; `KADIV` adalah jabatan, bukan aktor utama                                                      |
+| SR            | Satu departemen + satu gedung + jabatan; `KADEP` adalah jabatan, bukan aktor utama                                                      |
 | HCO           | Anggota HCO membuat event/QR, melihat dan mengekspor absensi                                                                            |
-| KADIV HCO     | Mengisi/mengoreksi absensi manual dengan alasan dan audit; KADIV departemen lain tidak punya hak ini                                     |
-| Audience      | `SR`; `KADIV` (seluruh departemen); `ALL_STUDENTS` (Mahasiswa **dan** SR, tetapi mahasiswa non-SR belum bisa login saat pilot)          |
+| KADEP HCO     | Mengisi/mengoreksi absensi manual dengan alasan dan audit; KADEP departemen lain tidak punya hak ini                                     |
+| Audience      | `SR`; `KADEP` (seluruh departemen); `ALL_STUDENTS` (Mahasiswa **dan** SR, tetapi mahasiswa non-SR belum bisa login saat pilot)          |
 | Event         | HCO memilih audience, jadwal, lokasi pusat dan radius; default radius **20 m**, bisa diubah                                             |
 | Status waktu  | Toleransi terlambat default **15 menit**, bisa diubah per event; EARLY/ON_TIME/LATE terpisah dari hadir/tidak hadir; batas toleransi inklusif; waktu scan server                                 |
 | QR            | QR event-bound statis, default 6 jam sejak aktivasi, editable, tanpa rotasi otomatis; display halaman event/revoke HCO; primitive reusable NEED-007                                              |
-| Fallback      | GPS gagal diverifikasi: hubungi KADIV HCO untuk input manual; tidak ada alur pengajuan/approval SR                                            |
+| Fallback      | GPS gagal diverifikasi: hubungi KADEP HCO untuk input manual; tidak ada alur pengajuan/approval SR                                            |
 | Snapshot | Peserta dibuat saat publish; semua undangan masuk laporan; inactive tetap ditolak login/check-in |
 | Superadmin | Hak sistem, bukan aktor kelima; awalnya hanya superadmin mengubah departemen/jabatan/gedung/status aktif SR |
 | DB runtime    | `DATABASE_URL` = Supabase **Session Pooler**                                                                                            |
@@ -41,10 +41,10 @@
 | -------------- | ------------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------- |
 | **10 Okt**     | F0 Audit scaffold + mulai F1 Supabase       | Struktur repo dipahami; rencana perubahan env/DB disetujui           | **F0 audit DONE**; F1 koneksi/workflow DONE; SQL teruji lokal F2A.5; Supabase Development diterapkan/diverifikasi F2A.6 |
 | **11 Okt**     | Review F1/pnpm + rencana skema; mulai F2 identitas | Koneksi teruji; SQL baseline versioned; review sebelum aplikasi SQL    | TODO                                                 |
-| **12 Okt**     | F2 Login/provisioning + F3 RBAC             | SR dummy login NIM; signup publik mati; izin HCO/KADIV diuji         | F2 auth/CSV teruji lokal: Phase 2B/2C; import nyata/UAT dan F3 TODO |
+| **12 Okt**     | F2 Login/provisioning + F3 RBAC             | SR dummy login NIM; signup publik mati; izin HCO/KADEP diuji         | F2/Phase 3 fondasi teruji lokal; review PM, import nyata/UAT dan endpoint domain pending |
 | **13 Okt**     | F4 Event & reusable QR                      | HCO buat event/QR; audience dan challenge diverifikasi backend       | TODO                                                 |
 | **14 Okt**     | F5 Check-in + geofence                      | SR bisa scan satu kali; presence + EARLY/ON_TIME/LATE & radius tervalidasi     | TODO                                                 |
-| **15 Okt**     | F6 Manual attendance + reporting            | Input/koreksi KADIV dengan audit, semua undangan dan CSV berjalan              | TODO                                                 |
+| **15 Okt**     | F6 Manual attendance + reporting            | Input/koreksi KADEP dengan audit, semua undangan dan CSV berjalan              | TODO                                                 |
 | **16 Okt**     | F7 Integrasi UI + automated tests           | Happy path dan failure cases lulus di staging                        | TODO                                                 |
 | **17 Okt**     | F8 UAT lapangan + deployment rehearsal      | HTTPS, backup, UAT HCO, revisi blocker P0, go/no-go                  | TODO                                                 |
 | **18 Okt**     | **Controlled pilot NEED-001**               | Persetujuan PM + HCO; bisa dipakai SR sungguhan tanpa blocker kritis | TODO                                                 |
@@ -80,7 +80,7 @@
 - [x] F2A.6: izin PM dan seluruh preflight lulus; tiga migration unchanged diterapkan lewat Session Pooler 5432, sepuluh tabel/constraints/triggers/history diverifikasi read-only; backend SELECT 1 lulus.
 - [ ] Pisahkan environment dev/prod dan gunakan least-privilege credential jika memungkinkan; jangan pernah uji destruktif pada production.
 
-**Hasil F1:** backend SELECT 1 berhasil, baseline migration versioned tersedia; F2A.5 menguji aplikasi SQL dari DB lokal kosong dan rerun tanpa perubahan objek/history. Supabase/pnpm dipertahankan. F2A source identitas + migration telah dibuat dan teruji lokal F2A.5 (Supabase Development diterapkan/diverifikasi F2A.6); Phase 2B menambahkan login/UI dan enforcement teruji lokal tanpa migrasi. Provisioning/RBAC dan domain event/QR/attendance belum diimplementasikan; review [model kanonis](resora-need-001-data-model.md) dahulu.
+**Hasil F1:** backend SELECT 1 berhasil, baseline migration versioned tersedia; F2A.5 menguji aplikasi SQL dari DB lokal kosong dan rerun tanpa perubahan objek/history. Supabase/pnpm dipertahankan. F2A source identitas + migration telah dibuat dan teruji lokal F2A.5 (Supabase Development diterapkan/diverifikasi F2A.6); Phase 2B menambahkan login/UI dan enforcement teruji lokal tanpa migrasi. Phase 2C provisioning dan Phase 3 policy/seed teruji lokal; domain event/QR/attendance belum diimplementasikan; review [model kanonis](resora-need-001-data-model.md) dahulu.
 
 ### F2 — Identitas SR, login NIM & provisioning (IN PROGRESS; Phase 2B teruji lokal, menunggu review)
 
@@ -105,18 +105,17 @@
 
 **Gate F2:** SR dummy berhasil login; pengguna tanpa provisioning tidak dapat mendaftar/login; tidak ada password plaintext di log/database/repo.
 
-### F3 — Server-side authorization & audience (TODO)
+### F3 — RBAC & organization standardization (implemented/tested locally; PM review pending)
 
-- [ ] Implementasikan action permissions yang **deny-by-default**, bukan sekadar hide/show menu.
-- [ ] HCO member: buat/ubah event, issue QR, lihat rekap, ekspor.
-- [ ] **Hanya** `SR + department=HCO + position=KADIV` yang dapat input/koreksi manual dengan alasan dan audit.
-- [ ] SR lain: daftar event eligible, scan, hubungi KADIV HCO jika perlu input manual, lihat histori sendiri.
-- [ ] Initial superadmin adalah privilege sistem; hanya superadmin mengubah assignment/status aktif SR, tanpa bypass attendance otomatis.
-- [ ] Satu primary actor per akun; `KADIV` audience cocok untuk semua KADIV SR lintas departemen.
-- [ ] `ALL_STUDENTS` mencakup aktor SR dan Mahasiswa secara semantik; pada pilot UI diberi batasan bahwa hanya SR memiliki akses login.
-- [ ] Uji akses negatif: SR biasa, HCO bukan KADIV, KADIV non-HCO, dan unauthenticated.
+- [x] Canonical 7 department / 7 position / 18 building codes and [relations](resora-need-001-data-model.md#42-departments-positions-buildings--canonical-organization-dictionaries), using the existing schema.
+- [x] Local-only preview/apply seed; idempotent, conflicts explicit, existing assignments/UUIDs preserved.
+- [x] Live DB identity context with department, position, building and explicit SUPERADMIN; current session/active-SR/password gates retained.
+- [x] Pure policies for personal SR access, HCO internal operations, **HCO + KADEP** manual correction, **ADAPTIF** general operations/manual correction, and explicit SUPERADMIN identity administration.
+- [x] Negative policy/API tests: non-HCO KADEP, ordinary HCO, inactive/non-SR/missing session, mandatory password gate, forged client claims, and no implicit RnD/admin operational bypass.
+- [x] Provisioning accepts official codes and active dictionaries; 8-character initial passwords, transaction/output recovery and import idempotency retained.
+- [ ] PM review/merge; real organization data adjustment or remote seed requires separate approval.
 
-**Gate F3:** semua protected tRPC procedures menguji session **dan** role/position/department/resource ownership di backend.
+**Gate F3:** tested policy foundation and local dictionaries; no event/attendance, grant/revoke or administrator endpoint/UI. Resource ownership, participant eligibility, state and audit checks apply when real endpoints are built. Audience semantics now use KADEP across departments; roster/session model alignment remains a Phase 4 design gate. Inti membership stays TBD.
 
 ### F4 — Event management & reusable QR challenge (TODO)
 
@@ -139,18 +138,18 @@
 - [ ] Error state eksplisit untuk invalid QR, expired QR, GPS ditolak/kurang akurat, di luar radius, session habis, koneksi putus.
 - [ ] Jangan simpan histori GPS kontinu; catat hanya bukti minimum yang disetujui.
 
-**Gate F5:** successful/late/duplicate/outside-radius/expired-token diuji otomatis; GPS tidak terverifikasi mengarahkan ke KADIV HCO untuk input manual.
+**Gate F5:** successful/late/duplicate/outside-radius/expired-token diuji otomatis; GPS tidak terverifikasi mengarahkan ke KADEP HCO untuk input manual.
 
 ### F6 — Manual attendance, history, recap & export (TODO)
 
-- [ ] KADIV HCO membuka event, mencari nama/NIM dan memilih profil peserta undangan; input dengan alasan wajib.
+- [ ] KADEP HCO membuka event, mencari nama/NIM dan memilih profil peserta undangan; input dengan alasan wajib.
 - [ ] attendance_at default server sekarang, dapat override waktu aktual; recorded_at immutable saat pencatatan. Klasifikasi otomatis dari waktu efektif.
 - [ ] Insert/koreksi + audit before/after atomik; unique event/user; koreksi mempertahankan source asli, histori dan recorded_at.
 - [ ] SR melihat histori sendiri; HCO melihat semua undangan, termasuk pending sebelum closure dan absent sesudahnya.
 - [ ] CSV wajib: NIM/nama, departemen/jabatan/gedung, presence, waktu efektif, timing, durasi keterlambatan, QR/MANUAL bila relevan. XLSX opsional; tanpa password/session/QR secret/koordinat GPS mentah.
 - [ ] Uji izin negatif, concurrent QR/manual, rollback audit dan batas waktu override setelah kebijakan disepakati.
 
-**Gate F6:** HCO publish/snapshot → SR scan atau KADIV input/koreksi → HCO rekap/CSV semua undangan berjalan end-to-end.
+**Gate F6:** HCO publish/snapshot → SR scan atau KADEP input/koreksi → HCO rekap/CSV semua undangan berjalan end-to-end.
 
 ### F7 — Integrasi frontend, keamanan, CI & pengujian (TODO)
 
@@ -183,17 +182,17 @@
 | OPEN-001 | Cancel/reopen/republication lifecycle; HCO close/reissue eksplisit sudah confirmed | HCO + PM | Lifecycle/reporting |
 | OPEN-002 | Final PM confirmation freeze center/radius/tolerance; audience/jadwal immutable, edit published hanya title/description | HCO + PM | F4 |
 | OPEN-003 | Radius range/accuracy threshold setelah field test; batas TTL/grace | HCO + PM | F5/UAT |
-| OPEN-004 | Batas override waktu; input historis untuk peserta sekarang inactive | KADIV HCO + PM | F6 |
+| OPEN-004 | Batas override waktu; input historis untuk peserta sekarang inactive | KADEP HCO + PM | F6 |
 | OPEN-005 | Nilai roster/gedung/jabatan dan distribusi credential aman | PM + RnD | Import nyata/UAT |
 | OPEN-006 | Konfigurasi Gmail sender, recovery/verifikasi | PM + RnD | F2 |
 | OPEN-007 | Basis/pembulatan lateness, filter/log/retensi ekspor; source asli tetap saat koreksi | HCO + PM | F6/release |
 | INFRA-001 | VPS/domain/HTTPS, biaya, backup dan target operasional | PM + DevOps | F8 |
 
-Snapshot publish, QR statis 6 jam, explicit HCO close/reissue (QR lama invalid), audience/jadwal immutable setelah publish, edit hanya title/description, source koreksi tetap, early/after-end scan, ON_TIME inklusif, CSV/email nyata dan input langsung KADIV sudah **CONFIRMED**. Jangan mengubah TBD menjadi aturan tersirat; lihat [model](resora-need-001-data-model.md).
+Snapshot publish, QR statis 6 jam, explicit HCO close/reissue (QR lama invalid), audience/jadwal immutable setelah publish, edit hanya title/description, source koreksi tetap, early/after-end scan, ON_TIME inklusif, CSV/email nyata dan input langsung KADEP sudah **CONFIRMED**. Jangan mengubah TBD menjadi aturan tersirat; lihat [model](resora-need-001-data-model.md).
 
 ## 5. Batas MVP dan pekerjaan yang ditunda
 
-**Wajib untuk pilot:** login SR aman; import/provisioning; RBAC HCO/KADIV; event & audience; QR event-bound; check-in + geofence + late; input/koreksi manual KADIV dengan audit; histori SR; rekap/ekspor HCO; HTTPS, audit dan UAT.
+**Wajib untuk pilot:** login SR aman; import/provisioning; RBAC HCO/KADEP; event & audience; QR event-bound; check-in + geofence + late; input/koreksi manual KADEP dengan audit; histori SR; rekap/ekspor HCO; HTTPS, audit dan UAT.
 
 **Ditunda:** login mahasiswa non-SR; operasional penuh audience `ALL_STUDENTS`; SSO/API universitas; NEED-007 registration/character points; dashboard analitik lanjutan; data warehouse; inventory/inspection; push notification; multi-location kompleks; sistem penjadwalan organisasi di luar event.
 
@@ -228,8 +227,8 @@ Ready for next phase? yes/no, reason:
 - [ ] Verifikasi production tidak berbagi environment dev; production tidak diakses pada fase ini.
 - [ ] Public sign-up diblokir di backend; login NIM/password berhasil dengan akun provisioned.
 - [ ] Password awal aman dan reset/change-first-login berhasil; tidak ada credential di repo/log.
-- [ ] HCO vs KADIV HCO vs KADIV non-HCO vs SR biasa diuji untuk semua aksi penting.
-- [ ] Audience `SR`, `KADIV` dan overlap `ALL_STUDENTS` ditangani tanpa multi-role akun.
+- [ ] HCO vs KADEP HCO vs KADEP non-HCO vs SR biasa diuji untuk semua aksi penting.
+- [ ] Audience `SR`, `KADEP` dan overlap `ALL_STUDENTS` ditangani tanpa multi-role akun.
 - [ ] Event publication snapshot, QR statis TTL/revoke, early/after-end scan dan geofence sesuai aturan confirmed; TBD terkait diselesaikan.
 - [ ] Duplikasi/retry/race condition tidak menggandakan kehadiran.
 - [ ] Input/koreksi manual menghasilkan audit immutable, effective time terpisah dari recorded_at dan klasifikasi otomatis.

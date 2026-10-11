@@ -1,3 +1,8 @@
+import {
+	officialBuildingCodes,
+	officialDepartments,
+	officialPositions,
+} from "@resora/db/organization";
 import { z } from "zod";
 
 export class ProvisioningError extends Error {
@@ -30,9 +35,9 @@ const rowSchema = z.object({
 		.regex(/^[a-zA-Z0-9_.]+$/),
 	name: z.string().trim().min(1),
 	email: z.email().transform((value) => value.toLowerCase()),
-	department: z.string().trim().min(1),
-	position: z.string().trim().min(1),
-	building: z.string().trim().min(1),
+	department: z.enum(officialDepartments.map((row) => row.code)),
+	position: z.enum(officialPositions.map((row) => row.code)),
+	building: z.enum(officialBuildingCodes),
 	is_active: z
 		.enum(["true", "false", "1", "0"])
 		.transform((value) => value === "true" || value === "1"),
