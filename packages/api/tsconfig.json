@@ -1,6 +1,6 @@
 {
-  "extends": "@resora/config/tsconfig.base.json",
-  "compilerOptions": {
-    "noEmit": true
-  }
+	"extends": "@resora/config/tsconfig.base.json",
+	"compilerOptions": {
+		"noEmit": true
+	}
 }

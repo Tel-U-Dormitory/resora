@@ -1,10 +1,10 @@
 {
-  "extends": "@resora/config/tsconfig.base.json",
-  "compilerOptions": {
-    "noEmit": true,
-    "paths": {
-      "@/*": ["./src/*"]
-    },
-    "jsx": "react-jsx"
-  }
+	"extends": "@resora/config/tsconfig.base.json",
+	"compilerOptions": {
+		"noEmit": true,
+		"paths": {
+			"@/*": ["./src/*"]
+		},
+		"jsx": "react-jsx"
+	}
 }
