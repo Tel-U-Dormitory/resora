@@ -1,36 +1,36 @@
 {
-  "name": "server",
-  "type": "module",
-  "main": "src/index.ts",
-  "scripts": {
-    "build": "tsdown",
-    "check-types": "tsc --noEmit",
-    "compile": "bun build --compile --no-compile-autoload-dotenv --minify --sourcemap --bytecode ./src/index.ts --outfile server",
-    "dev": "bun run --hot src/index.ts",
-    "start": "bun run dist/index.mjs",
-    "env:generate": "varlock codegen",
-    "db:check": "bun run src/scripts/check-db.ts",
-    "db:check:direct": "bun run src/scripts/check-db.ts --direct",
-    "auth:generate": "varlock run -- pnpm dlx auth@1.7.7 generate --config src/services.ts --output ../../packages/db/src/schema/auth.ts --yes"
-  },
-  "dependencies": {
-    "@hono/trpc-server": "^0.4.2",
-    "@resora/api": "workspace:*",
-    "@resora/auth": "workspace:*",
-    "@resora/db": "workspace:*",
-    "@trpc/server": "catalog:",
-    "better-auth": "catalog:",
-    "cors": "^2.8.6",
-    "express": "^5.2.1",
-    "varlock": "catalog:",
-    "zod": "catalog:"
-  },
-  "devDependencies": {
-    "@resora/config": "workspace:*",
-    "@types/bun": "catalog:",
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.6",
-    "tsdown": "^0.23.0",
-    "typescript": "catalog:"
-  }
+	"name": "server",
+	"type": "module",
+	"main": "src/index.ts",
+	"scripts": {
+		"build": "tsdown",
+		"check-types": "tsc --noEmit",
+		"compile": "bun build --compile --no-compile-autoload-dotenv --minify --sourcemap --bytecode ./src/index.ts --outfile server",
+		"dev": "bun run --hot src/index.ts",
+		"start": "bun run dist/index.mjs",
+		"env:generate": "varlock codegen",
+		"db:check": "bun run src/scripts/check-db.ts",
+		"db:check:direct": "bun run src/scripts/check-db.ts --direct",
+		"auth:generate": "varlock run -- pnpm dlx auth@1.7.7 generate --config src/services.ts --output ../../packages/db/src/schema/auth.ts --yes"
+	},
+	"dependencies": {
+		"@hono/trpc-server": "^0.4.2",
+		"@resora/api": "workspace:*",
+		"@resora/auth": "workspace:*",
+		"@resora/db": "workspace:*",
+		"@trpc/server": "catalog:",
+		"better-auth": "catalog:",
+		"cors": "^2.8.6",
+		"express": "^5.2.1",
+		"varlock": "catalog:",
+		"zod": "catalog:"
+	},
+	"devDependencies": {
+		"@resora/config": "workspace:*",
+		"@types/bun": "catalog:",
+		"@types/cors": "^2.8.19",
+		"@types/express": "^5.0.6",
+		"tsdown": "^0.23.0",
+		"typescript": "catalog:"
+	}
 }
