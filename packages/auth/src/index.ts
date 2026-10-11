@@ -1,5 +1,5 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
-import type { Database } from "@resora/db";
+import type { Database, DatabaseTransaction } from "@resora/db";
 import * as schema from "@resora/db/schema/auth";
 import { userProfiles } from "@resora/db/schema/identity";
 import { betterAuth } from "better-auth";
@@ -21,7 +21,7 @@ export type AuthConfig = {
 
 export function createAuth(
 	env: AuthConfig,
-	database: Database,
+	database: Database | DatabaseTransaction,
 	desktopOrigins: readonly string[] = [],
 ) {
 	const trustedOrigins = [env.CORS_ORIGIN, ...desktopOrigins];

@@ -11,6 +11,7 @@
 		"env:generate": "varlock codegen",
 		"db:check": "bun run src/scripts/check-db.ts",
 		"db:check:direct": "bun run src/scripts/check-db.ts --direct",
+		"sr:provision": "bun run --no-env-file src/scripts/provision-sr.ts",
 		"auth:generate": "varlock run -- pnpm dlx auth@1.7.7 generate --config src/services.ts --output ../../packages/db/src/schema/auth.ts --yes"
 	},
 	"dependencies": {

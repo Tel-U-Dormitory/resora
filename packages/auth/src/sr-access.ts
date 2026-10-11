@@ -4,7 +4,10 @@ import { srProfiles, userProfiles } from "@resora/db/schema/identity";
 import { eq } from "drizzle-orm";
 
 // Read current identity on every request; a session is not an active-account claim.
-export async function getActiveSr(database: Database, userId: string) {
+export async function getActiveSr(
+	database: Pick<Database, "select">,
+	userId: string,
+) {
 	const [profile] = await database
 		.select({
 			userId: userProfiles.userId,
