@@ -8,10 +8,10 @@ import { dirname, resolve } from "node:path";
 import { promisify } from "node:util";
 import { createAuth } from "@resora/auth";
 import { createDb, type Database } from "@resora/db";
+import { seedOrganization } from "@resora/db/organization";
 import { account, user } from "@resora/db/schema/auth";
 import {
 	buildings,
-	departments,
 	positions,
 	srProfiles,
 	systemPrivileges,
@@ -95,8 +95,7 @@ async function rejected(operation: Promise<unknown>, code: string) {
 			});
 		};
 		const prefix = `synthetic-provision-${randomUUID()}`;
-		const code = `SYN_PROVISION_${randomBytes(5).toString("hex")}`;
-		const buildingId = randomUUID();
+		let buildingId: string;
 		const projectRoot = resolve(import.meta.dir, "../../../../..");
 		const inputPath = resolve(projectRoot, "tmp", `${prefix}.csv`);
 		const cli = async (apply: boolean) => {
@@ -134,9 +133,9 @@ async function rejected(operation: Promise<unknown>, code: string) {
 			nims[index] ?? "",
 			"Synthetic SR",
 			`${prefix}-${index}@example.invalid`,
-			code,
-			code,
-			code,
+			index === 2 ? "RND" : "HCO",
+			index === 2 ? "KADEP" : "ANGGOTA",
+			["A", "F", "1", "12"][index] ?? "A",
 			String(active),
 		];
 		const csv = (...rows: string[][]) =>
@@ -208,15 +207,12 @@ async function rejected(operation: Promise<unknown>, code: string) {
 				localProvisioningTarget(testUrl),
 			);
 			await writeFile(inputPath, csv(inputRow(0)), { flag: "wx", mode: 0o600 });
-			await db.transaction(async (tx) => {
-				await tx
-					.insert(departments)
-					.values({ code, name: "Synthetic department" });
-				await tx.insert(positions).values({ code, name: "Synthetic position" });
-				await tx
-					.insert(buildings)
-					.values({ id: buildingId, code, name: "Synthetic building" });
-			});
+			await seedOrganization(db);
+			const building = (
+				await db.select().from(buildings).where(eq(buildings.code, "A"))
+			)[0];
+			if (!building) throw new Error("Missing official building A");
+			buildingId = building.id;
 			auth = createAuth(config, db);
 			server = createApp({ db, auth }, config.CORS_ORIGIN).listen(
 				0,
@@ -252,9 +248,6 @@ async function rejected(operation: Promise<unknown>, code: string) {
 						await tx.delete(srProfiles).where(inArray(srProfiles.userId, ids));
 						await tx.delete(user).where(inArray(user.id, ids));
 					}
-					await tx.delete(buildings).where(eq(buildings.id, buildingId));
-					await tx.delete(positions).where(eq(positions.code, code));
-					await tx.delete(departments).where(eq(departments.code, code));
 				});
 				await db.$client.end();
 			}
@@ -307,8 +300,8 @@ async function rejected(operation: Promise<unknown>, code: string) {
 			expect(identity.actor).toBe("SR");
 			expect(identity.active).toBe(true);
 			expect(identity.mustChange).toBe(true);
-			expect(identity.department).toBe(code);
-			expect(identity.position).toBe(code);
+			expect(identity.department).toBe("HCO");
+			expect(identity.position).toBe("ANGGOTA");
 			expect(identity.building).toBe(buildingId);
 			expect(
 				(
@@ -461,7 +454,7 @@ async function rejected(operation: Promise<unknown>, code: string) {
 				run(
 					csv([...inputRow(4).slice(0, 3), "MISSING", ...inputRow(4).slice(4)]),
 				),
-				"UNKNOWN_ORGANIZATION_REFERENCE",
+				"INVALID_CSV_ROW",
 			);
 			expect(await count(4)).toBe(0);
 		});
@@ -485,6 +478,24 @@ async function rejected(operation: Promise<unknown>, code: string) {
 			);
 			expect(await count(5)).toBe(0);
 		}, 20_000);
+		test("official codes still require active database dictionary references", async () => {
+			await db
+				.update(positions)
+				.set({ isActive: false })
+				.where(eq(positions.code, "ANGGOTA"));
+			try {
+				await rejected(
+					run(csv(inputRow(4)), "dry-run"),
+					"INACTIVE_ORGANIZATION_REFERENCE",
+				);
+				expect(await count(4)).toBe(0);
+			} finally {
+				await db
+					.update(positions)
+					.set({ isActive: true })
+					.where(eq(positions.code, "ANGGOTA"));
+			}
+		});
 		test("late uniqueness failure rolls back the entire batch, retaining a FAILED private export", async () => {
 			let path: string | undefined;
 			await rejected(

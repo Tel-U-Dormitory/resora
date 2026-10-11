@@ -13,12 +13,34 @@ const row = [
 	'Synthetic, "SR"',
 	"synthetic@example.invalid",
 	"HCO",
-	"MEMBER",
+	"ANGGOTA",
 	"A",
 	"true",
 ];
 const csv = (rows: string[][] = [row]) =>
 	encodeCsv([Array.from(csvColumns), ...rows]);
+test("official CSV accepts KADEP and separate letter/numeric building codes", () => {
+	for (const building of ["A", "F", "1", "12"] as const) {
+		const parsed = parseSrCsv(
+			csv([[...row.slice(0, 3), "RND", "KADEP", building, "true"]]),
+		)[0];
+		expect(parsed?.position).toBe("KADEP");
+		expect(parsed?.building).toBe(building);
+	}
+});
+test("unknown organization codes and legacy KADIV cannot enter new CSV imports", () => {
+	for (const [column, code] of [
+		[3, "MISSING"],
+		[4, "KADIV"],
+		[4, "MEMBER"],
+		[5, "A1"],
+		[5, "GEDUNG_A"],
+	] as const) {
+		const invalid = [...row];
+		invalid[column] = code;
+		expect(() => parseSrCsv(csv([invalid]))).toThrow("INVALID_CSV_ROW");
+	}
+});
 test("RFC CSV roundtrip handles quotes, commas, newlines, BOM and leading-zero NIM", () => {
 	const input = `\uFEFF${csv([[...row.slice(0, 1), "Synthetic\nSR", ...row.slice(2)]])}`;
 	expect(parseSrCsv(input)[0]?.nim).toBe("000012345");

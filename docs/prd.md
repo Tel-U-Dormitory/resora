@@ -45,7 +45,9 @@ RESORA is an integrated digital platform for operations and services related to 
 | `ASUS`        | Dormitory operational/administrative stakeholder        | Deferred.                                                                |
 | `DITMAWA`     | University administration stakeholder                   | Deferred.                                                                |
 
-A user has **exactly one primary actor**. Every SR has one department, one position/jabatan, and one building assignment. Departments currently include HCO, Adaptif, Sosial, Akademik, Spiritual, Media, and RnD. `KADIV` is a position, not an actor; **Inti** is a roster group whose authoritative members/position mapping still require confirmation. `SUPERADMIN` is an explicitly granted system privilege, **not** a fifth actor or an automatic benefit of RnD membership. Only users granted that privilege may maintain SR department/position/building/active status, with audit; it does not automatically bypass attendance ownership rules.
+A user has **exactly one primary actor**. Every SR has one department, one position/jabatan, and one building assignment. Departments currently include HCO, Adaptif, Sosial, Akademik, Spiritual, Media, and RnD. `KADEP` is a position, not an actor; **Inti** is a roster group whose authoritative members/position mapping still require confirmation. `SUPERADMIN` is an explicitly granted system privilege, **not** a fifth actor or an automatic benefit of RnD membership. Only users granted that privilege may maintain SR department/position/building/active status, with audit; it does not automatically bypass attendance ownership rules.
+
+Phase 3 uses the [canonical organization codes and authorization matrix](modules/need-001/resora-need-001-data-model.md#42-departments-positions-buildings--canonical-organization-dictionaries): 7 departments, 7 positions and 18 separate TEXT-coded buildings. PM approved **KADEP replacing KADIV** for new data/policies; no input alias or automatic legacy conversion. Policy foundations and local seed are implemented/tested; event/attendance endpoints and identity-admin UI are not implemented.
 
 Backend authorization must verify active account, actor, department, relevant position, permission, and resource context on every protected action. Hiding a UI control is not access control.
 
@@ -55,9 +57,9 @@ Backend authorization must verify active account, actor, department, relevant po
 | -------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
 | Core Identity / SR directory (`MOD-01`)                  | RnD with authoritative data source | Explicitly privileged administrators for SR assignments                                                                  | Membership in RnD alone grants no `SUPERADMIN` rights.                                                             |
 | Internal SR events and attendance (`NEED-001`, `MOD-03`) | **HCO**                            | Authorized active HCO members: create event, select audience, QR/session, geofence, recap/CSV                            | No general-student event attendance operations.                                                                    |
-| Manual insertion/correction for internal SR              | **HCO**                            | **KADIV HCO only**, mandatory reason and audit                                                                           | Ordinary HCO, KADIV of another department, and Adaptif cannot perform these actions.                               |
+| Manual insertion/correction for internal SR              | **HCO**                            | **KADEP HCO only**, mandatory reason and audit                                                                           | Ordinary HCO, KADEP of another department, and Adaptif cannot perform these actions.                               |
 | General activity registration (`NEED-007`, `MOD-06`)     | **Adaptif**                        | Authorized Adaptif management of registration, quotas and cancellation                                                   | Rights to create activities for other departments remain a separate, unconfirmed policy.                           |
-| General activity attendance (`NEED-007`, `MOD-03`)       | **Adaptif**                        | **All authorized Adaptif operators**: configure location/radius, activate/close session, QR, manual insertion/correction | HCO has **no role** in these attendance sessions; KADIV status is not required for an authorized Adaptif operator. |
+| General activity attendance (`NEED-007`, `MOD-03`)       | **Adaptif**                        | **All authorized Adaptif operators**: configure location/radius, activate/close session, QR, manual insertion/correction | HCO has **no role** in these attendance sessions; KADEP status is not required for an authorized Adaptif operator. |
 | SR KPI/performance (`NEED-005`, `MOD-07`)                | HCO and SR leadership              | Specific assessment permissions TBD                                                                                      | Attendance does not automatically determine KPI scoring.                                                           |
 
 Attendance data has a **contextual owner** although its implementation is shared. Domain ownership is not interchangeable with technical custody by RnD.
@@ -95,7 +97,7 @@ Core reusable capabilities include identity/RBAC, verified SR roster, notificati
 
 ### 6.1 NEED-001 — internal SR attendance
 
-HCO creates an internal event and constructs its audience in **composable “lego” fashion**: all active SR; one or more departments; only **Inti**; **Inti + KADIV**; chosen individual members; or any combination. HCO may add or remove individuals from the **draft preview**, and a final deduplicated **participant snapshot** is stored atomically when the event is published. This invitation gives the SR the **right to check in**, not an automatic `PRESENT` record. Changing a user's later department/position does not rewrite the invitation history. Edit/remove after **publication** is **not yet authorized** and requires a separate amendment policy.
+HCO creates an internal event and constructs its audience in **composable “lego” fashion**: all active SR; one or more departments; only **Inti**; **Inti + KADEP**; chosen individual members; or any combination. HCO may add or remove individuals from the **draft preview**, and a final deduplicated **participant snapshot** is stored atomically when the event is published. This invitation gives the SR the **right to check in**, not an automatic `PRESENT` record. Changing a user's later department/position does not rewrite the invitation history. Edit/remove after **publication** is **not yet authorized** and requires a separate amendment policy.
 
 Authorized HCO manages event, QR, radius, reporting and explicit closure. The initial NEED-001 event has **one attendance session**. Confirmed defaults and rules:
 
@@ -105,11 +107,11 @@ Authorized HCO manages event, QR, radius, reporting and explicit closure. The in
 | Geofence                  | HCO sets map point and radius; **20 m default**, configurable. Backend calculates distance; browser GPS is an untrusted signal.                                     |
 | Check-in time             | Scan allowed **before scheduled start and after scheduled end**, as long as session and QR are still active/valid.                                                  |
 | Timing                    | `EARLY` before start; `ON_TIME` from start through start + grace **inclusive**; `LATE` afterward; **15-minute default grace**.                                      |
-| Manual entry / correction | **KADIV HCO only**, mandatory reason, overridable effective `attendance_at`, immutable `recorded_at`, preserved original source and append-only before/after audit. |
+| Manual entry / correction | **KADEP HCO only**, mandatory reason, overridable effective `attendance_at`, immutable `recorded_at`, preserved original source and append-only before/after audit. |
 | Presence                  | Record exists → `PRESENT`; missing record → `PENDING` until HCO explicitly closes event, then `ABSENT`. Expired QR/end of schedule alone does not close event.      |
 | Reports                   | HCO sees and exports **every invited SR**, including pending/absent; CSV required, XLSX optional; SR sees only own event/history.                                   |
 
-If location access is denied, inaccurate, or out of range, there is no automatic bypass; SR must contact KADIV HCO for auditable manual handling. Only event title/description are confirmed editable after publishing; freezing location/radius/grace on publication is still recommended but not final.
+If location access is denied, inaccurate, or out of range, there is no automatic bypass; SR must contact KADEP HCO for auditable manual handling. Only event title/description are confirmed editable after publishing; freezing location/radius/grace on publication is still recommended but not final.
 
 The **official NEED-001 FR set** is `FR-086` (recap) and `FR-119–FR-130` (event, audience builder, snapshot, QR, check-in, geofence, manual, audit and CSV). Detailed scenarios: [NEED-001 PRD](modules/need-001/prd.md) and [acceptance tests](modules/need-001/acceptance-tests.md).
 
@@ -179,7 +181,7 @@ RESORA follows a **TypeScript modular monolith** with Next.js frontend, Express 
 
 ## 12. Dependencies, risks and constraints
 
-- **Identity readiness:** NEED-001 requires login, active SR status, organization roster/Inti mapping, and correct HCO/KADIV/SUPERADMIN permissions before pilot UAT.
+- **Identity readiness:** NEED-001 requires login, active SR status, organization roster/Inti mapping, and correct HCO/KADEP/SUPERADMIN permissions before pilot UAT.
 - **Cross-domain attendance:** MOD-03 consumes eligible SR snapshot for NEED-001 or valid MOD-06 registration for NEED-007. Sharing an engine **does not** share its operators.
 - **GPS reliability:** browser location can be inaccurate or spoofed; particularly sensitive for short distances/indoor use. Manual fallback must remain auditable.
 - **QR security:** static tokens can be forwarded; authenticated identity, server-side eligibility, session state and short expiry are mandatory checks.
@@ -191,7 +193,7 @@ RESORA follows a **TypeScript modular monolith** with Next.js frontend, Express 
 
 A NEED is ready for owner validation only when its official FRs map to verifiable test cases, negative permission tests pass, critical state transitions and concurrent operations are tested, data integrity is checked against the real user workflow, and privacy/security behavior is reviewed. A release additionally needs approved migration/recovery steps, backup/restore verification, operational ownership and PM sign-off.
 
-**NEED-001 UAT** must cover HCO's combined participant builder and snapshot, QR validity and session activation, distance checks, start/grace timing boundaries, duplicate scans, inactive/not-invited SR, KADIV-only manual changes with audit, explicit closure, and CSV including non-attendees. **NEED-007** has an independent Adaptif acceptance gate for successful/uncancelled registrations, quota concurrency, returned slots, login, Adaptif-only session control and manual audit.
+**NEED-001 UAT** must cover HCO's combined participant builder and snapshot, QR validity and session activation, distance checks, start/grace timing boundaries, duplicate scans, inactive/not-invited SR, KADEP-only manual changes with audit, explicit closure, and CSV including non-attendees. **NEED-007** has an independent Adaptif acceptance gate for successful/uncancelled registrations, quota concurrency, returned slots, login, Adaptif-only session control and manual audit.
 
 ## 14. Requirements traceability and change control
 

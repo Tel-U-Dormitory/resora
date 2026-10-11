@@ -10,25 +10,25 @@ Sources: [NEED-001 PRD](prd.md) and [canonical data model/repository review](res
 | AT-002 | Unprovisioned NIM                                                | Attempt login                                                   | Generic error; no user enumeration and no automatic registration   | Confirmed                                             |
 | AT-003 | SR in department HCO                                             | Create attendance event with audience SR, radius 20m, grace 15m | Event saved; HCO can display event QR                              | Confirmed fields                                      |
 | AT-004 | Ordinary SR not in HCO                                           | Try create event/issue QR/export via direct tRPC request        | Server refuses, regardless of UI                                   | Confirmed                                             |
-| AT-005 | KADIV of Adaptif (not HCO) | Attempt manual insertion/correction | Server rejects | Confirmed |
-| AT-006 | KADIV HCO, invited participant without attendance | Open event, search name/NIM, select profile, enter reason | One MANUAL record, default effective server time, immutable creation time and audit | Confirmed |
-| AT-007 | HCO member who is not KADIV | Attempt manual insertion/correction via direct request | Server rejects | Confirmed |
+| AT-005 | KADEP of Adaptif (not HCO) | Attempt manual insertion/correction | Server rejects | Confirmed |
+| AT-006 | KADEP HCO, invited participant without attendance | Open event, search name/NIM, select profile, enter reason | One MANUAL record, default effective server time, immutable creation time and audit | Confirmed |
+| AT-007 | HCO member who is not KADEP | Attempt manual insertion/correction via direct request | Server rejects | Confirmed |
 | AT-008 | SR event                                                         | Match event audience `SR`                                       | Can see/check in when all other conditions valid                   | Confirmed                                             |
-| AT-009 | KADIV event                                                      | SR `position=KADIV`, any department                             | Eligible                                                           | Confirmed                                             |
-| AT-010 | KADIV event                                                      | SR ordinary member                                              | Ineligible, cannot bypass with forged request                      | Confirmed                                             |
+| AT-009 | KADEP event                                                      | SR `position=KADEP`, any department                             | Eligible                                                           | Confirmed                                             |
+| AT-010 | KADEP event                                                      | SR ordinary member                                              | Ineligible, cannot bypass with forged request                      | Confirmed                                             |
 | AT-011 | ALL_STUDENTS event                                               | Authenticated SR                                                | Included by audience rule despite only one actor                   | Confirmed                                             |
 | AT-012 | ALL_STUDENTS event                                               | Non-SR student during pilot                                     | No login / cannot check in until student actor implemented         | Explicit MVP limitation                               |
 | AT-013 | Active invited SR, valid QR and location | Scan while QR active, including before start/after end | One PRESENT record with actual server timestamp and EARLY/ON_TIME/LATE timing | Confirmed |
 | AT-014 | Same user scans same QR twice                                    | Scan twice or concurrent requests                               | Exactly **one** confirmed attendance; stable duplicate result      | Confirmed                                             |
 | AT-015 | Revoked or expired event QR | Scan despite event still in progress | Denied; no attendance change or attendee data leakage | Confirmed |
-| AT-016 | Participant beyond configured radius | Try scan | No automatic attendance; direct participant to KADIV HCO for manual entry | Confirmed |
-| AT-017 | Location denied/unverifiable GPS accuracy | Try scan | No automatic attendance; contact KADIV HCO for manual entry | Confirmed fallback; accuracy threshold TBD |
-| AT-018 | KADIV HCO manual entry | Submit without reason or with blank reason | Rejected; no attendance or partial audit write | Confirmed |
-| AT-019 | Existing attendance record | KADIV HCO corrects effective time with reason | Preserve original recorded_at **and original source**; recalculate timing; append immutable before/after audit | Confirmed |
+| AT-016 | Participant beyond configured radius | Try scan | No automatic attendance; direct participant to KADEP HCO for manual entry | Confirmed |
+| AT-017 | Location denied/unverifiable GPS accuracy | Try scan | No automatic attendance; contact KADEP HCO for manual entry | Confirmed fallback; accuracy threshold TBD |
+| AT-018 | KADEP HCO manual entry | Submit without reason or with blank reason | Rejected; no attendance or partial audit write | Confirmed |
+| AT-019 | Existing attendance record | KADEP HCO corrects effective time with reason | Preserve original recorded_at **and original source**; recalculate timing; append immutable before/after audit | Confirmed |
 | AT-020 | Event grace configured to 30 min | Scan at start +30min and +30min 1sec | ON_TIME at inclusive boundary, then LATE; presence remains PRESENT | Confirmed |
 | AT-021 | HCO report includes every published invitee | View/export CSV | NIM/name, organization fields, presence, effective time, timing, duration, source; include missing records; exclude secrets/raw GPS | Confirmed columns; duration/retention TBD |
 | AT-022 | SR accesses other's attendance record                            | Direct request                                                  | Forbidden, own-history only                                        | Confirmed                                             |
-| AT-023 | QR and KADIV manual insertion for same event/user | Concurrent requests reach DB | One attendance row; successful manual mutation audited atomically; no duplicate or orphan audit | Required integrity |
+| AT-023 | QR and KADEP manual insertion for same event/user | Concurrent requests reach DB | One attendance row; successful manual mutation audited atomically; no duplicate or orphan audit | Required integrity |
 | AT-024 | Malformed center/radius/schedule | Save event | Reject malformed coordinates, nonpositive radius/TTL or unordered schedule; permitted configurable bounds reviewed separately | Validation design; radius/TTL/grace limits TBD |
 | AT-025 | Actual SR on common smartphone and campus network                | End-to-end pilot                                                | Login, QR, GPS, fallback and history usable with HTTPS             | Mandatory UAT                                         |
 | AT-026 | Event starts 13:00, grace 15min, QR active | Scan at 12:59:59 /13:00/13:15/13:15:01 | EARLY /ON_TIME/ON_TIME/LATE; all PRESENT; server time authoritative | Confirmed |
@@ -40,9 +40,9 @@ Sources: [NEED-001 PRD](prd.md) and [canonical data model/repository review](res
 | AT-032 | Invited SR changes department/position/building after publication | View historical event report | Invitation and organization snapshot retained; do not silently refresh roster | Confirmed snapshot; cancellation/republication handling TBD |
 | AT-033 | Invitee is later inactive, including a stored session | Attempt login or QR check-in | Both rejected regardless of participant snapshot; historical invitation retained | Confirmed |
 | AT-034 | Invited participant has no attendance record | Report before closure, then after confirmed window closure | PENDING/not yet present, then ABSENT; no fabricated attendance timestamp/class/source | Confirmed: explicit authorized HCO closure |
-| AT-035 | KADIV HCO records manual attendance at 17:00 for actual 13:05, event starts 13:00 | Enter reason and override effective time | attendance_at 13:05, recorded_at 17:00, ON_TIME; actor/reason audited | Confirmed; permitted override bounds TBD |
+| AT-035 | KADEP HCO records manual attendance at 17:00 for actual 13:05, event starts 13:00 | Enter reason and override effective time | attendance_at 13:05, recorded_at 17:00, ON_TIME; actor/reason audited | Confirmed; permitted override bounds TBD |
 | AT-036 | Manual correction/audit transaction fails | Save correction | Roll back both changes; no destructive history overwrite or partial mutation | Required integrity |
-| AT-037 | Initial superadmin account and HCO/KADIV accounts | Change SR assignments/active status | Only superadmin system privilege succeeds; exactly one primary actor, not a fifth actor | Confirmed |
+| AT-037 | Initial superadmin account and HCO/KADEP accounts | Change SR assignments/active status | Only superadmin system privilege succeeds; exactly one primary actor, not a fifth actor | Confirmed |
 | AT-038 | Synthetic provisioning CSV | Validate/import NIM, name, real email, department, position, building, active status | Unique identifiers, complete assignments, NIM kept as text; no public signup or credentials in Git/logs | Confirmed columns; mapping proposed |
 | AT-039 | Provisioned SR temporary credentials | First login, then change password | Secure initial credential handling; protected app gate until required change succeeds | Gate tested Phase 2B; provisioning/distribution pending |
 | AT-040 | User calls public signup directly | Submit signup despite hidden UI | Backend rejects; no public account created | Confirmed |
@@ -53,7 +53,7 @@ Sources: [NEED-001 PRD](prd.md) and [canonical data model/repository review](res
 | AT-045 | Published event with active QR and invited non-attendee | Authorized HCO explicitly closes event | Active QR invalidated atomically; scans denied; non-attendee reported ABSENT; existing attendance retained | Confirmed; future implementation |
 | AT-046 | Expired or revoked QR, event not explicitly closed | HCO reissues challenge | New activation + configured TTL (default six hours); previous challenges remain invalid; no automatic rotation | Confirmed; future implementation |
 | AT-047 | No attendance record and QR expired | Report before HCO explicitly closes, then after close | Pending before closure; ABSENT after close, regardless of scheduled end | Confirmed; future implementation |
-| AT-048 | Attendance originally sourced QR or MANUAL | KADIV HCO corrects effective time/reason | Original source and recorded_at preserved; immutable audit captures correction; automatic timing recalculation | Confirmed; future implementation |
+| AT-048 | Attendance originally sourced QR or MANUAL | KADEP HCO corrects effective time/reason | Original source and recorded_at preserved; immutable audit captures correction; automatic timing recalculation | Confirmed; future implementation |
 | AT-049 | Published event center/radius/late tolerance | Attempt edit after publication | Freeze recommended; executable expectation awaits final PM confirmation | PROPOSED safeguard, not an approved acceptance gate |
 
 ## Phase 2B authentication execution (2026-10-11)
@@ -76,6 +76,20 @@ Headless Edge with isolated temporary profile, production Next.js and local Expr
 **Domain discrepancy:** older audience/event-bound QR scenarios above predate the latest PRD's SR participant builder and session-based attendance. They are not executable policy authority for future domain work until reconciled with PM. Phase 2B covers identity only and does not change event acceptance decisions.
 
 
+## Phase 3 foundation acceptance (CLI)
+
+| Check | Expected result | Local automated evidence |
+| --- | --- | --- |
+| HCO ANGGOTA/SEKDEP vs HCO KADEP | All manage internal operations; only KADEP can correct manually | Policy unit tests |
+| ADAPTIF ANGGOTA/KADEP vs HCO/SOSIAL | Adaptif general operations/manual allowed without KADEP; no cross-context grants | Policy unit tests |
+| RND KADEP; explicit SUPERADMIN non-HCO | No inferred admin; explicit privilege grants identity admin only | Unit/live DB grant/revoke tests |
+| Anonymous/invalid session, inactive/non-SR, pending password change | Denied; live database changes take effect on next request | Existing protected API and auth regression tests |
+| Forged department/position/privilege input | Cannot change DB-derived authorization | Existing protected API test, no dummy endpoint |
+| Official dictionaries and rerun | 7/7/18, unchanged UUIDs/assignments; conflicts roll back | Organization integration tests |
+| CSV A/F/1/12 and KADEP; KADIV/unknown codes | Official codes resolve active DB references; legacy/unknown rejected | Provisioning unit/integration tests |
+
+These validate the policy/seed foundation, not unbuilt event/attendance workflows above. [Canonical codes/matrix](resora-need-001-data-model.md#8-server-side-authorization-phase-3); Inti mapping and domain model alignment remain open.
+
 ## Approval fields
 
 - **HCO policy validation:** TBD
@@ -85,4 +99,4 @@ Headless Edge with isolated temporary profile, production Next.js and local Expr
 
 A `TBD` scenario is **not automatically passing**. Review the [PRD](prd.md) before writing tests that assert unknown policy as fact.
 
-These are acceptance specifications, not executed automated tests. Remaining gates: cancellation/reopening/republication handling, final PM confirmation of center/radius/tolerance freeze, GPS/radius limits, override bounds (including now-inactive invitees and post-closure manual operations), lateness rounding, CSV values, credential delivery, retention and SMTP operations. Phase 2A identity tests are code-level checks, not completion of these application acceptance scenarios. See the canonical model §10/§12.
+These are acceptance specifications, not executed automated tests. Remaining gates: cancellation/reopening/republication handling, final PM confirmation of center/radius/tolerance freeze, GPS/radius limits, override bounds (including now-inactive invitees and post-closure manual operations), lateness rounding, actual roster/credential delivery, retention and SMTP operations. Phase 2A identity tests are code-level checks, not completion of these application acceptance scenarios. See the canonical model §10/§12.

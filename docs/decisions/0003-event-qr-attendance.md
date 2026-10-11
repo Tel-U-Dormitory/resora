@@ -4,9 +4,9 @@
 
 ## Decision
 
-HCO creates/configures attendance events for `SR`, `KADIV` or `ALL_STUDENTS` (includes SR); participant snapshots are generated at publication and reports include all invitees, even without attendance. Current inactive status always blocks authentication/check-in.
+HCO creates/configures attendance events for `SR`, `KADEP` or `ALL_STUDENTS` (includes SR); participant snapshots are generated at publication and reports include all invitees, even without attendance. Current inactive status always blocks authentication/check-in.
 
-HCO selects the geofence center by map pin or latitude/longitude; radius default **20 meters**, configurable separately. Backend validates distance from untrusted/imperfect browser location. GPS failure leads to direct KADIV HCO entry, with mandatory reason, overridable effective time defaulting to server now, immutable creation time and audit of every insertion/correction.
+HCO selects the geofence center by map pin or latitude/longitude; radius default **20 meters**, configurable separately. Backend validates distance from untrusted/imperfect browser location. GPS failure leads to direct KADEP HCO entry, with mandatory reason, overridable effective time defaulting to server now, immutable creation time and audit of every insertion/correction.
 
 QR has an unpredictable event-bound token, static for a configurable lifetime, default **six hours from activation**, without automatic rotation. HCO displays it on the event page and may revoke before expiration. Reject expired/revoked tokens. QR infrastructure remains reusable by NEED-007 without importing its business logic.
 
@@ -28,7 +28,9 @@ The [canonical data model](../modules/need-001/resora-need-001-data-model.md) pr
 
 ## Open policy
 
-Cancellation/reopening/republication snapshot handling, final approval of center/radius/late-tolerance freeze, GPS accuracy/radius and configurable TTL/grace bounds, manual override limits/now-inactive backdating, lateness-duration basis/rounding and retention remain TBD. Snapshot publication, QR defaults/static behavior, early/after-end scans and direct KADIV manual workflow are confirmed.
+Cancellation/reopening/republication snapshot handling, final approval of center/radius/late-tolerance freeze, GPS accuracy/radius and configurable TTL/grace bounds, manual override limits/now-inactive backdating, lateness-duration basis/rounding and retention remain TBD. Snapshot publication, QR defaults/static behavior, early/after-end scans and direct KADEP manual workflow are confirmed.
 
 
 **Synchronization (2026-10-10):** updated in place for the explicitly confirmed Phase 1/pnpm and NEED-001 decisions; prior Bun package-manager/local-only DB assumptions and manual request/approval direction are superseded where applicable. Acceptance does not imply implementation.
+
+**Phase 3 PM update (2026-10-11):** active jabatan/audience terminology uses KADEP, replacing KADIV without an input alias or automatic legacy conversion. See [canonical organization/policy baseline](../modules/need-001/resora-need-001-data-model.md#8-server-side-authorization-phase-3). Event/attendance implementation and reconciliation with the current roster/session PRD remain later work.

@@ -1,0 +1,72 @@
+import { expect, test } from "bun:test";
+import type { ActiveSrIdentity } from "@resora/auth/sr-access";
+import {
+	canAccessPersonalSr,
+	canManageInternalAttendanceManually,
+	canManageInternalEvent,
+	canOperateGeneralActivity,
+	hasSuperadminPrivilege,
+} from "./identity-policy";
+
+const identity = (
+	departmentCode: string,
+	positionCode: string,
+	isSuperadmin = false,
+): ActiveSrIdentity => ({
+	userId: "synthetic-policy",
+	nim: "000012345",
+	actor: "SR",
+	isActive: true,
+	departmentCode,
+	positionCode,
+	buildingId: "synthetic-building",
+	mustChangePassword: false,
+	isSuperadmin,
+});
+for (const [department, position, internal, manual, general] of [
+	["HCO", "ANGGOTA", true, false, false],
+	["HCO", "SEKDEP", true, false, false],
+	["HCO", "KADEP", true, true, false],
+	["ADAPTIF", "KADEP", false, false, true],
+	["ADAPTIF", "ANGGOTA", false, false, true],
+	["SOSIAL", "ANGGOTA", false, false, false],
+	["RND", "KADEP", false, false, false],
+	["HCO", "KADIV", true, false, false], // Legacy value never grants KADEP rights.
+] as const) {
+	test(`${department} + ${position}: explicit operational boundaries`, () => {
+		const current = identity(department, position);
+		expect(canAccessPersonalSr(current)).toBe(true);
+		expect(canManageInternalEvent(current)).toBe(internal);
+		expect(canManageInternalAttendanceManually(current)).toBe(manual);
+		expect(canOperateGeneralActivity(current)).toBe(general);
+		expect(hasSuperadminPrivilege(current)).toBe(false);
+	});
+}
+test("explicit superadmin grants identity administration without operational bypass", () => {
+	const current = identity("RND", "KADEP", true);
+	expect(hasSuperadminPrivilege(current)).toBe(true);
+	expect(canManageInternalEvent(current)).toBe(false);
+	expect(canManageInternalAttendanceManually(current)).toBe(false);
+	expect(canOperateGeneralActivity(current)).toBe(false);
+});
+test("missing identity, inactive/non-SR identity and first-change gate deny every action", () => {
+	const base = identity("HCO", "KADEP", true);
+	for (const invalid of [
+		null,
+		undefined,
+		{ ...base, isActive: false },
+		{ ...base, actor: "MAHASISWA" },
+		{ ...base, mustChangePassword: true },
+	]) {
+		for (const policy of [
+			canAccessPersonalSr,
+			canManageInternalEvent,
+			canManageInternalAttendanceManually,
+			canOperateGeneralActivity,
+			hasSuperadminPrivilege,
+		])
+			expect(policy(invalid as ActiveSrIdentity | null | undefined)).toBe(
+				false,
+			);
+	}
+});
