@@ -6,7 +6,7 @@
 **Owner and final prioritization/release approver:** Project Manager, RnD Senior Residents  
 **Status:** Working product baseline. Business rules explicitly identified as *PM-confirmed* are agreed for planning; stakeholder UAT, deployment approval, and unvalidated modules remain pending.
 
-> **Document boundary:** This PRD answers **what RESORA must do, for whom, under whose authority, and in what delivery scope**. Detailed folder structures, code boundaries, API patterns, transaction design, schema constraints, and environments belong in [Technical Architecture](architecture.md). Detailed business workflows and test cases belong in each module PRD and acceptance-test specification.
+> **Document boundary:** This PRD answers **what RESORA must do, for whom, under whose authority, and in what delivery scope**. Detailed folder structures, code boundaries, API patterns, transaction design, schema constraints, and environments belong in [Technical Architecture](../../architecture.md). Detailed business workflows and test cases belong in each module PRD and acceptance-test specification.
 
 ## 1. Product overview and objectives
 
@@ -111,7 +111,7 @@ Authorized HCO manages event, QR, radius, reporting and explicit closure. The in
 
 If location access is denied, inaccurate, or out of range, there is no automatic bypass; SR must contact KADIV HCO for auditable manual handling. Only event title/description are confirmed editable after publishing; freezing location/radius/grace on publication is still recommended but not final.
 
-The **official NEED-001 FR set** is `FR-086` (recap) and `FR-119–FR-130` (event, audience builder, snapshot, QR, check-in, geofence, manual, audit and CSV). Detailed scenarios: [NEED-001 PRD](modules/need-001/prd.md) and [acceptance tests](modules/need-001/acceptance-tests.md).
+The **official NEED-001 FR set** is `FR-086` (recap) and `FR-119–FR-130` (event, audience builder, snapshot, QR, check-in, geofence, manual, audit and CSV). Detailed scenarios: [NEED-001 PRD](prd.md) and [acceptance tests](acceptance-tests.md).
 
 ### 6.2 NEED-007 — Adaptif activity registration and attendance
 
@@ -129,8 +129,8 @@ The earlier plan identifies **2026-10-18 as a target for a controlled NEED-001 p
 | --- | --- | --- |
 | Next.js/Express/tRPC monorepo and technical scaffold | Present in repository | Keep builds, lint/type-check and configuration stable. |
 | PostgreSQL/Drizzle identity foundation | **Three reviewed migrations applied and verified on Supabase Development** (Phase 2A/2A.5/2A.6). | Do not modify applied identity migrations without reviewed follow-up migration. |
-| Better Auth SR sign-in (NIM/password), active checks and no-public-signup enforcement | **Not fully implemented/validated** | Phase 2B auth workflow/tests. |
-| Authorized CSV SR provisioning, initial password change, email recovery | **Pending** | Phase 2C and access to real roster; secure credentials delivery. |
+| Better Auth SR sign-in (NIM/password), active checks, no-public-signup and first-password-change enforcement | **Implemented; synthetic local HTTP/browser validation passed in Phase 2B** | Review [implementation evidence](resora-need-001-data-model.md#16-phase-2b-sr-authentication); pilot UAT still required. |
+| Authorized CSV SR provisioning and email recovery | **Pending** | Phase 2C and access to real roster; secure credentials delivery. |
 | NEED-001 event, roster builder, attendance sessions, QR, geofence and reporting | **Domain design only; no attendance domain migrations** | Align data model/acceptance docs, then review migration and implement. |
 | NEED-007 student login, quotas, registration and Adaptif attendance | **PM-confirmed business rules, not delivered** | Separate module specification and Adaptif UAT. |
 | Production VPS and full product release | **Planned, unverified** | Security, backup, deployment, operations and PM go/no-go. |
@@ -174,7 +174,7 @@ RESORA follows a **TypeScript modular monolith** with Next.js frontend, Express 
 - **Backend:** thin runtime in `apps/server/`; **one folder per domain**, with router/service/policy and optional repository or Zod schema files kept **directly in** `packages/api/src/modules/{domain}/` (no mandatory one-file layer subfolders).
 - **Data and cross-cutting packages:** Better Auth in `packages/auth`, Drizzle schema/migrations in `packages/db`, reused UI primitives in `packages/ui`, and shared configuration in `packages/config`. Avoid creating abstractions or shared code before genuine reuse.
 
-**This is a target development standard, not an assertion that all folders already exist.** Folder trees, import boundaries, dependency direction and conventions are specified in [Technical Architecture §3–5](architecture.md); the PRD does not maintain a per-file repository inventory.
+**This is a target development standard, not an assertion that all folders already exist.** Folder trees, import boundaries, dependency direction and conventions are specified in [Technical Architecture §3–5](../../architecture.md); the PRD does not maintain a per-file repository inventory.
 
 ## 12. Dependencies, risks and constraints
 

@@ -41,7 +41,7 @@
 | -------------- | ------------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------- |
 | **10 Okt**     | F0 Audit scaffold + mulai F1 Supabase       | Struktur repo dipahami; rencana perubahan env/DB disetujui           | **F0 audit DONE**; F1 koneksi/workflow DONE; SQL teruji lokal F2A.5; Supabase Development diterapkan/diverifikasi F2A.6 |
 | **11 Okt**     | Review F1/pnpm + rencana skema; mulai F2 identitas | Koneksi teruji; SQL baseline versioned; review sebelum aplikasi SQL    | TODO                                                 |
-| **12 Okt**     | F2 Login/provisioning + F3 RBAC             | SR dummy login NIM; signup publik mati; izin HCO/KADIV diuji         | TODO                                                 |
+| **12 Okt**     | F2 Login/provisioning + F3 RBAC             | SR dummy login NIM; signup publik mati; izin HCO/KADIV diuji         | F2 IN PROGRESS: Phase 2B auth teruji lokal; provisioning/F3 TODO |
 | **13 Okt**     | F4 Event & reusable QR                      | HCO buat event/QR; audience dan challenge diverifikasi backend       | TODO                                                 |
 | **14 Okt**     | F5 Check-in + geofence                      | SR bisa scan satu kali; presence + EARLY/ON_TIME/LATE & radius tervalidasi     | TODO                                                 |
 | **15 Okt**     | F6 Manual attendance + reporting            | Input/koreksi KADIV dengan audit, semua undangan dan CSV berjalan              | TODO                                                 |
@@ -80,22 +80,26 @@
 - [x] F2A.6: izin PM dan seluruh preflight lulus; tiga migration unchanged diterapkan lewat Session Pooler 5432, sepuluh tabel/constraints/triggers/history diverifikasi read-only; backend SELECT 1 lulus.
 - [ ] Pisahkan environment dev/prod dan gunakan least-privilege credential jika memungkinkan; jangan pernah uji destruktif pada production.
 
-**Hasil F1:** backend SELECT 1 berhasil, baseline migration versioned tersedia; F2A.5 menguji aplikasi SQL dari DB lokal kosong dan rerun tanpa perubahan objek/history. Supabase/pnpm dipertahankan. F2A source identitas + migration telah dibuat dan teruji lokal F2A.5 (Supabase Development diterapkan/diverifikasi F2A.6); login/UI/provisioning/RBAC dan domain event/QR/attendance belum diimplementasikan; review [model kanonis](resora-need-001-data-model.md) dahulu.
+**Hasil F1:** backend SELECT 1 berhasil, baseline migration versioned tersedia; F2A.5 menguji aplikasi SQL dari DB lokal kosong dan rerun tanpa perubahan objek/history. Supabase/pnpm dipertahankan. F2A source identitas + migration telah dibuat dan teruji lokal F2A.5 (Supabase Development diterapkan/diverifikasi F2A.6); Phase 2B menambahkan login/UI dan enforcement teruji lokal tanpa migrasi. Provisioning/RBAC dan domain event/QR/attendance belum diimplementasikan; review [model kanonis](resora-need-001-data-model.md) dahulu.
 
-### F2 — Identitas SR, login NIM & provisioning (TODO)
+### F2 — Identitas SR, login NIM & provisioning (IN PROGRESS; Phase 2B teruji lokal, menunggu review)
 
 **Codex:**
 
 - [x] F2A: Username Plugin server + generated username/display_username, enam tabel identitas dan migration additive/custom teruji lokal F2A.5; Supabase Development diterapkan/diverifikasi F2A.6.
-- [ ] Integrasi client/login NIM, enforcement akun aktif/password change, provisioning dan RBAC tetap fase berikutnya.
-- [ ] Matikan **server-side** public sign-up; hapus UI sign-up, dan uji request langsung ke endpoint signup ditolak.
+- [x] Phase 2B: client/login NIM sebagai string, validasi live SR aktif/profil, logout dan protected SSR/tRPC. Sesi lama ditolak setelah akun dinonaktifkan/actor berubah; password-change gate memakai flag yang sudah ada.
+- [x] Matikan **server-side** public sign-up; hapus UI sign-up, dan uji request langsung ke endpoint signup ditolak.
 - [x] Definisi tabel/profil SR, dictionary, actor/active/password-change dan privilege superadmin + relasi/constraints/versioned migrations.
 - [x] F2A.5: audit SQL, tiga migration pada PostgreSQL 18.3 disposable lokal, history/rerun identik; 38 identity tests (28 PostgreSQL + 10 offline) lulus tanpa skip. Fix matcher Bun di test harness, bukan SQL. [Bukti validasi](resora-need-001-data-model.md#14-phase-2a5-local-postgresql-validation).
 - [x] F2A.6: migration Supabase Development disetujui PM, diterapkan setelah target/history/privileges/recovery/TLS terverifikasi; history tepat tiga entry, nol pending. Tidak ada fixture/integrity writes di Supabase. [Bukti](resora-need-001-data-model.md#15-phase-2a6-supabase-development-migration).
 - [ ] Siapkan skrip import CSV **privileged** (NIM, nama, email nyata, departemen, jabatan, gedung, aktif); data nyata privat sebelum UAT, synthetic sementara; validasi NIM unik, relasi satu departemen/satu gedung, jabatan, dan duplikasi.
 - [ ] Akun awal memakai password sementara acak yang kuat, hashing melalui Better Auth, distribusi privat, dan kebijakan ganti password pertama.
+- [x] Bagian gate ganti password pertama sudah enforced dan teruji Phase 2B; pembuatan/distribusi credential awal tetap menunggu provisioning terotorisasi.
 - [ ] Gunakan email nyata setiap SR; implementasikan recovery/verifikasi Phase 2 via rencana Gmail SMTP, display name `RnD SR XIV`; alamat pengirim/credential hanya env.
-- [ ] Uji login, logout, session refresh, akun tidak aktif, NIM tidak dikenal, rate limiting dasar.
+- [x] Phase 2B: 16 auth tests lulus tanpa skip dengan DB lokal; login/logout, NIM nol di depan/tidak dikenal/password salah, non-SR/inactive, sesi kedaluwarsa, gate/rotasi password, direct signup, origin dan rate limit. Browser headless lokal lulus tujuh checkpoint; 38 identity tests dan empat smoke tests lulus. [Bukti](resora-need-001-data-model.md#16-phase-2b-sr-authentication).
+- [ ] UAT mobile/HTTPS, session refresh jangka panjang, konfigurasi reverse proxy dan limiter beberapa worker sebelum deployment.
+
+**Batas audit Phase 2B:** PRD/architecture terbaru memakai peserta internal SR dengan roster builder dan attendance sessions. Tabel Audience/QR dan rencana F3–F6 di roadmap ini masih edisi lama; wajib direkonsiliasi dengan PM sebelum domain tersebut diimplementasikan. Tidak ada perubahan aturan event dalam Phase 2B.
 
 **Manual — PM:** serahkan format roster/gedung **melalui kanal aman**, siapkan SMTP privat dan setujui distribusi password. Jangan masukkan identitas asli ke fixture GitHub.
 

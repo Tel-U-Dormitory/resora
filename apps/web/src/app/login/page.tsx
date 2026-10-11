@@ -1,16 +1,15 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { useState } from "react";
+import LoginForm from "@/features/identity/login-form";
+import { getSrSession } from "@/features/identity/server-session";
 
-import SignInForm from "@/components/sign-in-form";
-import SignUpForm from "@/components/sign-up-form";
-
-export default function LoginPage() {
-  const [showSignIn, setShowSignIn] = useState(false);
-
-  return showSignIn ? (
-    <SignInForm onSwitchToSignUp={() => setShowSignIn(false)} />
-  ) : (
-    <SignUpForm onSwitchToSignIn={() => setShowSignIn(true)} />
-  );
+export default async function LoginPage({
+	searchParams,
+}: {
+	searchParams: Promise<{ reason?: string }>;
+}) {
+	const session = await getSrSession();
+	if (session)
+		redirect(session.mustChangePassword ? "/change-password" : "/dashboard");
+	return <LoginForm expired={(await searchParams).reason === "session"} />;
 }

@@ -1,0 +1,40 @@
+import { appRouter } from "@resora/api/routers/index";
+import type { Auth } from "@resora/auth";
+import type { Database } from "@resora/db";
+import { createExpressMiddleware } from "@trpc/server/adapters/express";
+import { toNodeHandler } from "better-auth/node";
+import cors from "cors";
+import express from "express";
+
+import { createContext } from "./context";
+
+export function createApp(
+	services: { db: Database; auth: Auth },
+	origin: string,
+) {
+	const app = express();
+	app.disable("x-powered-by");
+	app.use(
+		cors({
+			origin,
+			methods: ["GET", "POST", "OPTIONS"],
+			allowedHeaders: ["Content-Type", "Authorization"],
+			credentials: true,
+		}),
+	);
+	app.all("/api/auth{/*path}", (req, res) => {
+		// Never accept an arbitrary client-supplied forwarded IP as a limiter key.
+		// Trust proxy stays false until deployment's proxy boundary is approved.
+		req.headers["x-resora-client-ip"] = req.socket.remoteAddress || "127.0.0.1";
+		return toNodeHandler(services.auth)(req, res);
+	});
+	app.use(
+		"/trpc",
+		createExpressMiddleware({
+			router: appRouter,
+			createContext: (opts) => createContext(services, opts),
+		}),
+	);
+	app.get("/", (_req, res) => res.status(200).send("OK"));
+	return app;
+}
