@@ -1,64 +1,72 @@
 # AGENTS.md — RESORA
 
-> Instructions for coding agents. Read this file **and the relevant PRD** before changing code.
-> Project brand **RESORA** is a working name; don't change hard-coded branding without PM approval.
+> Repository-wide instructions for coding agents. This file defines **how to work**, not **what product behavior to build**. Keep it stable across features, releases, and implementation phases.
 
-## Sources of truth & priorities
+## 1. Sources of truth
 
-1. `docs/prd.md`: system/product goals, confirmed decisions, MVP boundaries.
-2. `docs/modules/need-001/prd.md`: business requirements and tests for the first module.
-3. `docs/architecture.md`: runtime, data/auth/security boundaries.
-4. `docs/decisions/*.md`: accepted/proposed technical decisions, rationale.
-5. R&D planning spreadsheet: stakeholder baseline and 118 **unvalidated legacy** FRs; do **not** assume legacy MVP labels or speculative fields are approved.
-6. Actual generated files/configuration after scaffolding supersede **guessed** file paths. Document differences from expected structure.
+Read only the documents relevant to the task, then inspect the actual code and configuration before editing.
 
-If specs conflict, stop on the affected behavior, document the discrepancy, and ask the PM. **Do not silently invent business rules.**
+| Source                                    | Authority                                                                                    |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `docs/prd.md`                             | Product goals, scope, business rules, and approval boundaries                                |
+| `docs/modules/`                           | Module-specific requirements, workflows, and acceptance criteria                             |
+| `docs/architecture.md`                    | Technical architecture, code organization, integration boundaries, and engineering standards |
+| `docs/decisions/`                         | Architecture decisions and their rationale; check each decision's status                     |
+| `docs/setup.md` and repository manifests  | Available commands, environment setup, and tooling                                           |
+| Source code, tests, and migration history | Evidence of what is actually implemented and verified                                        |
 
-## Product constraints
+- Follow the latest **explicitly approved** requirements. Do not treat a proposal, old roadmap, existing implementation, or passing test as approval of business behavior.
+- A new request may change the intended scope, but do not silently resolve conflicts with existing approved requirements. Identify the conflict and ask for a decision before implementing the affected behavior.
+- Never invent unspecified permissions, eligibility rules, data semantics, or workflow transitions. Mark unresolved details as **TBD** and isolate work that depends on them.
+- Keep business requirements and volatile identifiers in the PRD; technical design in Architecture/ADRs; execution progress in task or project tracking. **Do not copy them into this file.**
 
-- Four **primary actor categories**: `MAHASISWA`, `SR`, `ASUS`, `DITMAWA`; account has exactly one primary actor. Only SR accounts are provisioned/login-enabled for the NEED-001 pilot.
-- SR attributes: **jabatan/position**, **one department** (HCO, Adaptif, Sosial, Akademik, Spiritual, Media, RnD), **one building**. `KADIV` is a position, _not_ a new primary actor.
-- Event audience groups are **eligibility predicates**, _not_ primary account roles: `SR` → SR accounts; `ALL_STUDENTS` → `MAHASISWA` and `SR`; `KADIV` → SR whose position is KADIV, independent of department. `ALL_STUDENTS` is **future-ready but not fully usable** until student login is implemented.
-- Only HCO members may create/configure NEED-001 attendance events, display/revoke QR codes and review/export attendance. **Only KADIV HCO** can insert or correct manual attendance, with a mandatory reason and immutable audit history.
-- Initial superadmin is a system privilege, not a fifth primary actor. Initially only superadmin may change SR department, position, building and active status; do not implicitly bypass attendance permissions.
-- Generate participant snapshots when an event is published. Reports include all invited participants, including non-attendees. Inactive accounts cannot authenticate or check in, regardless of snapshots.
-- SR may browse eligible events and their own attendance/participation history. Enforce all policy on backend procedures.
-- Event-bound, unpredictable QR token; default lifetime **six hours from activation**, configurable per event, static with no automatic rotation. HCO may display it, revoke early and explicitly reissue expired/revoked challenges using configured TTL; old challenges remain invalid; reject expired/revoked QR. Allow different invited users to use the same active QR while preventing duplicate attendance per user. **Never trust client-computed position/time/audience/permission**.
-- Default geofence radius **20 m**, configurable per event. HCO selects the center by map pin or latitude/longitude; radius is separately measured in meters. Backend validates distance using imperfect/untrusted browser location; failed verification directs the user to KADIV HCO for manual entry. Accuracy threshold and radius bounds remain TBD after field tests.
-- QR validity controls check-in, including before scheduled start and after scheduled end. Default late tolerance **15 minutes**, configurable: `EARLY` before start; `ON_TIME` from start through the tolerance boundary inclusive; `LATE` afterward. Presence (`PRESENT`, or missing-record `PENDING` until closure then `ABSENT`) is separate from timing. Event end is not a scan cutoff while QR remains active; authorized HCO explicitly closes the event, invalidating its active QR and reporting missing attendance as ABSENT.
-- Published events allow title/description edits only; audience and schedule are immutable. Freezing location/radius/late tolerance is a recommended safeguard pending final PM confirmation.
-- Manual entry: KADIV HCO opens an event, searches/selects an invited participant by name/NIM and provides a reason. Effective `attendance_at` defaults to server time and may be overridden; classification is automatic. Preserve immutable `recorded_at` and audit every insertion/correction atomically. Corrections preserve the original attendance source.
-- No self-registration. Accounts created via approved provisioning/import; login via **NIM + password** using Better Auth Username Plugin. Initial credentials must be generated and distributed securely; require first-login password change when implemented.
-- Every SR has a real email. Authorized CSV import supplies NIM, name, email, department, position, building and active status; real CSV arrives privately before pilot UAT. Use synthetic development accounts meanwhile. Gmail SMTP is planned with sender display name `RnD SR XIV`; sender address/credentials remain environment variables. Password recovery and email verification are Phase 2 work.
-- HCO CSV export includes all invitees, NIM/name, organizational snapshot fields, presence, effective attendance timestamp, timing, lateness duration and QR/MANUAL source where relevant. XLSX is optional; never export passwords, session tokens, QR secrets or raw GPS coordinates.
-- SSO and university data integration deferred. No fake external adapters or production data in git.
-- NEED-001 pilot use deadline: **2026-10-18**; do not claim release-ready until acceptance and UAT pass.
+## 2. Working principles
 
-## Engineering conventions
+1. **Understand before changing.** Inspect the relevant implementation, tests, and working-tree changes. Preserve user changes and avoid overwriting unrelated work.
+2. **Make the smallest cohesive change.** Stay within the requested scope. Avoid opportunistic refactors, new dependencies, scaffolding, or speculative features.
+3. **Follow existing conventions.** Match the actual repository and the current Architecture. Prefer simple, readable, type-safe code over abstraction for its own sake.
+4. **Organize by capability where appropriate.** Keep related code close together. Do not introduce unnecessary nesting or directories that merely wrap a single file. Create abstractions or shared modules only when genuine reuse or complexity justifies them.
+5. **Separate responsibilities without ceremony.** Keep transport/UI boundaries thin, business rules testable, and data access explicit. Do not create pass-through layers just to satisfy a pattern.
+6. **Respect module boundaries.** Avoid circular dependencies, hidden cross-module coupling, duplicate business rules, and direct access to another module's private implementation.
+7. **Update relevant documentation and tests** when behavior, interfaces, configuration, or architecture changes. Do not rewrite unrelated documents.
 
-- Stack: Next.js + Express + Bun 1.3.13 + TypeScript + tRPC + Supabase managed PostgreSQL + Drizzle + Better Auth + Docker + Turborepo + Biome. DB access goes through Express only; no Supabase Auth or frontend DB access. VPS deployment is planned.
-- Preserve Varlock. Runtime uses `DATABASE_URL` (Session Pooler); migrations prefer `DIRECT_DB_URL`, with explicit IPv6 failure diagnostics and no silent connection switch. Docker PostgreSQL remains optional; see `docs/setup.md` for deliberate Session Pooler alternatives. Never automatically apply remote migrations.
-- Package management: pnpm 10.33.4 with `pnpm-workspace.yaml` and `pnpm-lock.yaml`. Use `pnpm install --frozen-lockfile`, `pnpm run`, `pnpm exec` and `pnpm dlx`; do not use `bun install` or `bunx`. Keep Bun for Express runtime, `bun test` and Bun-specific scripts/compilation.
-- Use the generated project layout (expected `apps/web`, `apps/server`, `packages/api`, `packages/db`, `packages/auth`, `packages/config`). Verify actual generator output first.
-- Use TypeScript strict mode, Zod inputs at trust boundaries, safe DB migrations, and explicit server-side authorization.
-- Keep tRPC routers thin; domain/service logic independently testable; database access behind repositories/queries where appropriate.
-- Shared QR code **generator/challenge validation** should not depend on NEED-001 attendance business logic; NEED-007 can reuse it later.
-- UTC timestamps in storage, explicitly display Asia/Jakarta at the UI. Geospatial units: meters; validate coordinates, accuracy and radii.
-- `AttendanceRecord` uniqueness per `(eventId, userId)` enforced in the database. Handle concurrency/retries transactionally. Maintain immutable audit trail for manual edits.
-- Never commit plaintext credentials, NIM/password import sheets, secrets, `.env`, geolocation traces or real student data.
-- Canonical proposed NEED-001 schema: [data model](docs/modules/need-001/resora-need-001-data-model.md). Phase 2A defines Username Plugin fields and six identity tables plus deferred SR consistency constraints; Phase 2A.5 validated the chain on disposable local PostgreSQL; Phase 2A.6 applied and verified the three reviewed migrations on Supabase Development through the explicit Session Pooler workflow. Event/QR/attendance tables are not implemented. See the model implementation record before future changes.
-- Tests: unit for audience, permission, timestamps, location/dedup; integration for tRPC auth/DB concurrency; E2E for HCO publish/snapshot → SR scan → KADIV manual insertion/correction → HCO export including non-attendees.
-- Run generated lint/format/typecheck/test scripts; never assume a script name exists without checking `package.json`.
-- Do not add Redis, microservices, queues, AI or a new module for unapproved needs.
+## 3. Security and data integrity
 
-## Agent working protocol
+- Treat authentication, authorization, ownership, input validation, and sensitive-data access as **server-enforced** concerns. Client-side visibility is not a security boundary.
+- Validate untrusted inputs at appropriate boundaries. Consider failure paths, retries, concurrency, and data consistency when the affected workflow requires them.
+- Do not leak or commit secrets, credentials, private datasets, tokens, connection strings, or sensitive logs. Use approved environment mechanisms and synthetic fixtures for development.
+- Use parameterized database access and reviewed schema changes. Do not alter previously applied migrations or assume that a development database is disposable.
+- **Require explicit authorization** before deployments, remote database mutations/migrations, destructive operations, bulk imports, real-user account changes, or actions affecting external systems.
+- If execution permission is denied, do not bypass the restriction or silently try a different privileged route. Re-request permission when supported; otherwise explain the blocker.
 
-1. Read task-related docs; label behavior as `CONFIRMED`, `PROPOSED`, or `TBD`.
-2. Implement the smallest cohesive change. If the task touches `TBD` business policy, request clarification or hide incomplete behavior behind a flag without faking correctness.
-3. Add or update tests, docs and migration notes with any behavior change.
-4. Describe touched paths, migration/env impacts, commands run, untested areas and open questions.
-5. Do not deploy, import live users, or publish credentials without explicit approval.
+## 4. Verification and quality gates
 
-## Minimum completion gate for NEED-001
+- **Default to command-line verification:** focused unit/integration tests, typecheck, relevant lint, and build as appropriate to the change.
+- Do **not** launch Chromium, browser automation, computer-use, screenshots, or visual UI testing unless the user explicitly requests them. CLI verification is not a substitute for separately required manual UAT or release sign-off.
+- Inspect scripts and flags before running commands; distinguish read-only checks from tools that automatically format, modify, migrate, seed, or deploy.
+- Use local or otherwise explicitly approved test environments and synthetic data. Never run destructive validation against a remote environment by default.
+- Test relevant positive and negative paths, especially security, authorization, state transitions, and transactional integrity when touched.
+- A passing build is not proof that the feature works. Report unexecuted tests and unverified behavior honestly.
+- If a repository-wide check fails for pre-existing, unrelated issues, isolate the failure, verify changed files where feasible, and report the baseline rather than expanding scope without approval.
 
-See `docs/modules/need-001/prd.md` and `docs/modules/need-001/acceptance-tests.md`. Completion requires permissions, participant snapshots, audited manual attendance, QR validity/duplication controls, GPS fallback, reporting and pilot UAT; merely rendering a QR or storing a scan is insufficient.
+## 5. Efficient agent workflow
+
+1. **Inspect selectively.** Read task-relevant sections and files; avoid repeated full-document or repository dumps without a reason.
+2. **Plan briefly.** State intended changes, assumptions, dependencies, and any permission or decision gates for nontrivial work.
+3. **Implement incrementally.** Make focused changes and add or adjust tests for the affected behavior.
+4. **Verify purposefully.** Run commands relevant to the latest changes; do not rerun successful expensive checks without an intervening reason.
+5. **Keep output concise.** Show summaries and actionable errors, not long successful build logs or entire file contents.
+6. **Use external research only when needed.** Prefer repository documentation and local evidence; consult external references for genuine unknowns or version-sensitive blockers.
+7. **Stop at approval gates.** Do not infer approval from access to credentials, tools, or environments.
+
+## 6. Completion report
+
+Conclude with a short, evidence-based report containing:
+
+- **Implemented:** the behavior changed and key paths touched.
+- **Verified:** commands run and their actual results.
+- **Not verified:** skipped checks, test limitations, or manual UAT still required.
+- **Impact:** changes to configuration, dependencies, schema, data, or environments; explicitly state when none occurred.
+- **Open items:** conflicts, blockers, risks, and next recommended action.
+
+Use precise status language: **proposed**, **implemented**, **tested**, and **released** are different states. Never claim a task or phase is complete when its required acceptance criteria have not been demonstrated.

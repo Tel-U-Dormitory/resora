@@ -1,8 +1,17 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import type { Database } from "@resora/db";
 import * as schema from "@resora/db/schema/auth";
+import { userProfiles } from "@resora/db/schema/identity";
 import { betterAuth } from "better-auth";
+import {
+	APIError,
+	createAuthMiddleware,
+	getSessionFromCtx,
+} from "better-auth/api";
 import { username } from "better-auth/plugins";
+import { and, eq } from "drizzle-orm";
+
+import { getActiveSr } from "./sr-access";
 
 export type AuthConfig = {
 	BETTER_AUTH_URL: string;
@@ -15,21 +24,155 @@ export function createAuth(
 	database: Database,
 	desktopOrigins: readonly string[] = [],
 ) {
+	const trustedOrigins = [env.CORS_ORIGIN, ...desktopOrigins];
+	const allowedOrigins = new Set([
+		new URL(env.BETTER_AUTH_URL).origin,
+		new URL(env.CORS_ORIGIN).origin,
+		...desktopOrigins,
+	]);
+	const allowedPaths = new Set([
+		"/sign-in/username",
+		"/get-session",
+		"/sign-out",
+		"/change-password",
+		"/list-sessions",
+		"/revoke-session",
+		"/revoke-other-sessions",
+	]);
+	const passwordGatePaths = new Set([
+		"/get-session",
+		"/sign-out",
+		"/change-password",
+	]);
 	return betterAuth({
 		database: drizzleAdapter(database, {
 			provider: "pg",
 			schema,
 		}),
-		trustedOrigins: [env.CORS_ORIGIN, ...desktopOrigins],
-		emailAndPassword: { enabled: true },
+		trustedOrigins,
+		emailAndPassword: { enabled: true, disableSignUp: true },
+		session: { cookieCache: { enabled: false } },
+		logger: { disabled: true },
+		rateLimit: {
+			enabled: true,
+			storage: "memory",
+			customRules: {
+				"/sign-in/username": { window: 60, max: 5 },
+				"/change-password": { window: 60, max: 5 },
+			},
+		},
 		secret: env.BETTER_AUTH_SECRET,
 		baseURL: env.BETTER_AUTH_URL,
 		advanced: {
+			ipAddress: { ipAddressHeaders: ["x-resora-client-ip"] },
 			defaultCookieAttributes: {
-				sameSite: "none",
-				secure: true,
+				sameSite: "lax",
+				secure: new URL(env.BETTER_AUTH_URL).protocol === "https:",
 				httpOnly: true,
 			},
+		},
+		databaseHooks: {
+			session: {
+				create: {
+					before: async (session) => {
+						if (!(await getActiveSr(database, session.userId))) {
+							throw new APIError("UNAUTHORIZED", {
+								code: "INVALID_USERNAME_OR_PASSWORD",
+								message: "Invalid username or password",
+							});
+						}
+						return { data: session };
+					},
+				},
+			},
+		},
+		hooks: {
+			before: createAuthMiddleware(async (ctx) => {
+				// Login has no session cookie yet; enforce origin before any credential work.
+				if (ctx.request && ctx.method !== "GET") {
+					const origin = ctx.headers?.get("origin");
+					if (!origin || !allowedOrigins.has(origin)) {
+						throw new APIError("FORBIDDEN", {
+							code: "INVALID_ORIGIN",
+							message: "Request origin is not allowed",
+						});
+					}
+				}
+				// Restrict public auth capabilities, not internal authorized provisioning.
+				if (!allowedPaths.has(ctx.path)) {
+					throw new APIError("FORBIDDEN", {
+						code: "PILOT_AUTH_ONLY",
+						message: "This authentication operation is unavailable",
+					});
+				}
+				if (ctx.path === "/sign-in/username" || ctx.path === "/sign-out")
+					return;
+				const session = await getSessionFromCtx(ctx, {
+					disableCookieCache: true,
+				});
+				if (!session) return; // Native endpoints handle missing/expired sessions.
+				const profile = await getActiveSr(database, session.user.id);
+				if (!profile) {
+					throw new APIError("UNAUTHORIZED", {
+						code: "UNAUTHORIZED",
+						message: "Authentication required",
+					});
+				}
+				if (profile.mustChangePassword && !passwordGatePaths.has(ctx.path)) {
+					throw new APIError("FORBIDDEN", {
+						code: "PASSWORD_CHANGE_REQUIRED",
+						message: "Password change required",
+					});
+				}
+				if (ctx.path === "/change-password") {
+					if (ctx.body.newPassword === ctx.body.currentPassword) {
+						throw new APIError("BAD_REQUEST", {
+							code: "NEW_PASSWORD_REQUIRED",
+							message: "Choose a different password",
+						});
+					}
+					return {
+						context: {
+							...ctx,
+							body: { ...ctx.body, revokeOtherSessions: true },
+						},
+					};
+				}
+			}),
+			after: createAuthMiddleware(async (ctx) => {
+				if (
+					ctx.path !== "/change-password" ||
+					ctx.context.returned instanceof APIError
+				)
+					return;
+				const result = ctx.context.returned;
+				const userId = ctx.context.session?.user.id;
+				if (
+					!userId ||
+					!result ||
+					typeof result !== "object" ||
+					!("user" in result)
+				)
+					return;
+				// Clear only after Better Auth verifies the old password and completes rotation.
+				// Failure leaves the gate closed; never mark completion before credential success.
+				const [updated] = await database
+					.update(userProfiles)
+					.set({ mustChangePassword: false })
+					.where(
+						and(
+							eq(userProfiles.userId, userId),
+							eq(userProfiles.actor, "SR"),
+							eq(userProfiles.isActive, true),
+						),
+					)
+					.returning({ userId: userProfiles.userId });
+				if (!updated)
+					throw new APIError("UNAUTHORIZED", {
+						code: "UNAUTHORIZED",
+						message: "Authentication required",
+					});
+			}),
 		},
 		plugins: [
 			username({
@@ -41,3 +184,4 @@ export function createAuth(
 }
 
 export type Session = ReturnType<typeof createAuth>["$Infer"]["Session"];
+export type Auth = ReturnType<typeof createAuth>;

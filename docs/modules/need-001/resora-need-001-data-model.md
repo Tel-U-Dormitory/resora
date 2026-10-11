@@ -1,6 +1,6 @@
 # RESORA — Data Model & Schema Specification (NEED-001)
 
-**Version:** 0.3 · **Updated:** 2026-10-10 · **Status:** Phase 2A.6 identity migrations applied and verified on Supabase Development; future domain schema remains proposed\
+**Version:** 0.3 · **Updated:** 2026-10-11 · **Status:** Phase 2A.6 identity migrations applied; Phase 2B SR auth tested locally without schema changes; future domain schema remains proposed\
 **Target:** pilot presensi internal SR, 2026-10-18  
 **Canonical repository path:** `docs/modules/need-001/resora-need-001-data-model.md`\
 **Companion:** [NEED-001 PRD](prd.md), [architecture](../../architecture.md), [acceptance tests](acceptance-tests.md), [roadmap](roadmap.md)
@@ -591,3 +591,44 @@ Read-only post-verification passed:
 Initial failures were non-destructive: untrusted TLS chain resolved by explicitly trusting the public CA; conservative managed-schema guard resolved after catalog/source verification; first post-verification attempt stopped on a guard before catalog validation, and a retry with more precise stage reporting passed without changing verification assertions or database state. No SQL defect or migration-file correction was needed.
 
 **Remaining limitations:** configured URLs still omit TLS mode; future commands must deliberately supply the verified TLS/CA settings (see setup). No env files, runtime configuration or machine trust settings were changed. Direct/IPv6 connectivity, production backup/PITR/restore, least-privilege role provisioning and Docker health remain outside this validation. Development identity foundation is migrated and ready for reviewed Phase 2B work; authentication policy/UI, provisioning, SMTP, RBAC and event/QR/attendance remain unimplemented. Stop here for review.
+
+## 16. Phase 2B SR authentication
+
+**Date:** 2026-10-11 (Asia/Jakarta). **Scope:** SR authentication only, using the already applied identity schema. No migration/schema/history/env/dependency change, Supabase connection or remote data mutation. The Phase 2A.6 record above describes that earlier phase, not current authentication readiness.
+
+### Implemented identity behavior
+
+- Better Auth Username Plugin signs in with the exact NIM string; no numeric conversion or username normalization. Public signup, email-login bypass, username availability and public profile/username mutation endpoints are closed. Authorized CSV provisioning is not implemented and must later use an explicitly privileged server/script path.
+- Session creation requires a current active `SR` primary actor, nonblank username and joined SR profile. Auth session endpoints, protected tRPC requests and Next.js SSR check current identity, so a stored cookie cannot preserve access after deactivation or actor reassignment. Cookie caching is disabled.
+- Existing `user_profiles.must_change_password` gates protected APIs/dashboard immediately after first login. Session inspection/logout/password change remain available. Better Auth verifies the current password, requires a different new password, rotates the session and revokes prior sessions even if a caller asks otherwise; only after success does the backend clear the existing flag. No new column/migration is needed.
+- Credential update/session rotation and identity-flag clearing are sequential framework/Drizzle operations, not one shared transaction. If the final flag update fails, the gate stays closed; a user may need to log in with the new password and retry. No success is shown until the frontend rechecks identity. Fault-injection of this database failure has not been tested.
+- Backend requires a trusted Origin for HTTP auth mutations. Express overwrites the framework's IP header from the actual socket; the in-memory limiter allows five login/password-change attempts per minute. Generic credential errors do not distinguish wrong NIM/password, inactive, non-SR or missing profile. Logs are disabled for framework auth errors; tRPC internal errors omit driver details/stacks.
+- Feature files are shallow: `apps/web/src/features/identity`, `packages/api/src/modules/identity/identity.router.ts`, and `packages/auth/src/sr-access.ts`. Express bootstrap/context inject services for isolated tests. Next SSR calls Express/tRPC; no frontend DB client or Supabase Auth was added. Existing UI components/styles are retained; signup scaffold removed.
+
+### Validation evidence
+
+Reused the approved Phase 2A.5 native PostgreSQL **18.3** scratch cluster bound to **127.0.0.1:55432**, database **resora_identity_test_phase2a5**, role **resora_identity_test**. Read-only preflight verified host/name, three existing migration entries and empty application user table before fixtures. No migrations were run. Tests insert only randomly generated synthetic identities/password hashes and remove their own fixtures; neither runtime DATABASE_URL nor DIRECT_DB_URL is loaded by auth tests.
+
+| Command/check | Result |
+| --- | --- |
+| `pnpm.cmd run test:auth` with guarded local `RESORA_IDENTITY_TEST_DB_URL` | **16 passed, 0 failed, 0 skipped, 80 assertions**; includes 13 PostgreSQL/HTTP cases and three offline/guard cases. |
+| Same command without that variable | **3 passed, 0 failed, 15 skipped** (13 PostgreSQL cases and two lifecycle hooks), 15 assertions; explicit safe skip, no application database fallback. |
+| `pnpm.cmd run test:identity` with the same guarded local target | **38 passed, 0 failed, 0 skipped, 154 assertions**. Existing deferred identity constraints preserved. |
+| `pnpm.cmd run test:smoke` | **4 passed, 0 failed, 11 assertions**. |
+| `pnpm.cmd run check-types` | **All six tasks passed**. First check needed Next route type regeneration after adding `/change-password`; `pnpm.cmd --dir apps/web exec next typegen` resolved stale generated route types. |
+| `pnpm.cmd run build` | **Both Express and production Next.js builds passed**, including dynamic `/login`, `/dashboard`, `/change-password`. Varlock retained with process-only telemetry workaround. |
+| Targeted `pnpm.cmd exec biome check` | **All 20 changed/new TypeScript files passed**, read-only final check. Only edited code files were formatted. |
+| Full `pnpm.cmd run lint --max-diagnostics=5 --reporter=summary` | **Fails: 73 errors, 62 warnings** in existing scaffold formatting/import/a11y and root manifest formatting; unrelated files were not fixed. |
+| Local headless Edge smoke | **Seven checkpoints passed**: anonymous protection/NIM text/no signup; invalid credentials; leading-zero login/password gate; password change/dashboard; logout/replay protection; login using changed password; deactivated-account redirect/session state. Production Next.js and actual browser auth client called local Express. |
+| Documentation/diff review | Eight Phase 2B Markdown files: **51 internal links/anchors** and balanced code fences passed; four pre-existing relative links in the module PRD corrected. `git diff --check` passed. Schema, applied migrations and package-manager/Supabase configuration unchanged. A concurrent rewrite of AGENTS.md was preserved; implementation status remains in project documentation. |
+| Cleanup/catalog | All **ten application tables empty**, exactly **three migration entries** after tests. Browser/Next/Express processes and temporary profile/harness cleaned up; scratch cluster stopped after validation. |
+
+Windows sandbox initially prevented Bun resolving pnpm dependency junctions and PostgreSQL startup; explicit permission was obtained for the same operations. The accidentally denied startup request was repeated unchanged and approved. The browser helper failed; an explicitly approved isolated headless Edge harness completed smoke testing instead. No security configuration, browser sandbox or TLS verification was disabled. The harness was temporary, not a committed browser regression suite.
+
+Negative origin testing found that the Username Plugin could accept an untrusted login Origin before a session cookie existed. The explicit before-hook now rejects missing/untrusted HTTP mutation Origins before credential work; the negative test passes. Other early failures were test dependency location/type projections, stale Next route types and PostgreSQL address formatting (`host(inet_server_addr())` avoids CIDR suffix); fixes did not weaken identity constraints or alter applied SQL.
+
+### Remaining gates and document discrepancy
+
+Phase 2B core authentication acceptance is proven locally and ready for review; this does **not** establish pilot/production readiness. Authorized CSV import, private initial credential distribution, Gmail SMTP/recovery/verification, domain RBAC, long-lived session refresh testing and mobile/HTTPS UAT remain pending. Rate limiting is in memory per process; until a reviewed trusted-proxy configuration exists, reverse-proxied clients share the socket key. SameSite=Lax cookies require a same-site frontend/backend deployment; multiple-worker/proxy/domain configuration needs review.
+
+Latest [system PRD](../../prd.md), [module PRD](prd.md) and [architecture](../../architecture.md) introduce SR-only roster-builder eligibility and session-based shared attendance. The proposed event/audience/QR sections of this model and older ADR/roadmap/acceptance wording predate those decisions. **Do not implement those domain tables from the older design until PM reconciliation.** Identity/auth decisions agree and no event/QR/attendance schema or business rule was changed in Phase 2B. Continue to provisioning only after review; no remote migration is required or authorized by this record.

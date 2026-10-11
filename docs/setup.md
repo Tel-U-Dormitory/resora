@@ -211,9 +211,9 @@ Varlock also regenerated the ignored `src/env.ts` files. No dependencies or secr
 
 Generated baseline: `packages/db/src/migrations/20261010093513_phase1_scaffold/{migration.sql,snapshot.json}`. SQL was reviewed against the four existing Better Auth tables and has not been applied. Docker image builds/container startup and browser dev smoke checks are left for manual verification; Phase 1 does not establish auth/pilot/production readiness.
 
-## 7. Later phase: authentication bootstrapping (critical)
+## 7. SR authentication and remaining provisioning work
 
-- Phase 2A enables the server Username Plugin and defines compatible username/display_username plus identity tables; Phase 2A.5 validated the full chain locally; Phase 2A.6 applied and verified it on Supabase Development through the explicit Session Pooler workflow. Client/login UI, provisioning and authentication enforcement are later work. Review the [current migration record](modules/need-001/resora-need-001-data-model.md#15-phase-2a6-supabase-development-migration) first.
+- Phase 2A enables the server Username Plugin and defines compatible username/display_username plus identity tables; Phase 2A.5 validated the full chain locally; Phase 2A.6 applied and verified it on Supabase Development through the explicit Session Pooler workflow. Phase 2B implements NIM login/logout, live active-SR checks, disabled public signup and first-password-change enforcement/UI without another migration. Provisioning and recovery remain pending. Review the [current migration record](modules/need-001/resora-need-001-data-model.md#15-phase-2a6-supabase-development-migration) and [Phase 2B evidence](modules/need-001/resora-need-001-data-model.md#16-phase-2b-sr-authentication).
 - Set `username = NIM` for SR accounts. Numeric NIM strings remain strings to preserve leading zeros.
 - Better Auth's underlying provisioning expects `email`, `name`, `password`; every SR has a real email. Authorized CSV columns: NIM, name, email, department, position, building and active status. PM provides real data privately before pilot UAT; use synthetic accounts until then.
 - Create a privileged, **non-public** provisioning script/CLI for imports, validate unique NIM, actor SR, assigned department/building, position. Seed synthetic development-only accounts for tests.
@@ -221,7 +221,39 @@ Generated baseline: `packages/db/src/migrations/20261010093513_phase1_scaffold/{
 - Password recovery and email verification belong to Phase 2. Plan Gmail SMTP with sender display name `RnD SR XIV`; sender address and SMTP credentials remain environment variables, not documentation values.
 - Review the [canonical data model](modules/need-001/resora-need-001-data-model.md) before future schema implementation; Drizzle source defines auth username fields and six identity tables; local testing passed in Phase 2A.5; Supabase Development application and read-only verification passed in Phase 2A.6. See the [migration record](modules/need-001/resora-need-001-data-model.md#15-phase-2a6-supabase-development-migration).
 
+### Phase 2B safe verification
+
+`pnpm run test:auth` without `RESORA_IDENTITY_TEST_DB_URL` runs offline/guard tests and explicitly skips PostgreSQL cases. It never falls back to DATABASE_URL or loads server env files. For full verification, start the verified local scratch cluster described above and privately set that variable to its loopback `resora_identity_test_*` database with the existing three migrations. The suite checks actual server/database identity before inserting synthetic fixtures, then removes only its fixtures. **No migration command is part of Phase 2B verification.**
+
+```powershell
+$env:VARLOCK_TELEMETRY_DISABLED = '1'
+pnpm.cmd run test:auth
+pnpm.cmd run test:identity
+pnpm.cmd run test:smoke
+pnpm.cmd run check-types
+pnpm.cmd run build
+pnpm.cmd run lint --max-diagnostics=5 --reporter=summary
+```
+
+For UI review, use only an authorized synthetic local fixture, local Express and Next.js. Set `BETTER_AUTH_URL`/`NEXT_PUBLIC_SERVER_URL` to the same local auth origin and `CORS_ORIGIN` to the actual frontend origin; SSR `SERVER_URL`, when set, must target that same Express instance. Use localhost consistently in the browser. Keep existing Varlock and private env handling; never put passwords/URLs in screenshots or reports.
+
+1. Open `/dashboard` without cookies: expect `/login?reason=session`. Confirm NIM is a text input and no registration link exists.
+2. Submit a wrong password/unregistered NIM: generic error; submit a valid leading-zero NIM as text: authentication succeeds.
+3. With `must_change_password=true`, opening `/dashboard` redirects to `/change-password`; direct protected API returns 403. Wrong/current-equal new passwords must leave the gate closed.
+4. Submit current password plus a different confirmed new password: dashboard loads, NIM remains exact, old session cookies/password cannot authorize access.
+5. Use the account menu's `Keluar`: session ends; revisiting `/dashboard` redirects to login. Login again using the new password.
+6. Deactivate only that disposable synthetic account locally: the next API/page request is denied and shows the session state. Do not perform this mutation on Supabase as part of verification.
+7. POST directly to `/api/auth/sign-up/email` with the allowed Origin: expect 403 and no new account. Six rapid login attempts from one client are throttled; missing/untrusted Origin is rejected. The integration suite automates these negative cases.
+
+Stop the scratch cluster and remove temporary browser profiles/fixtures after review. Phase 2B tests/builds passed locally; full Biome still reports legacy scaffold failures. HTTPS/mobile, long-lived session refresh, deployment proxy configuration and real provisioning need later validation. Cookies use SameSite=Lax and Secure for HTTPS; planned frontend/backend must be same-site. In-memory throttling is per process and uses socket IP until a trusted proxy configuration is reviewed.
+
 ## 8. Work sequence before 2026-10-18
+
+### Selective Nafi UI integration — 2026-10-11
+
+On `integration/nafi-style`, `main` (`7462d53`) remains the authority for Phase 2B auth, sessions, active-account/password gates and protected pages. Selected Nafi Button/Card/Avatar/Skeleton components, brand tokens and presentational navigation stay in `apps/web`; shared packages and backend are unchanged. Existing login/password/logout handlers are preserved. Providers, auth client, SSR session helper, home behavior, package manifests and lockfile use `main`; no extra dependency is needed. Mock profiles/auth context, role simulator, localStorage permissions, unimplemented attendance navigation and unused QR/Iconsax dependencies are excluded. Dark-mode/shared UI tokens and accessible avatar/focus states are retained.
+
+CLI regression passed: **16 auth tests, 38 identity tests, 4 smoke tests**, zero failures/skips, using only the verified local scratch database. Typecheck passed six tasks; Express/Next.js builds passed, including all three protected/auth routes. Ten frontend callbacks match `main` after ignoring formatting; backend/auth/protected-page source comparisons match. All 15 selected/edited frontend source files passed read-only Biome. Full repo lint still fails (**87 errors, 61 warnings**) in preserved main/scaffold formatting and existing lint issues; unrelated code was not reformatted. Local fixtures were removed, ten tables remain empty, history remains three entries and the scratch cluster was stopped. No browser automation, Supabase connection/mutation, migration, push or merge into `main` was performed. Visual/mobile UAT remains a separate review gate; the integration merge is left uncommitted for review.
 
 | Order | Work / gate                                                         | Responsibility |
 | ----- | ------------------------------------------------------------------- | -------------- |

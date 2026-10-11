@@ -27,6 +27,7 @@
     "auth:generate": "pnpm --dir apps/server run auth:generate",
     "test:smoke": "bun test packages/db/src/connectivity.test.ts",
     "test:identity": "bun test packages/db/src/schema/identity.test.ts packages/db/src/schema/identity.integration.test.ts packages/auth/src/identity.test.ts",
+    "test:auth": "bun test packages/auth/src/pilot.test.ts packages/auth/src/pilot.integration.test.ts",
     "lint": "biome check .",
     "check": "biome check --write ."
   },

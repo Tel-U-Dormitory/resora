@@ -4,7 +4,7 @@ import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import { createTRPCOptionsProxy } from "@trpc/tanstack-react-query";
 import { toast } from "sonner";
 
-function getServerUrl(url?: string) {
+function getServerUrl(url: string) {
   const processEnv = typeof process === "undefined" ? undefined : process.env;
   if (typeof window === "undefined" && processEnv?.SERVER_URL) {
     return processEnv.SERVER_URL.endsWith("/")
@@ -12,8 +12,7 @@ function getServerUrl(url?: string) {
       : processEnv.SERVER_URL;
   }
 
-  const target = url || "http://localhost:3000";
-  return target.endsWith("/") ? target.slice(0, -1) : target;
+  return url.endsWith("/") ? url.slice(0, -1) : url;
 }
 
 export const queryClient = new QueryClient({
