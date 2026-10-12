@@ -9,7 +9,11 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { queryClient, trpc } from "@/utils/trpc";
-import { eventErrorMessage } from "./event-ui";
+import {
+	eventErrorMessage,
+	parseWibDateTimeInput,
+	toWibDateTimeInput,
+} from "./event-ui";
 
 const fieldClass =
 	"focus-ring block w-full rounded-lg border border-border bg-background px-3 py-2 text-sm aria-invalid:border-destructive aria-invalid:ring-1 aria-invalid:ring-destructive";
@@ -130,10 +134,10 @@ function DraftEditor({
 }) {
 	const [draft, setDraft] = useState(initial);
 	const [start, setStart] = useState(
-		initial.startsAt ? localDateTime(initial.startsAt) : "",
+		initial.startsAt ? toWibDateTimeInput(initial.startsAt) : "",
 	);
 	const [end, setEnd] = useState(
-		initial.endsAt ? localDateTime(initial.endsAt) : "",
+		initial.endsAt ? toWibDateTimeInput(initial.endsAt) : "",
 	);
 	const [error, setError] = useState("");
 	const [endError, setEndError] = useState("");
@@ -185,8 +189,8 @@ function DraftEditor({
 					if (create.isPending || edit.isPending) return;
 					setError("");
 					setEndError("");
-					const startDate = new Date(start);
-					const endDate = new Date(end);
+					const startDate = parseWibDateTimeInput(start);
+					const endDate = parseWibDateTimeInput(end);
 					if (
 						!Number.isFinite(startDate.getTime()) ||
 						!Number.isFinite(endDate.getTime())
@@ -260,7 +264,7 @@ function DraftEditor({
 					</div>
 					<CardContent className="grid gap-4 sm:grid-cols-2">
 						<label>
-							Waktu mulai
+							Waktu mulai (WIB)
 							<input
 								required
 								type="datetime-local"
@@ -273,7 +277,7 @@ function DraftEditor({
 							/>
 						</label>
 						<label>
-							Waktu selesai
+							Waktu selesai (WIB)
 							<input
 								required
 								type="datetime-local"
@@ -516,10 +520,4 @@ function DraftEditor({
 			</form>
 		</section>
 	);
-}
-function localDateTime(iso: string) {
-	const date = new Date(iso);
-	return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
-		.toISOString()
-		.slice(0, 16);
 }

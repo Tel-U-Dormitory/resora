@@ -13,10 +13,38 @@ export function createApp(
 	origin: string,
 ) {
 	const app = express();
+	const trustedOrigin = new URL(origin).origin;
 	app.disable("x-powered-by");
+	app.use((_req, res, next) => {
+		res.set({
+			"X-Content-Type-Options": "nosniff",
+			"X-Frame-Options": "DENY",
+			"Referrer-Policy": "strict-origin-when-cross-origin",
+		});
+		next();
+	});
+	app.use(["/api/auth", "/trpc"], (_req, res, next) => {
+		res.set("Cache-Control", "no-store");
+		next();
+	});
+	app.use("/trpc", (req, res, next) => {
+		const requestOrigin = req.get("origin");
+		const unsafeMethod = !["GET", "HEAD", "OPTIONS"].includes(req.method);
+		// CORS limits browser reads; independently reject cookie-authenticated cross-origin writes.
+		// Originless server-side queries remain available to the Next.js SSR session check.
+		if (
+			(requestOrigin && requestOrigin !== trustedOrigin) ||
+			(unsafeMethod && !requestOrigin)
+		) {
+			res.status(403).json({ error: "Request origin is not allowed" });
+			return;
+		}
+		next();
+	});
 	app.use(
 		cors({
-			origin,
+			origin: (requestOrigin, done) =>
+				done(null, requestOrigin === trustedOrigin),
 			methods: ["GET", "POST", "OPTIONS"],
 			allowedHeaders: ["Content-Type", "Authorization"],
 			credentials: true,

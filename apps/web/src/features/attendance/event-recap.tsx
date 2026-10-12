@@ -8,7 +8,13 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { queryClient, trpc } from "@/utils/trpc";
-import { eventErrorMessage, formatEventTime, StatusBadge } from "./event-ui";
+import {
+	eventErrorMessage,
+	formatEventTime,
+	parseWibDateTimeInput,
+	StatusBadge,
+	toWibDateTimeInput,
+} from "./event-ui";
 
 type Participant =
 	inferRouterOutputs<AppRouter>["attendance"]["recap"]["participants"][number];
@@ -129,9 +135,7 @@ function ManualForm({
 }) {
 	const [time, setTime] = useState(
 		participant.attendanceAt
-			? new Date(new Date(participant.attendanceAt).getTime() + 7 * 3600_000)
-					.toISOString()
-					.slice(0, 19)
+			? toWibDateTimeInput(participant.attendanceAt, true)
 			: "",
 	);
 	const [reason, setReason] = useState("");
@@ -156,7 +160,7 @@ function ManualForm({
 				}
 				try {
 					const attendanceAt = time
-						? new Date(`${time}+07:00`).toISOString()
+						? parseWibDateTimeInput(time).toISOString()
 						: undefined;
 					if (participant.attendanceId && attendanceAt)
 						await correct.mutateAsync({

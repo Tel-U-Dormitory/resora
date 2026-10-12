@@ -3,14 +3,15 @@ import { QueryCache, QueryClient } from "@tanstack/react-query";
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import { createTRPCOptionsProxy } from "@trpc/tanstack-react-query";
 import { toast } from "sonner";
+import { queryErrorMessage } from "./request-error";
 import { getServerUrl } from "./server-url";
 
 export const queryClient = new QueryClient({
 	queryCache: new QueryCache({
 		onError: (error, query) => {
-			toast.error(error.message, {
+			toast.error(queryErrorMessage(error), {
 				action: {
-					label: "retry",
+					label: "Coba kembali",
 					onClick: () => {
 						query.invalidate();
 					},

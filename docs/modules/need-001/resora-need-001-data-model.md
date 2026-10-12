@@ -1,13 +1,13 @@
 # RESORA — Data Model & Schema Specification (NEED-001)
 
-**Version:** 0.8 · **Updated:** 2026-10-12 · **Status:** Phase 4/4.5 PM-accepted; Phase 5 migration/PostgreSQL verified Development; Phase 6 manual/audit/report implemented for review, new migration unapplied\
+**Version:** 0.9 · **Updated:** 2026-10-12 · **Status:** Phase 4/4.5 PM-accepted; Phase 5 migration/PostgreSQL verified Development; Phase 6 migration/targeted PostgreSQL verified Development with live-role gaps; Phase 7 quality review\
 **Target:** pilot presensi internal SR, 2026-10-18  
 **Canonical repository path:** `docs/modules/need-001/resora-need-001-data-model.md`\
 **Companion:** [NEED-001 PRD](prd.md), [architecture](../../architecture.md), [acceptance tests](acceptance-tests.md), [roadmap](roadmap.md)
 
 > **Scope:** logical PostgreSQL/Drizzle design, **not executable migration SQL**. Do not run migrations from this document. Better Auth's **actual generated schema** takes precedence for its own four tables. Preserve pnpm 10.33.4 package management, Bun 1.3.13 Express runtime, Next.js/tRPC/Drizzle/Better Auth and Varlock; Supabase is managed PostgreSQL accessed **through Express only**. Do not use Supabase Auth or direct browser/database connections.
 
-Sections 1–11 describe the current design baseline. Sections 12–18 preserve historical Phase 2–3 reviews and test evidence, including superseded audience/event-bound proposals; they are not the current domain schema specification. Phase 4 implemented event/session/QR; Phase 5 adds record/check-in definitions below. Phase 6 audit/manual/report follow the final rules and implementation described in section 21; new migration remains unapplied. Historical sections retain their original evidence/status.
+Sections 1–11 describe the current design baseline. Sections 12–18 preserve historical Phase 2–3 reviews and test evidence, including superseded audience/event-bound proposals; they are not the current domain schema specification. Phase 4 implemented event/session/QR; Phase 5 adds record/check-in definitions below. Phase 6 audit/manual/report follow the final rules and implementation described in section 21; migration is now applied to Development as recorded below. Historical sections retain their original evidence/status.
 
 ## 1. Decisions and semantics
 
@@ -781,6 +781,8 @@ Attendance audit schema uses TEXT action labels, four restrictive FKs, record/se
 
 Manual writes lock event → session → record, reload/share-lock the operator through Identity public getCheckInSr and validate insertion targets through getActiveSrCandidate. Corrections use historical invitation snapshots; record/audit rollback together. Recap uses a read-only repeatable-read view; existing UNIQUE resolves insert conflicts without overwriting.
 
-Phase 6 is implemented for code/migration review, not released. One additive audit migration is prepared and unapplied. PostgreSQL Phase 6 trigger/concurrency/transaction execution requires separate approval; no remote mutation, new scratch, seed or provisioning was performed. Manual frontend UAT remains pending.
+Phase 6 migration `20261012071912_phase6_reporting` was applied with separate PM approval to verified Supabase Development using Session Pooler 5432 and verified TLS. History contains six matching migrations, no pending migration. Seventeen real PostgreSQL test groups passed (12 rollback-based, five committed concurrency cases), including audit guards, rollback on audit failure, manual/QR uniqueness, correction chain and concurrent close. Six temporary events rolled back completely; one explicitly approved concurrency fixture remains CLOSED with two records/four immutable audits. Data outside the fixture was unchanged. Live inactive-target/historical-inactive and additional role combinations remain unverified; Phase 7 does not mutate remote identities or repeat those suites. Manual frontend UAT remains pending.
 
 **Phase 6 CLI verification:** 19 targeted reporting/manual tests passed; 35 existing attendance/check-in/RBAC/auth offline regression cases passed. DB/API/Web typechecks, scoped Biome read-only (15 files), one frontend production build and diff checks passed. These are offline service/query-double and metadata tests, not PostgreSQL execution of the new audit migration or its lock/trigger behavior.
+
+**Phase 7 scope:** schema/migrations/data unchanged. Pending live PostgreSQL combinations: new inactive-target insertion denial; historical inactive correction; HCO non-KADEP/KADEP non-HCO manual denial; non-HCO SUPERADMIN bypass denial. Offline policy/service and loopback HTTP with auth/DB doubles cover these negative paths but are not live-profile proof. The smallest additional gate is PM-approved synthetic identities/status transitions with rollback or explicitly retained immutable audit fixtures; no real SR accounts/remote writes are authorized by Phase 7.
