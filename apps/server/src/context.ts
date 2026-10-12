@@ -22,6 +22,7 @@ export async function createContext(
 	return {
 		db,
 		session,
+		qrSigningSecret: auth.options.secret,
 	};
 }
 

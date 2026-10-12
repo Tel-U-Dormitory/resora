@@ -3,7 +3,7 @@
 **Document type:** System-wide Technical Architecture  
 **Version:** 0.3.1 — folder convention clarified 2026-10-11  
 **Owner:** RnD engineering, subject to PM approval for consequential scope, data and deployment changes  
-**Status:** Approved technology direction + **proposed target folder/domain architecture**. Some foundation is implemented; event/QR/attendance domains, folder reorganizations and deployment are **not** implemented by this document.
+**Status:** Approved technology direction + **proposed target folder/domain architecture**. Some foundation is implemented; Phase 4 internal event/session/QR is implemented; attendance records, folder reorganizations and deployment remain future work.
 
 > **Document boundary:** The [system-wide PRD](prd.md) owns **business rules, user actors, feature scope and ownership**; this document owns **how the implementation is organized, boundaries, constraints, interfaces, migration strategy and operations**. Module PRDs and FR Master are the authoritative reference for feature acceptance. A technical pattern written here does not grant new business permissions.
 
@@ -13,7 +13,7 @@
 | -------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Frontend             | **Next.js**, React, TypeScript                                    | Scaffold/repository present; feature-based folders below are **target standard**.                                                                    |
 | Backend entrypoint   | **Express.js** with **Bun 1.3.13** runtime                        | Repo present; keep runtime bootstrap thin.                                                                                                           |
-| API boundary         | **tRPC** + Zod schema validation                                  | Existing `packages/api`; domain modules proposed.                                                                                                    |
+| API boundary         | **tRPC** + Zod schema validation                                  | Existing `packages/api`; Identity and Phase 4 Attendance modules implemented.                                                                                                    |
 | Identity             | **Better Auth** + Username Plugin (`username=NIM` for SR)         | Phase 2B SR login/logout, live active-account enforcement and first-password-change gate tested locally; provisioning/recovery and pilot UAT pending. |
 | Primary database     | **Supabase managed PostgreSQL**                                   | Supabase **Development** configured through backend, not directly from browser.                                                                      |
 | ORM & schema         | **Drizzle**                                                       | Existing schema and **three applied/verified identity foundation migrations** in Supabase Development. Attendance/domain migrations **not applied**. |
@@ -205,7 +205,7 @@ Frontend still follows the established NEED boundaries: HCO event/roster screens
 ### 6.1 Identity baseline
 
 - Use Better Auth with Username Plugin: **SR `username = NIM`**, preserving leading zeros as a string. Confirm status for a user before permitting protected actions; session alone is not an active-account guarantee.
-- The user has one primary actor: `SR`, `MAHASISWA`, `ASUS`, or `DITMAWA`. SR attributes include exactly one department, one position and one building; **Inti** membership is an organizational grouping that needs an authoritative mapping.
+- The user has one primary actor: `SR`, `MAHASISWA`, `ASUS`, or `DITMAWA`. SR attributes include exactly one department, one position and one building; **Inti** means the official INTI department; approved pair validation restricts executive positions to INTI and KADEP/SEKDEP/ANGGOTA to other departments.
 - Initial pilot has **SR logins only**. Prevent public sign-up on backend, not merely UI. Phase 2C supplies guarded local CSV provisioning and temporary credentials; real imports/distribution still require approval; use real email addresses for eventual recovery, with SMTP settings only in server environment.
 - `SUPERADMIN` is an explicitly assigned system privilege, separate from `actor=SR` and any department membership. It does not bypass HCO/Adaptif attendance data rules by default.
 - Phase 2B enforces `user_profiles.must_change_password` on protected tRPC procedures and dashboard routes; Better Auth verifies the old password, rotates sessions and then clears the existing flag. Phase 2C implements local synthetic provisioning and credential output/recovery; SMTP/password recovery remain deferred Phase 2D work.
@@ -216,7 +216,7 @@ Public auth POST requests require a configured trusted Origin. Signup and email 
 
 **Phase 3 implementation:** `getActiveSr` reloads actor, active state, password-change flag, department/position/building and explicit SUPERADMIN in one indexed Drizzle join. `sessionProcedure` rejects invalid sessions/ineligible SR; `protectedProcedure` blocks pending password change. Pure functions in `packages/api/src/modules/identity/identity-policy.ts` consume this server identity after those gates. The public `identity.session` DTO stays unchanged. HCO membership grants internal operations; HCO + KADEP alone grants manual internal correction; ADAPTIF membership grants general operations/manual attendance without a KADEP requirement. No extra operator flag, generic permission engine, parallel session/provider or dummy endpoint is added. SUPERADMIN grants identity administration only, not an operational bypass.
 
-Organization code definitions and idempotent seed live in `packages/db/src/organization.ts`; the local-only server CLI reuses the provisioning target guard. CSV validates official codes plus active DB references and resolves building TEXT code to UUID. See [canonical lists](modules/need-001/resora-need-001-data-model.md#42-departments-positions-buildings--canonical-organization-dictionaries) and [matrix](modules/need-001/resora-need-001-data-model.md#8-server-side-authorization-phase-3). Inti mapping is still TBD. No schema/dependency/runtime changes.
+Organization code definitions and idempotent seed live in `packages/db/src/organization.ts`; the local-only server CLI reuses the provisioning target guard. CSV validates official codes plus active DB references and resolves building TEXT code to UUID. See [canonical lists](modules/need-001/resora-need-001-data-model.md#42-departments-positions-buildings--canonical-organization-dictionaries) and [matrix](modules/need-001/resora-need-001-data-model.md#8-server-side-authorization-phase-3). Phase 4 adds INTI and reusable pair validation without changing identity schema, authentication or runtime.
 
 ### 6.2 Authorization matrix for attendance
 
@@ -258,32 +258,32 @@ The uppercase context names above are **proposed code-level discriminators**, no
 
 | Concept                              | Technical responsibility                                                                                                                                                                                      |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `events` / activity event reference  | Who organized the event, business context, schedule, publication/closure and policy configuration. The exact cross-domain event ownership/reference contract remains under design.                            |
+| `events` / activity event reference  | Who organized the event, business context, schedule, publication/closure and policy configuration. Attendance owns current internal events; future Activity parent binding is deferred.                            |
 | `event_participants`                 | For NEED-001, immutable **publish-time snapshot** of the final invited active SR after composable filters and manual include/exclude.                                                                         |
 | `activity_registrations`             | For NEED-007, authoritative successful/not-cancelled registration and capacity allocation; **owned by activity domain**.                                                                                      |
-| **`attendance_sessions` (proposed)** | Explicit session active/closed state, event/context reference, configured operator/location/QR policy. NEED-001 **one session per event** initially; multiple sessions later only with approved requirements. |
+| **`attendance_sessions`** | Explicit session active/closed state, event/context reference, configured operator/location/QR policy. NEED-001 **one session per event** initially; multiple sessions later only with approved requirements. |
 | `qr_challenges`                      | Unpredictable token/challenge attached to session; activation, current challenge, expiry, revocation and controlled reissue.                                                                                  |
 | `attendance_records`                 | Actual presence per **`(session_id, user_id)`**; effective time, immutable recorded time, timing classification and source.                                                                                   |
 | `attendance_audit_logs`              | Immutable actor, time, reason and before/after changes, including manual inserts/corrections.                                                                                                                 |
 
 Do **not** retain old `UNIQUE(event_id,user_id)` as the universal shared-engine uniqueness rule. The proposed new invariant is **`UNIQUE(session_id,user_id)`**, with a separately enforced entitlement to that session's eligible source. For one internal SR session/event, this still gives one attendance per event. This is a **conceptual design direction**, not an instruction to alter applied SQL before review.
 
-**Current model baseline:** [the canonical data model](modules/need-001/resora-need-001-data-model.md) now follows composable active-SR selection, immutable publication snapshots, session-bound QR/records and domain-owned eligibility. Historical sections retain prior proposals/test evidence. **Before Phase 4 schema**, approve event ownership and the physical session/event/context binding, exactly-one internal session consistency and transaction boundaries; no universal internal-event FK, shared event registry or polymorphic parent design is finalized by this documentation. Independent session closure versus event closure/reporting is also an explicit policy gate. See [open decisions](modules/need-001/resora-need-001-data-model.md#10-decisions-to-close-before-implementation--production).
+**Current model baseline:** [the canonical data model](modules/need-001/resora-need-001-data-model.md) now follows composable active-SR selection, immutable publication snapshots, session-bound QR/records and domain-owned eligibility. Historical sections retain prior proposals/test evidence. **Phase 4 PM FINAL:** Attendance owns internal events; session has UNIQUE NOT NULL `internal_event_id` FK. Atomic create plus deferred inverse triggers enforce exactly one session at commit; binding cannot change. There is no standalone close-session API/UI. No shared registry or polymorphic design; future Activity association requires later review. See [open decisions](modules/need-001/resora-need-001-data-model.md#10-decisions-to-close-before-implementation--production).
 
 ### 7.2 NEED-001 event/attendance flow
 
-1. HCO drafts an event with schedule, map point and radius (default 20 m), grace period (default 15 min) and QR TTL (default 360 min). HCO selects **all active SR**, one/multiple departments, **all KADEP across departments**, specific individuals, or combined criteria. **Inti / Inti+KADEP filters remain TBD/unavailable until their official mapping is approved**. Manual individual include/exclude applies to the **draft**.
+1. HCO drafts an event with schedule, map point and radius (default 20 m), grace period (default 15 min) and QR TTL (default 360 min). HCO selects **all active SR**, one/multiple departments, **all KADEP across departments**, specific individuals, or combined criteria. **Inti** means department INTI; **Inti+KADEP** unions it with every non-INTI KADEP, with explicit exclusion winning. Manual individual include/exclude applies to the **draft**.
 2. A roster resolver produces a **deduplicated draft preview** from the current active SR directory and the explicit include/exclude set. The resolver must not change SR master assignments or treat an invitee as already present.
 3. **Publish** re-resolves the final active roster from a consistent directory view; its transaction freezes the resulting participants and required historical identity/organizational snapshots, then makes the event discoverable by invited SR. Only title/description are confirmed editable afterwards; postpublication roster amendments are TBD.
 4. HCO activates the attendance session and issues a **static verifiable QR challenge**. Default expiry = activation + six hours; configurable TTL, explicit revoke/reissue; no automatic rotation. QR expiration alone does not close the event.
 5. QR scan validates live authenticated SR account, snapshot, session active state, **current** QR challenge, validity, location and uniqueness. The server chooses attendance timestamp; it may accept scans before scheduled start/after scheduled end **while both session and QR are valid**.
 6. Presence record has `PRESENT` plus `EARLY`/`ON_TIME`/`LATE` using event start and configured grace; 15-minute grace boundary is **inclusive**. Missing invitees are `PENDING` until HCO **explicitly closes event**, then `ABSENT` is derived from no record.
 7. KADEP HCO only may insert/correct manually for an invitee, using reason, effective time and append-only audit. Original record timestamp and source stay immutable; enforce transaction atomicity.
-8. HCO explicit event closure atomically closes its one attendance session and invalidates the current QR; session activation/closure is distinct from event publication/scheduled end. Standalone session-close reporting/reopen behavior remains TBD. HCO recap/CSV begins from **all participant snapshot rows**, resolving the event's one session and joining records on `(session_id, user_id)`, not merely listing attendance records. Exclude tokens, credentials and raw GPS from exported data.
+8. HCO explicit event closure atomically closes its one attendance session and invalidates the current QR; session activation/closure is distinct from event publication/scheduled end. There is no standalone close-session API/UI or reopen/cancel/republish in NEED-001. HCO recap/CSV begins from **all participant snapshot rows**, resolving the event's one session and joining records on `(session_id, user_id)`, not merely listing attendance records. Exclude tokens, credentials and raw GPS from exported data.
 
 **Geolocation:** The browser provides a location measurement and its accuracy; the backend verifies distance (meters) from configured center (latitude/longitude). Client data and GPS can be spoofed; accuracy/radius thresholds still need HCO field UAT. Location failures do not create a record; KADEP HCO manual correction is the controlled fallback.
 
-**Published policy:** The business rule currently confirms only title/description edits after publication and locks audience/schedule. A complete center/radius/grace freeze is **recommended but not PM-confirmed**. Do not allow unrestricted modification of those fields or silently recalculate historical timing before the policy is decided.
+**Published policy:** final PM decision freezes roster, schedule and all session configuration (center, radius, grace, QR TTL); only title/description remain editable.
 
 ### 7.3 NEED-007 registration and Adaptif attendance flow
 
@@ -297,13 +297,13 @@ Do **not** retain old `UNIQUE(event_id,user_id)` as the universal shared-engine 
 
 ## 8. Candidate API/tRPC contract boundaries
 
-Procedure names are **illustrative, not already implemented** and may be adjusted during refinement.
+Phase 4 uses flat `attendance` procedures: `list`, `detail`, `directory`, `create`, `editDraft`, `editMetadata`, `preview`, `publish`, `activate`, `qr`, `revokeQr`, `reissueQr`, `close`. Future records/manual/Activity names below are illustrative only; no standalone session-close procedure is delivered.
 
 | Domain                   | Candidate actions                                                                                        |
 | ------------------------ | -------------------------------------------------------------------------------------------------------- |
 | `identity` / Better Auth | Sign-in, sign-out, active-account gate, authorized roster/provisioning, privileged SR assignment update. |
 | `attendance.events`      | `createDraft`, `previewInvitees`, `publish`, `updateAllowedFields`, `close`, `listEligible`, `get`.      |
-| `attendance.sessions`    | `activate`, `close`, `getCurrentQr`, `issueQr`, `revokeQr`, `reissueQr`.                                 |
+| `attendance.sessions`    | `activate`, `qr`, `revokeQr`, `reissueQr`; closure only via event `close`.                                 |
 | `attendance.records`     | `checkIn`, `ownHistory`, `byEvent`, `exportCsv`.                                                         |
 | `attendance.manual`      | `insert`, `correct`, `auditHistory` (scoped to operator context).                                        |
 | `activity.events`        | Manage activity fields, registration-window and quota (subject to activity creation policy).             |
@@ -317,12 +317,12 @@ Procedure names are **illustrative, not already implemented** and may be adjuste
 
 Four Better Auth core tables plus six identity-domain tables are part of the **applied Phase 2A schema chain in Supabase Development**. Continue through reviewed additive migrations; do not re-run, reset or edit applied migrations to backfill conceptual attendance changes. The database must remain private behind backend transport.
 
-### 9.2 Domain schema **proposals, not applied**
+### 9.2 Domain schema — Phase 4 locally validated; records/audit proposed
 
-- `events`: business context/type and lifecycle, schedule and HCO-specific config as applicable; generalized ownership model to be designed carefully with MOD-06.
-- `event_participants`: one row per SR invitee/event at publish, with required publish-time SR identity/organization snapshot for reports; exact field representation is proposed.
+- `events`: Attendance-owned internal schedule/roster/lifecycle; future Activity events remain Activity-owned. No generic event registry.
+- `event_participants`: one row per SR invitee/event at publish, with required publish-time SR identity/organization snapshot for reports; Phase 4 stores NIM/name, department/position codes and building code/name.
 - `activity_registrations`: active/cancelled participant registration per activity and a capacity-invariant strategy; source for NEED-007 eligibility.
-- `attendance_sessions`: event/context reference, status, geofence center/radius, TTL/grace policy and activation/closure.
+- `attendance_sessions`: immutable internal_event_id UNIQUE NOT NULL FK, INACTIVE/ACTIVE/CLOSED, geofence/radius/TTL/grace and activation/closure. Future Activity parent binding is deferred.
 - `qr_challenges`: NN session FK; partial unique current challenge per session; reviewed secure mechanism that redisplays the same static QR. A one-way token hash alone is insufficient for redisplay; only current/unexpired/unrevoked challenges on active sessions are accepted.
 - `attendance_records`: uniqueness on `(session_id,user_id)`, immutable origin/source and operation time, corrected effective attendance time and timing classification.
 - `attendance_audit_logs`: append-only session/record/actor, original/updated values and mandatory reasons for privileged operations.
@@ -371,14 +371,11 @@ A universal attendance FK to `event_participants` is not part of the shared-engi
 
 | Decision                                                                       | Impact                                            | Owner / timing                                                 |
 | ------------------------------------------------------------------------------ | ------------------------------------------------- | -------------------------------------------------------------- |
-| SR **Inti** group source and mapping                                           | Participant builder exact resolution              | HCO + PM, before roster tests.                                 |
 | Postpublication invitee amendments / canceled/reopened events                  | Snapshot invariants, history and audit            | HCO + PM, before lifecycle implementation.                     |
-| Freeze of geofence center/radius/grace after publish                           | Historical correctness and security               | PM/HCO, before editable event policy implementation.           |
 | Radius/accuracy/TTL/grace bounds and indoor GPS tolerance                      | UX, spoof risk and field UAT                      | HCO/Adaptif as relevant + RnD.                                 |
 | Manual effective timestamp bounds                                              | Audit and backdating controls                     | HCO/PM and Adaptif policy owner.                               |
-| Shared event registry vs typed event references                                | DB ownership and FK design                        | RnD architecture review before attendance migrations.          |
+| Future Activity/session binding (internal-only FK implemented)                                | DB ownership and FK design                        | RnD architecture review before attendance migrations.          |
 | Future multiple attendance sessions per event                                  | UI, state and analytics                           | Not needed in NEED-001 MVP; approve only when use case arises. |
-| Challenge redisplay/token signing design                                       | Stable static QR without plaintext bearer storage | Security review before QR implementation.                      |
 | Student/maba Better Auth onboarding                                            | NEED-007 authentication dependency                | Adaptif + PM + RnD before NEED-007.                            |
 | Cross-department activity creation authority                                   | MOD-06 creation RBAC                              | Adaptif + PM; attendance operator rule already final.          |
 | Privacy, raw coordinate retention, export logs, backup RPO/RTO and rate limits | NFR, production sign-off                          | PM + data owners + RnD.                                        |
@@ -386,7 +383,7 @@ A universal attendance FK to `event_participants` is not part of the shared-engi
 ## 13. Related documents and consistency obligations
 
 - [System-wide PRD](prd.md): product scope, actors, owners, priorities and acceptance governance.
-- [NEED-001 module PRD](modules/need-001/prd.md): current HCO internal attendance, composable roster and single-session requirements; Inti/lifecycle policies remain open.
+- [NEED-001 module PRD](modules/need-001/prd.md): current HCO internal attendance, composable roster and single-session requirements; INTI/session binding and configuration freeze are final; future lifecycle extensions remain out of scope.
 - [NEED-001 acceptance scenarios](modules/need-001/acceptance-tests.md): active roster/session specifications aligned; dated identity test evidence retained; unbuilt domain tests await implementation.
 - [NEED-001 data model](modules/need-001/resora-need-001-data-model.md): current roster/session/contextual eligibility proposal; event-reference storage and policy gates must be reviewed before Phase 4. Identity migrations remain intact.
 - [NEED-001 roadmap](modules/need-001/roadmap.md): implementation sequencing, not release approval.
@@ -396,3 +393,9 @@ A universal attendance FK to `event_participants` is not part of the shared-engi
 - **RESORA MAIN DOCUMENT**: approved IDs and requirement/decision mapping. Relevant official attendance FRs: NEED-001 `FR-086, FR-119–FR-130`; shared identity `FR-001, FR-094–FR-096, FR-101, FR-131–FR-132`; activity attendance NEED-007 `FR-044–FR-047, FR-133–FR-134` plus relevant registration/quotas FRs.
 
 **Handover rule:** Never initiate event/attendance domain SQL migrations until the revised module PRD, acceptance scenarios, data model, and affected ADR all agree with the master FR and these owner/eligibility boundaries. This Architecture is **not** permission to mutate Supabase Development or production.
+
+### Phase 4 implementation boundaries
+
+`packages/api/src/modules/attendance/` owns event/session/QR logic and thin protected tRPC router. Identity exposes `identity.public.ts` for current eligible SR directory and HCO policy; Attendance does not read private Identity tables. Publishing obtains a locked consistent directory view and stores historical snapshots atomically. Event/session row locks serialize all lifecycle/QR mutations; partial unique current-challenge index is a second concurrency guard. Event/session creation and event/session/QR closure are atomic; exactly-one inverse and immutable binding are custom versioned SQL triggers. All HCO members can manage internal events regardless of creator; invited non-HCO sees PUBLISHED events only, without roster or QR secrets.
+
+`attendance.public.ts` exposes backend-only QR verification for future Phase 5. Stable signed payloads use HMAC-SHA256 and a domain-separated HKDF key derived from existing Better Auth secret. No raw bearer token is persisted; secret rotation invalidates signatures. `qrcode` is the only added runtime dependency, for actual PNG rendering. No new auth provider, permission engine or session system. Frontend `features/attendance/` reuses existing UI/tRPC with thin `/events` routes and existing session/password redirects. Four-table additive migration is applied only to guarded local scratch; remote application still requires PM approval. Check-in, records, audit, reports and future Activity integration remain unimplemented.

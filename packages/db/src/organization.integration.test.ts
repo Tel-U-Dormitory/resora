@@ -22,8 +22,8 @@ import {
 	userProfiles,
 } from "./schema/identity";
 
-test("official seed defines exactly 7/7/18 unique codes and numeric buildings remain text", () => {
-	expect(officialDepartments.length).toBe(7);
+test("official seed defines exactly 8/7/18 unique codes and numeric buildings remain text", () => {
+	expect(officialDepartments.length).toBe(8);
 	expect(officialPositions.length).toBe(7);
 	expect(officialBuildings.length).toBe(18);
 	expect(new Set(officialBuildings.map((row) => row.code)).size).toBe(18);
@@ -58,7 +58,7 @@ const target = process.env.RESORA_IDENTITY_TEST_DB_URL;
 				buildings: 0,
 			});
 			expect(await db.select().from(buildings)).toEqual(before);
-			expect((await db.select().from(departments)).length).toBe(7);
+			expect((await db.select().from(departments)).length).toBe(8);
 			expect((await db.select().from(positions)).length).toBe(7);
 			expect(before.length).toBe(18);
 		});
@@ -91,6 +91,26 @@ const target = process.env.RESORA_IDENTITY_TEST_DB_URL;
 					departments: 0,
 					positions: 0,
 					buildings: 1,
+				});
+			});
+		});
+		test("adding INTI to the previous seven departments is explicit and idempotent", async () => {
+			await rollbackCase(async (tx) => {
+				await tx.delete(departments).where(eq(departments.code, "INTI"));
+				expect(await seedOrganization(tx, false)).toEqual({
+					departments: 1,
+					positions: 0,
+					buildings: 0,
+				});
+				expect(await seedOrganization(tx)).toEqual({
+					departments: 1,
+					positions: 0,
+					buildings: 0,
+				});
+				expect(await seedOrganization(tx)).toEqual({
+					departments: 0,
+					positions: 0,
+					buildings: 0,
 				});
 			});
 		});

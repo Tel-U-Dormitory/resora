@@ -46,7 +46,11 @@
 			"cache": false
 		}
 	},
-	"globalPassThroughEnv": ["VARLOCK_TELEMETRY_DISABLED"],
+	"globalPassThroughEnv": [
+		"VARLOCK_TELEMETRY_DISABLED",
+		"PGSSLMODE",
+		"NODE_EXTRA_CA_CERTS"
+	],
 	"globalEnv": [
 		"BETTER_AUTH_SECRET",
 		"BETTER_AUTH_URL",

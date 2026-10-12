@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 
-import { AppSidebar } from "@/components/app-sidebar";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -51,21 +50,18 @@ export default function SrDashboard() {
 			</Card>
 		);
 	return (
-		<div className="mx-auto flex max-w-7xl flex-col gap-6 p-4 sm:p-6 lg:flex-row">
-			<AppSidebar name={data.data.user.name} />
-			<section className="min-w-0 flex-1">
-				<DashboardHeader />
-				<Card>
-					<CardContent className="space-y-2">
-						<h2 className="font-semibold text-lg">
-							Selamat datang, {data.data.user.name}.
-						</h2>
-						<p className="text-muted-foreground text-sm">
-							NIM: {data.data.user.nim}
-						</p>
-					</CardContent>
-				</Card>
-			</section>
-		</div>
+		<section className="space-y-6">
+			<DashboardHeader />
+			<Card>
+				<CardContent className="space-y-2">
+					<h2 className="font-semibold text-lg">
+						Selamat datang, {data.data.user.name}.
+					</h2>
+					<p className="text-muted-foreground text-sm">
+						NIM: {data.data.user.nim}
+					</p>
+				</CardContent>
+			</Card>
+		</section>
 	);
 }

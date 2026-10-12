@@ -16,7 +16,10 @@ export default function PasswordChangeForm() {
 	const [newPassword, setNewPassword] = useState("");
 	const [confirmation, setConfirmation] = useState("");
 	const [pending, setPending] = useState(false);
-	const [error, setError] = useState("");
+	const [error, setError] = useState<{
+		field: "current" | "new" | "confirmation" | "form";
+		message: string;
+	} | null>(null);
 	return (
 		<Card className="mx-auto my-10 w-[calc(100%-2rem)] max-w-md">
 			<CardHeader className="pb-2">
@@ -29,21 +32,41 @@ export default function PasswordChangeForm() {
 			</CardHeader>
 			<CardContent>
 				<form
+					noValidate
 					className="space-y-4"
 					onSubmit={async (event) => {
 						event.preventDefault();
 						if (pending) return;
-						if (
-							newPassword !== confirmation ||
-							newPassword === currentPassword
-						) {
-							setError(
-								"Password baru harus berbeda dan konfirmasi harus sesuai.",
-							);
+						if (!currentPassword) {
+							setError({
+								field: "current",
+								message: "Masukkan password saat ini.",
+							});
+							return;
+						}
+						if (newPassword.length < 8 || newPassword.length > 128) {
+							setError({
+								field: "new",
+								message: "Password baru harus terdiri dari 8–128 karakter.",
+							});
+							return;
+						}
+						if (newPassword === currentPassword) {
+							setError({
+								field: "new",
+								message: "Password baru harus berbeda dari password saat ini.",
+							});
+							return;
+						}
+						if (newPassword !== confirmation) {
+							setError({
+								field: "confirmation",
+								message: "Konfirmasi password tidak sesuai.",
+							});
 							return;
 						}
 						setPending(true);
-						setError("");
+						setError(null);
 						try {
 							const result = await authClient.changePassword({
 								currentPassword,
@@ -57,11 +80,13 @@ export default function PasswordChangeForm() {
 									router.refresh();
 									return;
 								}
-								setError(
-									result.error.status === 429
-										? "Terlalu banyak percobaan. Tunggu satu menit."
-										: "Password belum berhasil diganti. Periksa password saat ini dan coba kembali.",
-								);
+								setError({
+									field: "form",
+									message:
+										result.error.status === 429
+											? "Terlalu banyak percobaan. Tunggu satu menit."
+											: "Password belum berhasil diganti. Periksa password saat ini dan coba kembali.",
+								});
 								return;
 							}
 							queryClient.clear();
@@ -69,9 +94,11 @@ export default function PasswordChangeForm() {
 								trpc.identity.session.queryOptions(),
 							);
 							if (!identity || identity.mustChangePassword) {
-								setError(
-									"Perubahan belum dapat dikonfirmasi. Silakan masuk kembali.",
-								);
+								setError({
+									field: "form",
+									message:
+										"Perubahan belum dapat dikonfirmasi. Silakan masuk kembali.",
+								});
 								return;
 							}
 							setCurrentPassword("");
@@ -80,9 +107,11 @@ export default function PasswordChangeForm() {
 							router.replace("/dashboard");
 							router.refresh();
 						} catch {
-							setError(
-								"Layanan tidak tersedia. Perubahan belum dapat dikonfirmasi; silakan masuk kembali sebelum mencoba ulang.",
-							);
+							setError({
+								field: "form",
+								message:
+									"Layanan tidak tersedia. Perubahan belum dapat dikonfirmasi; silakan masuk kembali sebelum mencoba ulang.",
+							});
 						} finally {
 							setPending(false);
 						}
@@ -96,9 +125,27 @@ export default function PasswordChangeForm() {
 							autoComplete="current-password"
 							required
 							value={currentPassword}
-							onChange={(e) => setCurrentPassword(e.target.value)}
+							onChange={(e) => {
+								setCurrentPassword(e.target.value);
+								setError(null);
+							}}
+							aria-invalid={error?.field === "current"}
+							aria-describedby={
+								error?.field === "current"
+									? "current-password-error"
+									: undefined
+							}
 							disabled={pending}
 						/>
+						{error?.field === "current" && (
+							<p
+								id="current-password-error"
+								role="alert"
+								className="text-destructive text-sm"
+							>
+								{error.message}
+							</p>
+						)}
 					</div>
 					<div className="space-y-2">
 						<Label htmlFor="new-password">Password baru (8–128 karakter)</Label>
@@ -110,9 +157,25 @@ export default function PasswordChangeForm() {
 							maxLength={128}
 							required
 							value={newPassword}
-							onChange={(e) => setNewPassword(e.target.value)}
+							onChange={(e) => {
+								setNewPassword(e.target.value);
+								setError(null);
+							}}
+							aria-invalid={error?.field === "new"}
+							aria-describedby={
+								error?.field === "new" ? "new-password-error" : undefined
+							}
 							disabled={pending}
 						/>
+						{error?.field === "new" && (
+							<p
+								id="new-password-error"
+								role="alert"
+								className="text-destructive text-sm"
+							>
+								{error.message}
+							</p>
+						)}
 					</div>
 					<div className="space-y-2">
 						<Label htmlFor="confirmation">Konfirmasi password baru</Label>
@@ -122,13 +185,31 @@ export default function PasswordChangeForm() {
 							autoComplete="new-password"
 							required
 							value={confirmation}
-							onChange={(e) => setConfirmation(e.target.value)}
+							onChange={(e) => {
+								setConfirmation(e.target.value);
+								setError(null);
+							}}
+							aria-invalid={error?.field === "confirmation"}
+							aria-describedby={
+								error?.field === "confirmation"
+									? "confirmation-error"
+									: undefined
+							}
 							disabled={pending}
 						/>
+						{error?.field === "confirmation" && (
+							<p
+								id="confirmation-error"
+								role="alert"
+								className="text-destructive text-sm"
+							>
+								{error.message}
+							</p>
+						)}
 					</div>
-					{error && (
+					{error?.field === "form" && (
 						<p role="alert" className="text-destructive">
-							{error}
+							{error.message}
 						</p>
 					)}
 					<Button

@@ -26,7 +26,7 @@ try {
 		const apply = args[0] === "--apply";
 		const counts = await seedOrganization(db, apply);
 		console.info(
-			`${apply ? "inserted" : "would insert"}: ${JSON.stringify(counts)}; standard totals=7/7/18`,
+			`${apply ? "inserted" : "would insert"}: ${JSON.stringify(counts)}; standard totals=8/7/18`,
 		);
 	}
 } catch (error) {

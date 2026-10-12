@@ -1,0 +1,517 @@
+"use client";
+
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { CalendarDays, MapPin, QrCode, Users } from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { queryClient, trpc } from "@/utils/trpc";
+import { eventErrorMessage, formatEventTime, StatusBadge } from "./event-ui";
+
+export default function EventDetail({ eventId }: { eventId: string }) {
+	const detail = useQuery({
+		...trpc.attendance.detail.queryOptions({ eventId }),
+		retry: false,
+	});
+	const canManage = detail.data?.canManage ?? false;
+	const preview = useQuery({
+		...trpc.attendance.preview.queryOptions({ eventId }),
+		enabled: canManage && detail.data?.event.status === "DRAFT",
+		retry: false,
+	});
+	const qr = useQuery({
+		...trpc.attendance.qr.queryOptions({ eventId }),
+		enabled: canManage && detail.data?.session.status === "ACTIVE",
+		retry: false,
+		refetchInterval: 15_000,
+	});
+	const publish = useMutation(trpc.attendance.publish.mutationOptions());
+	const activate = useMutation(trpc.attendance.activate.mutationOptions());
+	const close = useMutation(trpc.attendance.close.mutationOptions());
+	const revoke = useMutation(trpc.attendance.revokeQr.mutationOptions());
+	const reissue = useMutation(trpc.attendance.reissueQr.mutationOptions());
+	const metadata = useMutation(trpc.attendance.editMetadata.mutationOptions());
+	const [error, setError] = useState("");
+	const [now, setNow] = useState(Date.now());
+	useEffect(() => {
+		const timer = setInterval(() => setNow(Date.now()), 1000);
+		return () => clearInterval(timer);
+	}, []);
+	const act = async (operation: () => Promise<unknown>) => {
+		setError("");
+		try {
+			await operation();
+			await queryClient.invalidateQueries({
+				queryKey: trpc.attendance.pathKey(),
+			});
+		} catch (cause) {
+			setError(eventErrorMessage(cause));
+		}
+	};
+	if (detail.isPending)
+		return (
+			<div role="status" className="space-y-4">
+				<p className="text-muted-foreground text-sm">Memuat event…</p>
+				<Skeleton className="h-10 w-2/3" />
+				<Skeleton className="h-64 w-full rounded-xl" />
+			</div>
+		);
+	if (detail.error)
+		return (
+			<Card>
+				<CardContent className="space-y-4">
+					<p role="alert" className="text-destructive text-sm">
+						{eventErrorMessage(detail.error)}
+					</p>
+					<Link
+						className="focus-ring rounded-md text-primary underline"
+						href="/events"
+					>
+						Kembali ke daftar event
+					</Link>
+				</CardContent>
+			</Card>
+		);
+	const { event, session, participants } = detail.data;
+	const busy =
+		publish.isPending ||
+		activate.isPending ||
+		close.isPending ||
+		revoke.isPending ||
+		reissue.isPending ||
+		metadata.isPending;
+	const expiry = qr.data?.expiresAt
+		? new Date(qr.data.expiresAt).getTime()
+		: null;
+	const qrUsable =
+		qr.data?.state === "ACTIVE" && expiry !== null && now < expiry;
+	const qrState =
+		qr.data?.state === "ACTIVE" && !qrUsable ? "EXPIRED" : qr.data?.state;
+	const invited =
+		event.status === "DRAFT" ? preview.data?.participants : participants;
+	return (
+		<section className="space-y-6">
+			<Link
+				className="focus-ring inline-block rounded-md text-primary text-sm underline"
+				href="/events"
+			>
+				Kembali ke daftar event
+			</Link>
+			<div className="space-y-3">
+				<div className="flex flex-wrap items-center gap-3">
+					<h1 className="min-w-0 break-words font-bold text-2xl tracking-tight">
+						{event.title}
+					</h1>
+					<StatusBadge status={event.status} />
+				</div>
+				<p className="whitespace-pre-wrap break-words text-muted-foreground">
+					{event.description || "Belum ada deskripsi event."}
+				</p>
+			</div>
+			{error && (
+				<p
+					role="alert"
+					className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-destructive text-sm"
+				>
+					{error}
+				</p>
+			)}
+			<div className="grid gap-4 md:grid-cols-2">
+				<Card>
+					<CardHeader
+						title="Jadwal event"
+						icon={<CalendarDays size={20} aria-hidden="true" />}
+					/>
+					<CardContent>
+						<dl className="space-y-4 text-sm">
+							<div>
+								<dt className="text-muted-foreground">Mulai</dt>
+								<dd className="mt-1 font-medium">
+									{formatEventTime(event.startsAt)}
+								</dd>
+							</div>
+							<div>
+								<dt className="text-muted-foreground">Selesai</dt>
+								<dd className="mt-1 font-medium">
+									{formatEventTime(event.endsAt)}
+								</dd>
+							</div>
+							<div className="flex items-center justify-between gap-3">
+								<dt className="text-muted-foreground">Sesi kehadiran</dt>
+								<dd>
+									<StatusBadge status={session.status} />
+								</dd>
+							</div>
+						</dl>
+					</CardContent>
+				</Card>
+				<Card>
+					<CardHeader
+						title="Lokasi dan konfigurasi"
+						icon={<MapPin size={20} aria-hidden="true" />}
+					/>
+					<CardContent>
+						<dl className="grid gap-4 text-sm sm:grid-cols-2">
+							<div className="sm:col-span-2">
+								<dt className="text-muted-foreground">
+									Titik pusat (latitude, longitude)
+								</dt>
+								<dd className="mt-1 font-medium">
+									{session.centerLat}, {session.centerLng}
+								</dd>
+							</div>
+							<div>
+								<dt className="text-muted-foreground">Radius lokasi</dt>
+								<dd className="mt-1 font-medium">
+									{session.geofenceRadiusM} meter
+								</dd>
+							</div>
+							<div>
+								<dt className="text-muted-foreground">
+									Toleransi keterlambatan
+								</dt>
+								<dd className="mt-1 font-medium">
+									{session.lateGraceMinutes} menit
+								</dd>
+							</div>
+							<div>
+								<dt className="text-muted-foreground">Masa berlaku QR</dt>
+								<dd className="mt-1 font-medium">
+									{session.qrTtlMinutes} menit
+								</dd>
+							</div>
+						</dl>
+					</CardContent>
+				</Card>
+			</div>
+			{event.status === "CLOSED" && (
+				<div
+					role="status"
+					className="rounded-xl border border-border bg-muted/50 p-5 text-sm"
+				>
+					<p className="font-semibold">Event telah ditutup</p>
+					<p className="mt-1 text-muted-foreground">
+						Sesi kehadiran berakhir dan QR tidak dapat digunakan. Event tidak
+						dapat dibuka kembali.
+					</p>
+				</div>
+			)}
+			{canManage && event.status === "DRAFT" && (
+				<Card>
+					<CardHeader
+						title="Siap mempublikasikan?"
+						description="Jadwal, pilihan peserta, dan konfigurasi akan dikunci setelah publikasi. Sesi perlu diaktifkan secara terpisah."
+					/>
+					<CardContent className="flex flex-wrap items-center gap-4">
+						<Link
+							href={`/events/${eventId}/edit`}
+							className="focus-ring rounded-md font-semibold text-primary text-sm underline"
+						>
+							Edit draft
+						</Link>
+						<Button
+							disabled={busy || preview.isPending || Boolean(preview.error)}
+							loading={publish.isPending}
+							onClick={() => act(() => publish.mutateAsync({ eventId }))}
+						>
+							Publikasikan event
+						</Button>
+					</CardContent>
+				</Card>
+			)}
+			{canManage && event.status === "PUBLISHED" && (
+				<>
+					<div className="grid items-start gap-6 xl:grid-cols-2">
+						<Card>
+							<CardHeader
+								title="Informasi event"
+								description="Hanya judul dan deskripsi yang dapat diubah setelah publikasi."
+							/>
+							<CardContent>
+								<form
+									key={event.updatedAt}
+									className="space-y-4"
+									onSubmit={(e) => {
+										e.preventDefault();
+										const data = new FormData(e.currentTarget);
+										void act(() =>
+											metadata.mutateAsync({
+												eventId,
+												title: String(data.get("title") ?? ""),
+												description: String(data.get("description") ?? ""),
+											}),
+										);
+									}}
+								>
+									<label className="block space-y-2 text-sm">
+										Judul
+										<input
+											name="title"
+											required
+											maxLength={200}
+											defaultValue={event.title}
+											className="focus-ring block w-full rounded-lg border border-border bg-background px-3 py-2"
+										/>
+									</label>
+									<label className="block space-y-2 text-sm">
+										Deskripsi
+										<textarea
+											name="description"
+											rows={4}
+											maxLength={5000}
+											defaultValue={event.description}
+											className="focus-ring block w-full rounded-lg border border-border bg-background px-3 py-2"
+										/>
+									</label>
+									<Button
+										type="submit"
+										disabled={busy}
+										loading={metadata.isPending}
+									>
+										Simpan perubahan
+									</Button>
+								</form>
+							</CardContent>
+						</Card>
+						<Card>
+							<CardHeader
+								title="QR kehadiran"
+								icon={<QrCode size={20} aria-hidden="true" />}
+								description="QR yang aktif tetap sama saat halaman dimuat ulang."
+							/>
+							<CardContent className="space-y-4">
+								{session.status === "INACTIVE" && (
+									<>
+										<p className="text-muted-foreground text-sm">
+											Sesi belum aktif. Aktifkan sesi untuk menampilkan QR
+											dengan masa berlaku yang telah ditetapkan.
+										</p>
+										<Button
+											disabled={busy}
+											loading={activate.isPending}
+											onClick={() =>
+												act(() => activate.mutateAsync({ eventId }))
+											}
+										>
+											Aktifkan sesi dan QR
+										</Button>
+									</>
+								)}
+								{session.status === "ACTIVE" && (
+									<>
+										{qr.isPending && (
+											<p
+												role="status"
+												className="text-muted-foreground text-sm"
+											>
+												Memuat QR…
+											</p>
+										)}
+										{qrState && (
+											<div
+												role="status"
+												className="flex items-center justify-between gap-3"
+											>
+												<span className="text-muted-foreground text-sm">
+													Status QR
+												</span>
+												<StatusBadge status={qrState} />
+											</div>
+										)}
+										{qr.error && (
+											<div className="space-y-3">
+												<p role="alert" className="text-destructive text-sm">
+													QR gagal dimuat.
+												</p>
+												<Button variant="outline" onClick={() => qr.refetch()}>
+													Coba kembali
+												</Button>
+											</div>
+										)}
+										{qrUsable && qr.data?.image && (
+											<div className="flex justify-center rounded-xl border border-border bg-white p-4">
+												<Image
+													unoptimized
+													src={qr.data.image}
+													alt="QR kehadiran untuk event ini"
+													width={320}
+													height={320}
+													className="h-auto w-full max-w-80"
+												/>
+											</div>
+										)}
+										{expiry !== null && (
+											<p className="text-muted-foreground text-sm">
+												{qrUsable ? "Berlaku sampai" : "Batas berlaku"}{" "}
+												<span className="font-medium text-foreground">
+													{formatEventTime(new Date(expiry).toISOString())}
+												</span>
+											</p>
+										)}
+										{qr.data && !qrUsable && (
+											<p className="text-muted-foreground text-sm">
+												QR tidak dapat digunakan. Terbitkan QR baru untuk
+												melanjutkan; event tetap terbuka.
+											</p>
+										)}
+										<div className="flex flex-wrap gap-3">
+											<Button
+												variant="danger"
+												disabled={busy || !qrUsable}
+												loading={revoke.isPending}
+												onClick={() => {
+													if (
+														window.confirm(
+															"Batalkan QR ini? QR yang sedang ditampilkan tidak dapat digunakan lagi. Anda dapat menerbitkan QR baru.",
+														)
+													)
+														void act(() => revoke.mutateAsync({ eventId }));
+												}}
+											>
+												Batalkan QR
+											</Button>
+											<Button
+												variant="outline"
+												disabled={busy || qr.isPending || qrUsable || !qr.data}
+												loading={reissue.isPending}
+												onClick={() =>
+													act(() => reissue.mutateAsync({ eventId }))
+												}
+											>
+												Terbitkan QR baru
+											</Button>
+										</div>
+									</>
+								)}
+							</CardContent>
+						</Card>
+					</div>
+					<Card className="border-danger/30">
+						<CardContent className="flex flex-wrap items-center justify-between gap-4">
+							<div className="max-w-xl space-y-1">
+								<h2 className="font-semibold">Tutup event</h2>
+								<p className="text-muted-foreground text-sm">
+									Mengakhiri sesi dan membatalkan QR. Event tidak dapat dibuka
+									kembali.
+								</p>
+							</div>
+							<Button
+								variant="danger"
+								disabled={busy}
+								loading={close.isPending}
+								onClick={() => {
+									if (
+										window.confirm(
+											"Tutup event ini? Sesi akan berakhir dan QR dibatalkan. Event tidak dapat dibuka kembali.",
+										)
+									)
+										void act(() => close.mutateAsync({ eventId }));
+								}}
+							>
+								Tutup event
+							</Button>
+						</CardContent>
+					</Card>
+				</>
+			)}
+			{canManage && (
+				<Card>
+					<CardHeader
+						title={
+							event.status === "DRAFT" ? "Preview peserta" : "Daftar undangan"
+						}
+						description={
+							event.status === "DRAFT"
+								? "Peserta aktif terkini. Daftar final disimpan saat publikasi."
+								: "Daftar ini menyimpan informasi peserta saat event dipublikasikan."
+						}
+						icon={<Users size={20} aria-hidden="true" />}
+						action={
+							<span className="whitespace-nowrap rounded-full bg-muted px-3 py-1 font-semibold text-sm">
+								{invited?.length ?? 0} peserta
+							</span>
+						}
+					/>
+					<CardContent className="space-y-3">
+						{event.status === "DRAFT" && preview.isPending && (
+							<p role="status" className="text-muted-foreground text-sm">
+								Memuat preview peserta…
+							</p>
+						)}
+						{event.status === "DRAFT" && preview.error && (
+							<div className="space-y-3">
+								<p role="alert" className="text-destructive text-sm">
+									Preview peserta gagal dimuat.
+								</p>
+								<Button variant="outline" onClick={() => preview.refetch()}>
+									Coba kembali
+								</Button>
+							</div>
+						)}
+						{event.status === "DRAFT" &&
+							(preview.data?.invalidAssignmentCount ?? 0) > 0 && (
+								<p role="alert" className="text-sm text-warning">
+									Akun dengan penempatan organisasi tidak valid dikecualikan.
+									Hubungi pengelola akun.
+								</p>
+							)}
+						{invited?.length === 0 && (
+							<p className="py-4 text-center text-muted-foreground text-sm">
+								Belum ada peserta dalam daftar undangan.
+							</p>
+						)}
+						{Boolean(invited?.length) && (
+							<div className="overflow-x-auto rounded-lg border border-border">
+								<table className="w-full text-left text-sm">
+									<caption className="sr-only">Peserta yang diundang</caption>
+									<thead>
+										<tr className="border-border border-b bg-muted/50">
+											<th scope="col" className="p-3">
+												Peserta
+											</th>
+											<th scope="col" className="p-3">
+												Departemen / Jabatan
+											</th>
+											<th scope="col" className="p-3">
+												Gedung
+											</th>
+										</tr>
+									</thead>
+									<tbody>
+										{invited?.map((sr) => (
+											<tr
+												key={sr.userId}
+												className="border-border border-b last:border-0"
+											>
+												<td className="p-3">
+													<p className="font-medium">{sr.name}</p>
+													<p className="text-muted-foreground text-xs">
+														{sr.nim}
+													</p>
+												</td>
+												<td className="whitespace-nowrap p-3">
+													{sr.departmentCode} / {sr.positionCode}
+												</td>
+												<td className="whitespace-nowrap p-3">
+													{sr.buildingName}
+												</td>
+											</tr>
+										))}
+									</tbody>
+								</table>
+							</div>
+						)}
+					</CardContent>
+				</Card>
+			)}
+			{!canManage && (
+				<p className="rounded-xl border border-primary/20 bg-primary-soft p-5 text-primary-soft-foreground text-sm">
+					Anda diundang pada event ini. Check-in belum tersedia.
+				</p>
+			)}
+		</section>
+	);
+}

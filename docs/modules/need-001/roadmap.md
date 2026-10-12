@@ -22,8 +22,8 @@
 | SR            | Satu departemen + satu gedung + jabatan; `KADEP` adalah jabatan, bukan aktor utama                                                      |
 | HCO           | Anggota HCO membuat event/QR, melihat dan mengekspor absensi                                                                            |
 | KADEP HCO     | Mengisi/mengoreksi absensi manual dengan alasan dan audit; KADEP departemen lain tidak punya hak ini                                     |
-| Audience | Composable roster: seluruh SR aktif, satu/beberapa departemen, seluruh KADEP lintas departemen, individu, include/exclude dan deduplikasi; Inti tetap TBD |
-| Event | HCO memilih jadwal dan roster; NEED-001 satu attendance session per event, lifecycle aktivasi/close terpisah dari publish/jadwal; binding fisik lintas modul TBD |
+| Audience | Composable roster: seluruh SR aktif, satu/beberapa departemen, seluruh KADEP lintas departemen, individu, include/exclude dan deduplikasi; INTI sebagai departemen, INTI + KADEP non-INTI union |
+| Event | HCO memilih jadwal dan roster; NEED-001 satu attendance session per event, lifecycle aktivasi/close terpisah dari publish/jadwal; binding internal_event_id UNIQUE NOT NULL FK; binding Activity ditunda |
 | Status waktu  | Toleransi terlambat default **15 menit**, bisa diubah per event; EARLY/ON_TIME/LATE terpisah dari hadir/tidak hadir; batas toleransi inklusif; waktu scan server                                 |
 | QR | Challenge terikat attendance session; statis/redisplay sama, TTL default 360 menit sejak aktivasi challenge, revoke/reissue eksplisit; session harus aktif |
 | Fallback      | GPS gagal diverifikasi: hubungi KADEP HCO untuk input manual; tidak ada alur pengajuan/approval SR                                            |
@@ -119,17 +119,19 @@
 
 **Gate F3:** tested policy foundation and local dictionaries; no event/attendance, grant/revoke or administrator endpoint/UI. Resource ownership, participant eligibility, state and audit checks apply when real endpoints are built. Audience semantics now use KADEP across departments; documentation now follows roster/session design; physical cross-module binding and lifecycle decisions remain Phase 4 gates. Inti membership stays TBD.
 
-### F4 — Event, composable roster & attendance session/QR (TODO)
+### F4 — Organization alignment, event, composable roster & attendance session/QR (implemented locally; PM review pending)
 
-- [ ] Review keputusan event ownership/binding session-context lintas modul dan constraint satu session internal; jangan menetapkan universal FK/registry sepihak.
-- [ ] Proposal skema event dengan creator/title/jadwal/lifecycle dan composable roster criteria; session terpisah membawa geofence (20m), grace (15 menit), TTL (360 menit), aktivasi/close.
-- [ ] CRUD event khusus HCO, input tervalidasi Zod, kebijakan perubahan/pembatalan saat sudah ada absensi.
-- [ ] Roster builder: semua SR aktif, satu/beberapa departemen, seluruh KADEP lintas departemen, individu, manual include/exclude dan deduplikasi. Inti tidak diimplementasikan sebelum mapping resmi. Preview memakai data terkini; publish menyimpan snapshot `(event_id,user_id)` secara atomik, tanpa refresh akibat assignment setelahnya.
-- [ ] Modul QR memakai token unpredictable **terikat attendance session** dengan asosiasi event/context tervalidasi, statis default 6 jam dari aktivasi (editable), display halaman event, revoke HCO, tanpa rotasi otomatis. Expired/revoked QR dapat di-reissue eksplisit dengan TTL configured, QR sebelumnya tetap invalid. Protokol redisplay masih proposal model.
-- [ ] Pisahkan QR issuance/verification dari aturan absensi sehingga NEED-007 bisa menggunakan engine sama nanti, tanpa mengimplementasikan NEED-007 sekarang.
-- [ ] UI minimal HCO: form create event, detail, QR tampil, state loading/error/expired.
+- [x] Dictionary 8/7/18 dengan INTI; validasi pasangan resmi reusable pada provisioning/directory, seed idempotent tanpa mutasi legacy.
+- [x] Attendance memiliki event internal, snapshot, session dan QR; Identity public directory/policy dipakai antar modul, FE melalui satu appRouter tRPC.
+- [x] HCO create/edit draft/list/detail/publish/edit metadata/explicit close; non-HCO hanya published invited event; tanpa SUPERADMIN/INTI bypass.
+- [x] Roster all SR/departemen/INTI/KADEP non-INTI/INTI + KADEP/individu/include/exclude, UNION dan dedup; publish resolve ulang + snapshot atomik.
+- [x] Exactly-one session: UNIQUE NOT NULL internal event FK + deferred inverse constraints; create atomik INACTIVE, publish tidak activate; seluruh konfigurasi frozen sesudah publish.
+- [x] Static signed QR, default 360 menit, redisplay PNG, explicit revoke/reissue, session binding, current unique, row-lock concurrency; close event/session/QR atomik.
+- [x] UI minimal `/events`, feature-first shallow; guarded session/password flow existing dipertahankan.
+- [x] Migrasi additive empat tabel diterapkan dan rerun diverifikasi hanya pada scratch PostgreSQL lokal.
+- [ ] Review PM, izin migrasi Development terpisah dan manual UAT. Tidak ada remote mutation dalam Phase 4.
 
-**Gate F4:** keputusan binding/lifecycle relevan disetujui sebelum schema; event dummy punya satu session dan roster snapshot eligible; QR session A tidak berlaku pada session B, setelah revoke/expiry/close, atau sebelum session aktif.
+**Gate F4:** targeted tests dan regression/quality checks dicatat pada laporan implementasi. Scanner, attendance records/audit/export, standalone session close, cancel/reopen/republish dan Activity tidak termasuk.
 
 ### F5 — QR check-in, waktu & geofence (TODO)
 
@@ -183,14 +185,13 @@
 | ID | Keputusan tersisa | Pemutus | Gate |
 | --- | --- | --- | --- |
 | OPEN-001 | Cancel/reopen/republication lifecycle; HCO close/reissue eksplisit sudah confirmed | HCO + PM | Lifecycle/reporting |
-| OPEN-002 | Final PM confirmation freeze center/radius/tolerance; audience/jadwal immutable, edit published hanya title/description | HCO + PM | F4 |
 | OPEN-003 | Radius range/accuracy threshold setelah field test; batas TTL/grace | HCO + PM | F5/UAT |
 | OPEN-004 | Batas override waktu; input historis untuk peserta sekarang inactive | KADEP HCO + PM | F6 |
 | OPEN-005 | Nilai roster/gedung/jabatan dan distribusi credential aman | PM + RnD | Import nyata/UAT |
 | OPEN-006 | Konfigurasi Gmail sender, recovery/verifikasi | PM + RnD | F2 |
 | OPEN-007 | Basis/pembulatan lateness, filter/log/retensi ekspor; source asli tetap saat koreksi | HCO + PM | F6/release |
-| OPEN-008 | Event ownership dan binding fisik session/event/context, constraint satu session internal/publication dan konsistensi eligibility lintas interface | RnD + PM | Sebelum schema F4 |
-| OPEN-009 | Mapping Inti; efek close session mandiri terhadap event/report; pre-activation/post-closure manual dan reopen | HCO + PM | Sebelum endpoint/filter terkait |
+| OPEN-008 | Future Activity/session binding dan konsistensi registrasi lintas public interface; internal-event binding Phase 4 sudah final | RnD + PM | Sebelum NEED-007 |
+| OPEN-009 | Pre-activation/post-closure manual dan future reopen; INTI dan close-event-only sudah final | HCO + PM | Sebelum endpoint/filter terkait |
 | INFRA-001 | VPS/domain/HTTPS, biaya, backup dan target operasional | PM + DevOps | F8 |
 
 Snapshot publish, QR statis 6 jam, explicit HCO close/reissue (QR lama invalid), audience/jadwal immutable setelah publish, edit hanya title/description, source koreksi tetap, early/after-end scan, ON_TIME inklusif, CSV/email nyata dan input langsung KADEP sudah **CONFIRMED**. Jangan mengubah TBD menjadi aturan tersirat; lihat [model](resora-need-001-data-model.md).
@@ -233,7 +234,7 @@ Ready for next phase? yes/no, reason:
 - [ ] Public sign-up diblokir di backend; login NIM/password berhasil dengan akun provisioned.
 - [ ] Password awal aman dan reset/change-first-login berhasil; tidak ada credential di repo/log.
 - [ ] HCO vs KADEP HCO vs KADEP non-HCO vs SR biasa diuji untuk semua aksi penting.
-- [ ] Composable roster aktif, KADEP lintas departemen, include/exclude dan deduplikasi diuji; Inti hanya setelah mapping resmi. Snapshot tidak berubah saat assignment berubah.
+- [ ] Composable roster aktif, KADEP lintas departemen, include/exclude dan deduplikasi diuji; INTI dan INTI + KADEP sesuai department final. Snapshot tidak berubah saat assignment berubah.
 - [ ] Event publication snapshot, QR statis TTL/revoke, early/after-end scan dan geofence sesuai aturan confirmed; TBD terkait diselesaikan.
 - [ ] Duplikasi/retry/race condition tidak menggandakan kehadiran.
 - [ ] Input/koreksi manual menghasilkan audit immutable, effective time terpisah dari recorded_at dan klasifikasi otomatis.
@@ -246,3 +247,5 @@ Ready for next phase? yes/no, reason:
 ---
 
 **Kaidah keberhasilan:** targetnya **usable and safe SR attendance pilot**, bukan sekadar halaman tampil atau QR berhasil di-generate. Semua status pekerjaan perlu diperbarui dari hasil nyata, bukan dari tabel rencana ini.
+
+**Phase 4 FINAL supersedes prior Phase 3 open gates:** INTI is the eighth department; only executive four positions allowed there, other departments KADEP/SEKDEP/ANGGOTA. Attendance owns internal events with one immutable-bound session; no standalone close-session. Publication freezes roster/schedule/all session configuration. Earlier dated Phase 2/3 entries above preserve historical state.
