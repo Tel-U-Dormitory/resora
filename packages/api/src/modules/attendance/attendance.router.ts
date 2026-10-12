@@ -1,15 +1,39 @@
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../../index";
 import {
+	auditHistorySchema,
 	checkInSchema,
 	eventDraftSchema,
 	eventIdSchema,
 	eventMetadataSchema,
+	manualCorrectSchema,
+	manualInsertSchema,
+	ownHistorySchema,
 } from "./attendance.schema";
 import * as attendance from "./attendance.service";
 import { checkIn } from "./check-in";
+import { manualCorrect, manualInsert } from "./manual-attendance";
+import { auditHistory, exportCsv, ownHistory, recap } from "./reporting";
 
 export const attendanceRouter = router({
+	manualInsert: protectedProcedure
+		.input(manualInsertSchema)
+		.mutation(({ ctx, input }) => manualInsert(ctx.db, ctx.identity, input)),
+	manualCorrect: protectedProcedure
+		.input(manualCorrectSchema)
+		.mutation(({ ctx, input }) => manualCorrect(ctx.db, ctx.identity, input)),
+	auditHistory: protectedProcedure
+		.input(auditHistorySchema)
+		.query(({ ctx, input }) => auditHistory(ctx.db, ctx.identity, input)),
+	recap: protectedProcedure
+		.input(eventIdSchema)
+		.query(({ ctx, input }) => recap(ctx.db, ctx.identity, input.eventId)),
+	exportCsv: protectedProcedure
+		.input(eventIdSchema)
+		.query(({ ctx, input }) => exportCsv(ctx.db, ctx.identity, input.eventId)),
+	ownHistory: protectedProcedure
+		.input(ownHistorySchema)
+		.query(({ ctx, input }) => ownHistory(ctx.db, ctx.identity, input)),
 	checkIn: protectedProcedure
 		.input(checkInSchema)
 		.mutation(({ ctx, input }) => {

@@ -42,9 +42,9 @@
 | **10 Okt**     | F0 Audit scaffold + mulai F1 Supabase       | Struktur repo dipahami; rencana perubahan env/DB disetujui           | **F0 audit DONE**; F1 koneksi/workflow DONE; SQL teruji lokal F2A.5; Supabase Development diterapkan/diverifikasi F2A.6 |
 | **11 Okt**     | Review F1/pnpm + rencana skema; mulai F2 identitas | Koneksi teruji; SQL baseline versioned; review sebelum aplikasi SQL    | TODO                                                 |
 | **12 Okt**     | F2 Login/provisioning + F3 RBAC             | SR dummy login NIM; signup publik mati; izin HCO/KADEP diuji         | F2/Phase 3 fondasi teruji lokal; review PM, import nyata/UAT dan endpoint domain pending |
-| **13 Okt**     | F4 Event & reusable QR                      | HCO buat event/QR; audience dan challenge diverifikasi backend       | TODO                                                 |
-| **14 Okt**     | F5 Check-in + geofence                      | SR bisa scan satu kali; presence + EARLY/ON_TIME/LATE & radius tervalidasi     | TODO                                                 |
-| **15 Okt**     | F6 Manual attendance + reporting            | Input/koreksi KADEP dengan audit, semua undangan dan CSV berjalan              | TODO                                                 |
+| **13 Okt**     | F4 Event & reusable QR                      | HCO buat event/QR; audience dan challenge diverifikasi backend       | Phase 4/4.5 PM accepted |
+| **14 Okt**     | F5 Check-in + geofence                      | SR bisa scan satu kali; presence + EARLY/ON_TIME/LATE & radius tervalidasi     | Phase 5 Development verified; mobile UAT pending |
+| **15 Okt**     | F6 Manual attendance + reporting            | Input/koreksi KADEP dengan audit, semua undangan dan CSV berjalan              | Phase 6 implementation/migration review; unapplied |
 | **16 Okt**     | F7 Integrasi UI + automated tests           | Happy path dan failure cases lulus di staging                        | TODO                                                 |
 | **17 Okt**     | F8 UAT lapangan + deployment rehearsal      | HTTPS, backup, UAT HCO, revisi blocker P0, go/no-go                  | TODO                                                 |
 | **18 Okt**     | **Controlled pilot NEED-001**               | Persetujuan PM + HCO; bisa dipakai SR sungguhan tanpa blocker kritis | TODO                                                 |
@@ -133,30 +133,29 @@
 
 **Gate F4:** targeted tests dan regression/quality checks dicatat pada laporan implementasi. Scanner, attendance records/audit/export, standalone session close, cancel/reopen/republish dan Activity tidak termasuk.
 
-### F5 — QR check-in, waktu & geofence (implemented; migration/PostgreSQL/mobile UAT gates pending)
+### F5 — QR check-in, waktu & geofence (Development migration/PostgreSQL verified; mobile UAT pending)
 
 - [x] SR scan QR melalui browser mobile dan mengirim lokasi dengan izin pengguna (HTTPS pada staging/production).
 - [x] Backend memvalidasi auth session, attendance session/context, snapshot undangan internal, QR current/expiry/revoke, lokasi/radius dan status aktif; tidak mempercayai lokasi/waktu yang dihitung frontend.
 - [x] Default radius **20m** dan late tolerance **15 menit**, masing-masing editable saat DRAFT dan frozen sesudah publish; batas accuracy awal <=20 m melalui satu konstanta backend.
 - [x] Scan boleh sebelum mulai/setelah selesai selama QR aktif; waktu server menentukan EARLY/ON_TIME/LATE dengan batas grace inklusif. Close event/session/QR tetap memakai Phase 4. Proyeksi PENDING/ABSENT dan recap untuk seluruh invitee tetap Phase 6; jangan membuat record absent palsu.
-- [x] DB constraint `UNIQUE(session_id,user_id)` dan duplicate-safe insert disiapkan pada migration/code; PostgreSQL enforcement/concurrency belum diuji pada fase ini.
+- [x] DB constraint `UNIQUE(session_id,user_id)` dan duplicate-safe insert disiapkan pada migration/code; PM subsequently applied Phase 5 to Development; PostgreSQL enforcement/concurrency verified as described below.
 - [x] Error state eksplisit untuk invalid QR, expired QR, GPS ditolak/kurang akurat, di luar radius, session habis, koneksi putus.
 - [x] Simpan scan_lat/scan_lng/gps_accuracy_m DOUBLE PRECISION hanya pada QR berhasil; MANUAL NULL. Tanpa histori kontinu/scan gagal; tanpa GPS mentah di response umum/rekap/export. Notice sebelum permission; retensi/audit GPS wajib diputuskan sebelum pilot nyata.
 
-**Code gate F5 (offline tests only; real PostgreSQL concurrency/mobile GPS not yet verified):** successful/late/duplicate/outside-radius/expired-token diuji otomatis; GPS tidak terverifikasi mengarahkan ke KADEP HCO untuk input manual.
+**Code gate F5 (offline and targeted Development PostgreSQL tests passed; mobile GPS pending):** successful/late/duplicate/outside-radius/expired-token diuji otomatis; GPS tidak terverifikasi mengarahkan ke KADEP HCO untuk input manual.
 
-**Verification boundary:** `pnpm run test:check-in` tests policies/service doubles/schema metadata offline. This is not PostgreSQL execution or concurrency evidence. The new migration is unapplied; retention/dedicated GPS audit authorization and HTTPS mobile UAT remain release gates.
+**Verification boundary:** the original `pnpm run test:check-in` checks were offline. Subsequent approved Development verification matched five applied migrations and passed 18 distinct PostgreSQL cases, including duplicate/close/revoke/reissue and constraints. Live inactive/invalid-assignment profile reload remains unverified; retention/dedicated GPS audit authorization and HTTPS mobile UAT remain release gates.
 
-### F6 — Manual attendance, history, recap & export (TODO)
+### F6 — Manual attendance, audit, history & reporting (implemented for review; migration unapplied)
 
-- [ ] KADEP HCO membuka event, mencari nama/NIM dan memilih profil peserta undangan; input dengan alasan wajib.
-- [ ] attendance_at default server sekarang, dapat override waktu aktual; recorded_at immutable saat pencatatan. Klasifikasi otomatis dari waktu efektif.
-- [ ] Insert/koreksi + audit before/after atomik; unique session/user; koreksi mempertahankan source asli, histori dan recorded_at.
-- [ ] SR melihat histori sendiri; HCO melihat semua undangan, termasuk pending sebelum closure dan absent sesudahnya.
-- [ ] CSV wajib: NIM/nama, departemen/jabatan/gedung, presence, waktu efektif, timing, durasi keterlambatan, QR/MANUAL bila relevan. XLSX opsional; tanpa password/session/QR secret/koordinat GPS mentah.
-- [ ] Uji izin negatif, concurrent QR/manual, rollback audit dan batas waktu override setelah kebijakan disepakati.
+KADEP HCO alone may insert/correct/audit attendance on PUBLISHED with INACTIVE/ACTIVE session or CLOSED/CLOSED, never DRAFT. Effective time must be <= server now and, for CLOSED, <= events.closed_at; CLOSED insertion requires explicit time. No scheduled-end cutoff or extra backdate window. Existing records of inactive historical invitees may be corrected, but new inactive/ineligible insertion is denied. Preserve original recorded_at, source, recorded_by_user_id, initial manual_reason and GPS; update only attendance_at/timing_class/updated_at and append mandatory-reason before/after audit atomically. Manual operations cannot reopen event/session/QR or change snapshots/frozen policy.
 
-**Gate F6:** HCO publish/snapshot → SR scan atau KADEP input/koreksi → HCO rekap/CSV semua undangan berjalan end-to-end.
+HCO recap/CSV starts from every invitation snapshot LEFT JOIN records by session/user. Presence is derived PRESENT/PENDING/ABSENT, with missing time/timing/source/duration NULL. Lateness is max(0, ceil(minutes after grace)), zero for EARLY/ON_TIME. Own history is session-user-only with bounded pagination, no arbitrary userId. UTF-8 CSV uses quoting/formula defense, an apostrophe text marker retaining NIM leading zeros without formulas, WIB timestamps and blank missing fields. No raw GPS, credentials or internal audit JSON. GPS/audit/export retention and export-access audit remain release decisions.
+
+Phase 6 is implemented for code/migration review, not released. One additive audit migration is prepared and unapplied. PostgreSQL Phase 6 trigger/concurrency/transaction execution requires separate approval; no remote mutation, new scratch, seed or provisioning was performed. Manual frontend UAT remains pending.
+
+**Phase 5 validation:** PM applied `20261012032606_phase5_checkin` to Supabase Development. Read-only verification matched all five migration hashes, columns, indexes, constraints and enabled triggers. Eighteen distinct targeted PostgreSQL cases passed, including parallel duplicate, close, revoke/reissue and SQL origin/constraint checks. Twelve isolated fixture events were cleaned with existing data unchanged. Live inactive/invalid-assignment DB-profile reload remains unverified (service-context rejection tested); mobile HTTPS UAT is pending.
 
 ### F7 — Integrasi frontend, keamanan, CI & pengujian (TODO)
 
@@ -188,12 +187,12 @@
 | --- | --- | --- | --- |
 | OPEN-001 | Cancel/reopen/republication lifecycle; HCO close/reissue eksplisit sudah confirmed | HCO + PM | Lifecycle/reporting |
 | OPEN-003 | Radius range/accuracy tuning setelah field test (awal maksimum 20 m); batas TTL/grace; retensi dan akses audit GPS sebelum pilot nyata | HCO + PM | F5/UAT |
-| OPEN-004 | Batas override waktu; input historis untuk peserta sekarang inactive | KADEP HCO + PM | F6 |
+| RESOLVED-004 | Phase 6: waktu <= now/closed_at; CLOSED insert eksplisit; historical inactive correction boleh, new insertion ditolak | KADEP HCO + PM | Confirmed Phase 6 |
 | OPEN-005 | Nilai roster/gedung/jabatan dan distribusi credential aman | PM + RnD | Import nyata/UAT |
 | OPEN-006 | Konfigurasi Gmail sender, recovery/verifikasi | PM + RnD | F2 |
-| OPEN-007 | Basis/pembulatan lateness, filter/log/retensi ekspor; source asli tetap saat koreksi | HCO + PM | F6/release |
+| OPEN-007 | Retensi/access logging ekspor; ceil menit setelah grace dan immutable origin final Phase 6 | HCO + PM | F6/release |
 | OPEN-008 | Future Activity/session binding dan konsistensi registrasi lintas public interface; internal-event binding Phase 4 sudah final | RnD + PM | Sebelum NEED-007 |
-| OPEN-009 | Pre-activation/post-closure manual dan future reopen; INTI dan close-event-only sudah final | HCO + PM | Sebelum endpoint/filter terkait |
+| OPEN-009 | Future reopen/cancel; manual PUBLISHED/CLOSED dan batas efektif final Phase 6 | HCO + PM | Sebelum endpoint/filter terkait |
 | INFRA-001 | VPS/domain/HTTPS, biaya, backup dan target operasional | PM + DevOps | F8 |
 
 Snapshot publish, QR statis 6 jam, explicit HCO close/reissue (QR lama invalid), audience/jadwal immutable setelah publish, edit hanya title/description, source koreksi tetap, early/after-end scan, ON_TIME inklusif, CSV/email nyata dan input langsung KADEP sudah **CONFIRMED**. Jangan mengubah TBD menjadi aturan tersirat; lihat [model](resora-need-001-data-model.md).

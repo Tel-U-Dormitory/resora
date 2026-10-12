@@ -1,13 +1,13 @@
 # RESORA — Data Model & Schema Specification (NEED-001)
 
-**Version:** 0.7 · **Updated:** 2026-10-12 · **Status:** Phase 4/4.5 PM-accepted; Phase 5 attendance/check-in implemented, migration pending review and unapplied\
+**Version:** 0.8 · **Updated:** 2026-10-12 · **Status:** Phase 4/4.5 PM-accepted; Phase 5 migration/PostgreSQL verified Development; Phase 6 manual/audit/report implemented for review, new migration unapplied\
 **Target:** pilot presensi internal SR, 2026-10-18  
 **Canonical repository path:** `docs/modules/need-001/resora-need-001-data-model.md`\
 **Companion:** [NEED-001 PRD](prd.md), [architecture](../../architecture.md), [acceptance tests](acceptance-tests.md), [roadmap](roadmap.md)
 
 > **Scope:** logical PostgreSQL/Drizzle design, **not executable migration SQL**. Do not run migrations from this document. Better Auth's **actual generated schema** takes precedence for its own four tables. Preserve pnpm 10.33.4 package management, Bun 1.3.13 Express runtime, Next.js/tRPC/Drizzle/Better Auth and Varlock; Supabase is managed PostgreSQL accessed **through Express only**. Do not use Supabase Auth or direct browser/database connections.
 
-Sections 1–11 describe the current design baseline. Sections 12–18 preserve historical Phase 2–3 reviews and test evidence, including superseded audience/event-bound proposals; they are not the current domain schema specification. Phase 4 implemented event/session/QR; Phase 5 adds record/check-in definitions below. Phase 6 audit/manual/report remain proposals. Historical sections retain their original evidence/status.
+Sections 1–11 describe the current design baseline. Sections 12–18 preserve historical Phase 2–3 reviews and test evidence, including superseded audience/event-bound proposals; they are not the current domain schema specification. Phase 4 implemented event/session/QR; Phase 5 adds record/check-in definitions below. Phase 6 audit/manual/report follow the final rules and implementation described in section 21; new migration remains unapplied. Historical sections retain their original evidence/status.
 
 ## 1. Decisions and semantics
 
@@ -25,7 +25,7 @@ Sections 1–11 describe the current design baseline. Sections 12–18 preserve 
 | QR                | Challenge belongs to an attendance session; static/redisplayable during configured TTL, default 360 minutes from challenge activation; explicit revoke/reissue, no automatic rotation | Confirmed; Phase 4 static signed protocol implemented |
 | Geofence          | HCO selects map pin or latitude/longitude center; separate configurable radius, **20 m confirmed default**; browser requests location; backend validates distance from untrusted/imperfect GPS | Confirmed; Phase 5 accuracy <=20 m confirmed; operational radius bounds/retention remain open |
 | Manual entry      | KADEP HCO selects an invited person by name/NIM; `attendance_at` defaults to server time but can be overridden; `recorded_at` is actual immutable server write time, plus mandatory reason and actor | Confirmed                                            |
-| Non-attendees     | Record absence via a report **LEFT JOIN** over invited participants; do not insert fake attendance rows                                                                                              | Recommended                                          |
+| Non-attendees     | Derive presence via report **LEFT JOIN** over invitation snapshots; do not insert fake attendance rows                                                                                              | Confirmed Phase 6                                    |
 | Export            | Include every invited participant, attendance timestamp/status, time classification and lateness; exclude secrets and raw GPS coordinates                                                            | Confirmed                                            |
 | Email             | Real SR email; planned backend Gmail SMTP display name `RnD SR XIV`; sender address/credentials in env. Recovery/verification in Phase 2 | Confirmed; operational setup TBD |
 
@@ -365,7 +365,7 @@ QR sets effective time to actual server scan time and records creation at server
 | `attendance_id` | `uuid` | NN FK to `attendance_records.id` | Audited record |
 | `session_id` | `uuid` | NN FK to `attendance_sessions.id`; must match record parent | Context/report scope; consistency constraint reviewed with SQL |
 | `user_id` / `actor_user_id` | `text` | NN FKs to `user.id` | Participant / authorized operator |
-| `action` | Proposed `attendance_audit_action` | NN, `MANUAL_CREATED` / `ATTENDANCE_CORRECTED` | Audited action |
+| `action` | `text` with action/state CHECK | NN, `MANUAL_CREATED` / `ATTENDANCE_CORRECTED` | Audited action |
 | `before_state` / `after_state` | `jsonb` | Before nullable on creation; after NN | Reviewed fields only, no credentials/QR/GPS secrets |
 | `reason` | `text` | NN/nonblank | Required business explanation |
 | `created_at` | `timestamptz` | NN, default now; immutable | Audit write timestamp |
@@ -393,7 +393,7 @@ minutes_after_start = max(0, floor(seconds_from_start / 60))
 minutes_past_grace = max(0, ceil((seconds_from_start - grace_seconds) / 60))
 ```
 
-The EARLY/ON_TIME/LATE boundary is confirmed; display rounding above is **proposed**. Show effective attendance time separately from creation/audit time. Presence and timing are separate; missing attendance has no invented timestamp/class/source.
+The EARLY/ON_TIME/LATE boundary is confirmed; Phase 6 confirms ceiling minutes past grace, zero for EARLY/ON_TIME and NULL for missing attendance. Minutes after start above are explanatory only. Show effective attendance time separately from creation/audit time. Presence and timing are separate; missing attendance has no invented timestamp/class/source.
 
 ### 5.2 Event, session and challenge lifecycle
 
@@ -405,7 +405,7 @@ Attendance window: INACTIVE -- explicit operator activate --> ACTIVE
 QR challenge:     issue -- static/current until expiry, revoke or replacement
 ```
 
-State names are implemented TEXT labels with lifecycle CHECK constraints. Publication does not automatically activate scans. Activation requires a valid published internal event; the one-session invariant must hold. Session closure disables check-in and invalidates its QR independently of scheduled end. **Internal event closure** must atomically close its associated session and invalidate the current challenge. Expiry/revoke alone does not close session/event. Reissue is an explicit action in an active session and never reopens a closed session/event. No cancel/reopen/republication transitions are invented. No independent close-session endpoint/UI exists in NEED-001. Pre-activation/post-closure manual rules remain future policy decisions (§10).
+State names are implemented TEXT labels with lifecycle CHECK constraints. Publication does not automatically activate scans. Activation requires a valid published internal event; the one-session invariant must hold. Session closure disables check-in and invalidates its QR independently of scheduled end. **Internal event closure** must atomically close its associated session and invalidate the current challenge. Expiry/revoke alone does not close session/event. Reissue is an explicit action in an active session and never reopens a closed session/event. No cancel/reopen/republication transitions are invented. No independent close-session endpoint/UI exists in NEED-001. Phase 6 manual lifecycle is PUBLISHED/INACTIVE, PUBLISHED/ACTIVE or CLOSED/CLOSED, never DRAFT; manual operations cannot reopen lifecycle.
 
 ### 5.3 Presence and reporting (NEED-001 projection)
 
@@ -431,7 +431,7 @@ Start from **every `event_participants` row**, resolve the event's unique sessio
 5. Within the race-safe record transaction, validate relevant state/eligibility, use server time, classify internal timing and insert with unique `(session_id, user_id)`. Before-start/after-end internal scans are allowed while session and QR remain valid.
 6. Only after valid identity, current QR/session, invitation and geofence checks, duplicate/retry returns ALREADY_CHECKED_IN and original time/classification; no timestamp/source/GPS overwrite. Invalid tokens never disclose existing attendance. Lock event then session in the same order as close/revoke/reissue, and revalidate eligibility inside the transaction.
 
-**Manual/correction:** KADEP HCO selects an invited internal participant by NIM/name; Adaptif resolves an eligible general participant through Activity. Use the target session, validate domain/state/participant, require reason and default effective time to current server time. An allowed override changes `attendance_at`, not immutable `recorded_at`; compute internal classification automatically. Correct an existing record instead of adding a second row and append before/after audit atomically, preserving source. Pre-activation/post-closure manual rules, override bounds and now-inactive historical targets remain TBD. Never treat a SUPERADMIN grant as an operational bypass.
+**Manual/correction:** KADEP HCO selects an invited internal participant by NIM/name; Adaptif resolves an eligible general participant through Activity. Use the target session, validate domain/state/participant, require reason and default effective time to current server time. An allowed override changes `attendance_at`, not immutable `recorded_at`; compute internal classification automatically. Correct an existing record instead of adding a second row and append before/after audit atomically, preserving source. KADEP HCO alone may insert/correct/audit attendance on PUBLISHED with INACTIVE/ACTIVE session or CLOSED/CLOSED, never DRAFT. Effective time must be <= server now and, for CLOSED, <= events.closed_at; CLOSED insertion requires explicit time. No scheduled-end cutoff or extra backdate window. Existing records of inactive historical invitees may be corrected, but new inactive/ineligible insertion is denied. Preserve original recorded_at, source, recorded_by_user_id, initial manual_reason and GPS; update only attendance_at/timing_class/updated_at and append mandatory-reason before/after audit atomically. Manual operations cannot reopen event/session/QR or change snapshots/frozen policy. Never treat a SUPERADMIN grant as an operational bypass.
 
 ## 6. Constraints and required indexes (future migration review checklist)
 
@@ -492,12 +492,12 @@ Do not implement every table at once if incremental migrations can be safely dep
 | D-01 | Cancellation/reopening/republication handling; title/description-only published edits are confirmed                     | `event_participants` lifecycle and historical reports |
 | D-03 | QR TTL/grace bounds; radius range and accuracy tuning after field testing (initial maximum 20 m confirmed)                       | Validation policy and UAT                             |
 | D-04 | Closed-event reopening policy (explicit expired/revoked QR reissue is already confirmed)                                                            | HCO event operations                                  |
-| D-05 | Manual time override allowed range and whether corrected effective time can precede event start by days | Audit and fraud controls                              |
+| D-05 | Phase 6: no future effective time, CLOSED <= closed_at and explicit CLOSED insert time; no extra backdate window | Audit and fraud controls                              |
 | D-06 | Gmail SMTP sender configuration, recovery/verification policy and secure temporary password delivery      | Account readiness                                     |
 | D-07 | Actual SR roster and approved distribution; optional default center presets     | Pilot real-data import                                |
-| D-08 | Attendance/GPS retention, dedicated raw-location audit access, export access logging, and timezone/rounding display | Compliance and historical reporting |
+| D-08 | Attendance/GPS/audit/export retention, dedicated raw-location audit access and export-access logging; WIB/lateness rounding confirmed Phase 6 | Compliance and historical reporting |
 | D-09 | Future Activity/session parent binding and race-safe registration eligibility contract | Before NEED-007; Phase 4 internal binding approved |
-| D-10 | Pre-activation/post-closure manual operations and future cancel/reopen handling | Before affected future endpoints; no standalone close-session in NEED-001 |
+| D-10 | Phase 6 manual lifecycle confirmed; future cancel/reopen remains out of scope | Before affected future endpoints; no standalone close-session in NEED-001 |
 | D-11 | General-activity timing applicability and eligible report interface; exact registration-cancellation/check-in consistency | NEED-007 later; do not force internal invitation/timing rules |
 
 Until approved, don't silently convert these proposal-level details into product requirements. Implementation may use safe technical defaults with explicit review gates only where user-approved behavior is not affected.
@@ -765,8 +765,22 @@ HCO UI is `/events` with thin routes and flat attendance feature files. Non-HCO 
 
 ## 20. Phase 5 implementation and verification (2026-10-12)
 
-Attendance adds a single additive `phase5_checkin` migration for attendance_records, three numeric QR GPS fields, UNIQUE(session_id,user_id), FKs/history index, source/timing/GPS/manual-reason CHECKs and a custom immutable recorded_at/source trigger (not represented by snapshots). Existing applied migrations remain unchanged. No PostgreSQL/Supabase connection, migration application, seed or provisioning is performed in this phase.
+Attendance adds a single additive `phase5_checkin` migration for attendance_records, three numeric QR GPS fields, UNIQUE(session_id,user_id), FKs/history index, source/timing/GPS/manual-reason CHECKs and a custom immutable recorded_at/source trigger (not represented by snapshots). Existing applied migrations remain unchanged. The original implementation phase did not connect/mutate PostgreSQL. PM applied `20261012032606_phase5_checkin` to Supabase Development. Read-only verification matched all five migration hashes, columns, indexes, constraints and enabled triggers. Eighteen distinct targeted PostgreSQL cases passed, including parallel duplicate, close, revoke/reissue and SQL origin/constraint checks. Twelve isolated fixture events were cleaned with existing data unchanged. Live inactive/invalid-assignment DB-profile reload remains unverified (service-context rejection tested); mobile HTTPS UAT is pending.
 
 `attendance.checkIn` uses protectedProcedure, Identity public locked eligibility, published invitation, existing HMAC verifier and event?session locks matching Phase 4 lifecycle order. Only valid QR/GPS requests may lookup or return an existing record. Duplicates retain original values; ON CONFLICT DO NOTHING guards uniqueness. Explicit response contains status/event name/effective time/timing only. Scanner `/scan` uses qr-scanner decoder fallback, user-triggered camera, geolocation permission notice and resource cleanup; personal-history/report endpoints remain deferred.
 
-Offline targeted tests use synthetic query doubles and schema/SQL metadata; these are not real PostgreSQL constraint or concurrency evidence. Review/apply migration and test actual duplicate/close concurrency only under separately authorized environments. Mobile camera/GPS UAT needs HTTPS; no deployment/tunnel is created. GPS retention and dedicated audit access are unresolved before Production/real pilot.
+Original offline tests used synthetic query doubles, without PostgreSQL execution. Subsequent approved Development validation is described above; its limitations remain explicit. Mobile camera/GPS UAT needs HTTPS; no deployment/tunnel is created. GPS retention and dedicated audit access are unresolved before Production/real pilot.
+
+## 21. Phase 6 manual attendance, audit and reporting (2026-10-12)
+
+KADEP HCO alone may insert/correct/audit attendance on PUBLISHED with INACTIVE/ACTIVE session or CLOSED/CLOSED, never DRAFT. Effective time must be <= server now and, for CLOSED, <= events.closed_at; CLOSED insertion requires explicit time. No scheduled-end cutoff or extra backdate window. Existing records of inactive historical invitees may be corrected, but new inactive/ineligible insertion is denied. Preserve original recorded_at, source, recorded_by_user_id, initial manual_reason and GPS; update only attendance_at/timing_class/updated_at and append mandatory-reason before/after audit atomically. Manual operations cannot reopen event/session/QR or change snapshots/frozen policy.
+
+HCO recap/CSV starts from every invitation snapshot LEFT JOIN records by session/user. Presence is derived PRESENT/PENDING/ABSENT, with missing time/timing/source/duration NULL. Lateness is max(0, ceil(minutes after grace)), zero for EARLY/ON_TIME. Own history is session-user-only with bounded pagination, no arbitrary userId. UTF-8 CSV uses quoting/formula defense, an apostrophe text marker retaining NIM leading zeros without formulas, WIB timestamps and blank missing fields. No raw GPS, credentials or internal audit JSON. GPS/audit/export retention and export-access audit remain release decisions.
+
+Attendance audit schema uses TEXT action labels, four restrictive FKs, record/session/user binding, nonblank reasons, business-only before/after JSON (`attendanceAt`, `timingClass`) and attendance/session time indexes. Custom triggers reject audit UPDATE/DELETE/TRUNCATE, mismatched binding/state and unapproved JSON fields. This new migration extends immutable record origin/binding to recorder, initial manual reason and GPS, without modifying applied Phase 1–5 files.
+
+Manual writes lock event → session → record, reload/share-lock the operator through Identity public getCheckInSr and validate insertion targets through getActiveSrCandidate. Corrections use historical invitation snapshots; record/audit rollback together. Recap uses a read-only repeatable-read view; existing UNIQUE resolves insert conflicts without overwriting.
+
+Phase 6 is implemented for code/migration review, not released. One additive audit migration is prepared and unapplied. PostgreSQL Phase 6 trigger/concurrency/transaction execution requires separate approval; no remote mutation, new scratch, seed or provisioning was performed. Manual frontend UAT remains pending.
+
+**Phase 6 CLI verification:** 19 targeted reporting/manual tests passed; 35 existing attendance/check-in/RBAC/auth offline regression cases passed. DB/API/Web typechecks, scoped Biome read-only (15 files), one frontend production build and diff checks passed. These are offline service/query-double and metadata tests, not PostgreSQL execution of the new audit migration or its lock/trigger behavior.

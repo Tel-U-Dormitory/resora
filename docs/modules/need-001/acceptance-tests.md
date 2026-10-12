@@ -28,7 +28,7 @@ Sources: [NEED-001 PRD](prd.md) and [canonical data model/repository review](res
 | AT-018 | KADEP HCO manual entry | Submit without reason or with blank reason | Rejected; no attendance or partial audit write | Confirmed |
 | AT-019 | Existing attendance record | KADEP HCO corrects effective time with reason | Preserve original recorded_at **and original source**; recalculate timing; append immutable before/after audit | Confirmed |
 | AT-020 | Event grace configured to 30 min | Scan at start +30min and +30min 1sec | ON_TIME at inclusive boundary, then LATE; presence remains PRESENT | Confirmed |
-| AT-021 | HCO report includes every published invitee | View/export CSV | NIM/name, organization fields, presence, effective time, timing, duration, source; include missing records; exclude secrets/raw GPS | Confirmed columns; duration/retention TBD |
+| AT-021 | HCO report includes every published invitee | View/export CSV | NIM/name, organization fields, presence, effective time, timing, duration, source; include missing records; exclude secrets/raw GPS | Confirmed: ceil minutes past grace Phase 6; retention TBD |
 | AT-022 | SR accesses other's attendance record                            | Direct request                                                  | Forbidden, own-history only                                        | Confirmed                                             |
 | AT-023 | QR and KADEP HCO manual insertion for same session/user | Concurrent requests | One attendance row; manual mutation/audit atomic; no duplicates/orphans | Required integrity; future implementation |
 | AT-024 | Malformed center/radius/schedule | Save event | Reject malformed coordinates, nonpositive radius/TTL or unordered schedule; permitted configurable bounds reviewed separately | Validation design; radius/TTL/grace limits TBD |
@@ -42,7 +42,7 @@ Sources: [NEED-001 PRD](prd.md) and [canonical data model/repository review](res
 | AT-032 | Invited SR changes department/position/building after publication | View historical event report | Invitation and organization snapshot retained; do not silently refresh roster | Confirmed snapshot; cancellation/republication handling TBD |
 | AT-033 | Invitee is later inactive, including a stored session | Attempt login or QR check-in | Both rejected regardless of participant snapshot; historical invitation retained | Confirmed |
 | AT-034 | Invited participant has no attendance record | Report before closure, then after confirmed window closure | PENDING/not yet present, then ABSENT; no fabricated attendance timestamp/class/source | Confirmed: explicit authorized HCO closure |
-| AT-035 | KADEP HCO records manual attendance at 17:00 for actual 13:05, event starts 13:00 | Enter reason and override effective time | attendance_at 13:05, recorded_at 17:00, ON_TIME; actor/reason audited | Confirmed; permitted override bounds TBD |
+| AT-035 | KADEP HCO records manual attendance at 17:00 for actual 13:05, event starts 13:00 | Enter reason and override effective time | attendance_at 13:05, recorded_at 17:00, ON_TIME; actor/reason audited | Confirmed Phase 6: <= now and <= closed_at when CLOSED |
 | AT-036 | Manual correction/audit transaction fails | Save correction | Roll back both changes; no destructive history overwrite or partial mutation | Required integrity |
 | AT-037 | Initial superadmin account and HCO/KADEP accounts | Change SR assignments/active status | Only superadmin system privilege succeeds; exactly one primary actor, not a fifth actor | Confirmed |
 | AT-038 | Synthetic provisioning CSV | Validate/import NIM, name, real email, department, position, building, active status | Unique identifiers, complete assignments, NIM kept as text; no public signup or credentials in Git/logs | Confirmed columns; mapping proposed |
@@ -64,7 +64,7 @@ Sources: [NEED-001 PRD](prd.md) and [canonical data model/repository review](res
 
 ## Phase 5 acceptance baseline (2026-10-12)
 
-These are specifications, not claims of executed PostgreSQL/mobile tests. Phase 4/4.5 are PM-accepted; the additive Phase 5 migration requires separate review and application approval.
+PM applied `20261012032606_phase5_checkin` to Supabase Development. Read-only verification matched all five migration hashes, columns, indexes, constraints and enabled triggers. Eighteen distinct targeted PostgreSQL cases passed, including parallel duplicate, close, revoke/reissue and SQL origin/constraint checks. Twelve isolated fixture events were cleaned with existing data unchanged. Live inactive/invalid-assignment DB-profile reload remains unverified (service-context rejection tested); mobile HTTPS UAT is pending.
 
 | ID | Scenario | Expected |
 | --- | --- | --- |
@@ -122,10 +122,31 @@ These validate the policy/seed foundation, not unbuilt event/attendance workflow
 
 A `TBD` scenario is **not automatically passing**. Review the [PRD](prd.md) before writing tests that assert unknown policy as fact.
 
-These are acceptance specifications, not executed automated tests. Remaining gates: cancellation/reopening/republication handling, publication freeze is final; operational radius bounds/accuracy tuning after UAT, override bounds (including now-inactive invitees and post-closure manual operations), lateness rounding, actual roster/credential delivery, retention and SMTP operations. Phase 2A identity tests are code-level checks, not completion of these application acceptance scenarios. See the canonical model §10/§12.
+These are acceptance specifications, not executed automated tests. Remaining gates: cancellation/reopening/republication handling, publication freeze is final; operational radius bounds/accuracy tuning after UAT, Phase 6 override bounds/inactive correction/lifecycle/lateness are confirmed; remaining actual roster/credential delivery, retention and SMTP operations. Phase 2A identity tests are code-level checks, not completion of these application acceptance scenarios. See the canonical model §10/§12.
 
 ## Phase 4 event/session/QR verification (2026-10-11)
 
 Guarded local PostgreSQL only; no Supabase mutation. Targeted tests cover 56 organization pairs (25 valid), 8/7/18 seed and adding INTI idempotently, CSV pair validation, roster UNION/include/exclude/deduplication, legacy/inactive/non-SR exclusion, HCO authorization with no INTI/SUPERADMIN bypass, actual Express/tRPC authentication/password/forged-input rejection, exactly-one session and immutable binding, atomic create/publish/close failure paths, live publication and historical snapshot, published fields frozen, stable signed PNG, expiry/revoke/reissue/binding and concurrent activation/reissue.
 
 Phase 4 covers storage/lifecycle portions of AT-003/004/009/011/012/024/028/029/030/031/032/044/045/046/049/050/051/053. Attendance/report assertions in those scenarios remain future work; no check-in or presence report is claimed complete. Browser/mobile UAT and remote migration are not performed.
+
+## Phase 6 acceptance baseline (2026-10-12)
+
+Specifications and offline service/transaction-double tests; new migration unapplied. Real PostgreSQL Phase 6 locks/triggers require separate approval.
+
+| ID | Scenario | Expected |
+| --- | --- | --- |
+| AT-P6-01 | HCO member / KADEP HCO / non-HCO including SUPERADMIN | HCO recap/export; KADEP HCO alone manual/audit; no bypass |
+| AT-P6-02 | PUBLISHED/INACTIVE or ACTIVE, CLOSED/CLOSED vs DRAFT | Approved states allowed; DRAFT denied; no lifecycle reactivation |
+| AT-P6-03 | CLOSED insert missing time; future time; after-close time | Reject; explicit time <= now/closed_at, ends_at not cutoff |
+| AT-P6-04 | Inactive snapshot participant, existing vs new record | Historical correction allowed, new insertion denied |
+| AT-P6-05 | QR/MANUAL correction with reason | Preserve origin/GPS; atomically append effective time/timing before/after |
+| AT-P6-06 | Missing reason; duplicate QR/manual; audit failure | Reject blank; one record without overwrite; record/audit rollback together |
+| AT-P6-07 | Concurrent corrections/close/manual | Event → session → record order; current before-state, CLOSED policy, QR stays invalid |
+| AT-P6-08 | Audit update/delete/truncate, wrong binding or unapproved JSON | DB guards reject; safe audit DTO only |
+| AT-P6-09 | Snapshot invitee with/without record before/after close | PRESENT/PENDING/ABSENT; no fabricated rows; historical identity |
+| AT-P6-10 | Grace boundary, grace +1ms, missing attendance | ON_TIME/0; LATE/1 minute; missing effective fields NULL |
+| AT-P6-11 | Own history/forged userId/anonymous/inactive/password gate | Session user only, pagination; forged authority and invalid identity denied |
+| AT-P6-12 | CSV quotes/newlines/formulas/leading-zero NIM | All invitees, UTF-8/WIB, escaping/text marker/formula defense; no GPS/secrets/audit JSON |
+
+Manual frontend UAT, PostgreSQL Phase 6 concurrency/trigger execution and retention/export-access audit decisions remain pending.

@@ -133,13 +133,17 @@ The earlier plan identifies **2026-10-18 as a target for a controlled NEED-001 p
 | Internal CSV SR provisioning | **Implemented/tested locally with synthetic data in Phase 2C** | Dry-run/apply, Better Auth hashing, private credentials export; real imports/distribution require approval. |
 | Organization/RBAC foundation | **Phase 3 implemented/tested locally** | [Canonical 8/7/18 codes](resora-need-001-data-model.md#42-departments-positions-buildings--canonical-organization-dictionaries) and [authorization matrix](resora-need-001-data-model.md#8-server-side-authorization-phase-3); real resource checks belong to future endpoints. KADEP replaces KADIV without legacy mutation. |
 | Email recovery/verification | **Pending** | Gmail SMTP and operational delivery are outside Phase 2C. |
-| NEED-001 event, roster builder, attendance sessions, QR, geofence and reporting | **Phase 4 implemented; local migration validated, PM review pending** | Event/roster/session/static QR and minimal UI implemented. Check-in/geofence validation, records/audit/exports remain later phases; no remote migration applied. |
+| NEED-001 event, roster builder, attendance sessions, QR, geofence and reporting | **Phase 4/4.5 PM accepted; Phase 5 Development verified; Phase 6 review** | Event/session/QR/check-in implemented; Phase 5 applied by PM to Development and PostgreSQL verified with stated profile/mobile UAT limitations. Phase 6 manual/audit/recap/history/CSV implemented for review; audit migration unapplied. |
 | NEED-007 student login, quotas, registration and Adaptif attendance | **PM-confirmed business rules, not delivered** | Separate module specification and Adaptif UAT. |
 | Production VPS and full product release | **Planned, unverified** | Security, backup, deployment, operations and PM go/no-go. |
 
 **No database migration or production action is authorized merely by this PRD.** Migration review and explicit approval are required; local disposable DB tests and Supabase Development must be clearly distinguished from production.
 
 **Phase 5 PM decision (2026-10-12):** successful QR check-in stores one latitude/longitude/accuracy measurement as DOUBLE PRECISION on the attendance record. Failed scans and continuous location history are not stored. Explain this before GPS permission. Raw GPS is excluded from general responses, recaps and exports; dedicated audit access and retention require decisions before Production/real pilot. Manual attendance GPS is nullable. Initial maximum accuracy is 20 m, tunable to 30 m through one backend constant after UAT.
+
+**Phase 6 PM final decisions:** KADEP HCO alone may insert/correct/audit attendance on PUBLISHED with INACTIVE/ACTIVE session or CLOSED/CLOSED, never DRAFT. Effective time must be <= server now and, for CLOSED, <= events.closed_at; CLOSED insertion requires explicit time. No scheduled-end cutoff or extra backdate window. Existing records of inactive historical invitees may be corrected, but new inactive/ineligible insertion is denied. Preserve original recorded_at, source, recorded_by_user_id, initial manual_reason and GPS; update only attendance_at/timing_class/updated_at and append mandatory-reason before/after audit atomically. Manual operations cannot reopen event/session/QR or change snapshots/frozen policy.
+
+HCO recap/CSV starts from every invitation snapshot LEFT JOIN records by session/user. Presence is derived PRESENT/PENDING/ABSENT, with missing time/timing/source/duration NULL. Lateness is max(0, ceil(minutes after grace)), zero for EARLY/ON_TIME. Own history is session-user-only with bounded pagination, no arbitrary userId. UTF-8 CSV uses quoting/formula defense, an apostrophe text marker retaining NIM leading zeros without formulas, WIB timestamps and blank missing fields. No raw GPS, credentials or internal audit JSON. GPS/audit/export retention and export-access audit remain release decisions. See the canonical data model section 21 for implementation/verification limits.
 
 ## 8. Authentication, authorization and data governance
 
@@ -207,7 +211,7 @@ Official reference for SR attendance: **FR-086 and FR-119–FR-130**. Core depen
 ## 15. Open decisions (do not infer answers)
 
 1. **NEED-001:** future invitee amendment/cancel/reopen policy; none is implemented in Phase 4. INTI membership and publication freeze of all session configuration are final.
-2. **Location and manual attendance:** permissible radius range, GPS retention and dedicated audit access, effective-time override bounds, display rounding and audit retention/access.
+2. **Location and manual attendance:** permissible radius range, GPS retention and dedicated audit access, audit/export retention/access and export-access logging; Phase 6 effective-time bounds/lateness rounding confirmed.
 3. **Identity:** complete real SR roster, secure first-credential handoff, operational password recovery/SMTP, and login/provisioning for mahasiswa/maba.
 4. **Shared attendance architecture:** future Activity-to-session parent reference and registration consistency. Phase 4 internal event ownership, exactly-one session and close-event-only lifecycle are final; no universal cross-module FK is selected.
 5. **NEED-007:** creation privileges for activities outside Adaptif, full module MVP/UAT policy, and configurable registration-window edges; **capacity, cancellation and immediate eligibility rules are already confirmed**.

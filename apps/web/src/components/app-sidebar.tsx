@@ -2,6 +2,7 @@
 
 import {
 	CalendarDays,
+	History,
 	LayoutDashboard,
 	LockKeyhole,
 	ScanLine,
@@ -49,7 +50,9 @@ export function AppSidebar({
 								? CalendarDays
 								: icon === "scan"
 									? ScanLine
-									: LockKeyhole;
+									: icon === "history"
+										? History
+										: LockKeyhole;
 					return (
 						<Link
 							key={href}
