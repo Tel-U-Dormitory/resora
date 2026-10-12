@@ -9,6 +9,11 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { queryClient, trpc } from "@/utils/trpc";
+import { eventErrorMessage } from "./event-ui";
+
+const fieldClass =
+	"focus-ring block w-full rounded-lg border border-border bg-background px-3 py-2 text-sm aria-invalid:border-destructive aria-invalid:ring-1 aria-invalid:ring-destructive";
+const timeRangeMessage = "Waktu selesai harus lebih lambat dari waktu mulai.";
 
 type Draft = inferRouterInputs<AppRouter>["attendance"]["create"];
 const departments = [
@@ -131,12 +136,22 @@ function DraftEditor({
 		initial.endsAt ? localDateTime(initial.endsAt) : "",
 	);
 	const [error, setError] = useState("");
+	const [endError, setEndError] = useState("");
+	const [search, setSearch] = useState("");
 	const router = useRouter();
 	const create = useMutation(trpc.attendance.create.mutationOptions());
 	const edit = useMutation(trpc.attendance.editDraft.mutationOptions());
 	const criteria = draft.rosterCriteria ?? empty.rosterCriteria;
 	const session = draft.session;
 	if (!criteria) return null;
+	const matchingCandidates = candidates.filter((sr) =>
+		`${sr.nim} ${sr.name}`.toLowerCase().includes(search.trim().toLowerCase()),
+	);
+	const manualCount = new Set(
+		[...(criteria.individuals ?? []), ...(criteria.include ?? [])].filter(
+			(id) => !criteria.exclude?.includes(id),
+		),
+	).size;
 	const toggle = (
 		key: "individuals" | "include" | "exclude",
 		id: string,
@@ -152,23 +167,42 @@ function DraftEditor({
 			},
 		});
 	return (
-		<main className="mx-auto max-w-5xl space-y-5 p-6">
+		<section className="mx-auto max-w-5xl space-y-6">
 			<Link className="focus-ring text-primary underline" href="/events">
 				Daftar event
 			</Link>
 			<h1 className="font-semibold text-2xl">
 				{eventId ? "Edit draft" : "Draft event baru"}
 			</h1>
+			<p className="text-muted-foreground text-sm">
+				Siapkan informasi event dan undangan. Peserta dapat ditinjau setelah
+				draft disimpan.
+			</p>
 			<form
 				className="space-y-5"
 				onSubmit={async (event) => {
 					event.preventDefault();
+					if (create.isPending || edit.isPending) return;
 					setError("");
+					setEndError("");
+					const startDate = new Date(start);
+					const endDate = new Date(end);
+					if (
+						!Number.isFinite(startDate.getTime()) ||
+						!Number.isFinite(endDate.getTime())
+					) {
+						setEndError("Isi waktu mulai dan selesai yang valid.");
+						return;
+					}
+					if (endDate <= startDate) {
+						setEndError(timeRangeMessage);
+						return;
+					}
 					try {
 						const input = {
 							...draft,
-							startsAt: new Date(start).toISOString(),
-							endsAt: new Date(end).toISOString(),
+							startsAt: startDate.toISOString(),
+							endsAt: endDate.toISOString(),
 						};
 						const id = eventId ?? (await create.mutateAsync(input)).eventId;
 						if (eventId) await edit.mutateAsync({ eventId, draft: input });
@@ -177,20 +211,29 @@ function DraftEditor({
 						});
 						router.push(`/events/${id}`);
 					} catch (cause) {
-						setError(
-							cause instanceof Error ? cause.message : "Draft gagal disimpan",
-						);
+						if (
+							cause instanceof Error &&
+							cause.message.includes("Event end must follow start")
+						)
+							setEndError(timeRangeMessage);
+						else setError(eventErrorMessage(cause));
 					}
 				}}
 			>
 				<Card>
+					<div className="border-border border-b px-5 py-4">
+						<h2 className="font-semibold">Informasi event</h2>
+						<p className="mt-1 text-muted-foreground text-sm">
+							Judul dan deskripsi yang akan dilihat peserta.
+						</p>
+					</div>
 					<CardContent className="grid gap-4 sm:grid-cols-2">
 						<label>
 							Judul
 							<input
 								required
 								maxLength={200}
-								className="focus-ring block w-full rounded border p-2"
+								className={fieldClass}
 								value={draft.title}
 								onChange={(e) => setDraft({ ...draft, title: e.target.value })}
 							/>
@@ -198,7 +241,7 @@ function DraftEditor({
 						<label>
 							Deskripsi
 							<textarea
-								className="focus-ring block w-full rounded border p-2"
+								className={fieldClass}
 								maxLength={5000}
 								value={draft.description}
 								onChange={(e) =>
@@ -206,33 +249,72 @@ function DraftEditor({
 								}
 							/>
 						</label>
+					</CardContent>
+				</Card>
+				<Card>
+					<div className="border-border border-b px-5 py-4">
+						<h2 className="font-semibold">Jadwal</h2>
+						<p className="mt-1 text-muted-foreground text-sm">
+							Isi waktu sesuai zona waktu perangkat Anda.
+						</p>
+					</div>
+					<CardContent className="grid gap-4 sm:grid-cols-2">
 						<label>
-							Mulai (waktu lokal perangkat)
+							Waktu mulai
 							<input
 								required
 								type="datetime-local"
-								className="focus-ring block rounded border p-2"
+								className={fieldClass}
 								value={start}
-								onChange={(e) => setStart(e.target.value)}
+								onChange={(e) => {
+									setStart(e.target.value);
+									setEndError("");
+								}}
 							/>
 						</label>
 						<label>
-							Selesai (waktu lokal perangkat)
+							Waktu selesai
 							<input
 								required
 								type="datetime-local"
-								className="focus-ring block rounded border p-2"
+								id="event-end"
+								aria-invalid={Boolean(endError)}
+								aria-describedby={endError ? "event-end-error" : undefined}
+								className={fieldClass}
 								value={end}
-								onChange={(e) => setEnd(e.target.value)}
+								onChange={(e) => {
+									setEnd(e.target.value);
+									setEndError("");
+								}}
 							/>
+							{endError && (
+								<p
+									id="event-end-error"
+									className="mt-2 text-destructive text-sm"
+									role="alert"
+								>
+									{endError}
+								</p>
+							)}
 						</label>
+					</CardContent>
+				</Card>
+				<Card>
+					<div className="border-border border-b px-5 py-4">
+						<h2 className="font-semibold">Lokasi dan QR</h2>
+						<p className="mt-1 text-muted-foreground text-sm">
+							Atur titik pusat, radius lokasi, toleransi keterlambatan, dan masa
+							berlaku QR.
+						</p>
+					</div>
+					<CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 						{(
 							[
 								["centerLat", "Latitude pusat", -90, 90],
 								["centerLng", "Longitude pusat", -180, 180],
 								["geofenceRadiusM", "Radius (meter)", 1, undefined],
 								["lateGraceMinutes", "Toleransi telat (menit)", 0, undefined],
-								["qrTtlMinutes", "QR TTL (menit)", 1, undefined],
+								["qrTtlMinutes", "Masa berlaku QR (menit)", 1, undefined],
 							] as const
 						).map(([key, label, min, max]) => (
 							<label key={key}>
@@ -243,7 +325,7 @@ function DraftEditor({
 									step={key === "centerLat" || key === "centerLng" ? "any" : 1}
 									min={min}
 									max={max}
-									className="focus-ring block rounded border p-2"
+									className={fieldClass}
 									value={session[key] ?? ""}
 									onChange={(e) =>
 										setDraft({
@@ -256,46 +338,61 @@ function DraftEditor({
 						))}
 					</CardContent>
 				</Card>
-				<fieldset className="space-y-3 rounded border p-4">
-					<legend className="font-semibold">
-						Roster undangan (UNION, exclude didahulukan)
-					</legend>
-					{(
-						[
-							["allSr", "Semua SR aktif"],
-							["inti", "INTI"],
-							["kadep", "Semua KADEP non-INTI"],
-						] as const
-					).map(([key, label]) => (
-						<label key={key} className="mr-4 inline-flex items-center gap-2">
-							<input
-								type="checkbox"
-								checked={criteria[key] ?? false}
-								onChange={(e) =>
-									setDraft({
-										...draft,
-										rosterCriteria: { ...criteria, [key]: e.target.checked },
-									})
-								}
-							/>
-							{label}
-						</label>
-					))}
-					<Button
-						type="button"
-						variant="outline"
-						onClick={() =>
-							setDraft({
-								...draft,
-								rosterCriteria: { ...criteria, inti: true, kadep: true },
-							})
-						}
-					>
-						INTI + KADEP
-					</Button>
-					<div>
+				<fieldset className="space-y-4 rounded-xl border border-border bg-surface p-5 shadow-xs">
+					<legend className="font-semibold">Pemilihan peserta</legend>
+					<p className="text-muted-foreground text-sm">
+						Gabungkan beberapa kelompok atau pilih peserta satu per satu.
+						Peserta yang sama hanya diundang sekali. Pilihan Kecualikan selalu
+						menghapus peserta dari undangan.
+					</p>
+					<div className="flex flex-wrap items-center gap-3">
+						{(
+							[
+								["allSr", "Semua SR aktif"],
+								["inti", "INTI"],
+								["kadep", "KADEP lintas departemen"],
+							] as const
+						).map(([key, label]) => (
+							<label
+								key={key}
+								className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm has-checked:border-primary has-checked:bg-primary-soft"
+							>
+								<input
+									type="checkbox"
+									checked={criteria[key] ?? false}
+									onChange={(e) =>
+										setDraft({
+											...draft,
+											rosterCriteria: { ...criteria, [key]: e.target.checked },
+										})
+									}
+								/>
+								{label}
+							</label>
+						))}
+						<Button
+							type="button"
+							variant={
+								criteria.inti && criteria.kadep ? "secondary" : "outline"
+							}
+							aria-pressed={Boolean(criteria.inti && criteria.kadep)}
+							onClick={() =>
+								setDraft({
+									...draft,
+									rosterCriteria: { ...criteria, inti: true, kadep: true },
+								})
+							}
+						>
+							INTI + KADEP
+						</Button>
+					</div>
+					<p className="font-semibold text-sm">Departemen</p>
+					<div className="flex flex-wrap gap-3">
 						{departments.map((code) => (
-							<label key={code} className="mr-4 inline-flex items-center gap-2">
+							<label
+								key={code}
+								className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm has-checked:border-primary has-checked:bg-primary-soft"
+							>
 								<input
 									type="checkbox"
 									checked={criteria.departments?.includes(code) ?? false}
@@ -319,36 +416,72 @@ function DraftEditor({
 					</div>
 					{invalidCount > 0 && (
 						<p role="alert">
-							{invalidCount} assignment tidak valid dikecualikan; perlu review
-							Identity.
+							{invalidCount} akun tidak tersedia karena penempatan organisasi
+							tidak valid. Hubungi pengelola akun.
 						</p>
 					)}
-					<div className="max-h-80 overflow-auto">
+					<label className="block space-y-2 font-medium text-sm">
+						Cari peserta
+						<input
+							type="search"
+							className={fieldClass}
+							placeholder="Cari nama atau NIM"
+							value={search}
+							onChange={(e) => setSearch(e.target.value)}
+						/>
+					</label>
+					<p className="text-muted-foreground text-sm" role="status">
+						Menampilkan {matchingCandidates.length} dari {candidates.length} SR
+						· {manualCount} pilihan individu · {criteria.exclude?.length ?? 0}{" "}
+						dikecualikan
+					</p>
+					<div className="max-h-80 overflow-auto rounded-lg border border-border">
 						<table className="w-full text-left text-sm">
-							<caption>
-								Individu SR aktif; kandidat mengikuti assignment resmi
+							<caption className="sr-only">
+								Daftar SR aktif untuk pilihan peserta individu
 							</caption>
 							<thead>
-								<tr>
-									<th>Peserta</th>
-									<th>Pilih</th>
-									<th>Include</th>
-									<th>Exclude</th>
+								<tr className="border-border border-b bg-muted/50">
+									<th scope="col" className="p-3">
+										Peserta
+									</th>
+									<th scope="col" className="p-3">
+										Pilih
+									</th>
+									<th scope="col" className="p-3">
+										Tambahkan
+									</th>
+									<th scope="col" className="p-3">
+										Kecualikan
+									</th>
 								</tr>
 							</thead>
 							<tbody>
-								{candidates.map((sr) => (
-									<tr key={sr.userId}>
-										<td>
+								{matchingCandidates.length === 0 && (
+									<tr>
+										<td
+											colSpan={4}
+											className="p-6 text-center text-muted-foreground"
+										>
+											Tidak ada peserta yang cocok.
+										</td>
+									</tr>
+								)}
+								{matchingCandidates.map((sr) => (
+									<tr
+										key={sr.userId}
+										className="border-border border-b last:border-0 hover:bg-muted/30"
+									>
+										<td className="p-3">
 											{sr.nim} · {sr.name} ({sr.departmentCode}/
 											{sr.positionCode})
 										</td>
 										{(["individuals", "include", "exclude"] as const).map(
 											(key) => (
-												<td key={key}>
+												<td key={key} className="p-3">
 													<input
 														type="checkbox"
-														aria-label={`${key} ${sr.name} ${sr.nim}`}
+														aria-label={`${key === "exclude" ? "Kecualikan" : key === "include" ? "Tambahkan" : "Pilih"} ${sr.name} ${sr.nim}`}
 														checked={
 															criteria[key]?.includes(sr.userId) ?? false
 														}
@@ -364,13 +497,24 @@ function DraftEditor({
 							</tbody>
 						</table>
 					</div>
+					<p className="text-muted-foreground text-sm">
+						Simpan draft untuk melihat preview seluruh undangan sebelum
+						publikasi.
+					</p>
 				</fieldset>
-				{error && <p role="alert">{error}</p>}
+				{error && (
+					<p
+						className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-destructive text-sm"
+						role="alert"
+					>
+						{error}
+					</p>
+				)}
 				<Button type="submit" loading={create.isPending || edit.isPending}>
 					Simpan draft
 				</Button>
 			</form>
-		</main>
+		</section>
 	);
 }
 function localDateTime(iso: string) {
