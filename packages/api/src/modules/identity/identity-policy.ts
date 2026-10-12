@@ -1,4 +1,5 @@
 import type { ActiveSrIdentity } from "@resora/auth/sr-access";
+import { isValidSrAssignment } from "@resora/db/organization";
 
 // Use only server-derived ctx.identity after protectedProcedure validates the session.
 // Resource ownership/state/invitation/reason/audit checks belong to future real use cases.
@@ -14,7 +15,11 @@ export function canAccessPersonalSr(identity: Identity) {
 
 // Shared department gate for internal events, roster, QR/session and recap/export.
 export function canManageInternalEvent(identity: Identity) {
-	return canAccessPersonalSr(identity) && identity?.departmentCode === "HCO";
+	return (
+		canAccessPersonalSr(identity) &&
+		identity?.departmentCode === "HCO" &&
+		isValidSrAssignment(identity.departmentCode, identity.positionCode)
+	);
 }
 
 export function canManageInternalAttendanceManually(identity: Identity) {

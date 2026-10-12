@@ -274,7 +274,7 @@ const target = process.env.RESORA_IDENTITY_TEST_DB_URL;
 			).toBe("KETUM");
 		});
 		test("HCO manages events; INTI and explicit SUPERADMIN do not bypass", async () => {
-			for (const index of [1, 3])
+			for (const index of [1, 3, 7])
 				await rejects(
 					service.createEvent(db, await identity(index), draft()),
 					"FORBIDDEN",
@@ -292,6 +292,13 @@ const target = process.env.RESORA_IDENTITY_TEST_DB_URL;
 			await rejects(
 				service.getQr(db, await identity(3), eventId, secret),
 				"FORBIDDEN",
+			);
+			await rejects(
+				service.getRosterDirectory(db, await identity(7)),
+				"FORBIDDEN",
+			);
+			expect((await service.listEvents(db, await identity(7))).canManage).toBe(
+				false,
 			);
 		});
 		test("event plus session creation is atomic and exactly one session is enforced", async () => {

@@ -31,7 +31,12 @@ for (const [department, position, internal, manual, general] of [
 	["ADAPTIF", "ANGGOTA", false, false, true],
 	["SOSIAL", "ANGGOTA", false, false, false],
 	["RND", "KADEP", false, false, false],
-	["HCO", "KADIV", true, false, false], // Legacy value never grants KADEP rights.
+	["HCO", "KADIV", false, false, false], // Legacy assignment is not an operator.
+	["HCO", "KETUM", false, false, false],
+	["HCO", "WAKETUM", false, false, false],
+	["HCO", "SEKRETARIS", false, false, false],
+	["HCO", "BENDAHARA", false, false, false],
+	["INTI", "KETUM", false, false, false],
 ] as const) {
 	test(`${department} + ${position}: explicit operational boundaries`, () => {
 		const current = identity(department, position);
