@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { queryClient, trpc } from "@/utils/trpc";
+import EventRecap from "./event-recap";
 import { eventErrorMessage, formatEventTime, StatusBadge } from "./event-ui";
 
 export default function EventDetail({ eventId }: { eventId: string }) {
@@ -509,8 +510,12 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 			)}
 			{!canManage && (
 				<p className="rounded-xl border border-primary/20 bg-primary-soft p-5 text-primary-soft-foreground text-sm">
-					Anda diundang pada event ini. Check-in belum tersedia.
+					Anda diundang pada event ini. Gunakan Scan QR untuk check-in dan
+					riwayat kehadiran untuk melihat status pribadi.
 				</p>
+			)}
+			{canManage && event.status !== "DRAFT" && (
+				<EventRecap eventId={eventId} />
 			)}
 		</section>
 	);

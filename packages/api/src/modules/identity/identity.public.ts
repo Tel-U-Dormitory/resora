@@ -11,7 +11,11 @@ import {
 import { and, eq } from "drizzle-orm";
 
 export { isValidSrAssignment } from "@resora/db/organization";
-export { canAccessPersonalSr, canManageInternalEvent } from "./identity-policy";
+export {
+	canAccessPersonalSr,
+	canManageInternalAttendanceManually,
+	canManageInternalEvent,
+} from "./identity-policy";
 
 // Backend-only directory contract. Attendance must not read Identity's tables itself.
 async function readActiveSrDirectory(
@@ -89,6 +93,15 @@ export async function getCheckInSr(
 	const { candidates } = await readActiveSrDirectory(db, true, userId);
 	const candidate = candidates[0];
 	return candidate && !candidate.mustChangePassword ? candidate : null;
+}
+
+// Manual insertion needs an active eligible target, not completion of their first login.
+export async function getActiveSrCandidate(
+	db: Database | DatabaseTransaction,
+	userId: string,
+) {
+	const { candidates } = await readActiveSrDirectory(db, true, userId);
+	return candidates[0] ?? null;
 }
 export type SrCandidate = {
 	userId: string;

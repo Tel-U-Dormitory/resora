@@ -194,6 +194,52 @@ export const attendanceRecords = pgTable(
 		),
 	],
 );
+export type AttendanceAuditState = {
+	attendanceAt: string;
+	timingClass: "EARLY" | "ON_TIME" | "LATE";
+};
+export const attendanceAuditLogs = pgTable(
+	"attendance_audit_logs",
+	{
+		id: uuid("id").defaultRandom().primaryKey(),
+		attendanceId: uuid("attendance_id")
+			.notNull()
+			.references(() => attendanceRecords.id),
+		sessionId: uuid("session_id")
+			.notNull()
+			.references(() => attendanceSessions.id),
+		userId: text("user_id")
+			.notNull()
+			.references(() => user.id),
+		actorUserId: text("actor_user_id")
+			.notNull()
+			.references(() => user.id),
+		action: text("action")
+			.$type<"MANUAL_CREATED" | "ATTENDANCE_CORRECTED">()
+			.notNull(),
+		beforeState: jsonb("before_state").$type<AttendanceAuditState>(),
+		afterState: jsonb("after_state").$type<AttendanceAuditState>().notNull(),
+		reason: text("reason").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.notNull()
+			.defaultNow(),
+	},
+	(t) => [
+		index("attendance_audit_logs_attendance_time_idx").on(
+			t.attendanceId,
+			t.createdAt,
+		),
+		index("attendance_audit_logs_session_time_idx").on(
+			t.sessionId,
+			t.createdAt,
+		),
+		check("attendance_audit_logs_reason", sql`length(btrim(${t.reason})) > 0`),
+		check(
+			"attendance_audit_logs_action_state",
+			sql`(${t.action} = 'MANUAL_CREATED' AND ${t.beforeState} IS NULL) OR (${t.action} = 'ATTENDANCE_CORRECTED' AND ${t.beforeState} IS NOT NULL)`,
+		),
+	],
+);
 export const attendanceRelations = defineRelationsPart(
 	{
 		events,
@@ -201,6 +247,7 @@ export const attendanceRelations = defineRelationsPart(
 		eventParticipants,
 		qrChallenges,
 		attendanceRecords,
+		attendanceAuditLogs,
 		user,
 	},
 	(r) => ({
@@ -245,6 +292,10 @@ export const attendanceRelations = defineRelationsPart(
 			}),
 		},
 		attendanceRecords: {
+			audits: r.many.attendanceAuditLogs({
+				from: r.attendanceRecords.id,
+				to: r.attendanceAuditLogs.attendanceId,
+			}),
 			session: r.one.attendanceSessions({
 				from: r.attendanceRecords.sessionId,
 				to: r.attendanceSessions.id,
@@ -257,6 +308,28 @@ export const attendanceRelations = defineRelationsPart(
 			}),
 			recorder: r.one.user({
 				from: r.attendanceRecords.recordedByUserId,
+				to: r.user.id,
+				optional: false,
+			}),
+		},
+		attendanceAuditLogs: {
+			record: r.one.attendanceRecords({
+				from: r.attendanceAuditLogs.attendanceId,
+				to: r.attendanceRecords.id,
+				optional: false,
+			}),
+			session: r.one.attendanceSessions({
+				from: r.attendanceAuditLogs.sessionId,
+				to: r.attendanceSessions.id,
+				optional: false,
+			}),
+			participant: r.one.user({
+				from: r.attendanceAuditLogs.userId,
+				to: r.user.id,
+				optional: false,
+			}),
+			actor: r.one.user({
+				from: r.attendanceAuditLogs.actorUserId,
 				to: r.user.id,
 				optional: false,
 			}),

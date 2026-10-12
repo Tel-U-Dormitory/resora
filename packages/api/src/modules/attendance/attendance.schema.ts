@@ -63,3 +63,30 @@ export const checkInSchema = z
 	})
 	.strict();
 export type CheckInInput = z.infer<typeof checkInSchema>;
+
+const reasonSchema = z.string().trim().min(1).max(2000);
+const attendanceTimeSchema = z.iso.datetime({ offset: true });
+export const manualInsertSchema = eventIdSchema.extend({
+	userId: z.string().min(1).max(128),
+	attendanceAt: attendanceTimeSchema.optional(),
+	reason: reasonSchema,
+});
+export const manualCorrectSchema = z
+	.object({
+		attendanceId: z.uuid(),
+		attendanceAt: attendanceTimeSchema,
+		reason: reasonSchema,
+	})
+	.strict();
+export const auditHistorySchema = eventIdSchema.extend({
+	userId: z.string().min(1).max(128),
+	limit: z.number().int().min(1).max(100).default(50),
+	offset: z.number().int().min(0).max(1_000_000).default(0),
+});
+export const ownHistorySchema = z
+	.object({
+		limit: z.number().int().min(1).max(100).default(25),
+		offset: z.number().int().min(0).max(1_000_000).default(0),
+	})
+	.strict()
+	.default({ limit: 25, offset: 0 });

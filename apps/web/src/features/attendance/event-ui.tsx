@@ -1,6 +1,9 @@
 import { TRPCClientError } from "@trpc/client";
 
 const statuses: Record<string, { label: string; style: string }> = {
+	PRESENT: { label: "Hadir", style: "bg-success/10 text-success" },
+	PENDING: { label: "Belum hadir", style: "bg-warning/10 text-warning" },
+	ABSENT: { label: "Tidak hadir", style: "bg-danger/10 text-danger" },
 	DRAFT: { label: "Draft", style: "bg-muted text-muted-foreground" },
 	PUBLISHED: {
 		label: "Dipublikasikan",
