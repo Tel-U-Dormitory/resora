@@ -14,9 +14,10 @@ export { isValidSrAssignment } from "@resora/db/organization";
 export { canAccessPersonalSr, canManageInternalEvent } from "./identity-policy";
 
 // Backend-only directory contract. Attendance must not read Identity's tables itself.
-export async function getActiveSrDirectory(
+async function readActiveSrDirectory(
 	db: Database | DatabaseTransaction,
 	lock = false,
+	userId?: string,
 ) {
 	const query = db
 		.select({
@@ -28,6 +29,7 @@ export async function getActiveSrDirectory(
 			buildingId: buildings.id,
 			buildingCode: buildings.code,
 			buildingName: buildings.name,
+			mustChangePassword: userProfiles.mustChangePassword,
 		})
 		.from(userProfiles)
 		.innerJoin(user, eq(user.id, userProfiles.userId))
@@ -37,6 +39,7 @@ export async function getActiveSrDirectory(
 		.innerJoin(buildings, eq(buildings.id, srProfiles.buildingId))
 		.where(
 			and(
+				userId ? eq(userProfiles.userId, userId) : undefined,
 				eq(userProfiles.actor, "SR"),
 				eq(userProfiles.isActive, true),
 				eq(departments.isActive, true),
@@ -46,7 +49,7 @@ export async function getActiveSrDirectory(
 		);
 	// FOR SHARE prevents concurrent assignment/deactivation from invalidating publication's view.
 	const rows = await (lock ? query.for("share") : query);
-	const candidates: SrCandidate[] = [];
+	const candidates: (SrCandidate & { mustChangePassword: boolean })[] = [];
 	let invalidAssignmentCount = 0;
 	for (const row of rows) {
 		if (
@@ -59,6 +62,33 @@ export async function getActiveSrDirectory(
 		candidates.push({ ...row, nim: row.nim });
 	}
 	return { candidates, invalidAssignmentCount };
+}
+
+export async function getActiveSrDirectory(
+	db: Database | DatabaseTransaction,
+	lock = false,
+) {
+	const { candidates, invalidAssignmentCount } = await readActiveSrDirectory(
+		db,
+		lock,
+	);
+	return {
+		candidates: candidates.map(
+			({ mustChangePassword: _gate, ...candidate }) => candidate,
+		),
+		invalidAssignmentCount,
+	};
+}
+
+// Lock only the target's live identity/assignment/reference rows during check-in.
+// Roster building still includes invited first-login accounts; only scan is gated.
+export async function getCheckInSr(
+	db: Database | DatabaseTransaction,
+	userId: string,
+) {
+	const { candidates } = await readActiveSrDirectory(db, true, userId);
+	const candidate = candidates[0];
+	return candidate && !candidate.mustChangePassword ? candidate : null;
 }
 export type SrCandidate = {
 	userId: string;

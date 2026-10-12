@@ -49,3 +49,17 @@ export const eventMetadataSchema = eventIdSchema.extend({
 	description: z.string().max(5000),
 });
 export type EventDraft = z.infer<typeof eventDraftSchema>;
+
+export const checkInSchema = z
+	.object({
+		qrToken: z.string().min(1).max(256),
+		location: z
+			.object({
+				latitude: z.number().finite().min(-90).max(90),
+				longitude: z.number().finite().min(-180).max(180),
+				accuracyMeters: z.number().finite().positive(),
+			})
+			.strict(),
+	})
+	.strict();
+export type CheckInInput = z.infer<typeof checkInSchema>;

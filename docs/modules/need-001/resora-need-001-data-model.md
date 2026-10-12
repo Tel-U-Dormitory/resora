@@ -1,13 +1,13 @@
 # RESORA — Data Model & Schema Specification (NEED-001)
 
-**Version:** 0.6 · **Updated:** 2026-10-11 · **Status:** Phase 4 event/session/QR implemented; new migration locally validated, remote application requires separate approval\
+**Version:** 0.7 · **Updated:** 2026-10-12 · **Status:** Phase 4/4.5 PM-accepted; Phase 5 attendance/check-in implemented, migration pending review and unapplied\
 **Target:** pilot presensi internal SR, 2026-10-18  
 **Canonical repository path:** `docs/modules/need-001/resora-need-001-data-model.md`\
 **Companion:** [NEED-001 PRD](prd.md), [architecture](../../architecture.md), [acceptance tests](acceptance-tests.md), [roadmap](roadmap.md)
 
 > **Scope:** logical PostgreSQL/Drizzle design, **not executable migration SQL**. Do not run migrations from this document. Better Auth's **actual generated schema** takes precedence for its own four tables. Preserve pnpm 10.33.4 package management, Bun 1.3.13 Express runtime, Next.js/tRPC/Drizzle/Better Auth and Varlock; Supabase is managed PostgreSQL accessed **through Express only**. Do not use Supabase Auth or direct browser/database connections.
 
-Sections 1–11 describe the current design baseline. Sections 12–18 preserve historical Phase 2–3 reviews and test evidence, including superseded audience/event-bound proposals; they are not the current domain schema specification. Phase 4 implements event/session/QR storage only; attendance records/audit remain future proposals.
+Sections 1–11 describe the current design baseline. Sections 12–18 preserve historical Phase 2–3 reviews and test evidence, including superseded audience/event-bound proposals; they are not the current domain schema specification. Phase 4 implemented event/session/QR; Phase 5 adds record/check-in definitions below. Phase 6 audit/manual/report remain proposals. Historical sections retain their original evidence/status.
 
 ## 1. Decisions and semantics
 
@@ -23,7 +23,7 @@ Sections 1–11 describe the current design baseline. Sections 12–18 preserve 
 | Attendance scan   | Valid for an eligible authenticated user while attendance session and current QR are active/valid; NEED-001 allows scans before `starts_at` and after `ends_at` | Confirmed |
 | Timing            | `EARLY` if before event start; `ON_TIME` from start through 15-minute grace (configurable); `LATE` after grace                                                                                       | Confirmed                                            |
 | QR                | Challenge belongs to an attendance session; static/redisplayable during configured TTL, default 360 minutes from challenge activation; explicit revoke/reissue, no automatic rotation | Confirmed; Phase 4 static signed protocol implemented |
-| Geofence          | HCO selects map pin or latitude/longitude center; separate configurable radius, **20 m confirmed default**; browser requests location; backend validates distance from untrusted/imperfect GPS | Confirmed; accuracy threshold/radius bounds TBD |
+| Geofence          | HCO selects map pin or latitude/longitude center; separate configurable radius, **20 m confirmed default**; browser requests location; backend validates distance from untrusted/imperfect GPS | Confirmed; Phase 5 accuracy <=20 m confirmed; operational radius bounds/retention remain open |
 | Manual entry      | KADEP HCO selects an invited person by name/NIM; `attendance_at` defaults to server time but can be overridden; `recorded_at` is actual immutable server write time, plus mandatory reason and actor | Confirmed                                            |
 | Non-attendees     | Record absence via a report **LEFT JOIN** over invited participants; do not insert fake attendance rows                                                                                              | Recommended                                          |
 | Export            | Include every invited participant, attendance timestamp/status, time classification and lateness; exclude secrets and raw GPS coordinates                                                            | Confirmed                                            |
@@ -32,11 +32,11 @@ Sections 1–11 describe the current design baseline. Sections 12–18 preserve 
 ### Non-negotiable implementation principles
 
 - PostgreSQL `timestamptz` for instants; display `Asia/Jakarta` in UI. Store NIM as **text**, never an integer.
-- All authorization, QR token verification, event eligibility, duplicate checks, and geofence distance checks happen on the **backend**. The Phase 4 HMAC protocol below is implemented; downstream check-in remains future work.
+- All authorization, QR token verification, event eligibility, duplicate checks, and geofence distance checks happen on the **backend**. The Phase 4 HMAC protocol is reused by Phase 5 check-in; storage and concurrency require migration review/local PostgreSQL validation before remote application.
 - Runtime uses `DATABASE_URL` (Supabase Session Pooler); migration tooling prefers `DIRECT_DB_URL`, reports IPv6/network failures explicitly and never silently retries another connection. [Setup](../../setup.md) documents deliberate pooler alternatives. Local Docker PostgreSQL is optional; VPS deployment planned.
 - `attendance_at` is the **effective time of attendance**; `recorded_at` is **when the record was actually written**, including manual late entry.
 - Manual insertions/corrections require append-only audit: KADEP HCO for internal SR, authorized Adaptif for general activities. Do not use destructive delete as a routine correction.
-- Do not store plaintext passwords, QR bearer tokens, Gmail app passwords or raw GPS coordinates in event reports.
+- Never store plaintext passwords, QR bearer tokens or Gmail app passwords. Successful QR GPS evidence belongs only to attendance_records; exclude raw GPS from general responses/reports/exports.
 - Include unique constraints and transactions at the **database** level, not only client-side checks.
 
 ## 2. ERD — domain overview
@@ -138,8 +138,11 @@ erDiagram
       text user_id FK
       timestamptz attendance_at
       timestamptz recorded_at
-      enum source
-      enum timing_class
+      text source
+      text timing_class
+      double scan_lat
+      double scan_lng
+      double gps_accuracy_m
     }
     ATTENDANCE_AUDIT_LOGS {
       uuid id PK
@@ -165,7 +168,7 @@ erDiagram
 
 **Phase 2A:** server Username Plugin and compatible generated `username` (nullable, unique) / `display_username` (nullable) fields are present in `packages/db/src/schema/auth.ts`. Plugin normalization is disabled to preserve NIM text; immutableUsername is enabled. Phase 2B implements client integration and active-SR authentication enforcement; Phase 2C implements transaction-bound CSV provisioning. Phase 2A.6 applied and verified the foundation migrations on Development (§15); review any future unapplied migrations before application. Do not add a second application-level NIM column as a competing source of truth unless migration requirements dictate it.
 
-## 4. Domain tables and columns — identity/event/session/QR implemented; records/audit proposed
+## 4. Domain tables and columns — Phase 5 records implemented; audit/manual deferred
 
 Notation: **PK** primary key; **FK** foreign key; **UK** unique; **NN** not null. `timestamptz` = PostgreSQL timestamp with time zone. Defaults/constraints listed separately. Sections 4.1–4.4 are the authorized Phase 2A baseline defined in Drizzle, validated locally in Phase 2A.5 and applied/verified on Supabase Development in Phase 2A.6 (§15). Sections 4.5–4.8 are implemented by the additive Phase 4 migration, locally applied only. Sections 4.9–4.10 remain future storage proposals.
 
@@ -308,7 +311,7 @@ An attendance session is distinct from an Event and from a Better Auth login ses
 | `status` | TEXT with lifecycle CHECK | `INACTIVE` initially, explicit `ACTIVE` / `CLOSED` | Attendance lifecycle separate from event publication/schedule |
 | `activated_at` / `closed_at` | `timestamptz` | Nullable until explicit action | Actual session actions, not QR expiry |
 | `center_lat` / `center_lng` | `double precision` | Required for NEED-001; latitude -90..90, longitude -180..180 | Geofence center chosen by map pin/coordinates |
-| `geofence_radius_m` | `integer` | Positive, default 20 | Separate meter radius; bounds/GPS accuracy TBD |
+| `geofence_radius_m` | `integer` | Positive, default 20 | Separate meter radius; policy frozen at publish; accuracy initially <=20 m on backend |
 | `late_grace_minutes` | `integer` | Nonnegative, default 15 for NEED-001 | Inclusive grace measured from internal event start; general-activity timing applicability TBD |
 | `qr_ttl_minutes` | `integer` | Positive, default 360 | Each issued challenge expires relative to its own activation |
 
@@ -340,11 +343,15 @@ Authorized operators redisplay the **same QR for the same challenge** after refr
 | `user_id` | `text` | NN FK to `user.id` | Domain-eligible participant |
 | `attendance_at` | `timestamptz` | NN | Effective attendance time; QR uses server clock; authorized manual override permitted |
 | `recorded_at` | `timestamptz` | NN, default now; immutable | Actual original record creation |
-| `source` | Proposed `attendance_source` | NN, `QR` / `MANUAL`; immutable origin | Correction preserves original source |
-| `timing_class` | Proposed `attendance_timing` | EARLY/ON_TIME/LATE required for NEED-001; general-context applicability/nullability TBD | Derived from internal event start and session grace |
+| `source` | `text` (`QR` / `MANUAL`, CHECK) | NN, `QR` / `MANUAL`; immutable origin | Correction preserves original source |
+| `timing_class` | `text` (CHECK) | NN EARLY/ON_TIME/LATE for current internal sessions; future Activity timing remains separate | Derived from internal event start and session grace |
 | `recorded_by_user_id` | `text` | NN FK to `user.id` | QR: participant; manual: domain-authorized operator |
 | `manual_reason` | `text` | Required/nonblank on manual creation | Correction reasons belong to immutable audit |
 | `updated_at` | `timestamptz` | NN, default now; update on correction | Does not replace original creation time |
+| `scan_lat` / `scan_lng` | `double precision` | QR NN pair, latitude [-90,90], longitude [-180,180]; MANUAL NULL | One successful QR location measurement |
+| `gps_accuracy_m` | `double precision` | QR NN, finite and >0; MANUAL NULL | Measured accuracy; backend initially accepts <=20 m |
+
+**Phase 5 GPS privacy:** store exactly one GPS package only with successful QR attendance; MANUAL has NULL GPS. No failed-scan record, tracking history, raw GPS in general response/recap/export or token logging. Inform SR before permission. Retention and dedicated audit authorization are release gates before Production/real pilot. Phase 5 uses TEXT labels with CHECK constraints, matching Phase 4 conventions instead of introducing the previously proposed enums. Recorded creation time and original source are immutable; later correction/audit remains Phase 6.
 
 **Unique `(session_id, user_id)`**; index `(user_id, attendance_at DESC)`. There is no universal attendance `(event_id, user_id)` key or FK to `event_participants`: registration participants are not internal invitees. Through the validated session binding, internal checks require `(event_id, user_id)` in the snapshot; general checks require Activity's active-registration public interface. These checks must be race-safe in the record transaction. Any additional internal-only DB constraint and the registration-cancellation consistency contract need review with the parent binding; do not pretend one FK targets both eligibility sources.
 
@@ -420,9 +427,9 @@ Start from **every `event_participants` row**, resolve the event's unique sessio
 1. Validate Better Auth session, live eligibility and password-change gate. NEED-001 requires active SR; student onboarding for general activities is a separate future dependency.
 2. Verify token protocol/session binding and derive domain event/context from trusted backend data. For internal SR, require published/nonclosed event; for every context require active attendance session plus current, unexpired, unrevoked QR.
 3. Internal: require published invitation for that session's event. General: use Activity's public backend interface to require current successful/not-cancelled registration. Do not accept client department, owner, registration or eligibility claims.
-4. Validate browser location/accuracy against the session's geofence on backend. Treat it as untrusted; GPS failure leads to domain-authorized manual handling, not automatic bypass.
+4. Validate finite coordinates/ranges and accuracy >0 and <=20 m (one backend constant); compute Haversine distance ?session radius on backend. Treat it as untrusted; GPS failure leads to domain-authorized manual handling, not automatic bypass.
 5. Within the race-safe record transaction, validate relevant state/eligibility, use server time, classify internal timing and insert with unique `(session_id, user_id)`. Before-start/after-end internal scans are allowed while session and QR remain valid.
-6. Duplicate/retry returns stable already-recorded result without changing original fields.
+6. Only after valid identity, current QR/session, invitation and geofence checks, duplicate/retry returns ALREADY_CHECKED_IN and original time/classification; no timestamp/source/GPS overwrite. Invalid tokens never disclose existing attendance. Lock event then session in the same order as close/revoke/reissue, and revalidate eligibility inside the transaction.
 
 **Manual/correction:** KADEP HCO selects an invited internal participant by NIM/name; Adaptif resolves an eligible general participant through Activity. Use the target session, validate domain/state/participant, require reason and default effective time to current server time. An allowed override changes `attendance_at`, not immutable `recorded_at`; compute internal classification automatically. Correct an existing record instead of adding a second row and append before/after audit atomically, preserving source. Pre-activation/post-closure manual rules, override bounds and now-inactive historical targets remain TBD. Never treat a SUPERADMIN grant as an operational bypass.
 
@@ -435,7 +442,7 @@ Identity constraints are already implemented/applied in Phase 2A; keep their mig
 - [ ] Sessions: UUID PK; internal-event UNIQUE NOT NULL FK and unique one-session-per-internal-event enforcement, including event creation/commit consistency; active/closed timestamps; no rebinding.
 - [ ] Session policy: coordinate ranges, positive radius/TTL, nonnegative internal grace and confirmed defaults; publication freezes all session configuration; permitted operational bounds remain future UAT decisions.
 - [ ] QR: `session_id` FK, partial unique `(session_id) WHERE is_current=true`, expiry > activation; signed unpredictable binding and stable redisplay; revoke/reissue/closure concurrency.
-- [ ] Records: `session_id`/user FKs, unique `(session_id, user_id)`, own-history index; reviewed context-specific eligibility enforcement, **not a universal FK to invitations**.
+- [ ] Records: QR complete finite/range-valid GPS package, MANUAL NULL GPS, immutable recorded_at/source; `session_id`/user FKs, unique `(session_id, user_id)`, own-history index; reviewed context-specific eligibility enforcement, **not a universal FK to invitations**.
 - [ ] Audit: record/session/user/actor consistency and indexes, nonblank reason, immutable source/creation, append-only audit; atomic manual mutation/audit.
 - [ ] Live session/active-identity/password gate plus HCO, KADEP HCO or Adaptif domain policy; no frontend claims or SUPERADMIN operational bypass.
 - [ ] Race-safe publish, session/QR activation/reissue, explicit event/session closure and check-in; registration consistency via Activity public interface for future NEED-007.
@@ -483,12 +490,12 @@ Do not implement every table at once if incremental migrations can be safely dep
 | ID   | Open item                                                                                               | Impact                                                |
 | ---- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
 | D-01 | Cancellation/reopening/republication handling; title/description-only published edits are confirmed                     | `event_participants` lifecycle and historical reports |
-| D-03 | QR TTL/grace bounds; radius range and GPS accuracy threshold after field testing                       | Validation policy and UAT                             |
+| D-03 | QR TTL/grace bounds; radius range and accuracy tuning after field testing (initial maximum 20 m confirmed)                       | Validation policy and UAT                             |
 | D-04 | Closed-event reopening policy (explicit expired/revoked QR reissue is already confirmed)                                                            | HCO event operations                                  |
 | D-05 | Manual time override allowed range and whether corrected effective time can precede event start by days | Audit and fraud controls                              |
 | D-06 | Gmail SMTP sender configuration, recovery/verification policy and secure temporary password delivery      | Account readiness                                     |
 | D-07 | Actual SR roster and approved distribution; optional default center presets     | Pilot real-data import                                |
-| D-08 | Attendance data retention, export access logging, and timezone/rounding display | Compliance and historical reporting |
+| D-08 | Attendance/GPS retention, dedicated raw-location audit access, export access logging, and timezone/rounding display | Compliance and historical reporting |
 | D-09 | Future Activity/session parent binding and race-safe registration eligibility contract | Before NEED-007; Phase 4 internal binding approved |
 | D-10 | Pre-activation/post-closure manual operations and future cancel/reopen handling | Before affected future endpoints; no standalone close-session in NEED-001 |
 | D-11 | General-activity timing applicability and eligible report interface; exact registration-cancellation/check-in consistency | NEED-007 later; do not force internal invitation/timing rules |
@@ -755,3 +762,11 @@ Native PostgreSQL 18.3, loopback 127.0.0.1:55432, disposable `resora_identity_te
 Targeted Attendance unit/integration suite: 13 passed, zero failed/skipped; covers official pairs, roster, eligibility, actual Express/tRPC permissions, exactly-one cardinality, atomic failures, publication freezing/snapshots, static signed PNG, session binding, expiry/revoke/reissue and concurrent issuance. Identity/RBAC/provisioning/smoke regressions passed; auth suite 16 passed after its migration-history expectation was updated from three to four (no auth logic change). Whole workspace typecheck and Next.js/Express production build passed. Final close review preserves the original revoke timestamp; targeted close test and backend checks validate that correction. Browser/mobile UAT and remote migration remain separate approval gates.
 
 HCO UI is `/events` with thin routes and flat attendance feature files. Non-HCO sees only published invited events; INTI/SUPERADMIN does not bypass HCO policy. Snapshot values stay historical; protected procedures still reload active SR and enforce mandatory password change. Session policy/roster/schedule freezes at publish; publication does not activate session. Event/session/QR writes serialize with row locks; current QR has a partial unique index. Static signing derives a domain-separated HKDF key from existing backend auth secret, never persists bearer token; secret rotation invalidates signatures. Future Phase 5 must combine QR verification with live identity, snapshot eligibility and GPS in a race-safe record transaction.
+
+## 20. Phase 5 implementation and verification (2026-10-12)
+
+Attendance adds a single additive `phase5_checkin` migration for attendance_records, three numeric QR GPS fields, UNIQUE(session_id,user_id), FKs/history index, source/timing/GPS/manual-reason CHECKs and a custom immutable recorded_at/source trigger (not represented by snapshots). Existing applied migrations remain unchanged. No PostgreSQL/Supabase connection, migration application, seed or provisioning is performed in this phase.
+
+`attendance.checkIn` uses protectedProcedure, Identity public locked eligibility, published invitation, existing HMAC verifier and event?session locks matching Phase 4 lifecycle order. Only valid QR/GPS requests may lookup or return an existing record. Duplicates retain original values; ON CONFLICT DO NOTHING guards uniqueness. Explicit response contains status/event name/effective time/timing only. Scanner `/scan` uses qr-scanner decoder fallback, user-triggered camera, geolocation permission notice and resource cleanup; personal-history/report endpoints remain deferred.
+
+Offline targeted tests use synthetic query doubles and schema/SQL metadata; these are not real PostgreSQL constraint or concurrency evidence. Review/apply migration and test actual duplicate/close concurrency only under separately authorized environments. Mobile camera/GPS UAT needs HTTPS; no deployment/tunnel is created. GPS retention and dedicated audit access are unresolved before Production/real pilot.

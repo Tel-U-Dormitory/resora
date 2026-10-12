@@ -104,7 +104,7 @@ Authorized HCO manages event, QR, radius, reporting and explicit closure. The in
 | Rule                      | NEED-001 baseline                                                                                                                                                   |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | QR                        | Static, unpredictable, session-bound with validated event/context association; default **6 hours from activation**, configurable, revocable/reissuable explicitly; no automatic rotation.              |
-| Geofence                  | HCO sets map point and radius; **20 m default**, configurable. Backend calculates distance; browser GPS is an untrusted signal.                                     |
+| Geofence                  | HCO sets map point and radius; **20 m default**, configurable. Backend calculates distance; browser GPS is untrusted. Phase 5 initially requires accuracy <=20 m (one backend constant); radius is configurable only in DRAFT and frozen at publication.                                     |
 | Check-in time             | Scan allowed **before scheduled start and after scheduled end**, as long as session and QR are still active/valid.                                                  |
 | Timing                    | `EARLY` before start; `ON_TIME` from start through start + grace **inclusive**; `LATE` afterward; **15-minute default grace**.                                      |
 | Manual entry / correction | **KADEP HCO only**, mandatory reason, overridable effective `attendance_at`, immutable `recorded_at`, preserved original source and append-only before/after audit. |
@@ -139,6 +139,8 @@ The earlier plan identifies **2026-10-18 as a target for a controlled NEED-001 p
 | Production VPS and full product release                                               | **Planned, unverified**                                                                          | Security, backup, deployment, operations and PM go/no-go.                       |
 
 **No database migration or production action is authorized merely by this PRD.** Migration review and explicit approval are required; local disposable DB tests and Supabase Development must be clearly distinguished from production.
+
+**Phase 5 PM decision (2026-10-12):** successful QR check-in stores one latitude/longitude/accuracy measurement as DOUBLE PRECISION on the attendance record. Failed scans and continuous location history are not stored. Explain this before GPS permission. Raw GPS is excluded from general responses, recaps and exports; dedicated audit access and retention require decisions before Production/real pilot. Manual attendance GPS is nullable. Initial maximum accuracy is 20 m, tunable to 30 m through one backend constant after UAT.
 
 ## 8. Authentication, authorization and data governance
 
@@ -206,7 +208,7 @@ Official reference for SR attendance: **FR-086 and FR-119–FR-130**. Core depen
 ## 15. Open decisions (do not infer answers)
 
 1. **NEED-001:** future invitee amendment/cancel/reopen policy; none is implemented in Phase 4. INTI membership and publication freeze of all session configuration are final.
-2. **Location and manual attendance:** permissible radius range, GPS accuracy threshold, effective-time override bounds, display rounding and audit retention/access.
+2. **Location and manual attendance:** permissible radius range, GPS retention and dedicated audit access, effective-time override bounds, display rounding and audit retention/access.
 3. **Identity:** complete real SR roster, secure first-credential handoff, operational password recovery/SMTP, and login/provisioning for mahasiswa/maba.
 4. **Shared attendance architecture:** future Activity-to-session parent reference and registration consistency. Phase 4 internal event ownership, exactly-one session and close-event-only lifecycle are final; no universal cross-module FK is selected.
 5. **NEED-007:** creation privileges for activities outside Adaptif, full module MVP/UAT policy, and configurable registration-window edges; **capacity, cancellation and immediate eligibility rules are already confirmed**.

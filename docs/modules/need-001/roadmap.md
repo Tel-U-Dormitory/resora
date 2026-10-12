@@ -119,7 +119,7 @@
 
 **Gate F3:** tested policy foundation and local dictionaries; no event/attendance, grant/revoke or administrator endpoint/UI. Resource ownership, participant eligibility, state and audit checks apply when real endpoints are built. Audience semantics now use KADEP across departments; documentation now follows roster/session design; physical cross-module binding and lifecycle decisions remain Phase 4 gates. Inti membership stays TBD.
 
-### F4 — Organization alignment, event, composable roster & attendance session/QR (implemented locally; PM review pending)
+### F4 — Organization alignment, event, composable roster & attendance session/QR (PM accepted, including F4.5 frontend fixes)
 
 - [x] Dictionary 8/7/18 dengan INTI; validasi pasangan resmi reusable pada provisioning/directory, seed idempotent tanpa mutasi legacy.
 - [x] Attendance memiliki event internal, snapshot, session dan QR; Identity public directory/policy dipakai antar modul, FE melalui satu appRouter tRPC.
@@ -129,21 +129,23 @@
 - [x] Static signed QR, default 360 menit, redisplay PNG, explicit revoke/reissue, session binding, current unique, row-lock concurrency; close event/session/QR atomik.
 - [x] UI minimal `/events`, feature-first shallow; guarded session/password flow existing dipertahankan.
 - [x] Migrasi additive empat tabel diterapkan dan rerun diverifikasi hanya pada scratch PostgreSQL lokal.
-- [ ] Review PM, izin migrasi Development terpisah dan manual UAT. Tidak ada remote mutation dalam Phase 4.
+- [x] PM menerima Phase 4/4.5; migrasi Phase 4, dictionary dan dua dummy diterapkan pada Development dalam setup UAT terpisah yang disetujui. Production tidak disentuh.
 
 **Gate F4:** targeted tests dan regression/quality checks dicatat pada laporan implementasi. Scanner, attendance records/audit/export, standalone session close, cancel/reopen/republish dan Activity tidak termasuk.
 
-### F5 — QR check-in, waktu & geofence (TODO)
+### F5 — QR check-in, waktu & geofence (implemented; migration/PostgreSQL/mobile UAT gates pending)
 
-- [ ] SR scan QR melalui browser mobile dan mengirim lokasi dengan izin pengguna (HTTPS pada staging/production).
-- [ ] Backend memvalidasi auth session, attendance session/context, snapshot undangan internal, QR current/expiry/revoke, lokasi/radius dan status aktif; tidak mempercayai lokasi/waktu yang dihitung frontend.
-- [ ] Default radius **20m** dan late tolerance **15 menit**, masing-masing editable per event.
-- [ ] Scan boleh sebelum mulai/setelah selesai selama QR aktif; waktu server menentukan EARLY/ON_TIME/LATE dengan batas grace inklusif. Presence terpisah: pending tanpa record hingga closure, lalu absent; closure event eksplisit HCO menutup satu attendance session dan membatalkan QR aktif; non-attendee menjadi ABSENT.
-- [ ] DB constraint `UNIQUE(session_id,user_id)`; retry/concurrent scan tidak menghasilkan attendance ganda.
-- [ ] Error state eksplisit untuk invalid QR, expired QR, GPS ditolak/kurang akurat, di luar radius, session habis, koneksi putus.
-- [ ] Jangan simpan histori GPS kontinu; catat hanya bukti minimum yang disetujui.
+- [x] SR scan QR melalui browser mobile dan mengirim lokasi dengan izin pengguna (HTTPS pada staging/production).
+- [x] Backend memvalidasi auth session, attendance session/context, snapshot undangan internal, QR current/expiry/revoke, lokasi/radius dan status aktif; tidak mempercayai lokasi/waktu yang dihitung frontend.
+- [x] Default radius **20m** dan late tolerance **15 menit**, masing-masing editable saat DRAFT dan frozen sesudah publish; batas accuracy awal <=20 m melalui satu konstanta backend.
+- [x] Scan boleh sebelum mulai/setelah selesai selama QR aktif; waktu server menentukan EARLY/ON_TIME/LATE dengan batas grace inklusif. Close event/session/QR tetap memakai Phase 4. Proyeksi PENDING/ABSENT dan recap untuk seluruh invitee tetap Phase 6; jangan membuat record absent palsu.
+- [x] DB constraint `UNIQUE(session_id,user_id)` dan duplicate-safe insert disiapkan pada migration/code; PostgreSQL enforcement/concurrency belum diuji pada fase ini.
+- [x] Error state eksplisit untuk invalid QR, expired QR, GPS ditolak/kurang akurat, di luar radius, session habis, koneksi putus.
+- [x] Simpan scan_lat/scan_lng/gps_accuracy_m DOUBLE PRECISION hanya pada QR berhasil; MANUAL NULL. Tanpa histori kontinu/scan gagal; tanpa GPS mentah di response umum/rekap/export. Notice sebelum permission; retensi/audit GPS wajib diputuskan sebelum pilot nyata.
 
-**Gate F5:** successful/late/duplicate/outside-radius/expired-token diuji otomatis; GPS tidak terverifikasi mengarahkan ke KADEP HCO untuk input manual.
+**Code gate F5 (offline tests only; real PostgreSQL concurrency/mobile GPS not yet verified):** successful/late/duplicate/outside-radius/expired-token diuji otomatis; GPS tidak terverifikasi mengarahkan ke KADEP HCO untuk input manual.
+
+**Verification boundary:** `pnpm run test:check-in` tests policies/service doubles/schema metadata offline. This is not PostgreSQL execution or concurrency evidence. The new migration is unapplied; retention/dedicated GPS audit authorization and HTTPS mobile UAT remain release gates.
 
 ### F6 — Manual attendance, history, recap & export (TODO)
 
@@ -185,7 +187,7 @@
 | ID | Keputusan tersisa | Pemutus | Gate |
 | --- | --- | --- | --- |
 | OPEN-001 | Cancel/reopen/republication lifecycle; HCO close/reissue eksplisit sudah confirmed | HCO + PM | Lifecycle/reporting |
-| OPEN-003 | Radius range/accuracy threshold setelah field test; batas TTL/grace | HCO + PM | F5/UAT |
+| OPEN-003 | Radius range/accuracy tuning setelah field test (awal maksimum 20 m); batas TTL/grace; retensi dan akses audit GPS sebelum pilot nyata | HCO + PM | F5/UAT |
 | OPEN-004 | Batas override waktu; input historis untuk peserta sekarang inactive | KADEP HCO + PM | F6 |
 | OPEN-005 | Nilai roster/gedung/jabatan dan distribusi credential aman | PM + RnD | Import nyata/UAT |
 | OPEN-006 | Konfigurasi Gmail sender, recovery/verifikasi | PM + RnD | F2 |

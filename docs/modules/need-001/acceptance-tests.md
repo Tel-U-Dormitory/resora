@@ -1,8 +1,8 @@
 # NEED-001 — Acceptance Criteria & UAT Scenarios
 
-**Current domain baseline (2026-10-11):** composable active-SR roster and session-based shared attendance; [canonical model](resora-need-001-data-model.md). Phase 4 event/roster/session/QR cases are implemented and tested locally; scan/manual/report cases remain future acceptance specifications. Internal-only binding, no standalone close-session and policy freeze follow PM FINAL. Historical Phase 2B/3 evidence below records its original state.
+**Current domain baseline (2026-10-11):** composable active-SR roster and session-based shared attendance; [canonical model](resora-need-001-data-model.md). Phase 4/4.5 are PM-accepted. Phase 5 scan implementation is covered by offline tests; PostgreSQL/mobile execution remains unverified and its migration is unapplied. Phase 6 manual/report cases remain future specifications. Internal-only binding, no standalone close-session and policy freeze follow PM FINAL. Historical Phase 2B/3 evidence below records its original state.
 
-**Status:** Identity authentication cases tested locally in Phase 2B; domain execution/pilot UAT pending. Only explicitly marked policy details remain `TBD`.
+**Status:** Phase 4/4.5 accepted; Phase 5 migration review and mobile/concurrency UAT pending. Only explicitly marked policy details remain `TBD`.
 
 Sources: [NEED-001 PRD](prd.md) and [canonical data model/repository review](resora-need-001-data-model.md#12-repository-compatibility-review-2026-10-10). Phase 2A identity definitions/migrations were validated locally in Phase 2A.5 and applied/read-only verified on Supabase Development in [Phase 2A.6](resora-need-001-data-model.md#15-phase-2a6-supabase-development-migration); Phase 4 event/session/QR schema is locally validated only; records/audit and remote application remain future work. Use synthetic accounts only in authorized development testing until the private CSV arrives; no accounts were created in Phase 2A.6.
 
@@ -24,7 +24,7 @@ Sources: [NEED-001 PRD](prd.md) and [canonical data model/repository review](res
 | AT-014 | Same user and attendance session, valid QR | Retry or concurrent requests | Exactly one record via unique `(session_id, user_id)`; stable duplicate response without timestamp changes | Required shared-engine integrity |
 | AT-015 | Revoked or expired session QR | Scan despite event still in progress | Denied; no attendance change or attendee data leakage | Confirmed |
 | AT-016 | Participant beyond configured radius | Try scan | No automatic attendance; direct participant to KADEP HCO for manual entry | Confirmed |
-| AT-017 | Location denied/unverifiable GPS accuracy | Try scan | No automatic attendance; contact KADEP HCO for manual entry | Confirmed fallback; accuracy threshold TBD |
+| AT-017 | Location denied/unverifiable GPS accuracy | Try scan | No automatic attendance; contact KADEP HCO for manual entry | Confirmed: accuracy >20 m rejected; positive accuracy <=20 m accepted subject to radius |
 | AT-018 | KADEP HCO manual entry | Submit without reason or with blank reason | Rejected; no attendance or partial audit write | Confirmed |
 | AT-019 | Existing attendance record | KADEP HCO corrects effective time with reason | Preserve original recorded_at **and original source**; recalculate timing; append immutable before/after audit | Confirmed |
 | AT-020 | Event grace configured to 30 min | Scan at start +30min and +30min 1sec | ON_TIME at inclusive boundary, then LATE; presence remains PRESENT | Confirmed |
@@ -61,6 +61,23 @@ Sources: [NEED-001 PRD](prd.md) and [canonical data model/repository review](res
 | AT-051 | Published event E with its one session S and valid QR | Try check-in before session activation, after session close, or with foreign session/token | Rejected; publication/schedule alone does not activate attendance; binding and active state checked server-side | Confirmed internal_event_id UNIQUE NOT NULL FK; tested locally |
 | AT-052 | General Adaptif activity (future NEED-007) | Shared engine asks Activity public backend interface about registration | Successful active/noncancelled registration required; no internal invitation FK or private Activity table access; HCO denied, authorized Adaptif manual allowed without KADEP | Future interface boundary; consistency contract TBD |
 | AT-053 | Attempt standalone session close or reopen/cancel/republish | Inspect supported API/UI | No such endpoint/UI in NEED-001; close event atomically closes session and QR | Confirmed PM FINAL; future manual extensions TBD |
+
+## Phase 5 acceptance baseline (2026-10-12)
+
+These are specifications, not claims of executed PostgreSQL/mobile tests. Phase 4/4.5 are PM-accepted; the additive Phase 5 migration requires separate review and application approval.
+
+| ID | Scenario | Expected |
+| --- | --- | --- |
+| AT-P5-01 | Valid invited active SR, signed current QR, accuracy <=20 m, within radius | QR record stores three numeric GPS fields; response contains event/time/timing, no GPS/token |
+| AT-P5-02 | NaN/infinite/out-of-range coordinates, accuracy ?0 or >20 m, outside radius | Reject without attendance or failed-location storage |
+| AT-P5-03 | Early/start/exact grace/after grace/after scheduled end | EARLY / ON_TIME / ON_TIME / LATE; end is not a cutoff while QR/session valid |
+| AT-P5-04 | Valid duplicate/concurrent check-in | One record; ALREADY_CHECKED_IN with original timestamp/class/source/GPS unchanged |
+| AT-P5-05 | Invalid/revoked/expired QR or closed/inactive session, even with an existing record | Reject before revealing attendance; close/check-in serialize event then session |
+| AT-P5-06 | Inactive/non-SR, invalid assignment, not invited, first-password-change gate | Server denies; client cannot submit identity/time/permission claims |
+| AT-P5-07 | GPS permission denied/timeout/unavailable, poor accuracy/outside radius | Explain error; direct to KADEP HCO, no bypass or manual request flow |
+| AT-P5-08 | Mobile scanner lifecycle | Notice before GPS permission; explicit camera start; stop on completion/failure/unmount; HTTPS required on phone |
+
+Retention and dedicated GPS audit access remain required before Production/real pilot.
 
 ## Phase 2B authentication execution (2026-10-11)
 
@@ -105,7 +122,7 @@ These validate the policy/seed foundation, not unbuilt event/attendance workflow
 
 A `TBD` scenario is **not automatically passing**. Review the [PRD](prd.md) before writing tests that assert unknown policy as fact.
 
-These are acceptance specifications, not executed automated tests. Remaining gates: cancellation/reopening/republication handling, final PM confirmation of center/radius/tolerance freeze, GPS/radius limits, override bounds (including now-inactive invitees and post-closure manual operations), lateness rounding, actual roster/credential delivery, retention and SMTP operations. Phase 2A identity tests are code-level checks, not completion of these application acceptance scenarios. See the canonical model §10/§12.
+These are acceptance specifications, not executed automated tests. Remaining gates: cancellation/reopening/republication handling, publication freeze is final; operational radius bounds/accuracy tuning after UAT, override bounds (including now-inactive invitees and post-closure manual operations), lateness rounding, actual roster/credential delivery, retention and SMTP operations. Phase 2A identity tests are code-level checks, not completion of these application acceptance scenarios. See the canonical model §10/§12.
 
 ## Phase 4 event/session/QR verification (2026-10-11)
 

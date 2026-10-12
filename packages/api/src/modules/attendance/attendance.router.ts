@@ -1,13 +1,22 @@
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../../index";
 import {
+	checkInSchema,
 	eventDraftSchema,
 	eventIdSchema,
 	eventMetadataSchema,
 } from "./attendance.schema";
 import * as attendance from "./attendance.service";
+import { checkIn } from "./check-in";
 
 export const attendanceRouter = router({
+	checkIn: protectedProcedure
+		.input(checkInSchema)
+		.mutation(({ ctx, input }) => {
+			if (!ctx.qrSigningSecret)
+				throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+			return checkIn(ctx.db, ctx.identity, ctx.qrSigningSecret, input);
+		}),
 	list: protectedProcedure.query(({ ctx }) =>
 		attendance.listEvents(ctx.db, ctx.identity),
 	),

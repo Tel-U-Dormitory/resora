@@ -24,6 +24,7 @@
 		"lucide-react": "catalog:",
 		"next": "^16.3.4",
 		"next-themes": "catalog:",
+		"qr-scanner": "1.4.2",
 		"react": "catalog:",
 		"react-dom": "catalog:",
 		"sonner": "catalog:",

@@ -1,6 +1,11 @@
 "use client";
 
-import { CalendarDays, LayoutDashboard, LockKeyhole } from "lucide-react";
+import {
+	CalendarDays,
+	LayoutDashboard,
+	LockKeyhole,
+	ScanLine,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ModeToggle } from "@/components/mode-toggle";
@@ -42,7 +47,9 @@ export function AppSidebar({
 							? LayoutDashboard
 							: icon === "events"
 								? CalendarDays
-								: LockKeyhole;
+								: icon === "scan"
+									? ScanLine
+									: LockKeyhole;
 					return (
 						<Link
 							key={href}

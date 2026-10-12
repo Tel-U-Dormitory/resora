@@ -10,6 +10,7 @@ import {
 	primaryKey,
 	text,
 	timestamp,
+	unique,
 	uniqueIndex,
 	uuid,
 } from "drizzle-orm/pg-core";
@@ -142,8 +143,66 @@ export const qrChallenges = pgTable(
 		check("qr_challenges_expiry", sql`${t.expiresAt} > ${t.activatedAt}`),
 	],
 );
+export const attendanceRecords = pgTable(
+	"attendance_records",
+	{
+		id: uuid("id").defaultRandom().primaryKey(),
+		sessionId: uuid("session_id")
+			.notNull()
+			.references(() => attendanceSessions.id),
+		userId: text("user_id")
+			.notNull()
+			.references(() => user.id),
+		attendanceAt: timestamp("attendance_at", { withTimezone: true }).notNull(),
+		recordedAt: timestamp("recorded_at", { withTimezone: true })
+			.notNull()
+			.defaultNow(),
+		source: text("source").$type<"QR" | "MANUAL">().notNull(),
+		timingClass: text("timing_class")
+			.$type<"EARLY" | "ON_TIME" | "LATE">()
+			.notNull(),
+		recordedByUserId: text("recorded_by_user_id")
+			.notNull()
+			.references(() => user.id),
+		manualReason: text("manual_reason"),
+		updatedAt: timestamp("updated_at", { withTimezone: true })
+			.notNull()
+			.defaultNow()
+			.$onUpdate(() => new Date()),
+		scanLat: doublePrecision("scan_lat"),
+		scanLng: doublePrecision("scan_lng"),
+		gpsAccuracyM: doublePrecision("gps_accuracy_m"),
+	},
+	(t) => [
+		unique("attendance_records_session_user_unique").on(t.sessionId, t.userId),
+		index("attendance_records_user_time_idx").on(
+			t.userId,
+			t.attendanceAt.desc(),
+		),
+		check("attendance_records_source", sql`${t.source} IN ('QR', 'MANUAL')`),
+		check(
+			"attendance_records_timing",
+			sql`${t.timingClass} IN ('EARLY', 'ON_TIME', 'LATE')`,
+		),
+		check(
+			"attendance_records_manual_reason",
+			sql`${t.source} <> 'MANUAL' OR (${t.manualReason} IS NOT NULL AND length(btrim(${t.manualReason})) > 0)`,
+		),
+		check(
+			"attendance_records_gps_package",
+			sql`(${t.source} = 'QR' AND ${t.scanLat} IS NOT NULL AND ${t.scanLng} IS NOT NULL AND ${t.gpsAccuracyM} IS NOT NULL AND ${t.scanLat} BETWEEN -90 AND 90 AND ${t.scanLng} BETWEEN -180 AND 180 AND ${t.gpsAccuracyM} > 0 AND ${t.gpsAccuracyM} < 'Infinity'::double precision) OR (${t.source} = 'MANUAL' AND ${t.scanLat} IS NULL AND ${t.scanLng} IS NULL AND ${t.gpsAccuracyM} IS NULL)`,
+		),
+	],
+);
 export const attendanceRelations = defineRelationsPart(
-	{ events, attendanceSessions, eventParticipants, qrChallenges },
+	{
+		events,
+		attendanceSessions,
+		eventParticipants,
+		qrChallenges,
+		attendanceRecords,
+		user,
+	},
 	(r) => ({
 		events: {
 			session: r.one.attendanceSessions({
@@ -166,6 +225,10 @@ export const attendanceRelations = defineRelationsPart(
 				from: r.attendanceSessions.id,
 				to: r.qrChallenges.sessionId,
 			}),
+			records: r.many.attendanceRecords({
+				from: r.attendanceSessions.id,
+				to: r.attendanceRecords.sessionId,
+			}),
 		},
 		eventParticipants: {
 			event: r.one.events({
@@ -178,6 +241,23 @@ export const attendanceRelations = defineRelationsPart(
 			session: r.one.attendanceSessions({
 				from: r.qrChallenges.sessionId,
 				to: r.attendanceSessions.id,
+				optional: false,
+			}),
+		},
+		attendanceRecords: {
+			session: r.one.attendanceSessions({
+				from: r.attendanceRecords.sessionId,
+				to: r.attendanceSessions.id,
+				optional: false,
+			}),
+			participant: r.one.user({
+				from: r.attendanceRecords.userId,
+				to: r.user.id,
+				optional: false,
+			}),
+			recorder: r.one.user({
+				from: r.attendanceRecords.recordedByUserId,
+				to: r.user.id,
 				optional: false,
 			}),
 		},
