@@ -74,3 +74,47 @@ test("pilot enables memory rate limiting and authoritative sessions without sche
 	);
 	expect(secureAuth.options.advanced.defaultCookieAttributes.secure).toBe(true);
 });
+
+test("auth POST rejects missing and foreign Origin before credential work", async () => {
+	for (const origin of [null, "https://untrusted.example.invalid", "null"]) {
+		const response = await auth.handler(
+			new Request("http://localhost:3000/api/auth/sign-in/username", {
+				method: "POST",
+				headers: {
+					"content-type": "application/json",
+					...(origin ? { origin } : {}),
+					"x-resora-client-ip": "198.51.100.40",
+				},
+				body: JSON.stringify({
+					username: "0000123456",
+					password: "synthetic-password-only",
+				}),
+			}),
+		);
+		expect(response.status).toBe(403);
+	}
+});
+
+test("actual auth login limiter throttles invalid body requests without connecting to database", async () => {
+	const statuses: number[] = [];
+	for (let attempt = 0; attempt < 6; attempt++) {
+		const response = await auth.handler(
+			new Request("http://localhost:3000/api/auth/sign-in/username", {
+				method: "POST",
+				headers: {
+					"content-type": "application/json",
+					origin: "http://localhost:3001",
+					"x-resora-client-ip": "198.51.100.41",
+				},
+				// Schema rejects this before adapter/credential reads; limiter still sees real requests.
+				body: JSON.stringify({
+					username: 123,
+					password: "synthetic-password-only",
+				}),
+			}),
+		);
+		statuses.push(response.status);
+	}
+	expect(statuses.slice(0, 5)).toEqual([400, 400, 400, 400, 400]);
+	expect(statuses[5]).toBe(429);
+});

@@ -44,8 +44,8 @@
 | **12 Okt**     | F2 Login/provisioning + F3 RBAC             | SR dummy login NIM; signup publik mati; izin HCO/KADEP diuji         | F2/Phase 3 fondasi teruji lokal; review PM, import nyata/UAT dan endpoint domain pending |
 | **13 Okt**     | F4 Event & reusable QR                      | HCO buat event/QR; audience dan challenge diverifikasi backend       | Phase 4/4.5 PM accepted |
 | **14 Okt**     | F5 Check-in + geofence                      | SR bisa scan satu kali; presence + EARLY/ON_TIME/LATE & radius tervalidasi     | Phase 5 Development verified; mobile UAT pending |
-| **15 Okt**     | F6 Manual attendance + reporting            | Input/koreksi KADEP dengan audit, semua undangan dan CSV berjalan              | Phase 6 implementation/migration review; unapplied |
-| **16 Okt**     | F7 Integrasi UI + automated tests           | Happy path dan failure cases lulus di staging                        | TODO                                                 |
+| **15 Okt**     | F6 Manual attendance + reporting            | Input/koreksi KADEP dengan audit, semua undangan dan CSV berjalan              | Phase 6 Development migrated/verified; live-profile gaps pending |
+| **16 Okt**     | F7 Integrasi UI + automated tests           | Happy path dan failure cases lulus di staging                        | Phase 7 quality review; remote CI pending             |
 | **17 Okt**     | F8 UAT lapangan + deployment rehearsal      | HTTPS, backup, UAT HCO, revisi blocker P0, go/no-go                  | TODO                                                 |
 | **18 Okt**     | **Controlled pilot NEED-001**               | Persetujuan PM + HCO; bisa dipakai SR sungguhan tanpa blocker kritis | TODO                                                 |
 
@@ -147,24 +147,24 @@
 
 **Verification boundary:** the original `pnpm run test:check-in` checks were offline. Subsequent approved Development verification matched five applied migrations and passed 18 distinct PostgreSQL cases, including duplicate/close/revoke/reissue and constraints. Live inactive/invalid-assignment profile reload remains unverified; retention/dedicated GPS audit authorization and HTTPS mobile UAT remain release gates.
 
-### F6 — Manual attendance, audit, history & reporting (implemented for review; migration unapplied)
+### F6 — Manual attendance, audit, history & reporting (Development migrated/verified; live-role gaps and UAT pending)
 
 KADEP HCO alone may insert/correct/audit attendance on PUBLISHED with INACTIVE/ACTIVE session or CLOSED/CLOSED, never DRAFT. Effective time must be <= server now and, for CLOSED, <= events.closed_at; CLOSED insertion requires explicit time. No scheduled-end cutoff or extra backdate window. Existing records of inactive historical invitees may be corrected, but new inactive/ineligible insertion is denied. Preserve original recorded_at, source, recorded_by_user_id, initial manual_reason and GPS; update only attendance_at/timing_class/updated_at and append mandatory-reason before/after audit atomically. Manual operations cannot reopen event/session/QR or change snapshots/frozen policy.
 
 HCO recap/CSV starts from every invitation snapshot LEFT JOIN records by session/user. Presence is derived PRESENT/PENDING/ABSENT, with missing time/timing/source/duration NULL. Lateness is max(0, ceil(minutes after grace)), zero for EARLY/ON_TIME. Own history is session-user-only with bounded pagination, no arbitrary userId. UTF-8 CSV uses quoting/formula defense, an apostrophe text marker retaining NIM leading zeros without formulas, WIB timestamps and blank missing fields. No raw GPS, credentials or internal audit JSON. GPS/audit/export retention and export-access audit remain release decisions.
 
-Phase 6 is implemented for code/migration review, not released. One additive audit migration is prepared and unapplied. PostgreSQL Phase 6 trigger/concurrency/transaction execution requires separate approval; no remote mutation, new scratch, seed or provisioning was performed. Manual frontend UAT remains pending.
+Phase 6 migration `20261012071912_phase6_reporting` was applied with separate PM approval to verified Supabase Development using Session Pooler 5432 and verified TLS. History contains six matching migrations, no pending migration. Seventeen real PostgreSQL test groups passed (12 rollback-based, five committed concurrency cases), including audit guards, rollback on audit failure, manual/QR uniqueness, correction chain and concurrent close. Six temporary events rolled back completely; one explicitly approved concurrency fixture remains CLOSED with two records/four immutable audits. Data outside the fixture was unchanged. Live inactive-target/historical-inactive and additional role combinations remain unverified; Phase 7 does not mutate remote identities or repeat those suites.
 
 **Phase 5 validation:** PM applied `20261012032606_phase5_checkin` to Supabase Development. Read-only verification matched all five migration hashes, columns, indexes, constraints and enabled triggers. Eighteen distinct targeted PostgreSQL cases passed, including parallel duplicate, close, revoke/reissue and SQL origin/constraint checks. Twelve isolated fixture events were cleaned with existing data unchanged. Live inactive/invalid-assignment DB-profile reload remains unverified (service-context rejection tested); mobile HTTPS UAT is pending.
 
-### F7 — Integrasi frontend, keamanan, CI & pengujian (TODO)
+### F7 — Integrasi frontend, keamanan, CI & pengujian (implemented; PM review and remote CI/UAT pending)
 
-- [ ] Selesaikan mobile UI SR dan HCO; lokasi browser, kamera QR, loading, izin ditolak, expired token dan pesan error yang jelas.
-- [ ] Tulis unit test (audience, policy, geofence, status waktu), integration test (auth, RBAC, DB uniqueness), dan E2E alur utama.
-- [ ] Jalankan `pnpm exec biome check .` (read-only), `pnpm run check-types`, `pnpm run build`, serta test command sesuai repo. `pnpm run check` saat ini memakai `--write`; jangan pakai sebagai audit read-only.
-- [ ] Tambahkan CI minimal pada pull request: Biome, typecheck, build dan tests relevan.
-- [ ] Cek pembatasan public sign-up secara langsung, security headers, cookie/CORS/trusted origins, rate limiting, logging redaction.
-- [ ] Catat hasil terhadap `docs/modules/need-001/acceptance-tests.md`; setiap gagal punya severity dan owner.
+- [x] Audit existing SR/HCO/KADEP flows; scanner fallback copy/cache/track cleanup and safe query error fixes. Static/CLI review only; responsive/device UAT is Phase 8.
+- [x] Existing identity/auth/RBAC/roster/QR/check-in/manual/report offline coverage reused; loopback HTTP negative RBAC/origin/privacy/IP and scanner helper regressions added. No browser E2E or remote suite rerun.
+- [x] Jalankan `pnpm exec biome check .` (read-only), `pnpm run check-types`, `pnpm run build`, serta test command sesuai repo. `pnpm run check` saat ini memakai `--write`; jangan pakai sebagai audit read-only.
+- [x] Minimal main-target PR workflow implemented with pinned tooling, frozen install/Varlock, typegen, read-only Biome, typecheck, offline tests/build and synthetic env. Actual remote run pending.
+- [x] Direct signup/origin/login limiter checks and HTTP header/CORS/IP/error/redaction/RBAC checks; proxy security/HTTPS/multi-worker behavior remain Phase 8.
+- [x] Catat hasil terhadap `docs/modules/need-001/acceptance-tests.md`; remaining live-profile/UAT/remote-CI gates have explicit owners.
 
 **Gate F7:** tidak ada blocker P0, tes negatif RBAC lulus, dan aplikasi layak diuji oleh SR sungguhan di staging.
 
@@ -250,3 +250,7 @@ Ready for next phase? yes/no, reason:
 **Kaidah keberhasilan:** targetnya **usable and safe SR attendance pilot**, bukan sekadar halaman tampil atau QR berhasil di-generate. Semua status pekerjaan perlu diperbarui dari hasil nyata, bukan dari tabel rencana ini.
 
 **Phase 4 FINAL supersedes prior Phase 3 open gates:** INTI is the eighth department; only executive four positions allowed there, other departments KADEP/SEKDEP/ANGGOTA. Attendance owns internal events with one immutable-bound session; no standalone close-session. Publication freezes roster/schedule/all session configuration. Earlier dated Phase 2/3 entries above preserve historical state.
+
+**Phase 7 live-profile gate:** Pending live PostgreSQL combinations: new inactive-target insertion denial; historical inactive correction; HCO non-KADEP/KADEP non-HCO manual denial; non-HCO SUPERADMIN bypass denial. Offline policy/service and loopback HTTP with auth/DB doubles cover these negative paths but are not live-profile proof. The smallest additional gate is PM-approved synthetic identities/status transitions with rollback or explicitly retained immutable audit fixtures; no real SR accounts/remote writes are authorized by Phase 7.
+
+**Phase 7 CLI evidence (2026-10-12):** offline suite 99/99 (14 files), additional WIB tests 3/3, changed HTTP fixture rerun 8/8; 102 distinct cases covered across executions, without PostgreSQL connections. Global read-only Biome 0 errors/warnings; six workspace typechecks pass; server/web production builds pass with synthetic CI env, frontend rechecked only after final WIB change; Varlock codegen/Next typegen and diff checks pass. Source/schema/dependency lock unchanged outside the stated fixes. Workflow statically reviewed and local commands validated; GitHub runner/fresh frozen install remain pending actual PR CI. No remote mutation or deployment.

@@ -1,8 +1,8 @@
 # NEED-001 — Acceptance Criteria & UAT Scenarios
 
-**Current domain baseline (2026-10-11):** composable active-SR roster and session-based shared attendance; [canonical model](resora-need-001-data-model.md). Phase 4/4.5 are PM-accepted. Phase 5 scan implementation is covered by offline tests; PostgreSQL/mobile execution remains unverified and its migration is unapplied. Phase 6 manual/report cases remain future specifications. Internal-only binding, no standalone close-session and policy freeze follow PM FINAL. Historical Phase 2B/3 evidence below records its original state.
+**Current domain baseline (2026-10-12):** composable active-SR roster and session-based shared attendance; [canonical model](resora-need-001-data-model.md). Phase 4/4.5 are PM-accepted; Phase 5/6 migrated and targeted PostgreSQL verified on Development (six migrations). Phase 6 passed 17 groups including five concurrency cases, with listed live role/inactive-profile gaps. Mobile HTTPS/device UAT remains deferred to Phase 8. Historical Phase 2B/3 evidence below records its original state.
 
-**Status:** Phase 4/4.5 accepted; Phase 5 migration review and mobile/concurrency UAT pending. Only explicitly marked policy details remain `TBD`.
+**Status:** Phase 7 quality review; remote CI, live-profile gaps and Phase 8 UAT pending. Only explicitly marked policy details remain `TBD`.
 
 Sources: [NEED-001 PRD](prd.md) and [canonical data model/repository review](resora-need-001-data-model.md#12-repository-compatibility-review-2026-10-10). Phase 2A identity definitions/migrations were validated locally in Phase 2A.5 and applied/read-only verified on Supabase Development in [Phase 2A.6](resora-need-001-data-model.md#15-phase-2a6-supabase-development-migration); Phase 4 event/session/QR schema is locally validated only; records/audit and remote application remain future work. Use synthetic accounts only in authorized development testing until the private CSV arrives; no accounts were created in Phase 2A.6.
 
@@ -132,7 +132,7 @@ Phase 4 covers storage/lifecycle portions of AT-003/004/009/011/012/024/028/029/
 
 ## Phase 6 acceptance baseline (2026-10-12)
 
-Specifications and offline service/transaction-double tests; new migration unapplied. Real PostgreSQL Phase 6 locks/triggers require separate approval.
+Phase 6 migration `20261012071912_phase6_reporting` was applied with separate PM approval to verified Supabase Development using Session Pooler 5432 and verified TLS. History contains six matching migrations, no pending migration. Seventeen real PostgreSQL test groups passed (12 rollback-based, five committed concurrency cases), including audit guards, rollback on audit failure, manual/QR uniqueness, correction chain and concurrent close. Six temporary events rolled back completely; one explicitly approved concurrency fixture remains CLOSED with two records/four immutable audits. Data outside the fixture was unchanged. Live inactive-target/historical-inactive and additional role combinations remain unverified; Phase 7 does not mutate remote identities or repeat those suites.
 
 | ID | Scenario | Expected |
 | --- | --- | --- |
@@ -149,4 +149,29 @@ Specifications and offline service/transaction-double tests; new migration unapp
 | AT-P6-11 | Own history/forged userId/anonymous/inactive/password gate | Session user only, pagination; forged authority and invalid identity denied |
 | AT-P6-12 | CSV quotes/newlines/formulas/leading-zero NIM | All invitees, UTF-8/WIB, escaping/text marker/formula defense; no GPS/secrets/audit JSON |
 
-Manual frontend UAT, PostgreSQL Phase 6 concurrency/trigger execution and retention/export-access audit decisions remain pending.
+Manual frontend UAT and retention/export-access audit decisions remain pending; specific live-profile gaps are listed below.
+
+## Phase 7 quality/security traceability (2026-10-12)
+
+| Acceptance | Evidence/environment | Status / remaining gate |
+| --- | --- | --- |
+| AT-001/002/039/040, AUTH-01–08 | Existing Phase 2B local PostgreSQL evidence retained; current offline Username Plugin, signup/origin/cookie/limiter tests | PASS offline regression; HTTPS/long-lived session deployment UAT pending |
+| AT-003/004/009–015/026–033/044–051, AT-P5-01–06 | Existing roster/QR/check-in offline tests; prior Phase 4/5 PostgreSQL evidence retained | PASS regression; no remote suites repeated |
+| AT-006/018/019/021–023/034–036/042/048, AT-P6-01–12 | Phase 6 Development: 17 groups passed, including five concurrency cases; current offline reporting/manual tests | PARTIAL only for listed live-role/inactive transitions and frontend UAT |
+| AT-P5-07/08, frontend scanner | Media track/error helper doubles and cache invalidation code audit; no browser/device automation | PASS helper regression; actual camera/GPS/HTTPS field UAT pending |
+| AUTH-03/04/05, AT-004/005/007/022, AT-P6-11 | Direct loopback HTTP on actual Express/tRPC with auth/DB doubles: negative role matrix, inactive/password gate, forged input, safe errors | PASS mocked transport regression; not PostgreSQL live-profile evidence |
+| Security headers/origin/privacy | Direct HTTP origin/CORS/no-store/header/IP checks; actual Better Auth malformed-body limiter and forbidden signup/origin checks | PASS offline/loopback; production proxy/TLS/cookie topology pending |
+| PR quality | Main-target workflow and local synthetic-env quality gates; no live credentials/DB jobs | Remote GitHub Actions pending; no claim of remote green run |
+
+Remaining items are gates, not automatic passes. Live-profile proof: Pending live PostgreSQL combinations: new inactive-target insertion denial; historical inactive correction; HCO non-KADEP/KADEP non-HCO manual denial; non-HCO SUPERADMIN bypass denial. Offline policy/service and loopback HTTP with auth/DB doubles cover these negative paths but are not live-profile proof. The smallest additional gate is PM-approved synthetic identities/status transitions with rollback or explicitly retained immutable audit fixtures; no real SR accounts/remote writes are authorized by Phase 7.
+
+Open release gates: mobile HTTPS/camera/GPS UAT, real-data privacy notice/retention/export-access policy, deployment origin/cookie/proxy/multi-worker limiter/backup review. Owner: PM + HCO + RnD; release-blocking until Phase 8 acceptance. No new product behavior or retention automation is inferred.
+
+**Executed Phase 7:** 99 offline cases plus 3 WIB input/display cases passed; changed HTTP tests reran 8/8 without repeating the rest. Global Biome, six workspace typechecks, server/web builds, Varlock codegen/Next typegen and diff checks pass locally with synthetic CI env. Real PostgreSQL integration was not rerun. Confirmed findings (P2, RnD) fixed: tRPC Origin enforcement, missing headers/no-store, raw query-toast messages, scanner fallback/cache/track release and browser-timezone-dependent draft inputs. No confirmed P0/P1 defect remains in the audited scope; this is not device UAT or release approval.
+
+| Remaining gate | Severity/status | Owner / minimum next approval |
+| --- | --- | --- |
+| Four live inactive/role combinations | PENDING evidence; release gate, not a confirmed defect | PM + RnD: explicitly approve synthetic status/assignment/privilege transitions within rollback fixtures; no real users |
+| Mobile HTTPS camera/GPS, layout and UX | PENDING Phase 8 field UAT | PM + HCO |
+| Proxy/cookie topology, limiter across workers/NAT, backup and privacy/retention/export-access policy | PENDING release security/operations | PM + RnD/DevOps + HCO |
+| GitHub Actions/fresh Linux frozen installation | PENDING remote CI, no run claimed | Reviewer after approved PR push |

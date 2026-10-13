@@ -7,43 +7,16 @@ import type QrScanner from "qr-scanner";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { trpc } from "@/utils/trpc";
+import { queryClient, trpc } from "@/utils/trpc";
+import { releaseCamera, scannerErrorMessage } from "./check-in-ui";
 import { formatEventTime } from "./event-ui";
 
-const gpsHelp = "Hubungi KADEP HCO untuk penanganan manual pada Phase 6.";
-const messages: Record<string, string> = {
-	INVALID_QR:
-		"QR tidak valid. Gunakan QR kehadiran RESORA yang ditampilkan HCO.",
-	QR_EXPIRED: "QR telah kedaluwarsa. Minta HCO menampilkan QR baru.",
-	QR_REVOKED:
-		"QR telah dibatalkan atau diganti. Minta HCO menampilkan QR terbaru.",
-	SESSION_INACTIVE: "Sesi kehadiran belum aktif. Hubungi HCO.",
-	SESSION_CLOSED: "Sesi kehadiran sudah ditutup.",
-	NOT_INVITED: "Anda tidak termasuk dalam daftar undangan event ini.",
-	NOT_ELIGIBLE:
-		"Akun Anda tidak memenuhi syarat check-in SR. Hubungi pengelola akun.",
-	PASSWORD_CHANGE_REQUIRED:
-		"Ganti password terlebih dahulu untuk melakukan check-in.",
-	GPS_DENIED: `Izin lokasi ditolak. ${gpsHelp}`,
-	GPS_TIMEOUT: `Pengambilan lokasi terlalu lama. Coba lagi di tempat dengan sinyal lebih baik. ${gpsHelp}`,
-	GPS_UNAVAILABLE: `Lokasi tidak tersedia. ${gpsHelp}`,
-	INVALID_LOCATION: `Lokasi yang diterima tidak valid. ${gpsHelp}`,
-	GPS_INACCURATE: `Akurasi GPS belum mencukupi untuk check-in. Coba di area terbuka. ${gpsHelp}`,
-	OUTSIDE_GEOFENCE: `Lokasi Anda di luar radius event. ${gpsHelp}`,
-	HTTPS_REQUIRED:
-		"Kamera dan lokasi memerlukan HTTPS atau localhost. Gunakan alamat HTTPS yang disediakan untuk UAT mobile.",
-	CAMERA_DENIED:
-		"Izin kamera ditolak. Izinkan kamera melalui pengaturan browser, lalu coba lagi.",
-	CAMERA_UNAVAILABLE:
-		"Kamera tidak tersedia atau sedang digunakan aplikasi lain. Periksa kamera dan coba lagi.",
-	SESSION_EXPIRED:
-		"Sesi telah berakhir atau akun tidak lagi eligible. Silakan masuk kembali.",
-	SERVER_FAILED:
-		"Koneksi atau layanan tidak tersedia. Coba lagi; retry tidak menimpa catatan kehadiran yang sudah tersimpan.",
-};
-
 export default function CheckInScanner() {
-	const mutation = useMutation(trpc.attendance.checkIn.mutationOptions());
+	const mutation = useMutation({
+		...trpc.attendance.checkIn.mutationOptions(),
+		onSuccess: () =>
+			queryClient.invalidateQueries({ queryKey: trpc.attendance.pathKey() }),
+	});
 	const video = useRef<HTMLVideoElement>(null);
 	const scanner = useRef<QrScanner | null>(null);
 	const busy = useRef(false);
@@ -53,25 +26,16 @@ export default function CheckInScanner() {
 		"idle" | "camera" | "locating" | "submitting" | "result" | "error"
 	>("idle");
 	const [error, setError] = useState("");
-	const stopCamera = () => {
-		scanner.current?.stop();
-		const stream = video.current?.srcObject;
-		if (stream instanceof MediaStream)
-			for (const track of stream.getTracks()) track.stop();
-	};
+	const stopCamera = () => releaseCamera(scanner.current, video.current);
 	useEffect(() => {
 		return () => {
 			generation.current++;
-			scanner.current?.destroy();
-			// Capture release through scanner's video even after React clears the ref.
-			const stream = scanner.current?.$video.srcObject;
-			if (stream instanceof MediaStream)
-				for (const track of stream.getTracks()) track.stop();
+			releaseCamera(scanner.current, null, true);
 		};
 	}, []);
 	const showError = (code: string) => {
 		stopCamera();
-		setError(messages[code] ?? messages.SERVER_FAILED);
+		setError(scannerErrorMessage(code));
 		setPhase("error");
 	};
 	const processQr = async (token: string, attempt: number) => {
@@ -164,12 +128,8 @@ export default function CheckInScanner() {
 			);
 			scanner.current = activeScanner;
 			await activeScanner.start();
-			if (generation.current !== attempt) {
-				activeScanner.destroy();
-				const stream = activeScanner.$video.srcObject;
-				if (stream instanceof MediaStream)
-					for (const track of stream.getTracks()) track.stop();
-			}
+			if (generation.current !== attempt)
+				releaseCamera(activeScanner, null, true);
 		} catch (cause) {
 			if (generation.current === attempt)
 				showError(

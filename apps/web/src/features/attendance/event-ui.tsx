@@ -32,6 +32,16 @@ export function formatEventTime(value: string) {
 	return `${new Date(value).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" })} WIB`;
 }
 
+export function toWibDateTimeInput(value: string, seconds = false) {
+	return new Date(new Date(value).getTime() + 7 * 3600_000)
+		.toISOString()
+		.slice(0, seconds ? 19 : 16);
+}
+
+export function parseWibDateTimeInput(value: string) {
+	return new Date(`${value}+07:00`);
+}
+
 export function eventErrorMessage(error: unknown) {
 	if (error instanceof TRPCClientError) {
 		if (error.message === "PASSWORD_CHANGE_REQUIRED")

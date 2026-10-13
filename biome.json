@@ -10,6 +10,8 @@
 		"includes": [
 			"**",
 			"!.private",
+			"!tmp",
+			"!temp",
 			"!**/.next",
 			"!**/dist",
 			"!**/.turbo",
