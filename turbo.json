@@ -52,6 +52,11 @@
 		"NODE_EXTRA_CA_CERTS"
 	],
 	"globalEnv": [
+		"API_UPSTREAM_URL",
+		"SERVER_URL",
+		"DB_POOL_MAX",
+		"DB_POOL_IDLE_TIMEOUT_MS",
+		"DB_SSL_CA",
 		"BETTER_AUTH_SECRET",
 		"BETTER_AUTH_URL",
 		"CI",

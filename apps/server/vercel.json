@@ -1,0 +1,11 @@
+{
+	"$schema": "https://openapi.vercel.sh/vercel.json",
+	"framework": "express",
+	"installCommand": "pnpm install --frozen-lockfile",
+	"buildCommand": "pnpm run build",
+	"functions": {
+		"app.ts": {
+			"includeFiles": ".env.schema"
+		}
+	}
+}

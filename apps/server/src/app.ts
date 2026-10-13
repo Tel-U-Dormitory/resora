@@ -50,11 +50,23 @@ export function createApp(
 			credentials: true,
 		}),
 	);
-	app.all("/api/auth{/*path}", (req, res) => {
+	app.all("/api/auth{/*path}", async (req, res) => {
 		// Never accept an arbitrary client-supplied forwarded IP as a limiter key.
 		// Trust proxy stays false until deployment's proxy boundary is approved.
 		req.headers["x-resora-client-ip"] = req.socket.remoteAddress || "127.0.0.1";
-		return toNodeHandler(services.auth)(req, res);
+		try {
+			await toNodeHandler(services.auth)(req, res);
+		} catch {
+			// Storage/migration outages must fail closed without Express logging a raw error.
+			if (!res.headersSent) {
+				res.status(503).json({
+					code: "AUTH_UNAVAILABLE",
+					message: "Authentication service unavailable",
+				});
+			} else {
+				res.end();
+			}
+		}
 	});
 	app.use(
 		"/trpc",

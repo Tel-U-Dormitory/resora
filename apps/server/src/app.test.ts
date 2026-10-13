@@ -13,6 +13,7 @@ let sessions = 0;
 let writes = 0;
 let identity: Record<string, unknown> | null = null;
 let failContext = false;
+let failAuth = false;
 const query = {
 	innerJoin: () => query,
 	leftJoin: () => query,
@@ -27,8 +28,10 @@ const db = {
 } as unknown as Database;
 const auth = {
 	options: { secret: "synthetic-http-security-test-secret-0000000" },
-	handler: async (request: Request) =>
-		new Response(request.headers.get("x-resora-client-ip")),
+	handler: async (request: Request) => {
+		if (failAuth) throw new Error("synthetic-private-store-credential");
+		return new Response(request.headers.get("x-resora-client-ip"));
+	},
 	api: {
 		getSession: async () => {
 			sessions++;
@@ -66,6 +69,7 @@ beforeEach(() => {
 	sessions = 0;
 	writes = 0;
 	failContext = false;
+	failAuth = false;
 });
 
 async function post(
@@ -243,7 +247,24 @@ test("Express keeps proxy trust disabled and replaces spoofed auth limiter IP he
 		headers: {
 			"x-resora-client-ip": "198.51.100.42",
 			"x-forwarded-for": "198.51.100.43",
+			"x-vercel-forwarded-for": "198.51.100.44",
+			"x-real-ip": "198.51.100.45",
 		},
 	});
 	expect(await response.text()).toBe("127.0.0.1");
+});
+
+test("auth storage failure returns a private no-store 503 without raw error or stack", async () => {
+	failAuth = true;
+	const response = await fetch(`${base}/api/auth/sign-in/username`, {
+		method: "POST",
+		headers: { origin, "content-type": "application/json" },
+		body: "{}",
+	});
+	expect(response.status).toBe(503);
+	expect(response.headers.get("cache-control")).toBe("no-store");
+	const body = await response.text();
+	expect(body).toContain("AUTH_UNAVAILABLE");
+	expect(body).not.toContain("synthetic-private");
+	expect(body).not.toContain("stack");
 });

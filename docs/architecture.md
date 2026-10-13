@@ -20,7 +20,7 @@
 | Workspace            | **pnpm 10.33.4**, pnpm workspaces, Turborepo                      | Project scaffold exists.                                                                                                                             |
 | Shared packages      | `packages/api`, `auth`, `db`, `config`, `ui`                      | Some package content still scaffold-level.                                                                                                           |
 | Tooling              | TypeScript strict checks, Biome, Varlock/environment schema       | Preserve actual scripts/tool versions from repo; CI policy TBD.                                                                                      |
-| Deployment           | Planned VPS, Docker images/Compose, reverse proxy, TLS            | **Not production-approved or proven.** DNS, secrets, operations and backup gates remain.                                                             |
+| Deployment           | Vercel current target; Docker/home server/VPS portable alternatives | **Not deployed or production-proven.** Proxy/limiter, TLS/pool, secrets, operations and backup gates remain. |
 | Development database | Supabase Development; optional disposable local Docker PostgreSQL | Never confuse successful Development migration with production readiness.                                                                            |
 
 **Correction to the previous Architecture:** Phase 2A.6 **did apply and verify** the reviewed identity migration chain on Supabase Development. Any older closing statement claiming that no migrations have been applied is obsolete. There have been **no attendance-domain migrations**.
@@ -32,10 +32,10 @@
                          |
                     HTTPS / TLS
                          |
-                  Reverse proxy (VPS)
+                  Web routing / HTTPS proxy
                      /         \
                     /           \
-          apps/web (Next.js)   apps/server (Express + Bun)
+          apps/web (Next.js)   apps/server (Express: Node/Bun)
                     |                |
                 tRPC client <----> packages/api (tRPC boundary)
                                      |
@@ -212,7 +212,7 @@ Frontend still follows the established NEED boundaries: HCO event/roster screens
 
 **Phase 2B implementation:** `apps/web/src/features/identity` contains login, password-change, dashboard, session and account-menu files; App Router pages compose them. `packages/api/src/modules/identity/identity.router.ts` exposes a minimal identity DTO. `packages/auth/src/sr-access.ts` reads current identity through Drizzle; Express injects initialized services into its application/context. SSR also calls Express/tRPC and never imports a database client. See [validation evidence](modules/need-001/resora-need-001-data-model.md#16-phase-2b-sr-authentication).
 
-Public auth POST requests require a configured trusted Origin. Signup and email login are unavailable; NIM uses the Username Plugin. Better Auth's in-memory limiter allows five login/password-change requests per minute per socket address; Express overwrites incoming IP headers. Behind a future reverse proxy this conservatively groups clients by proxy address until a trusted proxy boundary is reviewed. Cookies are HttpOnly, SameSite=Lax, and Secure for HTTPS auth URLs; frontend/backend must be same-site. Cross-site domains, multiple workers, HTTPS and production proxy behavior require deployment review, not relaxed cookie/origin/IP validation.
+Public auth POST requests require a configured trusted Origin. Signup and email login are unavailable; NIM uses the Username Plugin. Better Auth 1.7.7 limits login/password-change to five requests per 60 seconds per IP/path bucket. Phase 8B selects its native database storage whenever auth configuration or process NODE_ENV is production; local/test keeps memory. A new `rate_limit` migration is prepared but unapplied. Database failures fail closed with a sanitized Express 503, never memory fallback. Express still overwrites incoming IP headers with socket IP and leaves proxy trust disabled. Behind two-project Vercel routing this may group unrelated clients under a proxy address; original-client-IP verification remains a Production blocker. Users behind the same NAT share the configured limit; no username-based bypass was introduced. Cookies remain HttpOnly, SameSite=Lax, and Secure for HTTPS auth URLs. Cross-site domains, HTTPS and production proxy behavior require deployment review, not relaxed validation.
 
 **Phase 3 implementation:** `getActiveSr` reloads actor, active state, password-change flag, department/position/building and explicit SUPERADMIN in one indexed Drizzle join. `sessionProcedure` rejects invalid sessions/ineligible SR; `protectedProcedure` blocks pending password change. Pure functions in `packages/api/src/modules/identity/identity-policy.ts` consume this server identity after those gates. The public `identity.session` DTO stays unchanged. HCO membership grants internal operations; HCO + KADEP alone grants manual internal correction; ADAPTIF membership grants general operations/manual attendance without a KADEP requirement. No extra operator flag, generic permission engine, parallel session/provider or dummy endpoint is added. SUPERADMIN grants identity administration only, not an operational bypass.
 
@@ -348,11 +348,14 @@ A universal attendance FK to `event_participants` is not part of the shared-engi
 - Keep secrets in ignored environment files or deployment secret stores; env schemas/examples must have placeholders only. Do not embed private credentials, SMTP secret, raw QR tokens or user production data in source/tests.
 - Maintain synthetic SR accounts in development until a PM-approved real roster has been supplied securely.
 
-### 10.2 Planned VPS / production
+### 10.2 Vercel preparation / portable deployment
 
-- Deploy Next.js and Express behind a reverse proxy with HTTPS/TLS. Set correct Better Auth URL, CORS/trusted origins, cookie domain/secure/sameSite/CSRF policy according to actual domains/subdomains. Never publish PostgreSQL or internal database/admin ports.
+- Current target is two Vercel Projects with Root Directories `apps/web` and `apps/server`, including workspace sources. Native Node 24 Express default entrypoint wraps existing `createApp()`; the Bun persistent listener and Docker startup remain. Home server/VPS are future options. [Setup](setup.md#8-vercel-deployment-preparation-phase-8a-not-deployed) defines settings and manual release gates.
+- Browser auth/tRPC use the web origin through configurable Next rewrites; SSR uses the explicit backend URL and forwards the session cookie. Better Auth URL/trusted Origin stay the exact HTTPS web origin, with host-only cookies. No cross-subdomain cookie or proxy-trust relaxation. Never publish PostgreSQL or internal database/admin ports.
+- Runtime uses only explicitly mapped `DATABASE_URL`; serverless Transaction Pooler is a candidate with pool max 1, short idle eviction, unnamed pg statements and verified TLS. No automatic Production connection selection; migration connections stay off the runtime. Live Transaction Pooler and Vercel packaging verification remain pending.
+- Phase 8B uses Better Auth's native PostgreSQL shared limiter, with an additive unapplied migration and no Redis/custom limiter. Isolated PostgreSQL concurrency and original-client-IP through two-project routing still require evidence. Production remains blocked on migration approval, verified proxy boundaries and Preview gates; [setup](setup.md#phase-8b-production-security-readiness--preview-gate) gives the procedure.
 - Configure separate least-privilege access to external Postgres and operational secrets; test session behavior across the intended hostname design.
-- Production readiness includes VPS ownership, domain/DNS, funding, monitoring, secure backup/restore, recovery targets, migration runbook, rollback/forward-fix plan, incident response and PM approval.
+- Production readiness includes project/domain ownership, funding, monitoring, secure backup/restore, recovery targets, migration runbook, rollback/forward-fix plan, incident response and PM approval.
 - Backup ownership and production Supabase subscription/point-in-time restore capabilities must be verified, not inferred from Development behavior. No production deployment is approved by this architecture.
 
 ## 11. Testing strategy and release gates
