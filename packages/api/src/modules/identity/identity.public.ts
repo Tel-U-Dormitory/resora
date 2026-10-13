@@ -1,3 +1,4 @@
+import type { ActiveSrIdentity } from "@resora/auth/sr-access";
 import type { Database, DatabaseTransaction } from "@resora/db";
 import { isValidSrAssignment } from "@resora/db/organization";
 import { user } from "@resora/db/schema/auth";
@@ -6,6 +7,7 @@ import {
 	departments,
 	positions,
 	srProfiles,
+	systemPrivileges,
 	userProfiles,
 } from "@resora/db/schema/identity";
 import { and, eq } from "drizzle-orm";
@@ -93,6 +95,33 @@ export async function getCheckInSr(
 	const { candidates } = await readActiveSrDirectory(db, true, userId);
 	const candidate = candidates[0];
 	return candidate && !candidate.mustChangePassword ? candidate : null;
+}
+
+// Call after event/session locks: reload eligible identity and the latest explicit grant.
+// Share-lock a present grant so its revocation cannot commit during an authorized write.
+export async function getLiveOperationalSr(
+	tx: DatabaseTransaction,
+	userId: string,
+): Promise<ActiveSrIdentity | null> {
+	const candidate = await getCheckInSr(tx, userId);
+	if (!candidate) return null;
+	const grants = await tx
+		.select({ userId: systemPrivileges.userId })
+		.from(systemPrivileges)
+		.where(
+			and(
+				eq(systemPrivileges.userId, userId),
+				eq(systemPrivileges.privilegeCode, "SUPERADMIN"),
+			),
+		)
+		.for("share");
+	return {
+		...candidate,
+		actor: "SR",
+		isActive: true,
+		mustChangePassword: false,
+		isSuperadmin: grants.length > 0,
+	};
 }
 
 // Manual insertion needs an active eligible target, not completion of their first login.

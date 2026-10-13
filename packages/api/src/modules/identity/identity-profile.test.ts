@@ -96,6 +96,22 @@ for (const [label, identity, code] of [
 		expect(f.selections).toHaveLength(1);
 	});
 
+test("session permissions reflect DB SUPERADMIN grant/revocation without changing assignment", async () => {
+	for (const isSuperadmin of [true, false]) {
+		const f = fixture({
+			departmentCode: "INTI",
+			positionCode: "KETUM",
+			isSuperadmin,
+		});
+		expect(await f.caller.session()).toMatchObject({
+			isSuperadmin,
+			canManageInternalEvents: isSuperadmin,
+			canManageInternalAttendanceManually: isSuperadmin,
+			canOperateGeneralActivity: isSuperadmin,
+		});
+	}
+});
+
 for (const [departmentCode, positionCode, allowed] of [
 	["HCO", "ANGGOTA", true],
 	["HCO", "KADEP", true],

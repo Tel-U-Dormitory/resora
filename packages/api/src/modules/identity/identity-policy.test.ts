@@ -47,12 +47,27 @@ for (const [department, position, internal, manual, general] of [
 		expect(hasSuperadminPrivilege(current)).toBe(false);
 	});
 }
-test("explicit superadmin grants identity administration without operational bypass", () => {
-	const current = identity("RND", "KADEP", true);
-	expect(hasSuperadminPrivilege(current)).toBe(true);
+for (const [department, position] of [
+	["RND", "ANGGOTA"],
+	["SOSIAL", "KADEP"],
+	["INTI", "KETUM"],
+	["HCO", "ANGGOTA"],
+] as const)
+	test(`explicit SUPERADMIN ${department}/${position} overrides operational department/position gates`, () => {
+		const current = identity(department, position, true);
+		expect(hasSuperadminPrivilege(current)).toBe(true);
+		expect(canManageInternalEvent(current)).toBe(true);
+		expect(canManageInternalAttendanceManually(current)).toBe(true);
+		expect(canOperateGeneralActivity(current)).toBe(true);
+		expect(current).toMatchObject({
+			departmentCode: department,
+			positionCode: position,
+		});
+	});
+test("SUPERADMIN does not make an invalid internal operator assignment eligible", () => {
+	const current = identity("HCO", "KETUM", true);
 	expect(canManageInternalEvent(current)).toBe(false);
 	expect(canManageInternalAttendanceManually(current)).toBe(false);
-	expect(canOperateGeneralActivity(current)).toBe(false);
 });
 test("missing identity, inactive/non-SR identity and first-change gate deny every action", () => {
 	const base = identity("HCO", "KADEP", true);

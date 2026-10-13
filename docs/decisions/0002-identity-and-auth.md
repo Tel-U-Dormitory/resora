@@ -8,7 +8,7 @@ Only SR accounts log in for NEED-001. User logs in with **NIM/password**, create
 
 ## Important nuance
 
-An event audience is not an account role. NEED-001 uses a composable active-SR roster (all SR, departments, all KADEP across departments, individuals, include/exclude and deduplication), not a single audience enum; Phase 4 INTI is an official department with canonical restricted department/position pairs. General-activity eligibility later comes from active Activity registration. Only _department=HCO and position=KADEP_ grants internal manual attendance insertion/correction, requiring reason and audit. Active Adaptif operators govern general activity attendance without a KADEP requirement; SUPERADMIN does not bypass either operational policy.
+An event audience is not an account role. NEED-001 uses a composable active-SR roster (all SR, departments, all KADEP across departments, individuals, include/exclude and deduplication), not a single audience enum; Phase 4 INTI is an official department with canonical restricted department/position pairs. General-activity eligibility later comes from active Activity registration. _Department=HCO and position=KADEP_ or an explicit eligible SUPERADMIN grant authorizes internal manual attendance insertion/correction, requiring reason and audit. Active Adaptif operators and eligible SUPERADMIN satisfy general-activity operator policy without a KADEP requirement. SA-01 supersedes the earlier no-operational-bypass decision; resource lifecycle, invitations/target eligibility and audit remain mandatory.
 
 ## Security and unresolved work
 
@@ -36,3 +36,7 @@ Live DB identity and [simple policies](../modules/need-001/resora-need-001-data-
 **Documentation synchronization (2026-10-11, after Phase 3):** active roster/session references are now aligned with the current PRD and [canonical model](../modules/need-001/resora-need-001-data-model.md). The earlier dated discrepancy note records the Phase 2B audit state. Cross-module event/session binding and unresolved lifecycle/policy decisions still block dependent Phase 4 implementation; no code/schema change is made here.
 
 **Phase 4 PM FINAL:** INTI is the eighth department; [canonical 8/7/18 dictionaries and pair validation](../modules/need-001/resora-need-001-data-model.md#42-departments-positions-buildings--canonical-organization-dictionaries) supersede the dated Phase 3 dictionary description. No implicit privilege derives from INTI.
+
+## SA-01 approved update - 2026-10-13
+
+SUPERADMIN remains an explicit system_privileges grant, not an actor/department/position. Existing policies grant active eligible SUPERADMIN cross-department operational and system-administration access, without rewriting assignment. Session permissions derive from current DB identity. Sensitive transactions re-read/lock eligibility and the latest grant through Identity's public interface; revocation takes effect on the next request without login renewal. Inactive/non-SR/password-change-gated users remain denied. Earlier dated Phase 3 no-bypass notes are historical. No new schema or privilege-management endpoint is introduced.

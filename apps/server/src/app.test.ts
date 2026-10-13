@@ -152,13 +152,13 @@ test("originless SSR GET works; anonymous mutation still requires authentication
 	});
 	expect(result.status).toBe(401);
 });
-test("direct HTTP denies manual/audit for ordinary HCO, other KADEP, Adaptif, normal SR and non-HCO SUPERADMIN", async () => {
+test("direct HTTP denies manual/audit for ordinary HCO, other KADEP, Adaptif and unprivileged SR", async () => {
 	for (const [departmentCode, positionCode, isSuperadmin] of [
 		["HCO", "ANGGOTA", false],
 		["ADAPTIF", "KADEP", false],
 		["ADAPTIF", "ANGGOTA", false],
 		["SOSIAL", "ANGGOTA", false],
-		["RND", "KADEP", true],
+		["RND", "KADEP", false],
 	] as const) {
 		identity = {
 			userId: "synthetic-http-sr",

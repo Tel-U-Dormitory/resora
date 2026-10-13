@@ -9,9 +9,11 @@ import { getTableName, type SQL } from "drizzle-orm";
 import { getTableConfig, PgDialect } from "drizzle-orm/pg-core";
 import { appRouter } from "../../routers";
 import {
+	eventDraftSchema,
 	manualCorrectSchema,
 	manualInsertSchema,
 	ownHistorySchema,
+	rosterSchema,
 } from "./attendance.schema";
 import { manualCorrect, manualInsert } from "./manual-attendance";
 import { auditHistory, exportCsv, ownHistory, recap } from "./reporting";
@@ -216,12 +218,14 @@ function fixture() {
 		status: "PUBLISHED",
 		startsAt: start,
 		closedAt: null as Date | null,
+		rosterCriteria: rosterSchema.parse({ allSr: true }),
 	};
 	const session = {
 		id: randomUUID(),
 		internalEventId: event.id,
 		status: "ACTIVE",
 		lateGraceMinutes: 15,
+		qrTtlMinutes: 360,
 	};
 	const original = {
 		id: randomUUID(),
@@ -240,10 +244,13 @@ function fixture() {
 	};
 	const state = {
 		record: null as Record<string, unknown> | null,
+		qr: null as Record<string, unknown> | null,
 		audits: [] as Record<string, unknown>[],
 		targetActive: true,
 		operatorActive: true,
 		operatorPosition: "KADEP",
+		superadmin: false,
+		revokeOnEventLock: false,
 		invited: true,
 		auditFailure: false,
 		conflict: false,
@@ -287,6 +294,8 @@ function fixture() {
 				},
 				for: (mode: string) => {
 					state.locks.push(`${table}:${mode}`);
+					if (table === "events" && state.revokeOnEventLock)
+						state.superadmin = false;
 					return query;
 				},
 				orderBy: () => query,
@@ -298,6 +307,9 @@ function fixture() {
 					if (table === "events")
 						rows = selection?.event ? [{ event, session }] : [event];
 					if (table === "attendance_sessions") rows = [session];
+					if (table === "qr_challenges") rows = state.qr ? [state.qr] : [];
+					if (table === "system_privileges" && state.superadmin)
+						rows = [{ userId: identity.userId }];
 					if (table === "attendance_records")
 						rows = joined
 							? [{ eventId: event.id }]
@@ -327,6 +339,8 @@ function fixture() {
 									userId: operator ? identity.userId : "synthetic-target",
 									name: "Synthetic",
 									positionCode: operator ? state.operatorPosition : "ANGGOTA",
+									departmentCode: operator ? identity.departmentCode : "HCO",
+									isSuperadmin: operator && state.superadmin,
 									buildingCode: "A",
 									buildingName: "Gedung A",
 								},
@@ -344,6 +358,16 @@ function fixture() {
 					if (name === "attendance_audit_logs") {
 						if (state.auditFailure) throw new Error("synthetic audit failure");
 						state.audits.push({ id: randomUUID(), ...data });
+					} else if (name !== "attendance_records") {
+						if (name === "qr_challenges")
+							state.qr = {
+								id: randomUUID(),
+								isCurrent: true,
+								revokedAt: null,
+								...data,
+							};
+						state.writes.push({ table: name, data });
+						return name === "events" ? [{ ...event, ...data }] : [];
 					} else {
 						if (state.conflict) return [];
 						state.record = {
@@ -358,6 +382,7 @@ function fixture() {
 					return state.record ? [state.record] : [];
 				};
 				return {
+					returning: insert,
 					onConflictDoNothing: () => ({ returning: insert }),
 					// biome-ignore lint/suspicious/noThenProperty: Drizzle insert builders are awaitable in this query double.
 					then: (
@@ -371,7 +396,12 @@ function fixture() {
 			set: (data: Record<string, unknown>) => ({
 				where: async () => {
 					state.writes.push({ table: getTableName(table), data });
-					state.record = { ...state.record, ...data };
+					const name = getTableName(table);
+					if (name === "events") Object.assign(event, data);
+					else if (name === "attendance_sessions") Object.assign(session, data);
+					else if (name === "qr_challenges")
+						Object.assign(state.qr ?? {}, data);
+					else state.record = { ...state.record, ...data };
 				},
 			}),
 		}),
@@ -518,14 +548,14 @@ test("closed event insertion/correction needs effective time no later than closu
 	);
 	expect(f.state.audits).toHaveLength(1);
 });
-test("HCO member can recap/export but never manual/audit; non-HCO and superadmin cannot bypass", async () => {
+test("unprivileged HCO member can recap/export but never manual/audit; non-HCO stays denied", async () => {
 	const f = fixture();
 	for (const departmentCode of ["HCO", "ADAPTIF", "RND", "SOSIAL"]) {
 		const identity = {
 			...f.identity,
 			departmentCode,
 			positionCode: departmentCode === "HCO" ? "ANGGOTA" : "KADEP",
-			isSuperadmin: true,
+			isSuperadmin: false,
 		};
 		await expect(manualInsert(f.db, identity, f.input)).rejects.toThrow(
 			"MANUAL_ACCESS_REQUIRED",
@@ -582,6 +612,240 @@ test("recap starts at historical snapshots including missing records; origin/GPS
 	expect(report.participants[1]?.lateMinutes).toBeNull();
 	expect(report.participants[0]).not.toHaveProperty("scanLat");
 });
+
+for (const [departmentCode, positionCode] of [
+	["RND", "ANGGOTA"],
+	["INTI", "KETUM"],
+] as const)
+	test(`tRPC SUPERADMIN ${departmentCode}/${positionCode} creates events and performs manual/correction/audit/recap/export`, async () => {
+		const f = fixture();
+		Object.assign(f.identity, { departmentCode, positionCode });
+		f.state.operatorPosition = positionCode;
+		f.state.superadmin = true;
+		const caller = appRouter.createCaller({
+			db: f.db,
+			session: { user: { id: f.identity.userId } } as never,
+		});
+		const draft = eventDraftSchema.parse({
+			title: "Synthetic SA-01 draft",
+			startsAt: start.toISOString(),
+			endsAt: new Date(start.getTime() + 3600000).toISOString(),
+			rosterCriteria: { allSr: true },
+			session: { centerLat: 0, centerLng: 0 },
+		});
+		expect(await caller.attendance.create(draft)).toEqual({
+			eventId: f.event.id,
+		});
+		expect(
+			f.state.writes.find((write) => write.table === "events")?.data,
+		).toMatchObject({ createdByUserId: f.identity.userId });
+		await caller.attendance.manualInsert(f.input);
+		const recordId = f.state.record?.id;
+		if (typeof recordId !== "string")
+			throw new Error("Missing synthetic record");
+		const origin = { ...f.state.record };
+		await caller.attendance.manualCorrect({
+			...f.correction,
+			attendanceId: recordId,
+		});
+		expect(f.state.record).toMatchObject({
+			source: "MANUAL",
+			recordedAt: origin.recordedAt,
+			recordedByUserId: f.identity.userId,
+			manualReason: f.input.reason,
+		});
+		expect(f.state.audits.map((audit) => audit.actorUserId)).toEqual([
+			f.identity.userId,
+			f.identity.userId,
+		]);
+		expect(
+			(
+				await caller.attendance.auditHistory({
+					eventId: f.event.id,
+					userId: f.input.userId,
+				})
+			).items,
+		).toHaveLength(2);
+		expect(
+			(await caller.attendance.recap({ eventId: f.event.id })).canManual,
+		).toBe(true);
+		expect(
+			(await caller.attendance.exportCsv({ eventId: f.event.id })).content,
+		).toContain("NIM,Name");
+		expect(f.identity).toMatchObject({ departmentCode, positionCode });
+		expect(f.state.locks).toContain("system_privileges:share");
+	});
+
+test("same tRPC session loses operational access on the request after DB privilege revocation", async () => {
+	const f = fixture();
+	Object.assign(f.identity, { departmentCode: "RND", positionCode: "ANGGOTA" });
+	f.state.operatorPosition = "ANGGOTA";
+	f.state.superadmin = true;
+	const caller = appRouter.createCaller({
+		db: f.db,
+		session: { user: { id: f.identity.userId } } as never,
+	});
+	expect((await caller.identity.session())?.canManageInternalEvents).toBe(true);
+	await caller.attendance.manualInsert(f.input);
+	const writes = f.state.writes.length;
+	f.state.superadmin = false;
+	expect(await caller.identity.session()).toMatchObject({
+		isSuperadmin: false,
+		canManageInternalEvents: false,
+	});
+	await expect(caller.attendance.manualInsert(f.input)).rejects.toThrow(
+		"MANUAL_ACCESS_REQUIRED",
+	);
+	await expect(
+		caller.attendance.recap({ eventId: f.event.id }),
+	).rejects.toThrow();
+	await expect(
+		caller.attendance.auditHistory({
+			eventId: f.event.id,
+			userId: f.input.userId,
+		}),
+	).rejects.toThrow();
+	expect(f.state.writes).toHaveLength(writes);
+});
+
+test("tRPC SUPERADMIN correction preserves QR origin/GPS and records the actual operator", async () => {
+	const f = fixture();
+	Object.assign(f.identity, { departmentCode: "RND", positionCode: "ANGGOTA" });
+	f.state.operatorPosition = "ANGGOTA";
+	f.state.superadmin = true;
+	f.state.record = { ...f.original };
+	f.state.targetActive = false;
+	const caller = appRouter.createCaller({
+		db: f.db,
+		session: { user: { id: f.identity.userId } } as never,
+	});
+	await caller.attendance.manualCorrect(f.correction);
+	for (const field of [
+		"source",
+		"recordedAt",
+		"recordedByUserId",
+		"manualReason",
+		"scanLat",
+		"scanLng",
+		"gpsAccuracyM",
+	] as const)
+		expect(f.state.record?.[field]).toEqual(f.original[field]);
+	expect(f.state.audits[0]).toMatchObject({
+		actorUserId: f.identity.userId,
+		beforeState: auditState(f.original),
+		afterState: {
+			attendanceAt: f.correction.attendanceAt,
+			timingClass: "LATE",
+		},
+	});
+});
+
+test("tRPC non-HCO SUPERADMIN can publish, manage QR and close while preserving lifecycle restrictions", async () => {
+	const f = fixture();
+	Object.assign(f.identity, {
+		departmentCode: "SOSIAL",
+		positionCode: "ANGGOTA",
+	});
+	f.state.operatorPosition = "ANGGOTA";
+	f.state.superadmin = true;
+	f.event.status = "DRAFT";
+	f.session.status = "INACTIVE";
+	const caller = appRouter.createCaller({
+		db: f.db,
+		session: { user: { id: f.identity.userId } } as never,
+		qrSigningSecret: "synthetic-sa01-qr-signing-secret-0000000000",
+	});
+	await expect(
+		caller.attendance.activate({ eventId: f.event.id }),
+	).rejects.toThrow("Event/session state");
+	await caller.attendance.publish({ eventId: f.event.id });
+	expect(f.event.status).toBe("PUBLISHED");
+	expect(f.session.status).toBe("INACTIVE");
+	await caller.attendance.activate({ eventId: f.event.id });
+	expect(f.state.qr?.issuedByUserId).toBe(f.identity.userId);
+	expect((await caller.attendance.qr({ eventId: f.event.id })).state).toBe(
+		"ACTIVE",
+	);
+	await caller.attendance.revokeQr({ eventId: f.event.id });
+	expect((await caller.attendance.qr({ eventId: f.event.id })).state).toBe(
+		"REVOKED",
+	);
+	await caller.attendance.reissueQr({ eventId: f.event.id });
+	expect((await caller.attendance.qr({ eventId: f.event.id })).state).toBe(
+		"ACTIVE",
+	);
+	await caller.attendance.close({ eventId: f.event.id });
+	expect(f.event.status).toBe("CLOSED");
+	expect(f.session.status).toBe("CLOSED");
+	await expect(
+		caller.attendance.activate({ eventId: f.event.id }),
+	).rejects.toThrow("Event/session state");
+});
+
+test("manual insert/correct and event writes re-read revoked SUPERADMIN after lifecycle lock waits", async () => {
+	for (const operation of ["manualInsert", "manualCorrect", "close"] as const) {
+		const f = fixture();
+		Object.assign(f.identity, {
+			departmentCode: "RND",
+			positionCode: "ANGGOTA",
+		});
+		f.state.operatorPosition = "ANGGOTA";
+		f.state.superadmin = true;
+		f.state.revokeOnEventLock = true;
+		if (operation === "manualCorrect") f.state.record = { ...f.original };
+		const caller = appRouter.createCaller({
+			db: f.db,
+			session: { user: { id: f.identity.userId } } as never,
+		});
+		await expect(
+			operation === "manualInsert"
+				? caller.attendance.manualInsert(f.input)
+				: operation === "manualCorrect"
+					? caller.attendance.manualCorrect(f.correction)
+					: caller.attendance.close({ eventId: f.event.id }),
+		).rejects.toThrow(
+			operation === "close" ? "HCO access required" : "MANUAL_ACCESS_REQUIRED",
+		);
+		expect(f.state.writes).toHaveLength(0);
+		expect(f.state.audits).toHaveLength(0);
+	}
+});
+
+test("SUPERADMIN cannot bypass draft lifecycle, target eligibility, invitation or effective time", async () => {
+	for (const failure of ["draft", "target", "invitation", "future"] as const) {
+		const f = fixture();
+		Object.assign(f.identity, {
+			departmentCode: "INTI",
+			positionCode: "KETUM",
+		});
+		f.state.operatorPosition = "KETUM";
+		f.state.superadmin = true;
+		if (failure === "draft") f.event.status = "DRAFT";
+		if (failure === "target") f.state.targetActive = false;
+		if (failure === "invitation") f.state.invited = false;
+		const caller = appRouter.createCaller({
+			db: f.db,
+			session: { user: { id: f.identity.userId } } as never,
+		});
+		await expect(
+			caller.attendance.manualInsert({
+				...f.input,
+				attendanceAt:
+					failure === "future"
+						? new Date(Date.now() + 3600000).toISOString()
+						: f.input.attendanceAt,
+			}),
+		).rejects.toThrow(
+			{
+				draft: "MANUAL_LIFECYCLE_INVALID",
+				target: "MANUAL_TARGET_INACTIVE_OR_INELIGIBLE",
+				invitation: "NOT_INVITED",
+				future: "ATTENDANCE_TIME_INVALID",
+			}[failure],
+		);
+		expect(f.state.writes).toHaveLength(0);
+	}
+});
 test("own history uses session user filter and bounded pagination, never arbitrary userId", async () => {
 	const f = fixture();
 	f.state.reports = [
@@ -633,6 +897,7 @@ test("protected Phase 6 routes reject anonymous, inactive and password-change ga
 			where: async () => [
 				{
 					...f.identity,
+					isSuperadmin: true,
 					isActive: gate !== "inactive",
 					mustChangePassword: gate === "password",
 				},

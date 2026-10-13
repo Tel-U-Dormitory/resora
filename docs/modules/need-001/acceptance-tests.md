@@ -11,10 +11,10 @@ Sources: [NEED-001 PRD](prd.md) and [canonical data model/repository review](res
 | AT-001 | Imported active SR with valid NIM/password                       | Log in                                                          | Authenticated with one SR primary actor, no registration link/path | Confirmed                                             |
 | AT-002 | Unprovisioned NIM                                                | Attempt login                                                   | Generic error; no user enumeration and no automatic registration   | Confirmed                                             |
 | AT-003 | SR in department HCO                                             | Create attendance event with audience SR, radius 20m, grace 15m | Event saved; HCO can display event QR                              | Confirmed fields                                      |
-| AT-004 | Ordinary SR not in HCO                                           | Try create event/issue QR/export via direct tRPC request        | Server refuses, regardless of UI                                   | Confirmed                                             |
-| AT-005 | KADEP of Adaptif (not HCO) | Attempt manual insertion/correction | Server rejects | Confirmed |
+| AT-004 | SR not in HCO, without SUPERADMIN                                           | Try create event/issue QR/export via direct tRPC request        | Server refuses, regardless of UI                                   | Confirmed                                             |
+| AT-005 | KADEP of Adaptif (not HCO), without SUPERADMIN | Attempt manual insertion/correction | Server rejects | Confirmed |
 | AT-006 | KADEP HCO, invited participant without attendance | Open event, search name/NIM, select profile, enter reason | One MANUAL record, default effective server time for the target session, immutable creation time and audit | Confirmed |
-| AT-007 | HCO member who is not KADEP | Attempt manual insertion/correction via direct request | Server rejects | Confirmed |
+| AT-007 | HCO member who is not KADEP, without SUPERADMIN | Attempt manual insertion/correction via direct request | Server rejects | Confirmed |
 | AT-008 | SR event                                                         | Match event audience `SR`                                       | Can see/check in when all other conditions valid                   | Confirmed                                             |
 | AT-009 | Draft selects all KADEP across departments | Preview active SR KADEP from HCO, RND and other departments | All eligible KADEP selected; position is not a primary actor | Confirmed roster builder; future implementation |
 | AT-010 | Draft selects only KADEP, no individual includes | Ordinary active SR attempts scan after publication | Not invited; forged department/position cannot bypass snapshot | Confirmed; future implementation |
@@ -105,7 +105,7 @@ Headless Edge with isolated temporary profile, production Next.js and local Expr
 | --- | --- | --- |
 | HCO ANGGOTA/SEKDEP vs HCO KADEP | All manage internal operations; only KADEP can correct manually | Policy unit tests |
 | ADAPTIF ANGGOTA/KADEP vs HCO/SOSIAL | Adaptif general operations/manual allowed without KADEP; no cross-context grants | Policy unit tests |
-| RND KADEP; explicit SUPERADMIN non-HCO | No inferred admin; explicit privilege grants identity admin only | Unit/live DB grant/revoke tests |
+| RND KADEP; explicit SUPERADMIN non-HCO | No inferred admin; explicit eligible SUPERADMIN grants system admin and operational override (SA-01) | Unit/live DB grant/revoke tests |
 | Anonymous/invalid session, inactive/non-SR, pending password change | Denied; live database changes take effect on next request | Existing protected API and auth regression tests |
 | Forged department/position/privilege input | Cannot change DB-derived authorization | Existing protected API test, no dummy endpoint |
 | Official dictionaries and rerun | 7/7/18, unchanged UUIDs/assignments; conflicts roll back | Organization integration tests |
@@ -136,7 +136,7 @@ Phase 6 migration `20261012071912_phase6_reporting` was applied with separate PM
 
 | ID | Scenario | Expected |
 | --- | --- | --- |
-| AT-P6-01 | HCO member / KADEP HCO / non-HCO including SUPERADMIN | HCO recap/export; KADEP HCO alone manual/audit; no bypass |
+| AT-P6-01 | HCO member / KADEP HCO / non-HCO including SUPERADMIN | HCO or explicit eligible SUPERADMIN recap/export; KADEP HCO or explicit eligible SUPERADMIN manual/audit; resource rules unchanged |
 | AT-P6-02 | PUBLISHED/INACTIVE or ACTIVE, CLOSED/CLOSED vs DRAFT | Approved states allowed; DRAFT denied; no lifecycle reactivation |
 | AT-P6-03 | CLOSED insert missing time; future time; after-close time | Reject; explicit time <= now/closed_at, ends_at not cutoff |
 | AT-P6-04 | Inactive snapshot participant, existing vs new record | Historical correction allowed, new insertion denied |
@@ -175,3 +175,17 @@ Open release gates: mobile HTTPS/camera/GPS UAT, real-data privacy notice/retent
 | Mobile HTTPS camera/GPS, layout and UX | PENDING Phase 8 field UAT | PM + HCO |
 | Proxy/cookie topology, limiter across workers/NAT, backup and privacy/retention/export-access policy | PENDING release security/operations | PM + RnD/DevOps + HCO |
 | GitHub Actions/fresh Linux frozen installation | PENDING remote CI, no run claimed | Reviewer after approved PR push |
+
+## SA-01 authorization regression - 2026-10-13
+
+This PM decision supersedes earlier SUPERADMIN operational-denial expectations, including dated Phase 4/7 evidence. No grant is inferred from organization assignment.
+
+| ID | Scenario | Expected | Evidence |
+| --- | --- | --- | --- |
+| AT-SA-01 | Explicit SUPERADMIN on RND/ANGGOTA or INTI/KETUM | Event create/publish/session/QR/close and manual/correction/audit/recap/export authorized with unchanged assignment | Targeted offline policy + actual tRPC router/service tests with DB doubles |
+| AT-SA-02 | Grant revoked with same session, or while request waits on lifecycle locks | Next request and transaction re-read deny privileged operation; no writes | Targeted offline tRPC tests; real PostgreSQL concurrency not run in SA-01 |
+| AT-SA-03 | Anonymous/inactive/password-change-gated SUPERADMIN; forged client claims | Auth/eligibility/password gates still deny; client input cannot grant permission | Existing HTTP and targeted policy/tRPC negative tests |
+| AT-SA-04 | SUPERADMIN attempts DRAFT manual attendance, non-invited/inactive new target or invalid effective time | Reject with no attendance/audit write | Targeted offline tRPC tests |
+| AT-SA-05 | SUPERADMIN corrects QR attendance | Original source/recorder/recorded_at/reason/GPS unchanged; audit uses authenticated operator | Targeted offline tRPC tests |
+
+Live grant/revoke concurrency and role UAT remain separate verification gates; offline doubles are not PostgreSQL evidence. No DB mutation or new privileged account is performed by SA-01.

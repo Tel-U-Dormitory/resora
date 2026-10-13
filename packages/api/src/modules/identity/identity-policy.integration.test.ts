@@ -160,11 +160,16 @@ const target = process.env.RESORA_IDENTITY_TEST_DB_URL;
 				.values({ userId: id(3), privilegeCode: "SUPERADMIN" });
 			const granted = await getActiveSr(db, id(3));
 			expect(hasSuperadminPrivilege(granted)).toBe(true);
-			expect(canManageInternalAttendanceManually(granted)).toBe(false);
+			expect(canManageInternalAttendanceManually(granted)).toBe(true);
+			expect(canManageInternalEvent(granted)).toBe(true);
+			expect(canOperateGeneralActivity(granted)).toBe(true);
 			await db
 				.delete(systemPrivileges)
 				.where(eq(systemPrivileges.userId, id(3)));
-			expect(hasSuperadminPrivilege(await getActiveSr(db, id(3)))).toBe(false);
+			const revoked = await getActiveSr(db, id(3));
+			expect(hasSuperadminPrivilege(revoked)).toBe(false);
+			expect(canManageInternalEvent(revoked)).toBe(false);
+			expect(canManageInternalAttendanceManually(revoked)).toBe(false);
 		});
 		test("assignment changes are read from DB rather than cached role claims", async () => {
 			await db

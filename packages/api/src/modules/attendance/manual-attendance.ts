@@ -13,7 +13,7 @@ import type { z } from "zod";
 import {
 	canManageInternalAttendanceManually,
 	getActiveSrCandidate,
-	getCheckInSr,
+	getLiveOperationalSr,
 } from "../identity/identity.public";
 import { manualCorrectSchema, manualInsertSchema } from "./attendance.schema";
 import {
@@ -48,13 +48,13 @@ async function lockContext(
 		.for("update");
 	if (!session) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 	// Re-read and share-lock current operator identity after lifecycle lock waits.
-	const live = await getCheckInSr(tx, identity.userId);
+	const live = await getLiveOperationalSr(tx, identity.userId);
 	if (!live)
 		throw new TRPCError({
 			code: "FORBIDDEN",
 			message: "MANUAL_ACCESS_REQUIRED",
 		});
-	requireOperator({ ...identity, ...live });
+	requireOperator(live);
 	return { event, session };
 }
 

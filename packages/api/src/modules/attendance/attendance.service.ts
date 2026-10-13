@@ -13,16 +13,21 @@ import {
 	canAccessPersonalSr,
 	canManageInternalEvent,
 	getActiveSrDirectory,
+	getLiveOperationalSr,
 } from "../identity/identity.public";
 import type { EventDraft } from "./attendance.schema";
 import { signChallenge } from "./qr";
 import { resolveRoster } from "./roster";
 
-function operator(identity: ActiveSrIdentity) {
+function operator(identity: ActiveSrIdentity | null) {
 	if (!canManageInternalEvent(identity))
 		throw new TRPCError({ code: "FORBIDDEN", message: "HCO access required" });
 }
-async function lockedEvent(tx: DatabaseTransaction, eventId: string) {
+async function lockedEvent(
+	tx: DatabaseTransaction,
+	eventId: string,
+	identity: ActiveSrIdentity,
+) {
 	const [event] = await tx
 		.select()
 		.from(events)
@@ -36,6 +41,7 @@ async function lockedEvent(tx: DatabaseTransaction, eventId: string) {
 		.where(eq(attendanceSessions.internalEventId, eventId))
 		.for("update");
 	if (!session) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+	operator(await getLiveOperationalSr(tx, identity.userId));
 	return { event, session };
 }
 function requireState(actual: string, expected: string) {
@@ -52,6 +58,7 @@ export async function createEvent(
 ) {
 	operator(identity);
 	return db.transaction(async (tx) => {
+		operator(await getLiveOperationalSr(tx, identity.userId));
 		const [event] = await tx
 			.insert(events)
 			.values({
@@ -78,7 +85,7 @@ export async function editDraft(
 ) {
 	operator(identity);
 	return db.transaction(async (tx) => {
-		await lockedEvent(tx, eventId).then(({ event }) =>
+		await lockedEvent(tx, eventId, identity).then(({ event }) =>
 			requireState(event.status, "DRAFT"),
 		);
 		await tx
@@ -105,7 +112,7 @@ export async function editMetadata(
 ) {
 	operator(identity);
 	return db.transaction(async (tx) => {
-		const { event } = await lockedEvent(tx, eventId);
+		const { event } = await lockedEvent(tx, eventId, identity);
 		requireState(event.status, "PUBLISHED");
 		await tx.update(events).set(metadata).where(eq(events.id, eventId));
 	});
@@ -213,7 +220,7 @@ export async function publishEvent(
 ) {
 	operator(identity);
 	return db.transaction(async (tx) => {
-		const { event, session } = await lockedEvent(tx, eventId);
+		const { event, session } = await lockedEvent(tx, eventId, identity);
 		requireState(event.status, "DRAFT");
 		requireState(session.status, "INACTIVE");
 		const directory = await getActiveSrDirectory(tx, true);
@@ -248,7 +255,7 @@ export async function activateSession(
 ) {
 	operator(identity);
 	return db.transaction(async (tx) => {
-		const { event, session } = await lockedEvent(tx, eventId);
+		const { event, session } = await lockedEvent(tx, eventId, identity);
 		requireState(event.status, "PUBLISHED");
 		requireState(session.status, "INACTIVE");
 		const now = new Date();
@@ -272,7 +279,7 @@ export async function changeQr(
 ) {
 	operator(identity);
 	return db.transaction(async (tx) => {
-		const { event, session } = await lockedEvent(tx, eventId);
+		const { event, session } = await lockedEvent(tx, eventId, identity);
 		requireState(event.status, "PUBLISHED");
 		requireState(session.status, "ACTIVE");
 		const [current] = await tx
@@ -318,7 +325,7 @@ export async function closeEvent(
 ) {
 	operator(identity);
 	return db.transaction(async (tx) => {
-		const { event, session } = await lockedEvent(tx, eventId);
+		const { event, session } = await lockedEvent(tx, eventId, identity);
 		requireState(event.status, "PUBLISHED");
 		const now = new Date();
 		await tx
