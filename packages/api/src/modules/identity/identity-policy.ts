@@ -39,5 +39,9 @@ export function canOperateGeneralActivity(identity: Identity) {
 }
 
 export function hasSuperadminPrivilege(identity: Identity) {
-	return canAccessPersonalSr(identity) && identity?.isSuperadmin === true;
+	return (
+		canAccessPersonalSr(identity) &&
+		identity?.isSuperadmin === true &&
+		isValidSrAssignment(identity.departmentCode, identity.positionCode)
+	);
 }

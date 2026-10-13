@@ -64,10 +64,12 @@ for (const [department, position] of [
 			positionCode: position,
 		});
 	});
-test("SUPERADMIN does not make an invalid internal operator assignment eligible", () => {
+test("invalid HCO/KETUM assignment denies every SUPERADMIN permission", () => {
 	const current = identity("HCO", "KETUM", true);
+	expect(hasSuperadminPrivilege(current)).toBe(false);
 	expect(canManageInternalEvent(current)).toBe(false);
 	expect(canManageInternalAttendanceManually(current)).toBe(false);
+	expect(canOperateGeneralActivity(current)).toBe(false);
 });
 test("missing identity, inactive/non-SR identity and first-change gate deny every action", () => {
 	const base = identity("HCO", "KADEP", true);
