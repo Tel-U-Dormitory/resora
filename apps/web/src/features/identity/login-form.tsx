@@ -33,6 +33,7 @@ export default function LoginForm({ expired = false }: { expired?: boolean }) {
 					</p>
 				)}
 				<form
+					method="post"
 					className="space-y-4"
 					onSubmit={async (event) => {
 						event.preventDefault();

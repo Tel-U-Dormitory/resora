@@ -32,6 +32,7 @@ export default function PasswordChangeForm() {
 			</CardHeader>
 			<CardContent>
 				<form
+					method="post"
 					noValidate
 					className="space-y-4"
 					onSubmit={async (event) => {
