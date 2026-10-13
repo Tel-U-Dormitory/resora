@@ -131,16 +131,32 @@ export function createAuth(
 					});
 				}
 				if (ctx.path === "/change-password") {
-					if (ctx.body.newPassword === ctx.body.currentPassword) {
+					const body = ctx.body;
+
+					if (
+						typeof body !== "object" ||
+						body === null ||
+						Array.isArray(body) ||
+						!("newPassword" in body) ||
+						!("currentPassword" in body) ||
+						typeof body.newPassword !== "string" ||
+						typeof body.currentPassword !== "string"
+					) {
+						// Let Better Auth validate malformed request bodies.
+						return;
+					}
+
+					if (body.newPassword === body.currentPassword) {
 						throw new APIError("BAD_REQUEST", {
 							code: "NEW_PASSWORD_REQUIRED",
 							message: "Choose a different password",
 						});
 					}
+
 					return {
 						context: {
 							...ctx,
-							body: { ...ctx.body, revokeOtherSessions: true },
+							body: { ...body, revokeOtherSessions: true },
 						},
 					};
 				}
