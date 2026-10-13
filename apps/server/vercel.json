@@ -4,8 +4,8 @@
 	"installCommand": "pnpm install --frozen-lockfile",
 	"buildCommand": "pnpm run build",
 	"functions": {
-		"app.ts": {
-			"includeFiles": ".env.schema"
+		"app.mjs": {
+			"includeFiles": "{dist/**,.env.schema}"
 		}
 	}
 }
