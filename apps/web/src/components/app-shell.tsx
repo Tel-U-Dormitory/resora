@@ -4,14 +4,15 @@ import { Menu, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
-import { ModeToggle } from "@/components/mode-toggle";
 import { Button } from "@/components/ui/button";
 
 export function AppShell({
 	name,
+	canManageEvents,
 	children,
 }: {
 	name: string;
+	canManageEvents: boolean;
 	children: ReactNode;
 }) {
 	const pathname = usePathname();
@@ -40,7 +41,7 @@ export function AppShell({
 	return (
 		<div className="min-h-dvh lg:flex">
 			<div className="hidden lg:sticky lg:top-0 lg:block lg:h-dvh lg:w-64 lg:shrink-0">
-				<AppSidebar name={name} />
+				<AppSidebar name={name} canManageEvents={canManageEvents} />
 			</div>
 			<div className="min-w-0 flex-1">
 				<div className="sticky top-0 z-20 flex items-center justify-between border-border border-b bg-surface/95 px-4 py-3 backdrop-blur-md lg:hidden">
@@ -59,7 +60,7 @@ export function AppShell({
 						<Menu size={22} aria-hidden="true" />
 					</Button>
 					<span className="font-bold tracking-tight">RESORA</span>
-					<ModeToggle />
+					<span className="size-10" aria-hidden="true" />
 				</div>
 				<main className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">{children}</main>
 			</div>
@@ -87,7 +88,12 @@ export function AppShell({
 					>
 						<X size={20} aria-hidden="true" />
 					</button>
-					<AppSidebar name={name} onNavigate={() => drawer.current?.close()} />
+					<AppSidebar
+						name={name}
+						canManageEvents={canManageEvents}
+						menuContainer={drawer}
+						onNavigate={() => drawer.current?.close()}
+					/>
 				</div>
 			</dialog>
 		</div>

@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, CalendarDays, Plus } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,10 +11,17 @@ import { trpc } from "@/utils/trpc";
 import { eventErrorMessage, formatEventTime, StatusBadge } from "./event-ui";
 
 export default function EventList() {
+	const params = useSearchParams();
 	const query = useQuery({
 		...trpc.attendance.list.queryOptions(),
 		retry: false,
+		meta: { errorHandledLocally: true },
 	});
+	const management = query.data?.canManage && params.get("view") === "manage";
+	const events =
+		query.data?.events.filter(
+			(event) => management || event.status === "PUBLISHED",
+		) ?? [];
 	return (
 		<section className="space-y-6">
 			<div className="flex flex-wrap items-start justify-between gap-4">
@@ -22,15 +30,15 @@ export default function EventList() {
 						RESORA / Event
 					</p>
 					<h1 className="font-bold text-2xl tracking-tight">
-						Event internal SR
+						{management ? "Kelola event internal" : "Event internal SR"}
 					</h1>
 					<p className="text-muted-foreground text-sm">
-						{query.data?.canManage
+						{management
 							? "Kelola jadwal, undangan peserta, dan QR event internal."
-							: "Jadwal dan informasi event yang mengundang Anda."}
+							: "Jadwal dan informasi event terpublikasi yang dapat Anda lihat."}
 					</p>
 				</div>
-				{query.data?.canManage && (
+				{management && (
 					<Link
 						href="/events/new"
 						className="focus-ring inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 font-semibold text-primary-foreground text-sm hover:bg-primary-hover"
@@ -55,8 +63,13 @@ export default function EventList() {
 							{eventErrorMessage(query.error)}
 						</p>
 						<div className="flex flex-wrap items-center gap-4">
-							<Button variant="outline" onClick={() => query.refetch()}>
-								Coba kembali
+							<Button
+								variant="outline"
+								disabled={query.isFetching}
+								loading={query.isFetching}
+								onClick={() => query.refetch()}
+							>
+								{query.isFetching ? "Memuat event…" : "Coba kembali"}
 							</Button>
 							<Link
 								className="focus-ring rounded-md text-primary text-sm underline"
@@ -68,7 +81,7 @@ export default function EventList() {
 					</CardContent>
 				</Card>
 			)}
-			{query.data?.events.length === 0 && (
+			{query.data && events.length === 0 && (
 				<Card>
 					<CardContent className="flex flex-col items-center gap-3 py-12 text-center">
 						<span className="rounded-2xl bg-primary-soft p-4 text-primary">
@@ -76,7 +89,7 @@ export default function EventList() {
 						</span>
 						<h2 className="font-semibold text-lg">Belum ada event</h2>
 						<p className="max-w-md text-muted-foreground text-sm">
-							{query.data.canManage
+							{management
 								? "Mulai dengan membuat draft event, lalu pilih peserta yang ingin diundang."
 								: "Event akan muncul di sini setelah Anda menerima undangan."}
 						</p>
@@ -84,7 +97,7 @@ export default function EventList() {
 				</Card>
 			)}
 			<div className="grid gap-4 md:grid-cols-2">
-				{query.data?.events.map((event) => (
+				{events.map((event) => (
 					<Card key={event.id} className="flex flex-col">
 						<CardContent className="flex flex-1 flex-col gap-4">
 							<div className="flex items-start justify-between gap-3">

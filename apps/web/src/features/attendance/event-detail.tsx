@@ -4,34 +4,49 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { CalendarDays, MapPin, QrCode, Users } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { queryClient, trpc } from "@/utils/trpc";
+import { attendanceQueryKeys, queryClient, trpc } from "@/utils/trpc";
+import { refreshAttendanceQueries } from "./attendance-queries";
 import EventRecap from "./event-recap";
 import { eventErrorMessage, formatEventTime, StatusBadge } from "./event-ui";
 
 export default function EventDetail({ eventId }: { eventId: string }) {
+	const actionLock = useRef(false);
+	const [activeAction, setActiveAction] = useState<string | null>(null);
+	const [feedback, setFeedback] = useState("");
+	const publish = useMutation(trpc.attendance.publish.mutationOptions());
+	const close = useMutation(trpc.attendance.close.mutationOptions());
 	const detail = useQuery({
 		...trpc.attendance.detail.queryOptions({ eventId }),
 		retry: false,
+		meta: { errorHandledLocally: true },
 	});
 	const canManage = detail.data?.canManage ?? false;
 	const preview = useQuery({
 		...trpc.attendance.preview.queryOptions({ eventId }),
-		enabled: canManage && detail.data?.event.status === "DRAFT",
+		enabled:
+			canManage &&
+			detail.data?.event.status === "DRAFT" &&
+			!activeAction &&
+			!publish.isSuccess,
 		retry: false,
+		meta: { errorHandledLocally: true },
 	});
 	const qr = useQuery({
 		...trpc.attendance.qr.queryOptions({ eventId }),
-		enabled: canManage && detail.data?.session.status === "ACTIVE",
+		enabled:
+			canManage &&
+			detail.data?.session.status === "ACTIVE" &&
+			!activeAction &&
+			!close.isSuccess,
 		retry: false,
+		meta: { errorHandledLocally: true },
 		refetchInterval: 15_000,
 	});
-	const publish = useMutation(trpc.attendance.publish.mutationOptions());
 	const activate = useMutation(trpc.attendance.activate.mutationOptions());
-	const close = useMutation(trpc.attendance.close.mutationOptions());
 	const revoke = useMutation(trpc.attendance.revokeQr.mutationOptions());
 	const reissue = useMutation(trpc.attendance.reissueQr.mutationOptions());
 	const metadata = useMutation(trpc.attendance.editMetadata.mutationOptions());
@@ -41,15 +56,40 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 		const timer = setInterval(() => setNow(Date.now()), 1000);
 		return () => clearInterval(timer);
 	}, []);
-	const act = async (operation: () => Promise<unknown>) => {
+	const act = async (
+		action: string,
+		message: string,
+		operation: () => Promise<unknown>,
+	) => {
+		if (actionLock.current) return;
+		actionLock.current = true;
+		setActiveAction(action);
 		setError("");
+		setFeedback("");
 		try {
+			await Promise.all([
+				queryClient.cancelQueries({ queryKey: attendanceQueryKeys.preview }),
+				queryClient.cancelQueries({ queryKey: attendanceQueryKeys.qr }),
+			]);
 			await operation();
-			await queryClient.invalidateQueries({
-				queryKey: trpc.attendance.pathKey(),
-			});
 		} catch (cause) {
 			setError(eventErrorMessage(cause));
+			actionLock.current = false;
+			setActiveAction(null);
+			return;
+		}
+		setFeedback(message);
+		try {
+			if (["activate", "revoke", "reissue", "close"].includes(action))
+				await queryClient.resetQueries({
+					queryKey: trpc.attendance.qr.queryKey({ eventId }),
+				});
+			await refreshAttendanceQueries(queryClient, attendanceQueryKeys);
+		} catch {
+			setFeedback(`${message} Tampilan belum diperbarui; muat ulang halaman.`);
+		} finally {
+			actionLock.current = false;
+			setActiveAction(null);
 		}
 	};
 	if (detail.isPending)
@@ -60,7 +100,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 				<Skeleton className="h-64 w-full rounded-xl" />
 			</div>
 		);
-	if (detail.error)
+	if (!detail.data)
 		return (
 			<Card>
 				<CardContent className="space-y-4">
@@ -78,6 +118,8 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 		);
 	const { event, session, participants } = detail.data;
 	const busy =
+		close.isSuccess ||
+		Boolean(activeAction) ||
 		publish.isPending ||
 		activate.isPending ||
 		close.isPending ||
@@ -95,12 +137,30 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 		event.status === "DRAFT" ? preview.data?.participants : participants;
 	return (
 		<section className="space-y-6">
-			<Link
-				className="focus-ring inline-block rounded-md text-primary text-sm underline"
-				href="/events"
-			>
-				Kembali ke daftar event
-			</Link>
+			<nav aria-label="Breadcrumb event" className="text-sm">
+				<ol className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+					<li>
+						<Link
+							className="focus-ring rounded-md text-muted-foreground hover:text-primary"
+							href="/events"
+						>
+							Event internal
+						</Link>
+					</li>
+					<li aria-hidden="true" className="text-muted-foreground">
+						/
+					</li>
+					<li className="min-w-0 flex-1">
+						<span
+							aria-current="page"
+							className="block truncate font-medium"
+							title={event.title}
+						>
+							{event.title}
+						</span>
+					</li>
+				</ol>
+			</nav>
 			<div className="space-y-3">
 				<div className="flex flex-wrap items-center gap-3">
 					<h1 className="min-w-0 break-words font-bold text-2xl tracking-tight">
@@ -120,6 +180,28 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 					{error}
 				</p>
 			)}
+			{feedback && (
+				<p
+					role="status"
+					className="rounded-lg border border-border bg-muted p-4 text-sm"
+				>
+					{feedback}
+				</p>
+			)}
+			{detail.isRefetchError && (
+				<p role="alert" className="text-muted-foreground text-sm">
+					Tampilan event belum berhasil diperbarui. Muat ulang halaman; jangan
+					mengulangi aksi yang sudah berhasil.
+				</p>
+			)}
+			{activeAction &&
+				![publish, activate, close, revoke, reissue, metadata].some(
+					(mutation) => mutation.isPending,
+				) && (
+					<p role="status" className="text-muted-foreground text-sm">
+						Memperbarui tampilan event…
+					</p>
+				)}
 			<div className="grid gap-4 md:grid-cols-2">
 				<Card>
 					<CardHeader
@@ -214,11 +296,22 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 							Edit draft
 						</Link>
 						<Button
-							disabled={busy || preview.isPending || Boolean(preview.error)}
-							loading={publish.isPending}
-							onClick={() => act(() => publish.mutateAsync({ eventId }))}
+							disabled={
+								busy ||
+								publish.isSuccess ||
+								preview.isPending ||
+								Boolean(preview.error)
+							}
+							loading={activeAction === "publish"}
+							onClick={() =>
+								act("publish", "Event berhasil dipublikasikan.", () =>
+									publish.mutateAsync({ eventId }),
+								)
+							}
 						>
-							Publikasikan event
+							{activeAction === "publish"
+								? "Mempublikasikan…"
+								: "Publikasikan event"}
 						</Button>
 					</CardContent>
 				</Card>
@@ -238,12 +331,15 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 									onSubmit={(e) => {
 										e.preventDefault();
 										const data = new FormData(e.currentTarget);
-										void act(() =>
-											metadata.mutateAsync({
-												eventId,
-												title: String(data.get("title") ?? ""),
-												description: String(data.get("description") ?? ""),
-											}),
+										void act(
+											"metadata",
+											"Perubahan event berhasil disimpan.",
+											() =>
+												metadata.mutateAsync({
+													eventId,
+													title: String(data.get("title") ?? ""),
+													description: String(data.get("description") ?? ""),
+												}),
 										);
 									}}
 								>
@@ -251,6 +347,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 										Judul
 										<input
 											name="title"
+											disabled={busy}
 											required
 											maxLength={200}
 											defaultValue={event.title}
@@ -261,6 +358,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 										Deskripsi
 										<textarea
 											name="description"
+											disabled={busy}
 											rows={4}
 											maxLength={5000}
 											defaultValue={event.description}
@@ -270,9 +368,11 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 									<Button
 										type="submit"
 										disabled={busy}
-										loading={metadata.isPending}
+										loading={activeAction === "metadata"}
 									>
-										Simpan perubahan
+										{activeAction === "metadata"
+											? "Menyimpan perubahan…"
+											: "Simpan perubahan"}
 									</Button>
 								</form>
 							</CardContent>
@@ -292,12 +392,18 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 										</p>
 										<Button
 											disabled={busy}
-											loading={activate.isPending}
+											loading={activeAction === "activate"}
 											onClick={() =>
-												act(() => activate.mutateAsync({ eventId }))
+												act(
+													"activate",
+													"Sesi dan QR berhasil diaktifkan.",
+													() => activate.mutateAsync({ eventId }),
+												)
 											}
 										>
-											Aktifkan sesi dan QR
+											{activeAction === "activate"
+												? "Mengaktifkan sesi…"
+												: "Aktifkan sesi dan QR"}
 										</Button>
 									</>
 								)}
@@ -327,8 +433,13 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 												<p role="alert" className="text-destructive text-sm">
 													QR gagal dimuat.
 												</p>
-												<Button variant="outline" onClick={() => qr.refetch()}>
-													Coba kembali
+												<Button
+													variant="outline"
+													disabled={qr.isFetching}
+													loading={qr.isFetching}
+													onClick={() => qr.refetch()}
+												>
+													{qr.isFetching ? "Memuat QR…" : "Coba kembali"}
 												</Button>
 											</div>
 										)}
@@ -362,27 +473,35 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 											<Button
 												variant="danger"
 												disabled={busy || !qrUsable}
-												loading={revoke.isPending}
+												loading={activeAction === "revoke"}
 												onClick={() => {
 													if (
 														window.confirm(
 															"Batalkan QR ini? QR yang sedang ditampilkan tidak dapat digunakan lagi. Anda dapat menerbitkan QR baru.",
 														)
 													)
-														void act(() => revoke.mutateAsync({ eventId }));
+														void act("revoke", "QR berhasil dibatalkan.", () =>
+															revoke.mutateAsync({ eventId }),
+														);
 												}}
 											>
-												Batalkan QR
+												{activeAction === "revoke"
+													? "Membatalkan QR…"
+													: "Batalkan QR"}
 											</Button>
 											<Button
 												variant="outline"
 												disabled={busy || qr.isPending || qrUsable || !qr.data}
-												loading={reissue.isPending}
+												loading={activeAction === "reissue"}
 												onClick={() =>
-													act(() => reissue.mutateAsync({ eventId }))
+													act("reissue", "QR baru berhasil diterbitkan.", () =>
+														reissue.mutateAsync({ eventId }),
+													)
 												}
 											>
-												Terbitkan QR baru
+												{activeAction === "reissue"
+													? "Menerbitkan QR…"
+													: "Terbitkan QR baru"}
 											</Button>
 										</div>
 									</>
@@ -402,17 +521,21 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 							<Button
 								variant="danger"
 								disabled={busy}
-								loading={close.isPending}
+								loading={activeAction === "close"}
 								onClick={() => {
 									if (
 										window.confirm(
 											"Tutup event ini? Sesi akan berakhir dan QR dibatalkan. Event tidak dapat dibuka kembali.",
 										)
 									)
-										void act(() => close.mutateAsync({ eventId }));
+										void act(
+											"close",
+											"Event dan sesi kehadiran berhasil ditutup.",
+											() => close.mutateAsync({ eventId }),
+										);
 								}}
 							>
-								Tutup event
+								{activeAction === "close" ? "Menutup event…" : "Tutup event"}
 							</Button>
 						</CardContent>
 					</Card>
@@ -447,8 +570,13 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 								<p role="alert" className="text-destructive text-sm">
 									Preview peserta gagal dimuat.
 								</p>
-								<Button variant="outline" onClick={() => preview.refetch()}>
-									Coba kembali
+								<Button
+									variant="outline"
+									disabled={preview.isFetching}
+									loading={preview.isFetching}
+									onClick={() => preview.refetch()}
+								>
+									{preview.isFetching ? "Memuat peserta…" : "Coba kembali"}
 								</Button>
 							</div>
 						)}

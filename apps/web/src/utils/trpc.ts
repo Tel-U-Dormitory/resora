@@ -9,6 +9,7 @@ import { getServerUrl } from "./server-url";
 export const queryClient = new QueryClient({
 	queryCache: new QueryCache({
 		onError: (error, query) => {
+			if (query.meta?.errorHandledLocally === true) return;
 			toast.error(queryErrorMessage(error), {
 				action: {
 					label: "Coba kembali",
@@ -39,3 +40,9 @@ export const trpc = createTRPCOptionsProxy<AppRouter>({
 	client: trpcClient,
 	queryClient,
 });
+
+export const attendanceQueryKeys = {
+	all: trpc.attendance.pathKey(),
+	preview: trpc.attendance.preview.pathKey(),
+	qr: trpc.attendance.qr.pathKey(),
+};

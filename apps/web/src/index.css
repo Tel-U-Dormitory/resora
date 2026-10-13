@@ -1,5 +1,24 @@
 @import "@resora/ui/globals.css";
 
+.resora-scan-line {
+	animation: resora-scan-line 2.4s ease-in-out infinite;
+}
+@keyframes resora-scan-line {
+	0%,
+	100% {
+		top: 0;
+	}
+	50% {
+		top: calc(100% - 2px);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.resora-scan-line {
+		animation: none;
+		top: 50%;
+	}
+}
+
 /* Selected Nafi design tokens; retain shared UI tokens and dark-mode support. */
 :root {
 	--primary: #e13b30;

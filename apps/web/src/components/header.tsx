@@ -1,13 +1,11 @@
 "use client";
 import Link from "next/link";
 import UserMenu from "@/features/identity/user-menu";
+import { authClient } from "@/lib/auth-client";
 import { ModeToggle } from "./mode-toggle";
 
 export default function Header() {
-	const links = [
-		{ to: "/", label: "Home" },
-		{ to: "/dashboard", label: "Dashboard" },
-	] as const;
+	const { data: session } = authClient.useSession();
 
 	return (
 		<header className="sticky top-0 z-30 border-border border-b bg-surface/95 backdrop-blur-md">
@@ -29,17 +27,20 @@ export default function Header() {
 						aria-label="Navigasi utama"
 						className="flex gap-4 font-medium text-muted-foreground text-sm"
 					>
-						{links.map(({ to, label }) => {
-							return (
-								<Link
-									key={to}
-									href={to}
-									className="focus-ring rounded-md hover:text-primary"
-								>
-									{label}
-								</Link>
-							);
-						})}
+						<a
+							href="#fitur"
+							className="focus-ring hidden rounded-md hover:text-primary md:inline"
+						>
+							Fitur
+						</a>
+						{session && (
+							<Link
+								href="/dashboard"
+								className="focus-ring rounded-md hover:text-primary"
+							>
+								Dashboard
+							</Link>
+						)}
 					</nav>
 				</div>
 				<div className="flex items-center gap-2">

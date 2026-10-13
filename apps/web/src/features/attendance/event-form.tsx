@@ -5,10 +5,11 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import type { inferRouterInputs } from "@trpc/server";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { queryClient, trpc } from "@/utils/trpc";
+import { attendanceQueryKeys, queryClient, trpc } from "@/utils/trpc";
+import { refreshAttendanceQueries } from "./attendance-queries";
 import {
 	eventErrorMessage,
 	parseWibDateTimeInput,
@@ -142,6 +143,8 @@ function DraftEditor({
 	const [error, setError] = useState("");
 	const [endError, setEndError] = useState("");
 	const [search, setSearch] = useState("");
+	const [saving, setSaving] = useState(false);
+	const submitLock = useRef(false);
 	const router = useRouter();
 	const create = useMutation(trpc.attendance.create.mutationOptions());
 	const edit = useMutation(trpc.attendance.editDraft.mutationOptions());
@@ -172,7 +175,10 @@ function DraftEditor({
 		});
 	return (
 		<section className="mx-auto max-w-5xl space-y-6">
-			<Link className="focus-ring text-primary underline" href="/events">
+			<Link
+				className="focus-ring text-primary underline"
+				href="/events?view=manage"
+			>
 				Daftar event
 			</Link>
 			<h1 className="font-semibold text-2xl">
@@ -186,7 +192,7 @@ function DraftEditor({
 				className="space-y-5"
 				onSubmit={async (event) => {
 					event.preventDefault();
-					if (create.isPending || edit.isPending) return;
+					if (submitLock.current) return;
 					setError("");
 					setEndError("");
 					const startDate = parseWibDateTimeInput(start);
@@ -202,6 +208,9 @@ function DraftEditor({
 						setEndError(timeRangeMessage);
 						return;
 					}
+					submitLock.current = true;
+					setSaving(true);
+					let saved = false;
 					try {
 						const input = {
 							...draft,
@@ -210,9 +219,11 @@ function DraftEditor({
 						};
 						const id = eventId ?? (await create.mutateAsync(input)).eventId;
 						if (eventId) await edit.mutateAsync({ eventId, draft: input });
-						await queryClient.invalidateQueries({
-							queryKey: trpc.attendance.pathKey(),
-						});
+						saved = true;
+						await refreshAttendanceQueries(
+							queryClient,
+							attendanceQueryKeys,
+						).catch(() => {});
 						router.push(`/events/${id}`);
 					} catch (cause) {
 						if (
@@ -221,6 +232,11 @@ function DraftEditor({
 						)
 							setEndError(timeRangeMessage);
 						else setError(eventErrorMessage(cause));
+					} finally {
+						if (!saved) {
+							submitLock.current = false;
+							setSaving(false);
+						}
 					}
 				}}
 			>
@@ -259,7 +275,7 @@ function DraftEditor({
 					<div className="border-border border-b px-5 py-4">
 						<h2 className="font-semibold">Jadwal</h2>
 						<p className="mt-1 text-muted-foreground text-sm">
-							Isi waktu sesuai zona waktu perangkat Anda.
+							Isi waktu mulai dan selesai dalam WIB.
 						</p>
 					</div>
 					<CardContent className="grid gap-4 sm:grid-cols-2">
@@ -514,8 +530,8 @@ function DraftEditor({
 						{error}
 					</p>
 				)}
-				<Button type="submit" loading={create.isPending || edit.isPending}>
-					Simpan draft
+				<Button type="submit" disabled={saving} loading={saving}>
+					{saving ? "Menyimpan draft…" : "Simpan draft"}
 				</Button>
 			</form>
 		</section>

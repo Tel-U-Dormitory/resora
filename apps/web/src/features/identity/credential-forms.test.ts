@@ -62,3 +62,45 @@ for (const [file, authMethod] of [
 		expect(preventsDefault).toBe(1);
 	});
 }
+
+test("password change keeps the mandatory redirect and gives voluntary changes local success feedback", () => {
+	const text = readFileSync(
+		new URL("password-change-form.tsx", import.meta.url),
+		"utf8",
+	);
+	const source = ts.createSourceFile(
+		"password-change-form.tsx",
+		text,
+		ts.ScriptTarget.Latest,
+		true,
+		ts.ScriptKind.TSX,
+	);
+	let mandatoryDefault = false;
+	let redirectBranches = 0;
+	let revokesOtherSessions = false;
+	function visit(node: ts.Node) {
+		if (ts.isBindingElement(node) && node.name.getText(source) === "mandatory")
+			mandatoryDefault = node.initializer?.getText(source) === "true";
+		if (
+			ts.isIfStatement(node) &&
+			node.expression.getText(source) === "mandatory" &&
+			node.thenStatement
+				.getText(source)
+				.includes('router.replace("/dashboard")')
+		) {
+			redirectBranches++;
+			expect(node.elseStatement?.getText(source)).toContain("setSuccess(true)");
+		}
+		if (
+			ts.isPropertyAssignment(node) &&
+			node.name.getText(source) === "revokeOtherSessions"
+		)
+			revokesOtherSessions =
+				node.initializer.kind === ts.SyntaxKind.TrueKeyword;
+		ts.forEachChild(node, visit);
+	}
+	visit(source);
+	expect(mandatoryDefault).toBe(true);
+	expect(redirectBranches).toBe(1);
+	expect(revokesOtherSessions).toBe(true);
+});

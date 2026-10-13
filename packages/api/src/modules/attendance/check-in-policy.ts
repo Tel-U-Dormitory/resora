@@ -1,4 +1,4 @@
-export const MAX_GPS_ACCURACY_M = 20;
+export const MAX_GPS_ACCURACY_M = 40;
 export type CheckInLocation = {
 	latitude: number;
 	longitude: number;
