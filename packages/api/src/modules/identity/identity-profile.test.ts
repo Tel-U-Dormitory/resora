@@ -95,3 +95,15 @@ for (const [label, identity, code] of [
 		}
 		expect(f.selections).toHaveLength(1);
 	});
+
+for (const [departmentCode, positionCode, allowed] of [
+	["HCO", "ANGGOTA", true],
+	["HCO", "KADEP", true],
+	["HCO", "KETUM", false],
+	["RND", "KADEP", false],
+	["INTI", "KETUM", false],
+] as const)
+	test(`session navigation capability uses existing policy for ${departmentCode}/${positionCode}`, async () => {
+		const f = fixture({ departmentCode, positionCode });
+		expect((await f.caller.session())?.canManageInternalEvents).toBe(allowed);
+	});

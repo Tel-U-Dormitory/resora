@@ -10,6 +10,7 @@ import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 
 import { protectedProcedure, publicProcedure, router } from "../../index";
+import { canManageInternalEvent } from "./identity-policy";
 
 export const identityRouter = router({
 	profile: protectedProcedure.query(async ({ ctx }) => {
@@ -47,6 +48,7 @@ export const identityRouter = router({
 			nim: identity.nim,
 			mustChangePassword: identity.mustChangePassword,
 			name: ctx.session.user.name,
+			canManageInternalEvents: canManageInternalEvent(identity),
 		};
 	}),
 });

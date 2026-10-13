@@ -8,9 +8,11 @@ import { Button } from "@/components/ui/button";
 
 export function AppShell({
 	name,
+	canManageEvents,
 	children,
 }: {
 	name: string;
+	canManageEvents: boolean;
 	children: ReactNode;
 }) {
 	const pathname = usePathname();
@@ -39,7 +41,7 @@ export function AppShell({
 	return (
 		<div className="min-h-dvh lg:flex">
 			<div className="hidden lg:sticky lg:top-0 lg:block lg:h-dvh lg:w-64 lg:shrink-0">
-				<AppSidebar name={name} />
+				<AppSidebar name={name} canManageEvents={canManageEvents} />
 			</div>
 			<div className="min-w-0 flex-1">
 				<div className="sticky top-0 z-20 flex items-center justify-between border-border border-b bg-surface/95 px-4 py-3 backdrop-blur-md lg:hidden">
@@ -88,6 +90,7 @@ export function AppShell({
 					</button>
 					<AppSidebar
 						name={name}
+						canManageEvents={canManageEvents}
 						menuContainer={drawer}
 						onNavigate={() => drawer.current?.close()}
 					/>

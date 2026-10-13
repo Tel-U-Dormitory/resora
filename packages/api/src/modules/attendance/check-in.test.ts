@@ -40,10 +40,16 @@ test("Haversine handles identity, known distance, antipodes and longitude wrap",
 	).toBeCloseTo(222.38985, 3);
 });
 test("location finite/range/positive accuracy checks and inclusive radius/accuracy boundary", () => {
-	expect(MAX_GPS_ACCURACY_M).toBe(20);
+	expect(MAX_GPS_ACCURACY_M).toBe(40);
 	expect(locationFailure(location, center, 20)).toBeNull();
 	expect(
 		locationFailure({ ...location, accuracyMeters: 20.001 }, center, 20),
+	).toBeNull();
+	expect(
+		locationFailure({ ...location, accuracyMeters: 40 }, center, 20),
+	).toBeNull();
+	expect(
+		locationFailure({ ...location, accuracyMeters: 40.001 }, center, 20),
 	).toBe("GPS_INACCURATE");
 	for (const value of [
 		Number.NaN,
@@ -288,7 +294,10 @@ test("Phase 4 directory keeps its original DTO without the internal password gat
 test("valid synthetic QR saves server time/GPS, ignores scheduled end and returns explicit safe DTO", async () => {
 	const f = fixture();
 	const before = Date.now();
-	const result = await checkIn(f.db, f.identity, f.secret, f.input);
+	const result = await checkIn(f.db, f.identity, f.secret, {
+		...f.input,
+		location: { ...location, accuracyMeters: 40 },
+	});
 	expect(result.status).toBe("CHECKED_IN");
 	expect(Object.keys(result).sort()).toEqual([
 		"attendanceAt",
@@ -303,7 +312,7 @@ test("valid synthetic QR saves server time/GPS, ignores scheduled end and return
 		recordedByUserId: f.identity.userId,
 		scanLat: 0,
 		scanLng: 0,
-		gpsAccuracyM: 20,
+		gpsAccuracyM: 40,
 	});
 	expect(f.state.locks).toEqual([
 		"events:update",
@@ -413,7 +422,7 @@ test("live inactive/invalid assignment/first-change/not-invited identities are d
 });
 test("geofence/accuracy failure never writes or exposes an existing record", async () => {
 	for (const [data, expected] of [
-		[{ ...location, accuracyMeters: 21 }, "GPS_INACCURATE"],
+		[{ ...location, accuracyMeters: 40.001 }, "GPS_INACCURATE"],
 		[{ ...location, longitude: 1 }, "OUTSIDE_GEOFENCE"],
 	] as const) {
 		const f = fixture();

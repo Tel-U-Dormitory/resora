@@ -7,7 +7,8 @@ import type { inferRouterOutputs } from "@trpc/server";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { queryClient, trpc } from "@/utils/trpc";
+import { attendanceQueryKeys, queryClient, trpc } from "@/utils/trpc";
+import { refreshAttendanceQueries } from "./attendance-queries";
 import {
 	eventErrorMessage,
 	formatEventTime,
@@ -58,6 +59,7 @@ function ParticipantAudit({
 			limit: 20,
 		}),
 		retry: false,
+		meta: { errorHandledLocally: true },
 	});
 	return (
 		<section className="space-y-3" aria-label={`Audit ${participant.name}`}>
@@ -175,7 +177,11 @@ function ManualForm({
 							attendanceAt,
 							reason,
 						});
-					await onDone();
+					await onDone().catch(() =>
+						setError(
+							"Kehadiran sudah disimpan, tetapi tampilan belum diperbarui. Muat ulang; jangan mengulangi penyimpanan.",
+						),
+					);
 				} catch (cause) {
 					setError(manualError(cause));
 				}
@@ -236,7 +242,7 @@ function ManualForm({
 			)}
 			<div className="flex gap-3">
 				<Button type="submit" loading={busy}>
-					Simpan kehadiran
+					{busy ? "Menyimpan kehadiran…" : "Simpan kehadiran"}
 				</Button>
 				<Button variant="outline" disabled={busy} onClick={onCancel}>
 					Batal
@@ -250,6 +256,7 @@ export default function EventRecap({ eventId }: { eventId: string }) {
 	const recap = useQuery({
 		...trpc.attendance.recap.queryOptions({ eventId }),
 		retry: false,
+		meta: { errorHandledLocally: true },
 	});
 	const [search, setSearch] = useState("");
 	const [selected, setSelected] = useState<Participant | null>(null);
@@ -289,13 +296,16 @@ export default function EventRecap({ eventId }: { eventId: string }) {
 					<Button
 						variant="outline"
 						loading={exporting}
+						disabled={exporting}
 						onClick={async () => {
+							if (exporting) return;
 							setExporting(true);
 							setError("");
 							try {
 								const csv = await queryClient.fetchQuery({
 									...trpc.attendance.exportCsv.queryOptions({ eventId }),
 									staleTime: 0,
+									meta: { errorHandledLocally: true },
 								});
 								const url = URL.createObjectURL(
 									new Blob([csv.content], { type: "text/csv;charset=utf-8" }),
@@ -312,7 +322,7 @@ export default function EventRecap({ eventId }: { eventId: string }) {
 							}
 						}}
 					>
-						Export CSV
+						{exporting ? "Menyiapkan CSV…" : "Export CSV"}
 					</Button>
 				</div>
 				{message && (
@@ -336,9 +346,7 @@ export default function EventRecap({ eventId }: { eventId: string }) {
 						onDone={async () => {
 							setSelected(null);
 							setMessage("Kehadiran berhasil disimpan dan diaudit.");
-							await queryClient.invalidateQueries({
-								queryKey: trpc.attendance.pathKey(),
-							});
+							await refreshAttendanceQueries(queryClient, attendanceQueryKeys);
 						}}
 					/>
 				)}
