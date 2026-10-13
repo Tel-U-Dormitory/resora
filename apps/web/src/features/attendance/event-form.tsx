@@ -68,13 +68,13 @@ export default function EventForm({ eventId }: { eventId?: string }) {
 	});
 	if (directory.isPending || (eventId && detail.isPending))
 		return (
-			<p role="status" className="p-6">
+			<p role="status" className="text-muted-foreground text-sm">
 				Memuat formulir...
 			</p>
 		);
 	if (directory.error || detail.error)
 		return (
-			<p role="alert" className="p-6">
+			<p role="alert" className="text-sm">
 				Form tidak tersedia. Akses HCO dan sesi valid diperlukan.{" "}
 				<Link href="/events">Kembali</Link>
 			</p>
@@ -84,7 +84,7 @@ export default function EventForm({ eventId }: { eventId?: string }) {
 		(!detail.data?.canManage || detail.data.event.status !== "DRAFT")
 	)
 		return (
-			<p role="alert" className="p-6">
+			<p role="alert" className="text-sm">
 				Hanya draft dapat diedit.
 			</p>
 		);
@@ -174,20 +174,36 @@ function DraftEditor({
 			},
 		});
 	return (
-		<section className="mx-auto max-w-5xl space-y-6">
-			<Link
-				className="focus-ring text-primary underline"
-				href="/events?view=manage"
-			>
-				Daftar event
-			</Link>
-			<h1 className="font-semibold text-2xl">
-				{eventId ? "Edit draft" : "Draft event baru"}
-			</h1>
-			<p className="text-muted-foreground text-sm">
-				Siapkan informasi event dan undangan. Peserta dapat ditinjau setelah
-				draft disimpan.
-			</p>
+		<section className="max-w-5xl space-y-6">
+			<nav aria-label="Breadcrumb event" className="text-sm">
+				<ol className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+					<li>
+						<Link
+							className="focus-ring rounded-md text-muted-foreground hover:text-primary"
+							href="/events?view=manage"
+						>
+							Kelola event
+						</Link>
+					</li>
+					<li aria-hidden="true" className="text-muted-foreground">
+						/
+					</li>
+					<li className="min-w-0">
+						<span aria-current="page" className="block truncate font-medium">
+							{eventId ? "Edit draft" : "Buat event"}
+						</span>
+					</li>
+				</ol>
+			</nav>
+			<div className="space-y-2">
+				<h1 className="font-bold text-2xl tracking-tight">
+					{eventId ? "Edit draft" : "Buat event"}
+				</h1>
+				<p className="text-muted-foreground text-sm">
+					Siapkan informasi event dan undangan. Peserta dapat ditinjau setelah
+					draft disimpan.
+				</p>
+			</div>
 			<form
 				className="space-y-5"
 				onSubmit={async (event) => {
@@ -241,7 +257,7 @@ function DraftEditor({
 				}}
 			>
 				<Card>
-					<div className="border-border border-b px-5 py-4">
+					<div className="border-border border-b p-5">
 						<h2 className="font-semibold">Informasi event</h2>
 						<p className="mt-1 text-muted-foreground text-sm">
 							Judul dan deskripsi yang akan dilihat peserta.
@@ -272,7 +288,7 @@ function DraftEditor({
 					</CardContent>
 				</Card>
 				<Card>
-					<div className="border-border border-b px-5 py-4">
+					<div className="border-border border-b p-5">
 						<h2 className="font-semibold">Jadwal</h2>
 						<p className="mt-1 text-muted-foreground text-sm">
 							Isi waktu mulai dan selesai dalam WIB.
@@ -320,7 +336,7 @@ function DraftEditor({
 					</CardContent>
 				</Card>
 				<Card>
-					<div className="border-border border-b px-5 py-4">
+					<div className="border-border border-b p-5">
 						<h2 className="font-semibold">Lokasi dan QR</h2>
 						<p className="mt-1 text-muted-foreground text-sm">
 							Atur titik pusat, radius lokasi, toleransi keterlambatan, dan masa

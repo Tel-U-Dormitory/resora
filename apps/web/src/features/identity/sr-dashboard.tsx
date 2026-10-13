@@ -36,7 +36,7 @@ export default function SrDashboard() {
 	}, [data.error, router]);
 	if (data.isPending)
 		return (
-			<div role="status" className="mx-auto max-w-7xl space-y-4 p-6">
+			<div role="status" className="space-y-4">
 				<p>Memuat dashboard…</p>
 				<Skeleton className="h-8 w-48" />
 				<Skeleton className="h-40 w-full" />
@@ -44,7 +44,7 @@ export default function SrDashboard() {
 		);
 	if (data.error)
 		return (
-			<Card className="mx-auto my-6 max-w-md space-y-4 p-6">
+			<Card className="max-w-md space-y-4 p-5">
 				<p role="alert">Sesi atau layanan tidak tersedia.</p>
 				<Button onClick={() => data.refetch()}>Coba kembali</Button>
 			</Card>

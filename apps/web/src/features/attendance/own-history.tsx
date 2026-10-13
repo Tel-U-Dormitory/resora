@@ -14,12 +14,16 @@ export default function OwnHistory() {
 		retry: false,
 	});
 	return (
-		<section className="space-y-5">
-			<h1 className="font-bold text-2xl">Riwayat kehadiran saya</h1>
-			<p className="text-muted-foreground text-sm">
-				Event yang mengundang Anda, termasuk yang belum memiliki catatan
-				kehadiran.
-			</p>
+		<section className="space-y-6">
+			<div className="space-y-2">
+				<h1 className="font-bold text-2xl tracking-tight">
+					Riwayat kehadiran saya
+				</h1>
+				<p className="text-muted-foreground text-sm">
+					Event yang mengundang Anda, termasuk yang belum memiliki catatan
+					kehadiran.
+				</p>
+			</div>
 			{history.isPending && <p role="status">Memuat riwayat…</p>}
 			{history.error && (
 				<div className="space-y-3">

@@ -45,7 +45,7 @@ export default function SrProfile() {
 	}, [profile.error, router]);
 	if (profile.isPending)
 		return (
-			<div role="status" className="space-y-4">
+			<div role="status" className="max-w-4xl space-y-4">
 				<p className="text-muted-foreground text-sm">Memuat profil…</p>
 				<Skeleton className="h-28 w-full rounded-xl" />
 				<Skeleton className="h-64 w-full rounded-xl" />
@@ -53,7 +53,7 @@ export default function SrProfile() {
 		);
 	if (profile.error)
 		return (
-			<Card>
+			<Card className="max-w-4xl">
 				<CardContent className="space-y-4">
 					<p role="alert" className="text-destructive text-sm">
 						{queryErrorMessage(profile.error)}
@@ -72,11 +72,13 @@ export default function SrProfile() {
 		["Gedung", info.building],
 	] as const;
 	return (
-		<section className="mx-auto max-w-4xl space-y-6">
+		<section className="max-w-4xl space-y-6">
 			<div>
-				<p className="font-semibold text-primary text-sm">Akun SR</p>
-				<h1 className="mt-1 font-bold text-3xl tracking-tight">Profil saya</h1>
-				<p className="mt-2 text-muted-foreground">
+				<p className="font-semibold text-primary text-xs uppercase tracking-wider">
+					Akun SR
+				</p>
+				<h1 className="mt-2 font-bold text-2xl tracking-tight">Profil saya</h1>
+				<p className="mt-2 text-muted-foreground text-sm">
 					Informasi akun, keamanan, dan tampilan RESORA Anda.
 				</p>
 			</div>
