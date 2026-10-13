@@ -16,6 +16,14 @@ bun.lock
 tmp
 temp
 
+# Credential exports, account imports and local operational data are never image assets.
+.private
+**/.private
+# No tracked CSV assets are required by the application; all CSV files are input/exports.
+**/*.csv
+**/.pgpass
+**/pgpass.conf
+
 **/.wrangler
 **/.alchemy
 **/.expo

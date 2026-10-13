@@ -168,12 +168,16 @@ Phase 6 migration `20261012071912_phase6_reporting` was applied with separate PM
 
 **Gate F7:** tidak ada blocker P0, tes negatif RBAC lulus, dan aplikasi layak diuji oleh SR sungguhan di staging.
 
-### F8 — VPS/HTTPS, UAT lapangan & controlled pilot (TODO)
+### F8 — Vercel/HTTPS, UAT lapangan & controlled pilot (deployment/UAT pending)
 
-**Manual — PM/DevOps:** pastikan VPS, DNS/subdomain, TLS, akun SR uji, lokasi pusat, akses HCO dan otorisasi penggunaan data tersedia.
+**Current target:** Vercel Web + Express Functions, Supabase PostgreSQL retained. Home server and VPS are possible future targets, not current infrastructure work. Phase 8A prepares native Node 24 Express entrypoint, configurable same-origin rewrites and portable pool/TLS settings; no deployment or Production access. See [setup](../../setup.md#8-vercel-deployment-preparation-phase-8a-not-deployed). Shared auth rate limiting/original-client IP through the two-project proxy, real Vercel packaging and Transaction Pooler validation remain release gates.
 
-- [ ] Siapkan Docker web/server dengan URL publik yang benar; hilangkan ketergantungan `postgres` lokal saat menggunakan Supabase.
-- [ ] Jalankan reverse proxy + HTTPS; verifikasi kamera/GPS, cookies, CSRF/CORS serta origin lintas subdomain.
+**Manual — PM/DevOps:** pastikan project/domain HTTPS, akun SR uji, lokasi pusat, akses HCO dan otorisasi penggunaan data tersedia.
+
+- [x] Phase 8A deployment configuration prepared for two Vercel Projects; local/Bun/Docker paths retained. Local verification is not a deployed-platform sign-off.
+- [x] Phase 8B native Better Auth PostgreSQL shared limiter prepared, unchanged five/60-second rules, sanitized auth failure and private Docker context protection. Migration unapplied; offline doubles are not PostgreSQL evidence.
+- [ ] Review/apply limiter migration separately; verify isolated PostgreSQL concurrency and exact original-client-IP through Vercel Preview. NAT clients share an IP/path bucket. See [Preview checklist](../../setup.md#phase-8b-production-security-readiness--preview-gate).
+- [ ] With separate approval deploy API then Web; verify same-origin rewrites/SSR, TLS/pool, cookies, CSRF/CORS, original-IP boundary and shared throttling.
 - [ ] Jalankan migrasi production **setelah** review SQL, izin PM dan rencana rollback; jangan gunakan `db:push` untuk production.
 - [ ] Verifikasi backup Supabase, retensi, pemulihan dan monitoring minimal; siapkan rollback image/release.
 - [ ] UAT mobile di lokasi nyata untuk radius 20m, akurasi GPS, QR expired, terlambat, manual fallback, export dan role restriction.
@@ -193,7 +197,7 @@ Phase 6 migration `20261012071912_phase6_reporting` was applied with separate PM
 | OPEN-007 | Retensi/access logging ekspor; ceil menit setelah grace dan immutable origin final Phase 6 | HCO + PM | F6/release |
 | OPEN-008 | Future Activity/session binding dan konsistensi registrasi lintas public interface; internal-event binding Phase 4 sudah final | RnD + PM | Sebelum NEED-007 |
 | OPEN-009 | Future reopen/cancel; manual PUBLISHED/CLOSED dan batas efektif final Phase 6 | HCO + PM | Sebelum endpoint/filter terkait |
-| INFRA-001 | VPS/domain/HTTPS, biaya, backup dan target operasional | PM + DevOps | F8 |
+| INFRA-001 | Vercel/domain/HTTPS, shared limiter/proxy-IP, biaya, backup; home server/VPS future alternatives | PM + DevOps | F8 |
 
 Snapshot publish, QR statis 6 jam, explicit HCO close/reissue (QR lama invalid), audience/jadwal immutable setelah publish, edit hanya title/description, source koreksi tetap, early/after-end scan, ON_TIME inklusif, CSV/email nyata dan input langsung KADEP sudah **CONFIRMED**. Jangan mengubah TBD menjadi aturan tersirat; lihat [model](resora-need-001-data-model.md).
 

@@ -12,6 +12,7 @@ const auth = createAuth(
 		BETTER_AUTH_URL: "http://localhost:3000",
 		BETTER_AUTH_SECRET: randomBytes(32).toString("hex"),
 		CORS_ORIGIN: "http://localhost:3001",
+		NODE_ENV: "test",
 	},
 	db,
 );
@@ -54,7 +55,7 @@ test("pilot closes public signup, email login and username enumeration before DB
 	}
 });
 
-test("pilot enables memory rate limiting and authoritative sessions without schema changes", () => {
+test("local tests retain memory limiting and authoritative sessions; Production uses shared storage", () => {
 	expect(auth.options.emailAndPassword.disableSignUp).toBe(true);
 	expect(auth.options.session.cookieCache.enabled).toBe(false);
 	expect(auth.options.rateLimit.enabled).toBe(true);
@@ -69,10 +70,15 @@ test("pilot enables memory rate limiting and authoritative sessions without sche
 			BETTER_AUTH_URL: "https://backend.example.invalid",
 			BETTER_AUTH_SECRET: randomBytes(32).toString("hex"),
 			CORS_ORIGIN: "https://app.example.invalid",
+			NODE_ENV: "production",
 		},
 		db,
 	);
 	expect(secureAuth.options.advanced.defaultCookieAttributes.secure).toBe(true);
+	expect(secureAuth.options.rateLimit.storage).toBe("database");
+	expect(secureAuth.options.rateLimit.customRules).toEqual(
+		auth.options.rateLimit.customRules,
+	);
 });
 
 test("auth POST rejects missing and foreign Origin before credential work", async () => {

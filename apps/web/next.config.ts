@@ -3,12 +3,16 @@ import { varlockNextConfigPlugin } from "@varlock/nextjs-integration/plugin";
 const withVarlock = varlockNextConfigPlugin();
 
 import type { NextConfig } from "next";
+import { getApiRewrites } from "./src/utils/api-rewrites";
 
 const nextConfig: NextConfig = {
 	typedRoutes: true,
 	reactCompiler: true,
 	output: "standalone",
 	poweredByHeader: false,
+	async rewrites() {
+		return getApiRewrites(process.env.API_UPSTREAM_URL);
+	},
 	async headers() {
 		return [
 			{

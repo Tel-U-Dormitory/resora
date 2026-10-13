@@ -46,3 +46,18 @@ test("missing or empty URL fails with a generic configuration error", () => {
 		expect(() => getServerUrl(url)).toThrow("Server URL is not configured");
 	}
 });
+
+test("same-origin browser routing uses the current web host, including preview hosts", () => {
+	Object.defineProperty(globalThis, "window", {
+		value: { location: { origin: "https://preview.example.test" } },
+		configurable: true,
+	});
+	process.env.SERVER_URL = "https://api.example.test";
+	expect(getServerUrl("/")).toBe("https://preview.example.test");
+});
+
+test("same-origin SSR requires an explicit backend rather than resolving relative URLs", () => {
+	expect(() => getServerUrl("/")).toThrow("SERVER_URL is required");
+	process.env.SERVER_URL = "https://api.example.test/";
+	expect(getServerUrl("/")).toBe("https://api.example.test");
+});

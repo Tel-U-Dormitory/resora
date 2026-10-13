@@ -7,5 +7,11 @@ export function getServerUrl(url: string | undefined) {
 	}
 
 	if (!url) throw new Error("Server URL is not configured");
+	if (url === "/") {
+		if (typeof window === "undefined") {
+			throw new Error("SERVER_URL is required for same-origin SSR");
+		}
+		return window.location.origin;
+	}
 	return url.endsWith("/") ? url.slice(0, -1) : url;
 }

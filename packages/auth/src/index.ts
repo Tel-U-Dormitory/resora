@@ -17,6 +17,7 @@ export type AuthConfig = {
 	BETTER_AUTH_URL: string;
 	BETTER_AUTH_SECRET: string;
 	CORS_ORIGIN: string;
+	NODE_ENV?: string;
 };
 
 export function createAuth(
@@ -55,7 +56,12 @@ export function createAuth(
 		logger: { disabled: true },
 		rateLimit: {
 			enabled: true,
-			storage: "memory",
+			// Production always shares counters through the supported Drizzle adapter.
+			// Missing schema/DB errors fail the request; there is no memory fallback.
+			storage:
+				env.NODE_ENV === "production" || process.env.NODE_ENV === "production"
+					? "database"
+					: "memory",
 			customRules: {
 				"/sign-in/username": { window: 60, max: 5 },
 				"/change-password": { window: 60, max: 5 },

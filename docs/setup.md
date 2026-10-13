@@ -305,7 +305,74 @@ pnpm.cmd exec bun test packages/api/src/modules/identity/sr-provisioning.integra
 Remove-Item Env:RESORA_PROVISION_WEB_SMOKE
 ```
 
-## 8. Work sequence before 2026-10-18
+## 8. Vercel deployment preparation (Phase 8A; not deployed)
+
+Current target: two Vercel Projects from this repository, `resora-web` (Root Directory `apps/web`, Next.js) and `resora-api` (Root Directory `apps/server`, Express). Enable **Include source files outside of the Root Directory in the Build Step** for both projects so pnpm workspace packages are available. Select Node.js **24.x**; each app pins that major in `engines`. Repository `vercel.json` files select the framework, `pnpm install --frozen-lockfile` and `pnpm run build`. Leave Output Directory at the framework default; do not set API output to `dist`. The native Express builder discovers `apps/server/app.ts`, which exports `createApp()` without opening a listener. The existing Bun `src/index.ts`/`dist/index.mjs` listener and Dockerfiles remain available. No adapter or Vercel SDK is added to domain code. See [native Express](https://vercel.com/docs/frameworks/backend/express), [monorepos](https://vercel.com/docs/monorepos) and [Node.js versions](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions).
+
+### Environment mapping (PM supplies values privately)
+
+| Project / scope | Variable | Mapping / requirement |
+| --- | --- | --- |
+| API runtime | `DATABASE_URL` | Explicitly copy the verified target's Transaction Pooler URL (Production candidate: private `PROD_TX_POOLER_URL`). No automatic Production selection. |
+| API runtime | `DB_POOL_MAX`, `DB_POOL_IDLE_TIMEOUT_MS` | Initially `1`, `1000` per warm instance. Persistent defaults remain `10`, `10000`. |
+| API runtime | `DB_SSL_CA` | Verified Supabase public root certificate PEM, entered privately; TLS and hostname verification stay enabled. With this setting the runtime URL must contain no SSL parameters that could override it. |
+| API runtime | `BETTER_AUTH_SECRET` | Unique environment-specific secret; never a frontend/build constant. |
+| API runtime | `BETTER_AUTH_URL`, `CORS_ORIGIN` | Both equal the exact HTTPS **web** origin, not the API hostname. Keep the origin stable; no wildcard preview origins. |
+| Web build + runtime | `NEXT_PUBLIC_SERVER_URL` | `/`: browser auth/tRPC resolve against the current web origin. This contains no secret. |
+| Web build + runtime | `API_UPSTREAM_URL`, `SERVER_URL` | Exact API HTTPS origin, without credentials/path/query. First configures rewrites, second SSR requests. Server-only, non-secret; upstream routing is visible in routing manifests. |
+| Both | `NODE_ENV`, `VARLOCK_TELEMETRY_DISABLED` | Production runtime; disable Varlock telemetry if required by the environment. Varlock codegen remains in root postinstall. |
+| Separate authorized migration workstation only | `DIRECT_DB_URL` | Private `PROD_DIRECT_DB_URL`, only after separate migration approval. Do not put it or the `PROD_*` keys in either Vercel runtime. `PROD_DB_URL` has no assumed mode or automatic use. |
+
+Never give Web any database URL, auth secret, credential export or migration credentials. API Varlock uses its supported in-process loader and packages `.env.schema`, retaining redaction without relying on a runtime CLI subprocess. Vercel runtime secrets are loaded at cold start, not embedded in compiled server code. If root postinstall asks for API build validation variables on Web, use only the CI's explicitly nonfunctional synthetic API values for that install step; do not inject Production secrets to satisfy codegen.
+
+Browser topology: `web /api/auth/*` → API `/api/auth/*`; `web /trpc/*` → API `/trpc/*`; other paths remain Next.js. Rewrites proxy requests without changing browser origin; SSR calls `SERVER_URL` directly and forwards only the session cookie. Better Auth uses host-only HttpOnly/SameSite=Lax/Secure cookies for the web HTTPS origin; do not enable cross-subdomain cookies. Origin checks, CORS and private API no-store are unchanged. See [Next.js external rewrites](https://nextjs.org/docs/app/api-reference/config/next-config-js/rewrites).
+
+### Database compatibility and release gates
+
+The pg client remains module-scoped. Application queries use unnamed pg statements; no `.prepare()`/named prepared statements or session-persistent SQL is used by runtime Attendance/Identity. Drizzle transactions reserve a client for their BEGIN/COMMIT and row locks, compatible in principle with Transaction Pooler. Provisioning uses transaction-local advisory locks but is not a Vercel route. Pool tuning is explicit, with no driver replacement. Transaction Pooler compatibility, TLS handshake, cold/warm reconnection and concurrency still require separately approved **Development** validation; no Production connection was made for Phase 8A. Idle eviction reduces retained connections but cannot prove behavior during function suspension. See [Supabase connection modes/limitations](https://supabase.com/docs/guides/database/connecting-to-postgres).
+
+**Phase 8B update:** PM selected Better Auth native database storage. Production now uses shared PostgreSQL counters; local/test retains memory. Migration `20261013024827_phase8b_auth_rate_limit` adds only `rate_limit` (text id PK, unique key, integer count, bigint millisecond last_request and expiry/pruning index). It is **unapplied everywhere**. Missing table/storage errors fail closed as a generic Express 503, never downgrade to memory. Installed 1.7.7 and its Drizzle relations-v2 adapter use unique-key insertion and conditional atomic increment; no custom limiter/Redis or change to the five-per-60-second login/change-password rules. Schema generation must include database limiter mode and be reviewed; generating auth schema in local memory mode alone would omit this model. Limiter keys contain IP/path metadata; do not log/export them. Better Auth handles expired counter pruning; do not infer an approved long-term security-log retention policy from this.
+
+**Production still blocked on evidence:** Express ignores supplied forwarding headers and uses socket IP; Web → API routing may group users under proxy addresses. [Vercel headers](https://vercel.com/docs/headers/request-headers) document edge overwrite behavior but do not establish original browser IP across both projects. No unrestricted proxy/header trust was introduced. Real PostgreSQL concurrency, reviewed migration application and Preview IP/routing/TLS proof remain gates. Future home-server/VPS deployments need their own explicit proxy boundary review.
+
+After code review **and separate deployment authorization**, PM should:
+
+1. Resolve the limiter/IP gate; choose a matching isolated API/Web environment and exact web origin. Preview environments must not point to Production; arbitrary preview hosts will fail strict Origin checks by design.
+2. Import the repository as the API Project using the settings above; add only its required private environment mapping. Configure any deployment protection deliberately so authorized Web rewrites/SSR can reach API (do not blindly disable protection). Deploy API first, then verify native entrypoint, Varlock/schema packaging, TLS/pool and origin rejection.
+3. Import Web as the second Project; set its three routing variables and the agreed web hostname. Deploy Web, then verify same-origin POST login/change-password/logout, Set-Cookie preservation, SSR cookie forwarding, protected redirects, no-store headers and forged-Origin rejection. External rewrites and runtime packaging still need actual Vercel evidence.
+4. Perform HTTPS mobile scanner/GPS UAT and resolve GPS/export retention, backup/recovery and remaining live-profile gates before pilot/Production. Deployment rollback does not roll back PostgreSQL writes/migrations; migrations always require a separate reviewed runbook/approval.
+
+Local Windows keeps existing absolute localhost URLs and no `API_UPSTREAM_URL`; Docker keeps its existing browser URL and internal `SERVER_URL`. Home server/VPS can use the Bun listener behind a configured HTTPS proxy with the same environment contract and Supabase provider. No domain/service rewrite is required.
+
+**Phase 8A local evidence:** 111 offline tests passed, six workspace typecheck tasks passed, Web/server builds passed using nonfunctional synthetic DB values. Final pool error-redaction tests (3) and DB typecheck passed; read-only Biome checked 160 files without errors/warnings. The built Express entrypoint passed loopback health/anonymous SSR/origin/signup/header checks on Node 24.13.0 and Bun 1.3.13. Vercel CLI/platform packaging, rewritten cookies on the actual platform, real Transaction Pooler and Docker image execution are not verified by these checks. No remote DB connection, migration or deployment occurred.
+
+## 9. Work sequence before 2026-10-18
+
+### Phase 8B Production security readiness / Preview gate
+
+No deployment or migration is authorized by this checklist. PM must separately approve an isolated Preview/Development target, migration and test traffic. Never map Preview to Production. Existing local test command, after the migration has been separately reviewed/applied to an isolated loopback `resora_identity_test_*` database:
+
+```powershell
+# Set RESORA_IDENTITY_TEST_DB_URL privately; the suite has no remote/default fallback.
+pnpm.cmd exec bun --no-env-file test packages/auth/src/rate-limit.integration.test.ts
+```
+
+This suite uses the real adapter with two independent auth contexts and concurrent PostgreSQL connections, validates the actual host/name/port, never creates schema/accounts, and removes only its synthetic limiter keys. It is skipped without an explicit local test URL. Offline adapter doubles are not live PostgreSQL proof.
+
+PM Preview checklist (record only statuses/counts/booleans, never credentials, cookies, real IPs or rate-limit keys):
+
+1. **Startup/schema:** API health returns 200; verify cold-start Varlock/schema packaging and runtime Node 24. Read-only DB catalog/history shows the separately approved limiter migration/table/unique key/index. Check one anonymous get-session request; missing limiter schema must produce generic 503 with no-store, not fallback to memory.
+2. **Routing/cookies/SSR:** Web Network requests stay on its origin for `/api/auth/*` and `/trpc/*`; approved synthetic login/change-password/logout work. Inspect cookie flags/host/path locally without copying values. Refresh protected pages to verify SSR session forwarding and password-change gate. Verify no-store on proxied responses.
+3. **Origins:** direct POSTs with absent/foreign/`null` Origin are rejected; only the exact configured HTTPS Web Origin works. Confirm CORS does not grant another origin and public signup stays rejected. Do not add wildcard Preview trust.
+4. **Spoof resistance:** after the limiter window is clear, send six empty-body login POSTs from one client while changing synthetic `x-resora-client-ip`, `x-forwarded-for`, `x-vercel-forwarded-for` and `x-real-ip` values. Log status numbers only. They must not reset its bucket; expected five validation rejections then 429. Repeat through Web rewrites and directly against API using the configured Origin. CORS header permission is not proof of trusted IP handling.
+5. **Original IP vs NAT:** use two devices on genuinely different networks after clearing the window, then two devices sharing one NAT. Different networks should have independent per-client buckets; NAT users intentionally share five requests per 60 seconds per path, including invalid attempts. If different networks share the proxy bucket, STOP the Production release. This behavioral test alone does not prove exact original IP; require a restricted, short-lived diagnostic comparison returning only `selected_source` and match/spoof booleans (no raw IP/cookie/credential logs). No such remote diagnostic endpoint is shipped here. `x-vercel-id` is not a Function-instance or original-IP proof.
+6. **Shared instances/concurrency:** prove counters survive an API process restart/cold instance and parallel requests. For two independently observable API instances/deployments on the same approved isolated DB and verified same client bucket, five combined requests pass validation and further attempts return 429; twenty parallel requests admit at most five. Repeat for change-password. Do not claim cross-instance proof from several requests to an unidentified single warm instance. Read only aggregate counts, never raw keys.
+7. **Pooler/TLS:** privately confirm DATABASE_URL is the approved Transaction Pooler, pool max 1/idle tuning and verified project CA. Test a real authenticated session and transactional Attendance operation using only approved fixtures; inspect cold/warm behavior and bounded connections. Failed certificate validation must fail, not select another connection or disable verification.
+8. **Release decision:** record PASS/PARTIAL/FAIL for each gate. Current original-IP behavior is deliberately socket-only and cannot be signed off without actual platform evidence. Alternatives requiring PM review: a single controlled ingress with narrowly verified forwarding, or an authenticated Web→API IP relay that strips all untrusted claims and prevents bypass. Do not trust Vercel-style headers solely because a request includes them. Mobile HTTPS/GPS, real-data privacy/retention and other pilot gates remain open.
+
+Docker context now excludes `.private`, account/credential CSV files, pgpass files, tmp/temp and env value files. No tracked CSV assets are required by current builds. Keep future public CSV assets explicit rather than broadly unignoring imports. Web standalone output recursively removes env values before runner COPY, preserving only schema/example templates; both Dockerfiles retain BuildKit secret mounts and existing Node/Bun entrypoints. Docker daemon/image-layer verification is a separate pending check when Docker is available.
+
+**Phase 8B local evidence:** 120 offline tests passed; guarded limiter integration reports 1 guard PASS and 4 SKIP (two PostgreSQL scenarios and lifecycle hooks), because no isolated test URL is configured and the known retained scratch cluster is stopped. Six workspace typecheck tasks, Web/server builds, read-only Biome (163 files), diff check and Compose configuration validation passed. Built Node/Bun loopback smoke verified the real unreachable-DB limiter path returns sanitized 503, with no memory fallback. Snapshot comparison preserved all previous DDL; all six applied migration files remain unchanged. Docker daemon is unavailable; no image was built/inspected. No schema migration was applied and no remote database was connected or mutated.
 
 ### Selective Nafi UI integration — 2026-10-11
 
