@@ -6,8 +6,8 @@ import {
 	History,
 	LayoutDashboard,
 	ScanLine,
-	UserRound,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import type { RefObject } from "react";
@@ -38,17 +38,18 @@ export function AppSidebar({
 			<Link
 				href="/dashboard"
 				onClick={onNavigate}
-				className="focus-ring mb-8 flex items-center gap-3 rounded-md px-3 py-2 font-bold tracking-tight"
+				className="focus-ring mb-6 flex items-center gap-2.5 rounded-md px-3 py-2 font-bold tracking-tight"
 			>
-				<span
-					className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground"
-					aria-hidden="true"
-				>
-					R
-				</span>
+				<Image
+					src="/Logo-Teldorm.png"
+					alt=""
+					width={937}
+					height={1024}
+					className="h-12 w-auto shrink-0 object-contain"
+				/>
 				RESORA
 			</Link>
-			<p className="mb-3 px-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">
+			<p className="mb-2 px-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">
 				Menu utama
 			</p>
 			<nav aria-label="Navigasi aplikasi" className="flex flex-col gap-1">
@@ -63,27 +64,28 @@ export function AppSidebar({
 								? CalendarDays
 								: icon === "scan"
 									? ScanLine
-									: icon === "history"
-										? History
-										: UserRound;
+									: History;
 					return (
 						<Link
 							key={href}
 							href={href}
 							onClick={onNavigate}
 							aria-current={active ? "page" : undefined}
-							className={`focus-ring flex items-center gap-3 rounded-md px-3 py-2.5 font-semibold text-sm transition-colors ${active ? "bg-primary-soft text-primary-soft-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+							className={`focus-ring flex min-h-10 items-center gap-2.5 rounded-md px-3 py-2 text-[13px] leading-5 transition-colors ${active ? "bg-primary-soft font-semibold text-primary-soft-foreground" : "font-medium text-muted-foreground hover:bg-muted hover:text-foreground"}`}
 						>
-							<Icon size={18} aria-hidden="true" />
+							<Icon size={16} aria-hidden="true" />
 							{title}
 						</Link>
 					);
 				})}
 			</nav>
 			{canManageEvents && (
-				<details className="group mt-6" open={hcoArea || undefined}>
-					<summary className="focus-ring flex cursor-pointer list-none items-center justify-between rounded-md px-3 py-2.5 font-semibold text-sm hover:bg-muted [&::-webkit-details-marker]:hidden">
-						HCO
+				<details className="group mt-5" open={hcoArea || undefined}>
+					<summary className="focus-ring flex min-h-10 cursor-pointer list-none items-center justify-between rounded-md px-3 py-2 font-semibold text-[13px] leading-5 transition-colors hover:bg-muted [&::-webkit-details-marker]:hidden">
+						<span className="flex items-center gap-2.5">
+							<CalendarDays size={16} aria-hidden="true" />
+							HCO
+						</span>
 						<ChevronDown
 							size={16}
 							className="transition-transform group-open:rotate-180"
@@ -92,7 +94,7 @@ export function AppSidebar({
 					</summary>
 					<nav
 						aria-label="Pengelolaan HCO"
-						className="mt-1 space-y-1 border-border border-l pl-3"
+						className="mt-1 ml-3 space-y-1 border-border border-l pl-3"
 					>
 						{HCO_NAVIGATION.map(({ title, href }) => {
 							const active =
@@ -105,7 +107,7 @@ export function AppSidebar({
 									href={href}
 									onClick={onNavigate}
 									aria-current={active ? "page" : undefined}
-									className={`focus-ring block rounded-md px-3 py-2.5 text-sm ${active ? "bg-primary-soft font-semibold text-primary-soft-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+									className={`focus-ring flex min-h-10 items-center rounded-md px-3 py-2 text-[13px] leading-5 transition-colors ${active ? "bg-primary-soft font-semibold text-primary-soft-foreground" : "font-medium text-muted-foreground hover:bg-muted hover:text-foreground"}`}
 								>
 									{title}
 								</Link>

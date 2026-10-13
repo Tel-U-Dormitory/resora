@@ -1,6 +1,7 @@
 "use client";
 
 import { Menu, X } from "lucide-react";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -59,7 +60,16 @@ export function AppShell({
 					>
 						<Menu size={22} aria-hidden="true" />
 					</Button>
-					<span className="font-bold tracking-tight">RESORA</span>
+					<span className="flex items-center gap-2 font-bold tracking-tight">
+						<Image
+							src="/Logo-Teldorm.png"
+							alt=""
+							width={937}
+							height={1024}
+							className="h-10 w-auto object-contain"
+						/>
+						RESORA
+					</span>
 					<span className="size-10" aria-hidden="true" />
 				</div>
 				<main className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">{children}</main>

@@ -153,7 +153,7 @@ export default function CheckInScanner() {
 		}
 	};
 	return (
-		<section className="mx-auto max-w-xl space-y-6">
+		<section className="max-w-xl space-y-6">
 			<div className="space-y-2">
 				<h1 className="font-bold text-2xl tracking-tight">Scan QR kehadiran</h1>
 				<p className="text-muted-foreground text-sm">

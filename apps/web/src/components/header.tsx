@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import Link from "next/link";
 import UserMenu from "@/features/identity/user-menu";
 import { authClient } from "@/lib/auth-client";
@@ -15,12 +16,13 @@ export default function Header() {
 						href="/"
 						className="focus-ring flex items-center gap-2 rounded-md font-bold tracking-tight"
 					>
-						<span
-							className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm"
-							aria-hidden="true"
-						>
-							R
-						</span>
+						<Image
+							src="/Logo-Teldorm.png"
+							alt=""
+							width={937}
+							height={1024}
+							className="h-10 w-auto shrink-0 object-contain sm:h-12"
+						/>
 						RESORA
 					</Link>
 					<nav

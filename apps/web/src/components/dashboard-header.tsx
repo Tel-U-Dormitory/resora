@@ -1,6 +1,6 @@
 export function DashboardHeader() {
 	return (
-		<div className="mb-6 space-y-1">
+		<div className="space-y-2">
 			<p className="font-semibold text-primary text-xs uppercase tracking-wider">
 				RESORA / Dashboard
 			</p>

@@ -7,6 +7,7 @@ import {
 	QrCode,
 	ShieldCheck,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import Header from "@/components/header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -93,8 +94,15 @@ export default function LandingPage() {
 						aria-label="Ilustrasi fitur RESORA"
 					>
 						<div className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
-							<div className="flex items-center justify-between border-border border-b px-5 py-4">
-								<span className="font-bold tracking-tight">
+							<div className="flex flex-wrap items-center justify-between gap-3 border-border border-b px-5 py-4">
+								<span className="flex items-center gap-2 font-bold tracking-tight">
+									<Image
+										src="/Logo-Teldorm.png"
+										alt=""
+										width={937}
+										height={1024}
+										className="h-10 w-auto shrink-0 object-contain"
+									/>
 									RESORA<span className="text-primary">.</span>
 								</span>
 								<span className="rounded-full bg-primary-soft px-3 py-1 font-semibold text-primary-soft-foreground text-xs">
@@ -228,8 +236,15 @@ export default function LandingPage() {
 				<div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-8 sm:px-6 md:flex-row md:items-center md:justify-between">
 					<Link
 						href="/"
-						className="focus-ring w-fit rounded-md font-bold tracking-tight"
+						className="focus-ring flex w-fit items-center gap-2.5 rounded-md font-bold tracking-tight"
 					>
+						<Image
+							src="/Logo-Teldorm.png"
+							alt=""
+							width={937}
+							height={1024}
+							className="h-12 w-auto shrink-0 object-contain"
+						/>
 						RESORA
 					</Link>
 					<p className="max-w-lg text-muted-foreground text-sm">

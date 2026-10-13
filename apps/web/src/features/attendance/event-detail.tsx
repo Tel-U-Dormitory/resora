@@ -202,7 +202,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 						Memperbarui tampilan event…
 					</p>
 				)}
-			<div className="grid gap-4 md:grid-cols-2">
+			<div className="grid gap-6 md:grid-cols-2">
 				<Card>
 					<CardHeader
 						title="Jadwal event"
@@ -318,10 +318,11 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 			)}
 			{canManage && event.status === "PUBLISHED" && (
 				<>
-					<div className="grid items-start gap-6 xl:grid-cols-2">
+					<div className="grid items-stretch gap-6 xl:grid-cols-2">
 						<Card>
 							<CardHeader
 								title="Informasi event"
+								icon={<CalendarDays size={20} aria-hidden="true" />}
 								description="Hanya judul dan deskripsi yang dapat diubah setelah publikasi."
 							/>
 							<CardContent>

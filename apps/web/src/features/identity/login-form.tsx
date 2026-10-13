@@ -2,6 +2,7 @@
 
 import { Input } from "@resora/ui/components/input";
 import { Label } from "@resora/ui/components/label";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -19,6 +20,13 @@ export default function LoginForm({ expired = false }: { expired?: boolean }) {
 	return (
 		<Card className="mx-auto my-10 w-[calc(100%-2rem)] max-w-md">
 			<CardHeader className="pb-2">
+				<Image
+					src="/Logo-Teldorm.png"
+					alt=""
+					width={937}
+					height={1024}
+					className="mx-auto mb-3 h-20 w-auto object-contain"
+				/>
 				<p className="mb-2 text-center font-semibold text-primary text-xs uppercase tracking-wider">
 					RESORA
 				</p>
