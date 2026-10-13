@@ -4,7 +4,6 @@ import { Menu, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
-import { ModeToggle } from "@/components/mode-toggle";
 import { Button } from "@/components/ui/button";
 
 export function AppShell({
@@ -59,7 +58,7 @@ export function AppShell({
 						<Menu size={22} aria-hidden="true" />
 					</Button>
 					<span className="font-bold tracking-tight">RESORA</span>
-					<ModeToggle />
+					<span className="size-10" aria-hidden="true" />
 				</div>
 				<main className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">{children}</main>
 			</div>
@@ -87,7 +86,11 @@ export function AppShell({
 					>
 						<X size={20} aria-hidden="true" />
 					</button>
-					<AppSidebar name={name} onNavigate={() => drawer.current?.close()} />
+					<AppSidebar
+						name={name}
+						menuContainer={drawer}
+						onNavigate={() => drawer.current?.close()}
+					/>
 				</div>
 			</dialog>
 		</div>

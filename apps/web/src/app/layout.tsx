@@ -14,8 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-	title: "resora",
-	description: "resora",
+	title: "RESORA | Platform Senior Resident Telkom University",
+	description:
+		"Platform internal Senior Resident Telkom University untuk mengelola kegiatan, undangan event, absensi QR, dan riwayat kehadiran.",
 };
 
 export default function RootLayout({

@@ -10,24 +10,39 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { authClient } from "@/lib/auth-client";
 import { queryClient, trpc } from "@/utils/trpc";
 
-export default function PasswordChangeForm() {
+export default function PasswordChangeForm({
+	mandatory = true,
+}: {
+	mandatory?: boolean;
+}) {
 	const router = useRouter();
 	const [currentPassword, setCurrentPassword] = useState("");
 	const [newPassword, setNewPassword] = useState("");
 	const [confirmation, setConfirmation] = useState("");
 	const [pending, setPending] = useState(false);
+	const [success, setSuccess] = useState(false);
 	const [error, setError] = useState<{
 		field: "current" | "new" | "confirmation" | "form";
 		message: string;
 	} | null>(null);
 	return (
-		<Card className="mx-auto my-10 w-[calc(100%-2rem)] max-w-md">
+		<Card
+			className={
+				mandatory ? "mx-auto my-10 w-[calc(100%-2rem)] max-w-md" : "w-full"
+			}
+		>
 			<CardHeader className="pb-2">
-				<h1 className="text-center font-bold text-3xl tracking-tight">
-					Ganti password
-				</h1>
+				{mandatory ? (
+					<h1 className="text-center font-bold text-3xl tracking-tight">
+						Ganti password
+					</h1>
+				) : (
+					<h2 className="font-bold text-lg tracking-tight">Keamanan akun</h2>
+				)}
 				<p className="mt-3 text-muted-foreground text-sm">
-					Ganti password awal untuk membuka dashboard SR.
+					{mandatory
+						? "Ganti password awal untuk membuka dashboard SR."
+						: "Ganti password Anda. Sesi di perangkat lain akan diakhiri."}
 				</p>
 			</CardHeader>
 			<CardContent>
@@ -38,6 +53,7 @@ export default function PasswordChangeForm() {
 					onSubmit={async (event) => {
 						event.preventDefault();
 						if (pending) return;
+						setSuccess(false);
 						if (!currentPassword) {
 							setError({
 								field: "current",
@@ -90,7 +106,11 @@ export default function PasswordChangeForm() {
 								});
 								return;
 							}
-							queryClient.clear();
+							if (mandatory) queryClient.clear();
+							else
+								await queryClient.invalidateQueries({
+									queryKey: trpc.identity.pathKey(),
+								});
 							const identity = await queryClient.fetchQuery(
 								trpc.identity.session.queryOptions(),
 							);
@@ -105,7 +125,8 @@ export default function PasswordChangeForm() {
 							setCurrentPassword("");
 							setNewPassword("");
 							setConfirmation("");
-							router.replace("/dashboard");
+							if (mandatory) router.replace("/dashboard");
+							else setSuccess(true);
 							router.refresh();
 						} catch {
 							setError({
@@ -211,6 +232,14 @@ export default function PasswordChangeForm() {
 					{error?.field === "form" && (
 						<p role="alert" className="text-destructive">
 							{error.message}
+						</p>
+					)}
+					{success && (
+						<p
+							role="status"
+							className="rounded-lg bg-muted p-3 text-foreground text-sm"
+						>
+							Password berhasil diganti. Sesi di perangkat lain telah diakhiri.
 						</p>
 					)}
 					<Button

@@ -95,12 +95,30 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 		event.status === "DRAFT" ? preview.data?.participants : participants;
 	return (
 		<section className="space-y-6">
-			<Link
-				className="focus-ring inline-block rounded-md text-primary text-sm underline"
-				href="/events"
-			>
-				Kembali ke daftar event
-			</Link>
+			<nav aria-label="Breadcrumb event" className="text-sm">
+				<ol className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+					<li>
+						<Link
+							className="focus-ring rounded-md text-muted-foreground hover:text-primary"
+							href="/events"
+						>
+							Event internal
+						</Link>
+					</li>
+					<li aria-hidden="true" className="text-muted-foreground">
+						/
+					</li>
+					<li className="min-w-0 flex-1">
+						<span
+							aria-current="page"
+							className="block truncate font-medium"
+							title={event.title}
+						>
+							{event.title}
+						</span>
+					</li>
+				</ol>
+			</nav>
 			<div className="space-y-3">
 				<div className="flex flex-wrap items-center gap-3">
 					<h1 className="min-w-0 break-words font-bold text-2xl tracking-tight">

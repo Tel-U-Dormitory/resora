@@ -1,25 +1,20 @@
 "use client";
 
-import {
-	CalendarDays,
-	History,
-	LayoutDashboard,
-	LockKeyhole,
-	ScanLine,
-} from "lucide-react";
+import { CalendarDays, History, LayoutDashboard, ScanLine } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ModeToggle } from "@/components/mode-toggle";
-import { Avatar } from "@/components/ui/avatar";
+import type { RefObject } from "react";
 import { MAIN_NAVIGATION } from "@/config/navigation";
 import UserMenu from "@/features/identity/user-menu";
 
 export function AppSidebar({
 	name,
 	onNavigate,
+	menuContainer,
 }: {
 	name: string;
 	onNavigate?: () => void;
+	menuContainer?: RefObject<HTMLDialogElement | null>;
 }) {
 	const pathname = usePathname();
 	return (
@@ -50,9 +45,7 @@ export function AppSidebar({
 								? CalendarDays
 								: icon === "scan"
 									? ScanLine
-									: icon === "history"
-										? History
-										: LockKeyhole;
+									: History;
 					return (
 						<Link
 							key={href}
@@ -68,17 +61,11 @@ export function AppSidebar({
 				})}
 			</nav>
 			<div className="mt-auto space-y-4 border-border border-t px-3 pt-5">
-				<div className="mt-5 flex items-center gap-3">
-					<Avatar name={name} shape="squircle" />
-					<div className="min-w-0">
-						<p className="truncate font-semibold text-sm">{name}</p>
-						<p className="text-muted-foreground text-xs">Akun SR</p>
-					</div>
-				</div>
-				<div className="hidden lg:block">
-					<ModeToggle />
-				</div>
-				<UserMenu inline />
+				<UserMenu
+					name={name}
+					onNavigate={onNavigate}
+					container={menuContainer}
+				/>
 			</div>
 		</aside>
 	);
