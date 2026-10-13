@@ -189,3 +189,18 @@ This PM decision supersedes earlier SUPERADMIN operational-denial expectations, 
 | AT-SA-05 | SUPERADMIN corrects QR attendance | Original source/recorder/recorded_at/reason/GPS unchanged; audit uses authenticated operator | Targeted offline tRPC tests |
 
 Live grant/revoke concurrency and role UAT remain separate verification gates; offline doubles are not PostgreSQL evidence. No DB mutation or new privileged account is performed by SA-01.
+
+## SA-02 account administration acceptance
+
+| ID | Scenario | Expected | Verification |
+| --- | --- | --- | --- |
+| AT-SA2-01 | Eligible SUPERADMIN; ordinary/inactive/invalid-assignment/password-gated/revoked/anonymous identity | List/reference/create restricted to valid SUPERADMIN; transaction re-read rejects revocation | Offline actual tRPC/service tests with DB double |
+| AT-SA2-02 | Create one valid SR, including leading-zero NIM and normalized email | Better Auth credential hash, active SR profiles, mandatory password change, no SUPERADMIN grant, one actor/target audit | Real Better Auth adapter/hash with offline persistence |
+| AT-SA2-03 | Duplicate NIM/email, invalid/inactive references, invalid INTI pair, raced unique violation | Sanitized validation/conflict, no partial identity | Targeted offline tests; PostgreSQL concurrency pending |
+| AT-SA2-04 | Profile/credential/audit insert fails | All account writes rollback | Offline transaction double; real PostgreSQL pending |
+| AT-SA2-05 | Lost commit acknowledgement | Uncertain result; inspect list before retry; do not claim account failed | Targeted offline simulation |
+| AT-SA2-06 | List inactive SR, search/filter/page | Default 20/max 50, stable order, required identity fields only; no hash/token | Query double/SQL parameter checks |
+| AT-SA2-07 | Create UI success, copy, close/navigation | Temporary password appears once in local state, no query/mutation cache/storage/log/URL; mandatory change instructions | Static UI regressions; manual responsive/copy/navigation UAT pending |
+| AT-SA2-08 | CSV provisioning after shared helper extraction | Dry-run makes no writes; eight-character password and COMMITTED export semantics retained | Offline adapter/transaction/output double |
+
+Account audit migration is generated but unapplied. These tests do not claim real PostgreSQL trigger/lock/concurrency evidence. Manual UAT requires separately approved migration/environment and synthetic accounts; do not create real users during review.

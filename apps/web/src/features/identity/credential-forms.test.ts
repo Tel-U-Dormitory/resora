@@ -6,8 +6,9 @@ import ts from "typescript";
 for (const [file, authMethod] of [
 	["login-form.tsx", "authClient.signIn.username"],
 	["password-change-form.tsx", "authClient.changePassword"],
+	["account-create-form.tsx", "trpcClient.identity.createAccount.mutate"],
 ] as const) {
-	test(`${file}: native credential submission stays POST and Better Auth handles JS submission`, () => {
+	test(`${file}: native credential submission stays POST and the existing client handles JS submission`, () => {
 		const source = ts.createSourceFile(
 			file,
 			readFileSync(new URL(file, import.meta.url), "utf8"),
@@ -103,4 +104,34 @@ test("password change keeps the mandatory redirect and gives voluntary changes l
 	expect(mandatoryDefault).toBe(true);
 	expect(redirectBranches).toBe(1);
 	expect(revokesOtherSessions).toBe(true);
+});
+
+test("admin credential delivery avoids persistent/mutation/query storage and clears the success state", () => {
+	const text = readFileSync(
+		new URL("account-create-form.tsx", import.meta.url),
+		"utf8",
+	);
+	const source = ts.createSourceFile(
+		"account-create-form.tsx",
+		text,
+		ts.ScriptTarget.Latest,
+		true,
+		ts.ScriptKind.TSX,
+	);
+	const calls: string[] = [];
+	function visit(node: ts.Node) {
+		if (ts.isCallExpression(node)) calls.push(node.expression.getText(source));
+		ts.forEachChild(node, visit);
+	}
+	visit(source);
+	for (const call of calls) {
+		expect(
+			/(?:localStorage|sessionStorage|console\.|setQueryData|setQueriesData|useMutation)/.test(
+				call,
+			),
+		).toBe(false);
+	}
+	expect(text).toContain("setCredentials(null)");
+	expect(text).toContain("submitting.current");
+	expect(text).toContain("Periksa daftar akun sebelum mencoba kembali");
 });

@@ -46,6 +46,8 @@ erDiagram
     BA_USER ||--|| USER_PROFILES : has
     BA_USER ||--o| SR_PROFILES : has_if_SR
     BA_USER ||--o{ SYSTEM_PRIVILEGES : has
+    BA_USER ||--o{ ACCOUNT_AUDIT_LOGS : administers
+    BA_USER ||--o{ ACCOUNT_AUDIT_LOGS : created_account
     DEPARTMENTS ||--o{ SR_PROFILES : assigned
     POSITIONS ||--o{ SR_PROFILES : assigned
     BUILDINGS ||--o{ SR_PROFILES : assigned
@@ -373,6 +375,14 @@ QR sets effective time to actual server scan time and records creation at server
 | `created_at` | `timestamptz` | NN, default now; immutable | Audit write timestamp |
 
 Indexes `(attendance_id, created_at)` and `(session_id, created_at)`. Only domain-authorized backend insert/correction services append entries; ordinary UPDATE/DELETE is prohibited. Record mutation and audit insertion succeed/fail together. General Adaptif operators do not inherit HCO's KADEP requirement; internal manual operations remain KADEP HCO only.
+
+### 4.11 `account_audit_logs` — SA-02 account creation
+
+Additive table: UUID `id` PK; NOT NULL `actor_user_id` and `target_user_id` FKs to Better Auth `user.id`; TEXT `action` constrained to `ACCOUNT_CREATED`; NOT NULL TIMESTAMPTZ `created_at` default server now. Indexes `(actor_user_id, created_at)` and `(target_user_id, created_at)`. No password/hash/credential metadata column. Table-specific UPDATE/DELETE/TRUNCATE guards keep creation evidence append-only; custom SQL guards are versioned alongside the Drizzle-generated schema snapshot.
+
+SA-02 lists SR accounts (including inactive) and creates one active SR account through the existing Better Auth internal adapter. Valid DB organization references and department/position pairs are required. User, credential, SR/actor profiles and actor/target audit insert commit atomically; deferred identity constraints are flushed before commit. SUPERADMIN is rechecked and share-locked in the transaction, with no inferred/automatic grant. Dashboard temporary passwords are cryptographically generated **24-character** base64url values, returned only after a successful commit and held only in the success screen's memory. The existing CSV contract remains **eight alphanumeric characters**, with its private export/recovery semantics unchanged. Lost response/commit acknowledgement requires checking the account list before retry; this phase does not reset or recover passwords.
+
+Migration `20261013170324_sa02_account_management` is generated for PM review, **not applied**. Offline DB doubles cover services/adapter/hash/rollback; PostgreSQL concurrency and trigger execution remain unverified. No account editing, activation toggle, deletion, password reset, privilege grant or remote account creation is delivered by SA-02.
 
 ## 5. State and classification rules
 

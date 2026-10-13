@@ -21,6 +21,7 @@ import {
 	parseSrCsv,
 	type SrImportRow,
 } from "./provisioning-csv";
+import { createSrAccount } from "./sr-account";
 
 type Source = Database | DatabaseTransaction;
 const temporaryPasswordAlphabet =
@@ -266,38 +267,21 @@ export async function provisionSrAccounts(
 				((records) => prepareCredentials(options.projectRoot, records))
 			)(output);
 			for (const { row, buildingId, hash } of entries) {
-				const created = await context.internalAdapter.createUser(
+				await createSrAccount(
+					tx,
+					context,
 					{
 						name: row.name,
 						email: row.email,
-						emailVerified: false,
-						username: row.nim,
-						displayUsername: row.nim,
+						nim: row.nim,
+						isActive: row.is_active,
+						departmentCode: row.department,
+						positionCode: row.position,
+						buildingId,
 					},
-					{ method: "sr-csv" },
+					hash,
+					"sr-csv",
 				);
-				if (!created?.id)
-					throw new ProvisioningError("AUTH_ACCOUNT_CREATION_FAILED");
-				const linked = await context.internalAdapter.linkAccount({
-					userId: created.id,
-					accountId: created.id,
-					providerId: "credential",
-					password: hash,
-				});
-				if (!linked?.id)
-					throw new ProvisioningError("AUTH_ACCOUNT_CREATION_FAILED");
-				await tx.insert(userProfiles).values({
-					userId: created.id,
-					actor: "SR",
-					isActive: row.is_active,
-					mustChangePassword: true,
-				});
-				await tx.insert(srProfiles).values({
-					userId: created.id,
-					departmentCode: row.department,
-					positionCode: row.position,
-					buildingId,
-				});
 			}
 			// Flush existing deferred identity constraints before reporting readiness for commit.
 			await tx.execute(sql`SET CONSTRAINTS ALL IMMEDIATE`);
@@ -320,6 +304,11 @@ export async function provisionSrAccounts(
 				"IMPORT_OUTCOME_UNCONFIRMED_CHECK_PRIVATE_EXPORT",
 			);
 		if (error instanceof ProvisioningError) throw error;
+		if (
+			error instanceof Error &&
+			error.message === "AUTH_ACCOUNT_CREATION_FAILED"
+		)
+			throw new ProvisioningError("AUTH_ACCOUNT_CREATION_FAILED");
 		throw new ProvisioningError("PROVISIONING_FAILED_NO_ACCOUNTS_COMMITTED");
 	}
 }

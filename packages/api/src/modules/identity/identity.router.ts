@@ -11,6 +11,15 @@ import { eq } from "drizzle-orm";
 
 import { protectedProcedure, publicProcedure, router } from "../../index";
 import {
+	accountReferences,
+	createAccount,
+	listAccounts,
+} from "./account-admin";
+import {
+	createAccountSchema,
+	listAccountsSchema,
+} from "./account-admin.schema";
+import {
 	canManageInternalAttendanceManually,
 	canManageInternalEvent,
 	canOperateGeneralActivity,
@@ -18,6 +27,17 @@ import {
 } from "./identity-policy";
 
 export const identityRouter = router({
+	listAccounts: protectedProcedure
+		.input(listAccountsSchema)
+		.query(({ ctx, input }) => listAccounts(ctx.db, ctx.identity, input)),
+	accountReferences: protectedProcedure.query(({ ctx }) =>
+		accountReferences(ctx.db, ctx.identity),
+	),
+	createAccount: protectedProcedure
+		.input(createAccountSchema)
+		.mutation(({ ctx, input }) =>
+			createAccount(ctx.db, ctx.identity, ctx.authConfig, input),
+		),
 	profile: protectedProcedure.query(async ({ ctx }) => {
 		const [profile] = await ctx.db
 			.select({

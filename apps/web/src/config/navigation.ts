@@ -10,3 +10,8 @@ export const HCO_NAVIGATION = [
 	{ title: "Kelola event", href: "/events?view=manage" },
 	{ title: "Buat event", href: "/events/new" },
 ] as const;
+
+export const ADMIN_NAVIGATION = [
+	{ title: "Kelola akun", href: "/admin/users" },
+	{ title: "Tambah akun", href: "/admin/users/new" },
+] as const;

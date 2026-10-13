@@ -14,6 +14,7 @@ export default async function AuthenticatedLayout({
 		<AppShell
 			name={session.name}
 			canManageEvents={session.canManageInternalEvents}
+			isSuperadmin={session.isSuperadmin}
 		>
 			{children}
 		</AppShell>

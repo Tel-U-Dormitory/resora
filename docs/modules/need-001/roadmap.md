@@ -262,3 +262,11 @@ Ready for next phase? yes/no, reason:
 ## SA-01 approved update - 2026-10-13
 
 Eligible active SR with explicit DB SUPERADMIN now satisfies existing HCO, KADEP HCO manual/audit and Adaptif operator policies across departments. Earlier dated no-bypass rules and SUPERADMIN-denial test evidence are superseded, not current requirements. Users without that grant keep existing department/position boundaries. Auth/password-change, valid assignment, event/session/QR lifecycle, invitation/target validation, original attendance fields and audit remain enforced. Session/navigation capabilities come from backend policy; transactional event/QR/manual writes reload current privilege after lifecycle locks. No new schema, account, module or remote mutation is included.
+
+## SA-02 account management ? implementation pending PM review
+
+- SUPERADMIN-only SR list/search/department/status filter with bounded server pagination and inactive-account visibility.
+- Single-account creation uses DB references, valid organization pairs, transaction-bound Better Auth internal adapter/hash and mandatory first-password-change; no automatic privilege grant.
+- Atomic durable ACCOUNT_CREATED audit; additive `20261013170324_sa02_account_management` SQL/snapshot generated, **not applied**.
+- Authenticated `/admin/users` and `/admin/users/new`, desktop/mobile admin navigation and one-time memory-only password/copy screen. CSV passwords/export remain unchanged.
+- Targeted offline tests and local quality gates are required; PostgreSQL locks/concurrency/trigger validation and manual UI UAT remain gates. No edit/reset/delete/grant UI, account bootstrap, remote data mutation or deployment.

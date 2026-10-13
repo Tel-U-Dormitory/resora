@@ -131,6 +131,37 @@ export const systemPrivileges = pgTable(
 	],
 );
 
+export const accountAuditLogs = pgTable(
+	"account_audit_logs",
+	{
+		id: uuid("id").defaultRandom().primaryKey(),
+		actorUserId: text("actor_user_id")
+			.notNull()
+			.references(() => user.id),
+		targetUserId: text("target_user_id")
+			.notNull()
+			.references(() => user.id),
+		action: text("action").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.defaultNow()
+			.notNull(),
+	},
+	(table) => [
+		check(
+			"account_audit_logs_action_check",
+			sql`${table.action} = 'ACCOUNT_CREATED'`,
+		),
+		index("account_audit_logs_actor_created_idx").on(
+			table.actorUserId,
+			table.createdAt,
+		),
+		index("account_audit_logs_target_created_idx").on(
+			table.targetUserId,
+			table.createdAt,
+		),
+	],
+);
+
 // Cross-table SR/actor consistency is enforced by deferred constraint triggers
 // in the versioned identity integrity migration (not expressible by a CHECK).
 export const identityRelations = defineRelationsPart(
@@ -142,6 +173,7 @@ export const identityRelations = defineRelationsPart(
 		positions,
 		buildings,
 		systemPrivileges,
+		accountAuditLogs,
 	},
 	(r) => ({
 		user: {
@@ -222,6 +254,18 @@ export const identityRelations = defineRelationsPart(
 				from: r.systemPrivileges.grantedByUserId,
 				to: r.user.id,
 				alias: "grantor",
+			}),
+		},
+		accountAuditLogs: {
+			actor: r.one.user({
+				from: r.accountAuditLogs.actorUserId,
+				to: r.user.id,
+				optional: false,
+			}),
+			target: r.one.user({
+				from: r.accountAuditLogs.targetUserId,
+				to: r.user.id,
+				optional: false,
 			}),
 		},
 	}),
