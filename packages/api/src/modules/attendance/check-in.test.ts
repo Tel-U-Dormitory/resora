@@ -145,6 +145,7 @@ function fixture() {
 		},
 		eligible: true,
 		mustChange: false,
+		superadmin: false,
 		invited: true,
 		invalidAssignment: false,
 		record: null as {
@@ -204,6 +205,8 @@ function fixture() {
 							},
 						];
 					if (table === "event_participants" && state.invited)
+						rows = [{ userId: identity.userId }];
+					if (table === "system_privileges" && state.superadmin)
 						rows = [{ userId: identity.userId }];
 					if (table === "qr_challenges")
 						rows = joined
@@ -318,6 +321,7 @@ test("valid synthetic QR saves server time/GPS, ignores scheduled end and return
 		"events:update",
 		"attendance_sessions:update",
 		"user_profiles:share",
+		"system_privileges:share",
 	]);
 });
 test("valid duplicate and conflict fallback return original result without any update", async () => {
@@ -395,7 +399,30 @@ test("closed/inactive/revoked/replaced/expired/future QR reject before duplicate
 		expect(f.state.writes).toHaveLength(0);
 	}
 });
-test("live inactive/invalid assignment/first-change/not-invited identities are denied", async () => {
+test("regular SR with initial password can check in; a newly granted SUPERADMIN remains gated", async () => {
+	const f = fixture();
+	f.state.mustChange = true;
+	f.identity.mustChangePassword = true;
+	expect((await checkIn(f.db, f.identity, f.secret, f.input)).status).toBe(
+		"CHECKED_IN",
+	);
+	expect(f.state.writes).toHaveLength(1);
+	const privileged = fixture();
+	privileged.state.mustChange = true;
+	privileged.state.superadmin = true; // Added after the request identity was read.
+	await failure(
+		checkIn(
+			privileged.db,
+			privileged.identity,
+			privileged.secret,
+			privileged.input,
+		),
+		"NOT_ELIGIBLE",
+	);
+	expect(privileged.state.writes).toHaveLength(0);
+});
+
+test("live inactive/invalid assignment/privileged first-change/not-invited identities are denied", async () => {
 	for (const kind of [
 		"inactive",
 		"assignment",
@@ -405,7 +432,10 @@ test("live inactive/invalid assignment/first-change/not-invited identities are d
 		const f = fixture();
 		if (kind === "inactive") f.state.eligible = false;
 		if (kind === "assignment") f.state.invalidAssignment = true;
-		if (kind === "password") f.state.mustChange = true;
+		if (kind === "password") {
+			f.state.mustChange = true;
+			f.state.superadmin = true;
+		}
 		if (kind === "invitation") f.state.invited = false;
 		await failure(
 			checkIn(f.db, f.identity, f.secret, f.input),

@@ -10,6 +10,8 @@ export default async function LoginPage({
 }) {
 	const session = await getSrSession();
 	if (session)
-		redirect(session.mustChangePassword ? "/change-password" : "/dashboard");
+		redirect(
+			session.requiresPasswordChange ? "/change-password" : "/dashboard",
+		);
 	return <LoginForm expired={(await searchParams).reason === "session"} />;
 }

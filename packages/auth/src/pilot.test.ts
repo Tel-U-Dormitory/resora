@@ -124,3 +124,47 @@ test("actual auth login limiter throttles invalid body requests without connecti
 	expect(statuses.slice(0, 5)).toEqual([400, 400, 400, 400, 400]);
 	expect(statuses[5]).toBe(429);
 });
+
+test("diagnostic limiter-off mode keeps public signup closed and Origin/cookie/session protections", async () => {
+	const disabled = createAuth(
+		{
+			BETTER_AUTH_URL: "http://localhost:3000",
+			CORS_ORIGIN: "http://localhost:3001",
+			BETTER_AUTH_SECRET: "synthetic-disabled-limiter-secret-000000000",
+			NODE_ENV: "test",
+			AUTH_RATE_LIMIT_ENABLED: "false",
+		},
+		db,
+	);
+	expect(disabled.options.emailAndPassword.disableSignUp).toBe(true);
+	expect(disabled.options.session.cookieCache.enabled).toBe(false);
+	expect(disabled.options.advanced.defaultCookieAttributes).toMatchObject({
+		httpOnly: true,
+		sameSite: "lax",
+	});
+	for (const [path, origin, body] of [
+		[
+			"sign-in/username",
+			"https://untrusted.example.invalid",
+			{ username: "synthetic", password: "synthetic-only-password" },
+		],
+		[
+			"sign-up/email",
+			"http://localhost:3001",
+			{
+				name: "Synthetic",
+				email: "synthetic@example.invalid",
+				password: "synthetic-only-password",
+			},
+		],
+	] as const) {
+		const response = await disabled.handler(
+			new Request(`http://localhost:3000/api/auth/${path}`, {
+				method: "POST",
+				headers: { origin, "content-type": "application/json" },
+				body: JSON.stringify(body),
+			}),
+		);
+		expect(response.status).toBe(403);
+	}
+});

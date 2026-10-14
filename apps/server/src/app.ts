@@ -14,7 +14,69 @@ export function createApp(
 ) {
 	const app = express();
 	const trustedOrigin = new URL(origin).origin;
+	const authHandler = toNodeHandler(async (request) => {
+		const response = await services.auth.handler(request);
+		// Better Auth can return an internal-error response instead of throwing.
+		return response.status >= 500
+			? Response.json(
+					{
+						code: "AUTH_UNAVAILABLE",
+						message: "Authentication service unavailable",
+					},
+					{ status: 503 },
+				)
+			: response;
+	});
 	app.disable("x-powered-by");
+	// Observe the final HTTP status, including failures before a tRPC resolver runs.
+	app.use((req, res, next) => {
+		const authMutation =
+			req.method === "POST" &&
+			(req.path === "/api/auth/sign-in/username" ||
+				req.path === "/api/auth/change-password");
+		const operation = authMutation
+			? req.path === "/api/auth/sign-in/username"
+				? "LOGIN"
+				: "PASSWORD_CHANGE"
+			: req.path === "/api/auth/get-session"
+				? "AUTH_SESSION"
+				: req.path === "/trpc/identity.session"
+					? "IDENTITY_SESSION"
+					: req.path === "/trpc" || req.path.startsWith("/trpc/")
+						? "TRPC"
+						: null;
+		if (operation) {
+			const started = Date.now();
+			res.once("finish", () => {
+				const status = res.statusCode;
+				if (!authMutation && status < 500) return;
+				const pool = services.db.$client;
+				console.info("AUTH_REQUEST_RESULT", {
+					operation,
+					status,
+					outcome:
+						status === 503
+							? "UNAVAILABLE"
+							: status >= 500
+								? "ERROR"
+								: status === 429
+									? "RATE_LIMITED"
+									: status >= 200 && status < 300
+										? "SUCCESS"
+										: "REJECTED",
+					durationMs: Date.now() - started,
+					...(status >= 500 && pool
+						? {
+								poolTotal: pool.totalCount,
+								poolIdle: pool.idleCount,
+								poolWaiting: pool.waitingCount,
+							}
+						: {}),
+				});
+			});
+		}
+		next();
+	});
 	app.use((_req, res, next) => {
 		res.set({
 			"X-Content-Type-Options": "nosniff",
@@ -55,7 +117,7 @@ export function createApp(
 		// Trust proxy stays false until deployment's proxy boundary is approved.
 		req.headers["x-resora-client-ip"] = req.socket.remoteAddress || "127.0.0.1";
 		try {
-			await toNodeHandler(services.auth)(req, res);
+			await authHandler(req, res);
 		} catch {
 			// Storage/migration outages must fail closed without Express logging a raw error.
 			if (!res.headersSent) {

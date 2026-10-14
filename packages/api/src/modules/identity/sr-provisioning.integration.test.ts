@@ -262,7 +262,7 @@ async function rejected(operation: Promise<unknown>, code: string) {
 			).toBe(true);
 			expect(await count(0)).toBe(0);
 		});
-		test("one dummy: CSV, Better Auth hash, SR identity, login and mandatory password change", async () => {
+		test("one dummy: CSV, Better Auth hash, initial-password access and voluntary rotation", async () => {
 			const output = await cli(true);
 			expect(output.includes("apply: created=1, unchanged=0")).toBe(true);
 			const relativePath =
@@ -328,20 +328,26 @@ async function rejected(operation: Promise<unknown>, code: string) {
 			});
 			expect(login.status).toBe(200);
 			const cookie = cookies(login);
-			expect((await rpc(cookie)).status).toBe(403);
+			expect((await rpc(cookie)).status).toBe(200);
 			await startWeb();
 			if (webBase) {
 				expect((await dashboard()).headers.get("location")).toBe(
 					"/login?reason=session",
 				);
-				expect((await dashboard(cookie)).headers.get("location")).toBe(
-					"/change-password",
-				);
+				expect((await dashboard(cookie)).status).toBe(200);
 			}
 			const session = (await (
 				await rpc(cookie, "identity.session")
-			).json()) as { result: { data: { mustChangePassword: boolean } } };
+			).json()) as {
+				result: {
+					data: {
+						mustChangePassword: boolean;
+						requiresPasswordChange: boolean;
+					};
+				};
+			};
 			expect(session.result.data.mustChangePassword).toBe(true);
+			expect(session.result.data.requiresPasswordChange).toBe(false);
 			expect((await auth.$context).password.config.minPasswordLength).toBe(8);
 			const tooShort = "A1b2C";
 			const rejectedChange = await native(
@@ -353,7 +359,7 @@ async function rejected(operation: Promise<unknown>, code: string) {
 			expect(((await rejectedChange.json()) as { code: string }).code).toBe(
 				"PASSWORD_TOO_SHORT",
 			);
-			expect((await rpc(cookie)).status).toBe(403);
+			expect((await rpc(cookie)).status).toBe(200);
 			const newPassword = `R!${randomBytes(32).toString("base64url")}`;
 			const changed = await native(
 				"change-password",
@@ -365,7 +371,7 @@ async function rejected(operation: Promise<unknown>, code: string) {
 			if (webBase) {
 				expect((await dashboard(cookies(changed))).status).toBe(200);
 				console.info(
-					"Production dashboard HTTP smoke: anonymous redirect, password gate and authenticated dashboard passed",
+					"Production-mode dashboard HTTP smoke: anonymous redirect and initial/rotated password access passed",
 				);
 			}
 			expect(

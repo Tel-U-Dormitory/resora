@@ -1,4 +1,8 @@
-import type { ActiveIdentity, ActiveSrIdentity } from "@resora/auth/sr-access";
+import {
+	type ActiveIdentity,
+	type ActiveSrIdentity,
+	requiresPasswordChange,
+} from "@resora/auth/sr-access";
 import { isValidSrAssignment } from "@resora/db/organization";
 
 // Use only server-derived ctx.identity after protectedProcedure validates the session.
@@ -11,7 +15,7 @@ export function canAccessPersonalSr(
 	return (
 		identity?.actor === "SR" &&
 		identity.isActive === true &&
-		identity.mustChangePassword === false
+		!requiresPasswordChange(identity)
 	);
 }
 
