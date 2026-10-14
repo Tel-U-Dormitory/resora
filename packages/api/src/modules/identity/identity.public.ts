@@ -1,4 +1,4 @@
-import type { ActiveSrIdentity } from "@resora/auth/sr-access";
+import { type ActiveIdentity, getActiveIdentity } from "@resora/auth/sr-access";
 import type { Database, DatabaseTransaction } from "@resora/db";
 import { isValidSrAssignment } from "@resora/db/organization";
 import { user } from "@resora/db/schema/auth";
@@ -17,6 +17,7 @@ export {
 	canAccessPersonalSr,
 	canManageInternalAttendanceManually,
 	canManageInternalEvent,
+	hasSuperadminPrivilege,
 } from "./identity-policy";
 
 // Backend-only directory contract. Attendance must not read Identity's tables itself.
@@ -99,13 +100,22 @@ export async function getCheckInSr(
 
 // Call after event/session locks: reload eligible identity and the latest explicit grant.
 // Share-lock a present grant so its revocation cannot commit during an authorized write.
-export async function getLiveOperationalSr(
+export async function getLiveOperationalIdentity(
 	tx: DatabaseTransaction,
 	userId: string,
-): Promise<ActiveSrIdentity | null> {
-	const candidate = await getCheckInSr(tx, userId);
-	if (!candidate) return null;
-	const grants = await tx
+): Promise<ActiveIdentity | null> {
+	const [profile] = await tx
+		.select({ userId: userProfiles.userId })
+		.from(userProfiles)
+		.where(eq(userProfiles.userId, userId))
+		.for("share");
+	if (!profile) return null;
+	await tx
+		.select({ userId: user.id })
+		.from(user)
+		.where(eq(user.id, userId))
+		.for("share");
+	await tx
 		.select({ userId: systemPrivileges.userId })
 		.from(systemPrivileges)
 		.where(
@@ -115,13 +125,10 @@ export async function getLiveOperationalSr(
 			),
 		)
 		.for("share");
-	return {
-		...candidate,
-		actor: "SR",
-		isActive: true,
-		mustChangePassword: false,
-		isSuperadmin: grants.length > 0,
-	};
+	const identity = await getActiveIdentity(tx, userId);
+	if (!identity || identity.mustChangePassword) return null;
+	if (identity.actor === "SR" && !(await getCheckInSr(tx, userId))) return null;
+	return identity;
 }
 
 // Manual insertion needs an active eligible target, not completion of their first login.

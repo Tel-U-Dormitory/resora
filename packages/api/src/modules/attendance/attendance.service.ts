@@ -1,4 +1,4 @@
-import type { ActiveSrIdentity } from "@resora/auth/sr-access";
+import type { ActiveIdentity } from "@resora/auth/sr-access";
 import type { Database, DatabaseTransaction } from "@resora/db";
 import {
 	attendanceSessions,
@@ -13,20 +13,21 @@ import {
 	canAccessPersonalSr,
 	canManageInternalEvent,
 	getActiveSrDirectory,
-	getLiveOperationalSr,
+	getLiveOperationalIdentity,
+	hasSuperadminPrivilege,
 } from "../identity/identity.public";
 import type { EventDraft } from "./attendance.schema";
 import { signChallenge } from "./qr";
 import { resolveRoster } from "./roster";
 
-function operator(identity: ActiveSrIdentity | null) {
+function operator(identity: ActiveIdentity | null) {
 	if (!canManageInternalEvent(identity))
 		throw new TRPCError({ code: "FORBIDDEN", message: "HCO access required" });
 }
 async function lockedEvent(
 	tx: DatabaseTransaction,
 	eventId: string,
-	identity: ActiveSrIdentity,
+	identity: ActiveIdentity,
 ) {
 	const [event] = await tx
 		.select()
@@ -41,7 +42,7 @@ async function lockedEvent(
 		.where(eq(attendanceSessions.internalEventId, eventId))
 		.for("update");
 	if (!session) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-	operator(await getLiveOperationalSr(tx, identity.userId));
+	operator(await getLiveOperationalIdentity(tx, identity.userId));
 	return { event, session };
 }
 function requireState(actual: string, expected: string) {
@@ -53,12 +54,12 @@ function requireState(actual: string, expected: string) {
 }
 export async function createEvent(
 	db: Database,
-	identity: ActiveSrIdentity,
+	identity: ActiveIdentity,
 	draft: EventDraft,
 ) {
 	operator(identity);
 	return db.transaction(async (tx) => {
-		operator(await getLiveOperationalSr(tx, identity.userId));
+		operator(await getLiveOperationalIdentity(tx, identity.userId));
 		const [event] = await tx
 			.insert(events)
 			.values({
@@ -79,7 +80,7 @@ export async function createEvent(
 }
 export async function editDraft(
 	db: Database,
-	identity: ActiveSrIdentity,
+	identity: ActiveIdentity,
 	eventId: string,
 	draft: EventDraft,
 ) {
@@ -106,7 +107,7 @@ export async function editDraft(
 }
 export async function editMetadata(
 	db: Database,
-	identity: ActiveSrIdentity,
+	identity: ActiveIdentity,
 	eventId: string,
 	metadata: { title: string; description: string },
 ) {
@@ -117,8 +118,8 @@ export async function editMetadata(
 		await tx.update(events).set(metadata).where(eq(events.id, eventId));
 	});
 }
-export async function listEvents(db: Database, identity: ActiveSrIdentity) {
-	if (!canAccessPersonalSr(identity))
+export async function listEvents(db: Database, identity: ActiveIdentity) {
+	if (!canAccessPersonalSr(identity) && !hasSuperadminPrivilege(identity))
 		throw new TRPCError({ code: "FORBIDDEN" });
 	const canManage = canManageInternalEvent(identity);
 	const selection = {
@@ -146,10 +147,10 @@ export async function listEvents(db: Database, identity: ActiveSrIdentity) {
 }
 export async function getEvent(
 	db: Database,
-	identity: ActiveSrIdentity,
+	identity: ActiveIdentity,
 	eventId: string,
 ) {
-	if (!canAccessPersonalSr(identity))
+	if (!canAccessPersonalSr(identity) && !hasSuperadminPrivilege(identity))
 		throw new TRPCError({ code: "FORBIDDEN" });
 	const [row] = await db
 		.select({ event: events, session: attendanceSessions })
@@ -193,14 +194,14 @@ export async function getEvent(
 }
 export async function getRosterDirectory(
 	db: Database,
-	identity: ActiveSrIdentity,
+	identity: ActiveIdentity,
 ) {
 	operator(identity);
 	return getActiveSrDirectory(db);
 }
 export async function previewRoster(
 	db: Database,
-	identity: ActiveSrIdentity,
+	identity: ActiveIdentity,
 	eventId: string,
 ) {
 	operator(identity);
@@ -215,7 +216,7 @@ export async function previewRoster(
 }
 export async function publishEvent(
 	db: Database,
-	identity: ActiveSrIdentity,
+	identity: ActiveIdentity,
 	eventId: string,
 ) {
 	operator(identity);
@@ -250,7 +251,7 @@ export async function publishEvent(
 }
 export async function activateSession(
 	db: Database,
-	identity: ActiveSrIdentity,
+	identity: ActiveIdentity,
 	eventId: string,
 ) {
 	operator(identity);
@@ -273,7 +274,7 @@ export async function activateSession(
 }
 export async function changeQr(
 	db: Database,
-	identity: ActiveSrIdentity,
+	identity: ActiveIdentity,
 	eventId: string,
 	action: "revoke" | "reissue",
 ) {
@@ -320,7 +321,7 @@ export async function changeQr(
 }
 export async function closeEvent(
 	db: Database,
-	identity: ActiveSrIdentity,
+	identity: ActiveIdentity,
 	eventId: string,
 ) {
 	operator(identity);
@@ -352,7 +353,7 @@ export async function closeEvent(
 }
 export async function getQr(
 	db: Database,
-	identity: ActiveSrIdentity,
+	identity: ActiveIdentity,
 	eventId: string,
 	secret: string,
 ) {

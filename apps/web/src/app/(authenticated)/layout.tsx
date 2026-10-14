@@ -15,6 +15,7 @@ export default async function AuthenticatedLayout({
 			name={session.name}
 			canManageEvents={session.canManageInternalEvents}
 			isSuperadmin={session.isSuperadmin}
+			isSr={session.actor === "SR"}
 		>
 			{children}
 		</AppShell>

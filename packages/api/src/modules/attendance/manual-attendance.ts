@@ -1,4 +1,4 @@
-import type { ActiveSrIdentity } from "@resora/auth/sr-access";
+import type { ActiveIdentity } from "@resora/auth/sr-access";
 import type { Database, DatabaseTransaction } from "@resora/db";
 import {
 	attendanceAuditLogs,
@@ -13,7 +13,7 @@ import type { z } from "zod";
 import {
 	canManageInternalAttendanceManually,
 	getActiveSrCandidate,
-	getLiveOperationalSr,
+	getLiveOperationalIdentity,
 } from "../identity/identity.public";
 import { manualCorrectSchema, manualInsertSchema } from "./attendance.schema";
 import {
@@ -22,7 +22,7 @@ import {
 	manualEffectiveTime,
 } from "./reporting-policy";
 
-function requireOperator(identity: ActiveSrIdentity) {
+function requireOperator(identity: ActiveIdentity) {
 	if (!canManageInternalAttendanceManually(identity))
 		throw new TRPCError({
 			code: "FORBIDDEN",
@@ -32,7 +32,7 @@ function requireOperator(identity: ActiveSrIdentity) {
 
 async function lockContext(
 	tx: DatabaseTransaction,
-	identity: ActiveSrIdentity,
+	identity: ActiveIdentity,
 	eventId: string,
 ) {
 	const [event] = await tx
@@ -48,7 +48,7 @@ async function lockContext(
 		.for("update");
 	if (!session) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 	// Re-read and share-lock current operator identity after lifecycle lock waits.
-	const live = await getLiveOperationalSr(tx, identity.userId);
+	const live = await getLiveOperationalIdentity(tx, identity.userId);
 	if (!live)
 		throw new TRPCError({
 			code: "FORBIDDEN",
@@ -78,7 +78,7 @@ async function requireInvitation(
 
 export async function manualInsert(
 	db: Database,
-	identity: ActiveSrIdentity,
+	identity: ActiveIdentity,
 	input: z.infer<typeof manualInsertSchema>,
 ) {
 	requireOperator(identity);
@@ -155,7 +155,7 @@ export async function manualInsert(
 
 export async function manualCorrect(
 	db: Database,
-	identity: ActiveSrIdentity,
+	identity: ActiveIdentity,
 	input: z.infer<typeof manualCorrectSchema>,
 ) {
 	requireOperator(identity);

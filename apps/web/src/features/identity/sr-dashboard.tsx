@@ -51,14 +51,16 @@ export default function SrDashboard() {
 		);
 	return (
 		<section className="space-y-6">
-			<DashboardHeader />
+			<DashboardHeader isSystem={data.data.user.actor === "SYSTEM_ADMIN"} />
 			<Card>
 				<CardContent className="space-y-2">
 					<h2 className="font-semibold text-lg">
 						Selamat datang, {data.data.user.name}.
 					</h2>
 					<p className="text-muted-foreground text-sm">
-						NIM: {data.data.user.nim}
+						{data.data.user.actor === "SR"
+							? `NIM: ${data.data.user.nim}`
+							: `Username: ${data.data.user.username}`}
 					</p>
 				</CardContent>
 			</Card>

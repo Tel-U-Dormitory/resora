@@ -31,7 +31,7 @@ export default function LoginForm({ expired = false }: { expired?: boolean }) {
 					RESORA
 				</p>
 				<h1 className="text-center font-bold text-3xl tracking-tight">
-					Masuk SR
+					Masuk RESORA
 				</h1>
 			</CardHeader>
 			<CardContent>
@@ -59,7 +59,7 @@ export default function LoginForm({ expired = false }: { expired?: boolean }) {
 										? "Terlalu banyak percobaan. Tunggu satu menit sebelum mencoba kembali."
 										: result.error.status >= 500
 											? "Layanan masuk sedang tidak tersedia. Silakan coba kembali."
-											: "NIM atau password tidak valid.",
+											: "NIM / username atau password tidak valid.",
 								);
 								return;
 							}
@@ -88,12 +88,11 @@ export default function LoginForm({ expired = false }: { expired?: boolean }) {
 					}}
 				>
 					<div className="space-y-2">
-						<Label htmlFor="nim">NIM</Label>
+						<Label htmlFor="nim">NIM / Username</Label>
 						<Input
 							id="nim"
 							name="username"
 							type="text"
-							inputMode="numeric"
 							autoComplete="username"
 							required
 							value={nim}

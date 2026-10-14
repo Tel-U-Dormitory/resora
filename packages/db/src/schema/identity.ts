@@ -18,6 +18,7 @@ export const actorType = pgEnum("actor_type", [
 	"MAHASISWA",
 	"ASUS",
 	"DITMAWA",
+	"SYSTEM_ADMIN",
 ]);
 export const systemPrivilege = pgEnum("system_privilege", ["SUPERADMIN"]);
 
@@ -135,9 +136,7 @@ export const accountAuditLogs = pgTable(
 	"account_audit_logs",
 	{
 		id: uuid("id").defaultRandom().primaryKey(),
-		actorUserId: text("actor_user_id")
-			.notNull()
-			.references(() => user.id),
+		actorUserId: text("actor_user_id").references(() => user.id),
 		targetUserId: text("target_user_id")
 			.notNull()
 			.references(() => user.id),
@@ -149,7 +148,7 @@ export const accountAuditLogs = pgTable(
 	(table) => [
 		check(
 			"account_audit_logs_action_check",
-			sql`${table.action} = 'ACCOUNT_CREATED'`,
+			sql`(${table.action} = 'ACCOUNT_CREATED' AND ${table.actorUserId} IS NOT NULL) OR (${table.action} = 'SYSTEM_ADMIN_BOOTSTRAPPED' AND ${table.actorUserId} IS NULL)`,
 		),
 		index("account_audit_logs_actor_created_idx").on(
 			table.actorUserId,
@@ -260,7 +259,7 @@ export const identityRelations = defineRelationsPart(
 			actor: r.one.user({
 				from: r.accountAuditLogs.actorUserId,
 				to: r.user.id,
-				optional: false,
+				optional: true,
 			}),
 			target: r.one.user({
 				from: r.accountAuditLogs.targetUserId,

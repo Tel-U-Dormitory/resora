@@ -11,11 +11,13 @@ export function AppShell({
 	name,
 	canManageEvents,
 	isSuperadmin,
+	isSr,
 	children,
 }: {
 	name: string;
 	canManageEvents: boolean;
 	isSuperadmin: boolean;
+	isSr: boolean;
 	children: ReactNode;
 }) {
 	const pathname = usePathname();
@@ -48,6 +50,7 @@ export function AppShell({
 					name={name}
 					canManageEvents={canManageEvents}
 					isSuperadmin={isSuperadmin}
+					isSr={isSr}
 				/>
 			</div>
 			<div className="min-w-0 flex-1">
@@ -108,6 +111,7 @@ export function AppShell({
 						name={name}
 						canManageEvents={canManageEvents}
 						isSuperadmin={isSuperadmin}
+						isSr={isSr}
 						menuContainer={drawer}
 						onNavigate={() => drawer.current?.close()}
 					/>

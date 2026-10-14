@@ -13,9 +13,9 @@ Sections 1–11 describe the current design baseline. Sections 12–18 preserve 
 
 | Area              | Policy / design                                                                                                                                                                                      | State                                                |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| Identity          | Exactly one primary actor per account (`SR`, `MAHASISWA`, `ASUS`, `DITMAWA`); only SR can sign in at pilot                                                                                           | Confirmed                                            |
+| Identity          | Exactly one primary actor per account (`SR`, `MAHASISWA`, `ASUS`, `DITMAWA`, `SYSTEM_ADMIN`); pilot login accepts SR and explicitly privileged SYSTEM_ADMIN                                                                                           | Confirmed                                            |
 | SR                | One department, one position, one building, active state; NIM login through Better Auth Username Plugin                                                                                              | Confirmed                                            |
-| System permission | `SUPERADMIN` granted to a specifically authorized account; **not** a fifth actor. Initially only superadmin changes SR assignments and active status | Confirmed |
+| System permission | `SUPERADMIN` granted to a specifically authorized account; **not** an actor; SYSTEM_ADMIN is the dedicated account actor (SA-03). Initially only superadmin changes SR assignments and active status | Confirmed |
 | Event audience    | Composable roster of active SR: all SR, one/multiple departments, all KADEP across departments, individuals, explicit include/exclude and deduplication; INTI department and INTI + non-INTI KADEP union | Confirmed |
 | Event organizer   | SR belonging to HCO can create event, show QR, view/export attendance; **KADEP HCO or explicit eligible SUPERADMIN** can input/correct manual attendance                                                                        | Confirmed                                            |
 | Participant list  | Persist per-event eligible participant roster **at publication** to preserve historical reports and absent invitees                                                                                  | **Confirmed business rule; table design proposed**    |
@@ -181,7 +181,7 @@ Notation: **PK** primary key; **FK** foreign key; **UK** unique; **NN** not null
 | Column                 | PG type           | Constraint/default             | Note                                                                  |
 | ---------------------- | ----------------- | ------------------------------ | --------------------------------------------------------------------- |
 | `user_id`              | `text`            | PK, FK → `user.id` CASCADE     | Exactly one profile per provisioned user                              |
-| `actor`                | `actor_type` enum | NN                             | `SR`, `MAHASISWA`, `ASUS`, `DITMAWA`                                  |
+| `actor`                | `actor_type` enum | NN                             | `SR`, `MAHASISWA`, `ASUS`, `DITMAWA`, `SYSTEM_ADMIN`                                  |
 | `is_active`            | `boolean`         | NN, default `true`             | Backend must reject inactive users even with existing session         |
 | `must_change_password` | `boolean`         | NN, default `true` for imports | First-login gate; do not expose protected app actions until completed |
 | `created_at`           | `timestamptz`     | NN, default now                |                                                                       |
@@ -271,7 +271,7 @@ NIM comes from `user.username` (Better Auth Username Plugin). Do **not** duplica
 | `granted_at`         | `timestamptz`           | NN, default now          |                                                       |
 | `granted_by_user_id` | `text`                  | FK → `user.id`, nullable | Nullable only for securely recorded initial bootstrap |
 
-**Composite PK:** `(user_id, privilege_code)`. Bootstrap superadmin through audited, non-public mechanism. `SUPERADMIN` grants explicitly authorized system administration and cross-department operational permissions (SA-01). It is read from DB; eligibility, password change, resource lifecycle, invitation/target validation and audit are still enforced.
+**Composite PK:** `(user_id, privilege_code)`. Bootstrap the first superadmin as a new SYSTEM_ADMIN through the audited non-public CLI, never by elevating an existing SR. No SR profile/organization assignment; explicit grant and active username identity required. Existing explicit SR grants retain SA-01 behavior. `SUPERADMIN` grants explicitly authorized system administration and cross-department operational permissions (SA-01). It is read from DB; eligibility, password change, resource lifecycle, invitation/target validation and audit are still enforced.
 
 ### 4.5 `events` — HCO internal event and draft roster builder
 
@@ -378,11 +378,11 @@ Indexes `(attendance_id, created_at)` and `(session_id, created_at)`. Only domai
 
 ### 4.11 `account_audit_logs` — SA-02 account creation
 
-Additive table: UUID `id` PK; NOT NULL `actor_user_id` and `target_user_id` FKs to Better Auth `user.id`; TEXT `action` constrained to `ACCOUNT_CREATED`; NOT NULL TIMESTAMPTZ `created_at` default server now. Indexes `(actor_user_id, created_at)` and `(target_user_id, created_at)`. No password/hash/credential metadata column. Table-specific UPDATE/DELETE/TRUNCATE guards keep creation evidence append-only; custom SQL guards are versioned alongside the Drizzle-generated schema snapshot.
+Additive table: UUID `id` PK; `actor_user_id` and NOT NULL `target_user_id` FKs to Better Auth `user.id`; TEXT `action` constrained to `ACCOUNT_CREATED` (real actor required) or `SYSTEM_ADMIN_BOOTSTRAPPED` (NULL actor required, explicit system-bootstrap origin); NOT NULL TIMESTAMPTZ `created_at` default server now. Indexes `(actor_user_id, created_at)` and `(target_user_id, created_at)`. No password/hash/credential metadata column. Table-specific UPDATE/DELETE/TRUNCATE guards keep creation evidence append-only; custom SQL guards are versioned alongside the Drizzle-generated schema snapshot.
 
 SA-02 lists SR accounts (including inactive) and creates one active SR account through the existing Better Auth internal adapter. Valid DB organization references and department/position pairs are required. User, credential, SR/actor profiles and actor/target audit insert commit atomically; deferred identity constraints are flushed before commit. SUPERADMIN is rechecked and share-locked in the transaction, with no inferred/automatic grant. Dashboard temporary passwords are cryptographically generated **24-character** base64url values, returned only after a successful commit and held only in the success screen's memory. The existing CSV contract remains **eight alphanumeric characters**, with its private export/recovery semantics unchanged. Lost response/commit acknowledgement requires checking the account list before retry; this phase does not reset or recover passwords.
 
-Migration `20261013170324_sa02_account_management` is generated for PM review, **not applied**. Offline DB doubles cover services/adapter/hash/rollback; PostgreSQL concurrency and trigger execution remain unverified. No account editing, activation toggle, deletion, password reset, privilege grant or remote account creation is delivered by SA-02.
+SA-02 was accepted by PM. Migration `20261013170324_sa02_account_management` remains unapplied remotely; SA-03 applied it on disposable local PostgreSQL and verified account creation, concurrency, audit guards and profile/audit failure rollback. Offline DB doubles retain service/adapter/hash coverage. No account editing, activation toggle, deletion, password reset, privilege grant or remote account creation is delivered by SA-02.
 
 ## 5. State and classification rules
 
@@ -470,7 +470,7 @@ Phase 2C provisions through supported internal Better Auth APIs in one transacti
 
 ## 8. Server-side authorization (Phase 3)
 
-Every policy requires a valid Better Auth session, an active primary actor `SR` with complete SR identity, and completion of mandatory password change. `sessionProcedure` reloads current identity from Drizzle; `protectedProcedure` enforces the password gate before a domain policy uses `ctx.identity`. Client role/organization/privilege claims are never authority.
+Every operational policy requires a valid Better Auth session and completion of mandatory password change. The principal is an active SR with complete identity/valid assignment, or active SYSTEM_ADMIN with nonblank username and explicit SUPERADMIN grant. Participant/personal SR policies exclude SYSTEM_ADMIN. `sessionProcedure` reloads current identity from Drizzle; `protectedProcedure` enforces the password gate before a domain policy uses `ctx.identity`. Client role/organization/privilege claims are never authority.
 
 | Operation | Required DB identity beyond the shared gate |
 | --- | --- |
@@ -484,7 +484,7 @@ Every policy requires a valid Better Auth session, an active primary actor `SR` 
 
 Implemented pure functions are `canAccessPersonalSr`, `canManageInternalEvent` (shared HCO foundation for roster/QR/recap), `canManageInternalAttendanceManually`, `canOperateGeneralActivity`, and `hasSuperadminPrivilege` in `packages/api/src/modules/identity/identity-policy.ts`. These consume server-validated identity after protected procedures, not client input. Phase 4 real Attendance endpoints reuse the HCO policy through Identity's public backend interface; no identity-admin endpoint is added merely to exercise policies. Resource ownership/context, event state, invited/registered participants, reasons and immutable audit remain mandatory checks when real modules are implemented.
 
-**SA-01 implementation:** `identity.session` projects operator permissions and gated `isSuperadmin` from the current DB identity. Transactional event/QR/manual guards use Identity's public `getLiveOperationalSr`, re-reading and share-locking current eligibility and explicit privilege after lifecycle lock waits; no stale privilege is merged into the new identity. A revoked privilege stops access on the next request without login renewal. Creator, recorder and audit actor remain the actual authenticated user. Dated Phase 3/4/7 no-bypass evidence below is historical and superseded by SA-01; it is not the current authorization policy. No schema/migration change is needed.
+**SA-01 implementation:** `identity.session` projects operator permissions and gated `isSuperadmin` from the current DB identity. Transactional event/QR/manual guards use Identity's public `getLiveOperationalIdentity`, re-reading and share-locking current eligibility and explicit privilege after lifecycle lock waits; no stale privilege is merged into the new identity. A revoked privilege stops access on the next request without login renewal. Creator, recorder and audit actor remain the actual authenticated user. Dated Phase 3/4/7 no-bypass evidence below is historical and superseded by SA-01; it is not the current authorization policy. No schema/migration change is needed.
 
 Disallow raw browser DB access; runtime queries go through Express/Drizzle. No Supabase Auth, service-role key or frontend DB client is introduced.
 
@@ -800,3 +800,9 @@ Phase 6 migration `20261012071912_phase6_reporting` was applied with separate PM
 **Phase 6 CLI verification:** 19 targeted reporting/manual tests passed; 35 existing attendance/check-in/RBAC/auth offline regression cases passed. DB/API/Web typechecks, scoped Biome read-only (15 files), one frontend production build and diff checks passed. These are offline service/query-double and metadata tests, not PostgreSQL execution of the new audit migration or its lock/trigger behavior.
 
 **Phase 7 scope:** schema/migrations/data unchanged. Pending live PostgreSQL combinations: new inactive-target insertion denial; historical inactive correction; HCO non-KADEP/KADEP non-HCO manual denial; non-HCO SUPERADMIN bypass denial. Offline policy/service and loopback HTTP with auth/DB doubles cover these negative paths but are not live-profile proof. The smallest additional gate is PM-approved synthetic identities/status transitions with rollback or explicitly retained immutable audit fixtures; no real SR accounts/remote writes are authorized by Phase 7.
+
+## SA-03 dedicated SYSTEM_ADMIN implementation
+
+`20261014034514_sa03_system_admin` adds the actor enum value and extends only account bootstrap audit semantics; SA-02 SQL/snapshot is unchanged. No user/reference data is inserted by migration. Existing deferred SR consistency triggers already require every non-SR actor to have no SR profile. A SYSTEM_ADMIN without grant is denied by auth/authorization; no fake NIM or organization values are assigned. Grantor is NULL for bootstrap, with SYSTEM_ADMIN_BOOTSTRAPPED actor-NULL/target/timestamp audit evidence.
+
+Bootstrap default dry-run validates explicit target, exact migration chain, username/email conflicts, existing dedicated accounts and existing privileges. Apply serializes bootstrap and writes user/credential/profile/grant/audit atomically with a 32-character cryptographic temporary password and must_change_password=true. Private export uses username,name,email,temporary_password and existing PREPARED/COMMITTED/FAILED/UNCONFIRMED semantics. No automatic retry/reset after ambiguous commit. Earlier descriptions of the first admin as an SR or of SR-only authentication are historical and superseded. See [Production/local runbook](../../superadmin-bootstrap.md).

@@ -23,12 +23,14 @@ export function AppSidebar({
 	name,
 	canManageEvents,
 	isSuperadmin,
+	isSr,
 	onNavigate,
 	menuContainer,
 }: {
 	name: string;
 	canManageEvents: boolean;
 	isSuperadmin: boolean;
+	isSr: boolean;
 	onNavigate?: () => void;
 	menuContainer?: RefObject<HTMLDialogElement | null>;
 }) {
@@ -60,7 +62,10 @@ export function AppSidebar({
 				Menu utama
 			</p>
 			<nav aria-label="Navigasi aplikasi" className="flex flex-col gap-1">
-				{MAIN_NAVIGATION.map(({ title, href, icon }) => {
+				{MAIN_NAVIGATION.filter(
+					({ href }) =>
+						isSr || (href !== "/scan" && href !== "/attendance/history"),
+				).map(({ title, href, icon }) => {
 					const active =
 						(pathname === href || pathname.startsWith(`${href}/`)) &&
 						!(href === "/events" && hcoArea);
@@ -160,6 +165,7 @@ export function AppSidebar({
 			<div className="mt-auto space-y-4 border-border border-t px-3 pt-5">
 				<UserMenu
 					name={name}
+					accountLabel={isSr ? "Akun SR" : "Akun Sistem"}
 					onNavigate={onNavigate}
 					container={menuContainer}
 				/>

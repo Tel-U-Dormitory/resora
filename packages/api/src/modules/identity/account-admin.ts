@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { type AuthConfig, createAuth } from "@resora/auth";
-import type { ActiveSrIdentity } from "@resora/auth/sr-access";
+import type { ActiveIdentity } from "@resora/auth/sr-access";
 import type { Database } from "@resora/db";
 import { isValidSrAssignment } from "@resora/db/organization";
 import { user } from "@resora/db/schema/auth";
@@ -20,18 +20,18 @@ import {
 	createAccountSchema,
 	listAccountsSchema,
 } from "./account-admin.schema";
-import { getLiveOperationalSr } from "./identity.public";
+import { getLiveOperationalIdentity } from "./identity.public";
 import { hasSuperadminPrivilege } from "./identity-policy";
 import { createSrAccount } from "./sr-account";
 
-function requireAdmin(identity: ActiveSrIdentity | null) {
+function requireAdmin(identity: ActiveIdentity | null) {
 	if (!hasSuperadminPrivilege(identity))
 		throw new TRPCError({ code: "FORBIDDEN", message: "SUPERADMIN_REQUIRED" });
 }
 
 export async function accountReferences(
 	db: Database,
-	identity: ActiveSrIdentity,
+	identity: ActiveIdentity,
 ) {
 	requireAdmin(identity);
 	const departmentRows = await db
@@ -65,7 +65,7 @@ export async function accountReferences(
 
 export async function listAccounts(
 	db: Database,
-	identity: ActiveSrIdentity,
+	identity: ActiveIdentity,
 	input: z.input<typeof listAccountsSchema>,
 ) {
 	requireAdmin(identity);
@@ -136,7 +136,7 @@ export async function listAccounts(
 
 export async function createAccount(
 	db: Database,
-	identity: ActiveSrIdentity,
+	identity: ActiveIdentity,
 	authConfig: AuthConfig | undefined,
 	input: z.input<typeof createAccountSchema>,
 ) {
@@ -150,7 +150,7 @@ export async function createAccount(
 	if (!authConfig) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 	try {
 		return await db.transaction(async (tx) => {
-			requireAdmin(await getLiveOperationalSr(tx, identity.userId));
+			requireAdmin(await getLiveOperationalIdentity(tx, identity.userId));
 			// Share the existing CSV lock: normalized identity conflicts are checked before creation.
 			await tx.execute(
 				sql`SELECT pg_advisory_xact_lock(hashtext('resora:sr-csv-provisioning'))`,

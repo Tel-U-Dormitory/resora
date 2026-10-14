@@ -1,4 +1,4 @@
-import type { ActiveSrIdentity } from "@resora/auth/sr-access";
+import type { ActiveIdentity } from "@resora/auth/sr-access";
 import type { Database } from "@resora/db";
 import {
 	attendanceAuditLogs,
@@ -38,7 +38,7 @@ const snapshotFields = {
 
 export async function recap(
 	db: Database,
-	identity: ActiveSrIdentity,
+	identity: ActiveIdentity,
 	eventId: string,
 ) {
 	if (!canManageInternalEvent(identity))
@@ -113,7 +113,7 @@ export async function recap(
 
 export async function exportCsv(
 	db: Database,
-	identity: ActiveSrIdentity,
+	identity: ActiveIdentity,
 	eventId: string,
 ) {
 	const report = await recap(db, identity, eventId);
@@ -125,7 +125,7 @@ export async function exportCsv(
 
 export async function ownHistory(
 	db: Database,
-	identity: ActiveSrIdentity,
+	identity: ActiveIdentity,
 	input: z.input<typeof ownHistorySchema>,
 ) {
 	if (
@@ -179,7 +179,7 @@ export async function ownHistory(
 
 export async function auditHistory(
 	db: Database,
-	identity: ActiveSrIdentity,
+	identity: ActiveIdentity,
 	input: z.input<typeof auditHistorySchema>,
 ) {
 	if (!canManageInternalAttendanceManually(identity))

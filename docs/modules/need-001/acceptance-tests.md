@@ -196,11 +196,28 @@ Live grant/revoke concurrency and role UAT remain separate verification gates; o
 | --- | --- | --- | --- |
 | AT-SA2-01 | Eligible SUPERADMIN; ordinary/inactive/invalid-assignment/password-gated/revoked/anonymous identity | List/reference/create restricted to valid SUPERADMIN; transaction re-read rejects revocation | Offline actual tRPC/service tests with DB double |
 | AT-SA2-02 | Create one valid SR, including leading-zero NIM and normalized email | Better Auth credential hash, active SR profiles, mandatory password change, no SUPERADMIN grant, one actor/target audit | Real Better Auth adapter/hash with offline persistence |
-| AT-SA2-03 | Duplicate NIM/email, invalid/inactive references, invalid INTI pair, raced unique violation | Sanitized validation/conflict, no partial identity | Targeted offline tests; PostgreSQL concurrency pending |
-| AT-SA2-04 | Profile/credential/audit insert fails | All account writes rollback | Offline transaction double; real PostgreSQL pending |
+| AT-SA2-03 | Duplicate NIM/email, invalid/inactive references, invalid INTI pair, raced unique violation | Sanitized validation/conflict, no partial identity | Targeted offline tests; SA-03 also verifies concurrent creation on local PostgreSQL |
+| AT-SA2-04 | Profile/credential/audit insert fails | All account writes rollback | Offline transaction double; SA-03 also verifies profile/audit failure rollback on local PostgreSQL |
 | AT-SA2-05 | Lost commit acknowledgement | Uncertain result; inspect list before retry; do not claim account failed | Targeted offline simulation |
 | AT-SA2-06 | List inactive SR, search/filter/page | Default 20/max 50, stable order, required identity fields only; no hash/token | Query double/SQL parameter checks |
 | AT-SA2-07 | Create UI success, copy, close/navigation | Temporary password appears once in local state, no query/mutation cache/storage/log/URL; mandatory change instructions | Static UI regressions; manual responsive/copy/navigation UAT pending |
 | AT-SA2-08 | CSV provisioning after shared helper extraction | Dry-run makes no writes; eight-character password and COMMITTED export semantics retained | Offline adapter/transaction/output double |
 
-Account audit migration is generated but unapplied. These tests do not claim real PostgreSQL trigger/lock/concurrency evidence. Manual UAT requires separately approved migration/environment and synthetic accounts; do not create real users during review.
+Initial SA-02 evidence was offline only. SA-03 now supplements it with local PostgreSQL trigger/lock/concurrency evidence below; the account audit migration remains unapplied remotely. Manual UAT requires an approved environment and synthetic accounts; do not create real users during review.
+
+## SA-03 integration acceptance
+
+SA-03 supersedes SR-only login/first-admin assumptions above. SUPERADMIN is still a privilege; SYSTEM_ADMIN is the new dedicated primary actor. No existing SR is upgraded during bootstrap.
+
+| ID | Scenario | Expected/evidence |
+| --- | --- | --- |
+| AT-SA3-01 | SR login and dedicated username login | Actual Better Auth/PostgreSQL login and first password change pass; system profile has no SR/NIM fields |
+| AT-SA3-02 | Grant missing, inactive or pending password change | Subsequent requests denied; grant revoke while manual mutation waits for event lock denies write on PostgreSQL |
+| AT-SA3-03 | Dedicated operator event/QR/manual/recap/audit/CSV | Actual tRPC/services with PostgreSQL pass; original system operator IDs preserved; business state/target validations retained |
+| AT-SA3-04 | SR directory/snapshot/system self-scan/own history | Directory and snapshot exclude system admin; QR self-check-in and own history rejected |
+| AT-SA3-05 | Dry-run, export failure, audit/profile failure | No partial user/credential/profile/grant; real PostgreSQL transaction rollback passes |
+| AT-SA3-06 | Concurrent bootstrap and account creation; concurrent correction | One bootstrap/account winner and matching audit; sequential before/after correction audit; no deadlock in targeted tests |
+| AT-SA3-07 | SR consistency and account audit guards | System SR-profile insertion, audit UPDATE/DELETE/TRUNCATE rejected; explicit valid SR grant still permits operations in rollback test |
+| AT-SA3-08 | One-time bootstrap credentials/logout/duplicate bootstrap | Restrictive private username CSV export COMMITTED; password change/logout work; duplicate bootstrap stops |
+
+Verification: final 12 guarded PostgreSQL integration groups + two extra SQL/service checks PASS, nine exact history hashes/schema prerequisites verified on loopback only. Offline policy/auth/input/UI regressions are separate evidence. Initial harness 401 handling/import issues were corrected; no application authorization was weakened. Local synthetic fixtures retained because account/attendance audits are append-only. Remote migrations/bootstrap and frontend/mobile UAT are not claimed.

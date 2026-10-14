@@ -10,6 +10,8 @@
 
 **SA-01 PM decision (2026-10-13):** An active, eligible SR with an explicit database SUPERADMIN grant has all existing cross-department operational and system-administration permissions. This supersedes earlier no-operational-bypass clauses, including dated Phase 4 notes. No privilege is inferred from department/position; authentication, mandatory password change, valid assignment, resource lifecycle, invitation/target eligibility, integrity and audit still apply. Existing department policies remain unchanged for users without the grant.
 
+**SA-03 final PM decision:** The first SUPERADMIN is a newly bootstrapped dedicated `SYSTEM_ADMIN`, never an elevated existing SR or a fabricated SR assignment. Login accepts SR NIM or administrative username through the same Better Auth flow. Both require active identity and mandatory password change; SYSTEM_ADMIN additionally requires a current explicit SUPERADMIN grant. SYSTEM_ADMIN has cross-department operational/admin permissions but is excluded from SR roster, attendance targets, QR check-in and own SR history. Explicit valid SR SUPERADMIN grants retain SA-01 behavior. Earlier SR-only login/first-admin assumptions are superseded; Production bootstrap still requires separate approval.
+
 ## 1. Product overview and objectives
 
 RESORA is an integrated digital platform for operations and services related to the Telkom University dormitory and Senior Residents (SR). Its candidate domains include internal SR attendance, student activities, inspections, resident services, SR performance, inventory, content/CoD, feedback, and analytics. Public landing pages, content delivery, and management interfaces may use distinct subdomains within the same product; final hostnames remain undecided.
@@ -18,7 +20,7 @@ RESORA is an integrated digital platform for operations and services related to 
 
 **Product principles:** one coherent identity and permission model; modular ownership; reuse common capabilities rather than copying features; server-enforced authorization; privacy by design; explicit audit of sensitive mutations; independent scope and release acceptance **per NEED**, not a blanket release of every historical feature.
 
-**Out of current commitment:** full deployment of all 12 NEEDs, institutional single sign-on/API integration, production-ready non-SR logins, analytics warehouse, and other features without approved module scope.
+**Out of current commitment:** full deployment of all 12 NEEDs, institutional single sign-on/API integration, general non-SR student/staff logins (dedicated SYSTEM_ADMIN is explicitly approved by SA-03), analytics warehouse, and other features without approved module scope.
 
 ## 2. Governance and sources of truth
 
@@ -47,7 +49,7 @@ RESORA is an integrated digital platform for operations and services related to 
 | `ASUS` | Dormitory operational/administrative stakeholder | Deferred. |
 | `DITMAWA` | University administration stakeholder | Deferred. |
 
-A user has **exactly one primary actor**. Every SR has one department, one position/jabatan, and one building assignment. Departments include INTI plus the seven existing departments; see the canonical organization dictionary. `KADEP` is a position, not an actor; **Inti** means department `INTI`; executive positions belong only to INTI and non-INTI departments accept KADEP/SEKDEP/ANGGOTA. `SUPERADMIN` is an explicitly granted system privilege, **not** a fifth actor or an automatic benefit of RnD membership. Only users granted that privilege may maintain SR department/position/building/active status, with audit. SA-01 grants eligible active SUPERADMIN cross-department operational access, including HCO/KADEP HCO and Adaptif policies; resource lifecycle, invitation/target validation and audit remain mandatory.
+A user has **exactly one primary actor**. Every SR has one department, one position/jabatan, and one building assignment. Departments include INTI plus the seven existing departments; see the canonical organization dictionary. `KADEP` is a position, not an actor; **Inti** means department `INTI`; executive positions belong only to INTI and non-INTI departments accept KADEP/SEKDEP/ANGGOTA. `SUPERADMIN` is an explicitly granted system privilege, **not** an actor or an automatic benefit of RnD membership. SA-03 adds the distinct primary actor `SYSTEM_ADMIN` for a new dedicated administrative account: no NIM/SR profile/organization assignment, and no SR participant rights. Only users granted that privilege may maintain SR department/position/building/active status, with audit. SA-01 grants eligible active SUPERADMIN cross-department operational access, including HCO/KADEP HCO and Adaptif policies; resource lifecycle, invitation/target validation and audit remain mandatory.
 
 Backend authorization must verify active account, actor, department, relevant position, permission, and resource context on every protected action. Hiding a UI control is not access control.
 

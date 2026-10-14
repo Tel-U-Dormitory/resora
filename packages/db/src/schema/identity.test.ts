@@ -45,7 +45,13 @@ test("synthetic NIM keeps leading zeros in Better Auth's single source of truth"
 });
 
 test("primary actors are exclusive and superadmin is a separate system privilege", () => {
-	expect(actorType.enumValues).toEqual(["SR", "MAHASISWA", "ASUS", "DITMAWA"]);
+	expect(actorType.enumValues).toEqual([
+		"SR",
+		"MAHASISWA",
+		"ASUS",
+		"DITMAWA",
+		"SYSTEM_ADMIN",
+	]);
 	expect(systemPrivilege.enumValues).toEqual(["SUPERADMIN"]);
 	expect(userProfiles.userId.primary).toBe(true);
 	expect(userProfiles.actor.notNull).toBe(true);

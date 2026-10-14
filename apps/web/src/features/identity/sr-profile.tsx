@@ -63,19 +63,26 @@ export default function SrProfile() {
 			</Card>
 		);
 	const info = profile.data;
-	const fields = [
-		["Nama lengkap", info.name],
-		["NIM", info.nim],
-		["Email", info.email],
-		["Departemen", info.department],
-		["Jabatan", info.position],
-		["Gedung", info.building],
-	] as const;
+	const fields =
+		info.actor === "SR"
+			? ([
+					["Nama lengkap", info.name],
+					["NIM", info.nim],
+					["Email", info.email],
+					["Departemen", info.department],
+					["Jabatan", info.position],
+					["Gedung", info.building],
+				] as const)
+			: ([
+					["Nama lengkap", info.name],
+					["Username", info.username],
+					["Email", info.email],
+				] as const);
 	return (
 		<section className="max-w-4xl space-y-6">
 			<div>
 				<p className="font-semibold text-primary text-xs uppercase tracking-wider">
-					Akun SR
+					{info.actor === "SR" ? "Akun SR" : "Akun Sistem / SUPERADMIN"}
 				</p>
 				<h1 className="mt-2 font-bold text-2xl tracking-tight">Profil saya</h1>
 				<p className="mt-2 text-muted-foreground text-sm">
@@ -88,7 +95,9 @@ export default function SrProfile() {
 					<div className="min-w-0">
 						<h2 className="break-words font-bold text-xl">{info.name}</h2>
 						<p className="mt-1 text-muted-foreground text-sm">
-							Akun Senior Resident
+							{info.actor === "SR"
+								? "Akun Senior Resident"
+								: "Akun Sistem / SUPERADMIN"}
 						</p>
 					</div>
 				</CardContent>

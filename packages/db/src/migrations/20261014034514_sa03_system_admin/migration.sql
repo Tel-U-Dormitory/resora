@@ -1,0 +1,3 @@
+ALTER TYPE "actor_type" ADD VALUE 'SYSTEM_ADMIN';--> statement-breakpoint
+ALTER TABLE "account_audit_logs" ALTER COLUMN "actor_user_id" DROP NOT NULL;--> statement-breakpoint
+ALTER TABLE "account_audit_logs" DROP CONSTRAINT "account_audit_logs_action_check", ADD CONSTRAINT "account_audit_logs_action_check" CHECK (("action" = 'ACCOUNT_CREATED' AND "actor_user_id" IS NOT NULL) OR ("action" = 'SYSTEM_ADMIN_BOOTSTRAPPED' AND "actor_user_id" IS NULL));
