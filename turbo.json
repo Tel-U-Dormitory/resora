@@ -52,6 +52,7 @@
 		"NODE_EXTRA_CA_CERTS"
 	],
 	"globalEnv": [
+		"AUTH_RATE_LIMIT_ENABLED",
 		"API_UPSTREAM_URL",
 		"SERVER_URL",
 		"DB_POOL_MAX",

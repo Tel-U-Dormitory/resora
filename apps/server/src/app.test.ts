@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, expect, spyOn, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -14,12 +14,14 @@ let writes = 0;
 let identity: Record<string, unknown> | null = null;
 let failContext = false;
 let failAuth = false;
+let authStatus: number | undefined;
 const query = {
 	innerJoin: () => query,
 	leftJoin: () => query,
 	where: async () => (identity ? [identity] : []),
 };
 const db = {
+	$client: { totalCount: 1, idleCount: 0, waitingCount: 3 },
 	select: () => ({ from: () => query }),
 	transaction: () => {
 		writes++;
@@ -30,6 +32,11 @@ const auth = {
 	options: { secret: "synthetic-http-security-test-secret-0000000" },
 	handler: async (request: Request) => {
 		if (failAuth) throw new Error("synthetic-private-store-credential");
+		if (authStatus)
+			return new Response("synthetic-private-response", {
+				status: authStatus,
+				headers: { "x-retry-after": "60" },
+			});
 		return new Response(request.headers.get("x-resora-client-ip"));
 	},
 	api: {
@@ -70,6 +77,7 @@ beforeEach(() => {
 	writes = 0;
 	failContext = false;
 	failAuth = false;
+	authStatus = undefined;
 });
 
 async function post(
@@ -267,4 +275,55 @@ test("auth storage failure returns a private no-store 503 without raw error or s
 	expect(body).toContain("AUTH_UNAVAILABLE");
 	expect(body).not.toContain("synthetic-private");
 	expect(body).not.toContain("stack");
+});
+
+test("auth preserves credential rejection/429/success and sanitizes returned internal errors with safe diagnostics", async () => {
+	const records: unknown[][] = [];
+	const log = spyOn(console, "info").mockImplementation(
+		(...args: unknown[]) => {
+			records.push(args);
+		},
+	);
+	try {
+		for (const [upstream, expected, outcome] of [
+			[200, 200, "SUCCESS"],
+			[401, 401, "REJECTED"],
+			[429, 429, "RATE_LIMITED"],
+			[500, 503, "UNAVAILABLE"],
+			[503, 503, "UNAVAILABLE"],
+		] as const) {
+			authStatus = upstream;
+			const response = await fetch(`${base}/api/auth/sign-in/username`, {
+				method: "POST",
+				headers: { origin, "content-type": "application/json" },
+				body: "{}",
+			});
+			expect(response.status).toBe(expected);
+			expect(response.headers.get("cache-control")).toBe("no-store");
+			if (expected === 429)
+				expect(response.headers.get("x-retry-after")).toBe("60");
+			if (expected === 503) {
+				expect(await response.json()).toEqual({
+					code: "AUTH_UNAVAILABLE",
+					message: "Authentication service unavailable",
+				});
+				expect(records.at(-1)?.[1]).toMatchObject({
+					poolTotal: 1,
+					poolIdle: 0,
+					poolWaiting: 3,
+				});
+			}
+			expect(records.at(-1)?.[0]).toBe("AUTH_REQUEST_RESULT");
+			expect(records.at(-1)?.[1]).toMatchObject({
+				operation: "LOGIN",
+				status: expected,
+				outcome,
+			});
+		}
+		expect(JSON.stringify(records)).not.toMatch(
+			/synthetic-private|password|cookie|198\.51|127\.0|postgresql|token/i,
+		);
+	} finally {
+		log.mockRestore();
+	}
 });

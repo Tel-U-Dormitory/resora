@@ -14,6 +14,19 @@ export function createApp(
 ) {
 	const app = express();
 	const trustedOrigin = new URL(origin).origin;
+	const authHandler = toNodeHandler(async (request) => {
+		const response = await services.auth.handler(request);
+		// Better Auth can return an internal-error response instead of throwing.
+		return response.status >= 500
+			? Response.json(
+					{
+						code: "AUTH_UNAVAILABLE",
+						message: "Authentication service unavailable",
+					},
+					{ status: 503 },
+				)
+			: response;
+	});
 	app.disable("x-powered-by");
 	app.use((_req, res, next) => {
 		res.set({
@@ -51,11 +64,44 @@ export function createApp(
 		}),
 	);
 	app.all("/api/auth{/*path}", async (req, res) => {
+		const operation =
+			req.path === "/api/auth/sign-in/username"
+				? "LOGIN"
+				: req.path === "/api/auth/change-password"
+					? "PASSWORD_CHANGE"
+					: null;
+		if (req.method === "POST" && operation) {
+			const started = Date.now();
+			res.once("finish", () => {
+				const status = res.statusCode;
+				const pool = services.db.$client;
+				console.info("AUTH_REQUEST_RESULT", {
+					operation,
+					status,
+					outcome:
+						status === 429
+							? "RATE_LIMITED"
+							: status === 503
+								? "UNAVAILABLE"
+								: status >= 200 && status < 300
+									? "SUCCESS"
+									: "REJECTED",
+					durationMs: Date.now() - started,
+					...(status === 503 && pool
+						? {
+								poolTotal: pool.totalCount,
+								poolIdle: pool.idleCount,
+								poolWaiting: pool.waitingCount,
+							}
+						: {}),
+				});
+			});
+		}
 		// Never accept an arbitrary client-supplied forwarded IP as a limiter key.
 		// Trust proxy stays false until deployment's proxy boundary is approved.
 		req.headers["x-resora-client-ip"] = req.socket.remoteAddress || "127.0.0.1";
 		try {
-			await toNodeHandler(services.auth)(req, res);
+			await authHandler(req, res);
 		} catch {
 			// Storage/migration outages must fail closed without Express logging a raw error.
 			if (!res.headersSent) {

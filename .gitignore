@@ -59,3 +59,4 @@ temp
 
 # Local account imports and plaintext credential exports (never commit).
 /.private/
+.env*

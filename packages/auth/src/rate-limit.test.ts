@@ -20,9 +20,10 @@ type Row = { id: string; key: string; count: number; lastRequest: number };
 
 // Adapter doubles exercise Better Auth's actual database consume algorithm.
 // This is offline evidence, not PostgreSQL concurrency evidence.
-async function sharedInstances() {
+async function sharedInstances(enabled?: "true" | "false") {
 	const rows = new Map<string, Row>();
-	const auths = [createAuth(config, db), createAuth(config, db)] as const;
+	const selected = { ...config, AUTH_RATE_LIMIT_ENABLED: enabled };
+	const auths = [createAuth(selected, db), createAuth(selected, db)] as const;
 	for (const auth of auths) {
 		const { adapter } = await auth.$context;
 		adapter.findMany = async ({ model, where }) => {
@@ -171,4 +172,58 @@ test("a Production process cannot downgrade shared storage through local config"
 		if (previous === undefined) delete process.env.NODE_ENV;
 		else process.env.NODE_ENV = previous;
 	}
+});
+
+test("rate limiter defaults on, accepts explicit true/false and rejects untyped invalid config", () => {
+	for (const enabled of [undefined, "true", "false"] as const) {
+		const auth = createAuth(
+			{ ...config, AUTH_RATE_LIMIT_ENABLED: enabled },
+			db,
+		);
+		expect(auth.options.rateLimit.enabled).toBe(enabled !== "false");
+		expect(auth.options.rateLimit.storage).toBe("database");
+		expect(auth.options.rateLimit.customRules).toEqual({
+			"/sign-in/username": { window: 60, max: 5 },
+			"/change-password": { window: 60, max: 5 },
+		});
+	}
+	for (const enabled of ["off", "invalid", false, 0, null])
+		expect(() =>
+			createAuth(
+				{
+					...config,
+					AUTH_RATE_LIMIT_ENABLED: enabled,
+				} as unknown as Parameters<typeof createAuth>[0],
+				db,
+			),
+		).toThrow("AUTH_RATE_LIMIT_ENABLED must be true or false");
+});
+
+test("explicit-on retains shared counters; explicit-off never consumes or reads limiter storage", async () => {
+	const enabled = await sharedInstances("true");
+	for (let attempt = 0; attempt < 6; attempt++)
+		expect(
+			(await request(enabled.auths[attempt % 2 ? 1 : 0], "sign-in/username"))
+				.status,
+		).toBe(attempt < 5 ? 400 : 429);
+	expect(enabled.rows.size).toBe(1);
+	const disabled = await sharedInstances("false");
+	for (const auth of disabled.auths) {
+		const { adapter } = await auth.$context;
+		adapter.findMany = async () => {
+			throw new Error("Limiter storage must not be read");
+		};
+		adapter.create = async () => {
+			throw new Error("Limiter counter must not be created");
+		};
+		adapter.incrementOne = async () => {
+			throw new Error("Limiter counter must not be consumed");
+		};
+	}
+	for (const path of ["sign-in/username", "change-password"])
+		for (let attempt = 0; attempt < 8; attempt++) {
+			const response = await request(disabled.auths[attempt % 2 ? 1 : 0], path);
+			expect(response.status).toBe(400);
+		}
+	expect(disabled.rows.size).toBe(0);
 });
