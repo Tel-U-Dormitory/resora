@@ -12,11 +12,19 @@ import { attendanceQueryKeys, queryClient, trpc } from "@/utils/trpc";
 import { refreshAttendanceQueries } from "./attendance-queries";
 import EventRecap from "./event-recap";
 import { eventErrorMessage, formatEventTime, StatusBadge } from "./event-ui";
+import { participantPage } from "./participant-list";
 
 export default function EventDetail({ eventId }: { eventId: string }) {
 	const actionLock = useRef(false);
 	const [activeAction, setActiveAction] = useState<string | null>(null);
 	const [feedback, setFeedback] = useState("");
+	const [invitationToggle, setInvitationToggle] = useState<{
+		eventId: string;
+		status: string;
+		open: boolean;
+	} | null>(null);
+	const [invitationSearch, setInvitationSearch] = useState("");
+	const [invitationPage, setInvitationPage] = useState(1);
 	const publish = useMutation(trpc.attendance.publish.mutationOptions());
 	const close = useMutation(trpc.attendance.close.mutationOptions());
 	const detail = useQuery({
@@ -135,8 +143,16 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 		qr.data?.state === "ACTIVE" && !qrUsable ? "EXPIRED" : qr.data?.state;
 	const invited =
 		event.status === "DRAFT" ? preview.data?.participants : participants;
+	const invitationsOpen =
+		invitationToggle?.eventId === eventId &&
+		invitationToggle.status === event.status
+			? invitationToggle.open
+			: event.status === "DRAFT";
+	const visibleInvitations = participantPage<
+		NonNullable<typeof invited>[number]
+	>(invited ?? [], invitationSearch, invitationPage);
 	return (
-		<section className="space-y-6">
+		<section className="min-w-0 space-y-6">
 			<nav aria-label="Breadcrumb event" className="text-sm">
 				<ol className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
 					<li>
@@ -554,13 +570,47 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 								: "Daftar ini menyimpan informasi peserta saat event dipublikasikan."
 						}
 						icon={<Users size={20} aria-hidden="true" />}
+						className="flex-col sm:flex-row"
 						action={
-							<span className="whitespace-nowrap rounded-full bg-muted px-3 py-1 font-semibold text-sm">
-								{invited?.length ?? 0} peserta
-							</span>
+							<div className="flex flex-wrap items-center gap-2">
+								<span className="whitespace-nowrap rounded-full bg-muted px-3 py-1 font-semibold text-sm">
+									{invited?.length ?? 0} peserta
+								</span>
+								<Button
+									variant="outline"
+									size="sm"
+									aria-expanded={invitationsOpen}
+									aria-controls="event-invitations"
+									onClick={() =>
+										setInvitationToggle({
+											eventId,
+											status: event.status,
+											open: !invitationsOpen,
+										})
+									}
+								>
+									{invitationsOpen ? "Sembunyikan" : "Lihat undangan"}
+								</Button>
+							</div>
 						}
 					/>
-					<CardContent className="space-y-3">
+					<CardContent
+						id="event-invitations"
+						hidden={!invitationsOpen}
+						className="space-y-3"
+					>
+						<label className="block space-y-2 text-sm">
+							Cari nama atau NIM
+							<input
+								type="search"
+								value={invitationSearch}
+								onChange={(e) => {
+									setInvitationSearch(e.target.value);
+									setInvitationPage(1);
+								}}
+								className="focus-ring block w-full rounded-lg border border-border bg-background px-3 py-2"
+							/>
+						</label>
 						{event.status === "DRAFT" && preview.isPending && (
 							<p role="status" className="text-muted-foreground text-sm">
 								Memuat preview peserta…
@@ -593,6 +643,11 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 								Belum ada peserta dalam daftar undangan.
 							</p>
 						)}
+						{Boolean(invited?.length) && visibleInvitations.matching === 0 && (
+							<p className="py-4 text-muted-foreground text-sm">
+								Tidak ada peserta yang sesuai dengan pencarian.
+							</p>
+						)}
 						{Boolean(invited?.length) && (
 							<div className="overflow-x-auto rounded-lg border border-border">
 								<table className="w-full text-left text-sm">
@@ -611,7 +666,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 										</tr>
 									</thead>
 									<tbody>
-										{invited?.map((sr) => (
+										{visibleInvitations.rows.map((sr) => (
 											<tr
 												key={sr.userId}
 												className="border-border border-b last:border-0"
@@ -634,6 +689,33 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 								</table>
 							</div>
 						)}
+						<div className="flex flex-wrap items-center justify-between gap-3">
+							<p className="text-muted-foreground text-sm">
+								Halaman {visibleInvitations.page} dari{" "}
+								{visibleInvitations.pages} · {visibleInvitations.matching}{" "}
+								peserta
+							</p>
+							<div className="flex gap-2">
+								<Button
+									variant="outline"
+									size="sm"
+									disabled={visibleInvitations.page === 1}
+									onClick={() => setInvitationPage(visibleInvitations.page - 1)}
+								>
+									Sebelumnya
+								</Button>
+								<Button
+									variant="outline"
+									size="sm"
+									disabled={
+										visibleInvitations.page === visibleInvitations.pages
+									}
+									onClick={() => setInvitationPage(visibleInvitations.page + 1)}
+								>
+									Berikutnya
+								</Button>
+							</div>
+						</div>
 					</CardContent>
 				</Card>
 			)}

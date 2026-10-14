@@ -49,7 +49,7 @@ export default function PasswordChangeForm({
 				<form
 					method="post"
 					noValidate
-					className="space-y-4"
+					className={mandatory ? "space-y-4" : "max-w-2xl space-y-4"}
 					onSubmit={async (event) => {
 						event.preventDefault();
 						if (pending) return;

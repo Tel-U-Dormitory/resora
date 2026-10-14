@@ -45,7 +45,7 @@ export default function SrProfile() {
 	}, [profile.error, router]);
 	if (profile.isPending)
 		return (
-			<div role="status" className="max-w-4xl space-y-4">
+			<div role="status" className="min-w-0 space-y-4">
 				<p className="text-muted-foreground text-sm">Memuat profil…</p>
 				<Skeleton className="h-28 w-full rounded-xl" />
 				<Skeleton className="h-64 w-full rounded-xl" />
@@ -53,7 +53,7 @@ export default function SrProfile() {
 		);
 	if (profile.error)
 		return (
-			<Card className="max-w-4xl">
+			<Card>
 				<CardContent className="space-y-4">
 					<p role="alert" className="text-destructive text-sm">
 						{queryErrorMessage(profile.error)}
@@ -79,7 +79,7 @@ export default function SrProfile() {
 					["Email", info.email],
 				] as const);
 	return (
-		<section className="max-w-4xl space-y-6">
+		<section className="min-w-0 space-y-6">
 			<div>
 				<p className="font-semibold text-primary text-xs uppercase tracking-wider">
 					{info.actor === "SR" ? "Akun SR" : "Akun Sistem / SUPERADMIN"}
