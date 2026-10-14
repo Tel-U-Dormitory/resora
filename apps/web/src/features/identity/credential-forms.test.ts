@@ -106,6 +106,26 @@ test("password change keeps the mandatory redirect and gives voluntary changes l
 	expect(revokesOtherSessions).toBe(true);
 });
 
+test("login and protected layouts redirect using the derived password requirement, not the stored flag", () => {
+	for (const path of [
+		"login-form.tsx",
+		"../../app/login/page.tsx",
+		"../../app/(authenticated)/layout.tsx",
+		"../../app/(authenticated)/admin/users/layout.tsx",
+	]) {
+		const source = readFileSync(new URL(path, import.meta.url), "utf8");
+		expect(source).toContain(".requiresPasswordChange");
+		expect(source).not.toContain(".mustChangePassword");
+	}
+	const mandatoryPage = readFileSync(
+		new URL("../../app/change-password/page.tsx", import.meta.url),
+		"utf8",
+	);
+	expect(mandatoryPage).toContain(
+		'if (!session.requiresPasswordChange) redirect("/profile")',
+	);
+});
+
 test("admin credential delivery avoids persistent/mutation/query storage and clears the success state", () => {
 	const text = readFileSync(
 		new URL("account-create-form.tsx", import.meta.url),

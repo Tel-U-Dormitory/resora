@@ -75,8 +75,9 @@ function loginFixture() {
 		queryClient: {
 			clear: () => {},
 			fetchQuery: async () =>
-				({ mustChangePassword: false }) as {
+				({ mustChangePassword: true, requiresPasswordChange: false }) as {
 					mustChangePassword: boolean;
+					requiresPasswordChange: boolean;
 				} | null,
 		},
 		trpc: { identity: { session: { queryOptions: () => ({}) } } },
@@ -95,7 +96,7 @@ function loginFixture() {
 }
 
 test("login stays pending through session lookup/navigation and blocks repeated submits", async () => {
-	for (const mustChangePassword of [false, true]) {
+	for (const requiresPasswordChange of [false, true]) {
 		const fixture = loginFixture();
 		let release: () => void = () => {};
 		let started: () => void = () => {};
@@ -108,7 +109,7 @@ test("login stays pending through session lookup/navigation and blocks repeated 
 		fixture.scope.queryClient.fetchQuery = async () => {
 			started();
 			await gate;
-			return { mustChangePassword };
+			return { mustChangePassword: true, requiresPasswordChange };
 		};
 		const submit = fixture.submit();
 		const first = submit(event);
@@ -121,7 +122,7 @@ test("login stays pending through session lookup/navigation and blocks repeated 
 		expect(fixture.observed.status).toBe("redirecting");
 		expect(fixture.submitting.current).toBe(true);
 		expect(fixture.observed.paths).toEqual([
-			mustChangePassword ? "/change-password" : "/dashboard",
+			requiresPasswordChange ? "/change-password" : "/dashboard",
 		]);
 		await submit(event);
 		expect(fixture.observed.calls).toBe(1);

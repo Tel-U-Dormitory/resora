@@ -14,11 +14,15 @@ let writes = 0;
 let identity: Record<string, unknown> | null = null;
 let failContext = false;
 let failAuth = false;
+let failQuery = false;
 let authStatus: number | undefined;
 const query = {
 	innerJoin: () => query,
 	leftJoin: () => query,
-	where: async () => (identity ? [identity] : []),
+	where: async () => {
+		if (failQuery) throw new Error("synthetic-private-query");
+		return identity ? [identity] : [];
+	},
 };
 const db = {
 	$client: { totalCount: 1, idleCount: 0, waitingCount: 3 },
@@ -77,7 +81,105 @@ beforeEach(() => {
 	writes = 0;
 	failContext = false;
 	failAuth = false;
+	failQuery = false;
 	authStatus = undefined;
+});
+
+test("initial-password SR can use protected API; live grant adds the mandatory gate", async () => {
+	identity = { ...identity, mustChangePassword: true };
+	expect((await fetch(`${base}/trpc/privateData`)).status).toBe(200);
+	const response = await fetch(`${base}/trpc/identity.session`);
+	expect(response.status).toBe(200);
+	expect(
+		((await response.json()) as { result: { data: unknown } }).result.data,
+	).toMatchObject({
+		mustChangePassword: true,
+		requiresPasswordChange: false,
+		canManageInternalEvents: true,
+		canManageInternalAttendanceManually: true,
+	});
+	identity = { ...identity, isSuperadmin: true };
+	expect((await fetch(`${base}/trpc/privateData`)).status).toBe(403);
+	identity = { ...identity, actor: "SYSTEM_ADMIN", srUserId: null };
+	expect((await fetch(`${base}/trpc/privateData`)).status).toBe(403);
+	identity = { ...identity, mustChangePassword: false };
+	expect((await fetch(`${base}/trpc/privateData`)).status).toBe(200);
+	identity = { ...identity, isSuperadmin: false };
+	expect((await fetch(`${base}/trpc/privateData`)).status).toBe(401);
+});
+
+test("session/tRPC 5xx diagnostics cover context and resolver failures without sensitive fields", async () => {
+	const records: unknown[][] = [];
+	const log = spyOn(console, "info").mockImplementation(
+		(...args: unknown[]) => {
+			records.push(args);
+		},
+	);
+	try {
+		for (const [path, operation, failure, status, outcome] of [
+			["/api/auth/get-session", "AUTH_SESSION", "auth", 503, "UNAVAILABLE"],
+			["/trpc/identity.session", "IDENTITY_SESSION", "context", 500, "ERROR"],
+			["/trpc/identity.session", "IDENTITY_SESSION", "query", 500, "ERROR"],
+			["/trpc/privateData", "TRPC", "query", 500, "ERROR"],
+			[
+				"/trpc/privateData,identity.session?batch=1",
+				"TRPC",
+				"context",
+				500,
+				"ERROR",
+			],
+		] as const) {
+			failAuth = failure === "auth";
+			failContext = failure === "context";
+			failQuery = failure === "query";
+			const result = await fetch(
+				`${base}${path}${path.includes("?") ? "&" : "?"}sensitive=synthetic-query-secret`,
+				{
+					headers: { cookie: "synthetic-cookie-secret" },
+				},
+			);
+			expect(result.status).toBe(status);
+			expect(await result.text()).not.toContain("synthetic-private");
+			const record = records.at(-1)?.[1] as Record<string, unknown>;
+			expect(record).toMatchObject({
+				operation,
+				status,
+				outcome,
+				poolTotal: 1,
+				poolIdle: 0,
+				poolWaiting: 3,
+			});
+			expect(typeof record.durationMs).toBe("number");
+			expect(record.durationMs as number).toBeGreaterThanOrEqual(0);
+			expect(Object.keys(record).sort()).toEqual([
+				"durationMs",
+				"operation",
+				"outcome",
+				"poolIdle",
+				"poolTotal",
+				"poolWaiting",
+				"status",
+			]);
+		}
+		expect(records).toHaveLength(5);
+		expect(JSON.stringify(records)).not.toMatch(
+			/synthetic|cookie|secret|query|127\.0|postgresql|stack/i,
+		);
+		failAuth = failContext = failQuery = false;
+		for (const path of [
+			"/api/auth/get-session",
+			"/trpc/identity.session",
+			"/trpc/privateData",
+		])
+			expect((await fetch(`${base}${path}`)).status).toBe(200);
+		identity = null;
+		expect((await fetch(`${base}/trpc/privateData`)).status).toBe(401);
+		authStatus = 429;
+		expect((await fetch(`${base}/api/auth/get-session`)).status).toBe(429);
+		expect(records).toHaveLength(5); // Session success and non-5xx responses stay quiet.
+	} finally {
+		log.mockRestore();
+	}
 });
 
 async function post(
@@ -207,7 +309,12 @@ test("inactive and first-password-change users denied; forged input cannot eleva
 		[false, false, 401],
 		[true, true, 403],
 	] as const) {
-		identity = { ...identity, isActive, mustChangePassword };
+		identity = {
+			...identity,
+			isActive,
+			mustChangePassword,
+			isSuperadmin: true,
+		};
 		expect(
 			(
 				await post("attendance.manualInsert", {

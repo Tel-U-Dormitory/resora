@@ -8,6 +8,25 @@ import {
 	hasSuperadminPrivilege,
 } from "./identity-policy";
 
+test("regular SR initial-password flag preserves department permissions", () => {
+	for (const [department, position, internal, manual, general] of [
+		["HCO", "ANGGOTA", true, false, false],
+		["HCO", "KADEP", true, true, false],
+		["INTI", "KETUM", false, false, false],
+		["ADAPTIF", "ANGGOTA", false, false, true],
+	] as const) {
+		const current = {
+			...identity(department, position),
+			mustChangePassword: true,
+		};
+		expect(canAccessPersonalSr(current)).toBe(true);
+		expect(canManageInternalEvent(current)).toBe(internal);
+		expect(canManageInternalAttendanceManually(current)).toBe(manual);
+		expect(canOperateGeneralActivity(current)).toBe(general);
+		expect(hasSuperadminPrivilege(current)).toBe(false);
+	}
+});
+
 const identity = (
 	departmentCode: string,
 	positionCode: string,

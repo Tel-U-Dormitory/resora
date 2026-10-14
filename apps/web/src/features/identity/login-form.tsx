@@ -81,7 +81,9 @@ export default function LoginForm({ expired = false }: { expired?: boolean }) {
 							}
 							setStatus("redirecting");
 							router.replace(
-								identity.mustChangePassword ? "/change-password" : "/dashboard",
+								identity.requiresPasswordChange
+									? "/change-password"
+									: "/dashboard",
 							);
 							redirecting = true;
 						} catch {

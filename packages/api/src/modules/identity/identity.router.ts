@@ -1,4 +1,7 @@
-import { getActiveIdentity } from "@resora/auth/sr-access";
+import {
+	getActiveIdentity,
+	requiresPasswordChange,
+} from "@resora/auth/sr-access";
 import { user } from "@resora/db/schema/auth";
 import {
 	buildings,
@@ -88,6 +91,7 @@ export const identityRouter = router({
 				? { actor: "SR" as const, nim: identity.nim }
 				: { actor: "SYSTEM_ADMIN" as const, username: identity.username }),
 			mustChangePassword: identity.mustChangePassword,
+			requiresPasswordChange: requiresPasswordChange(identity),
 			name: ctx.session.user.name,
 			canManageInternalEvents: canManageInternalEvent(identity),
 			canManageInternalAttendanceManually:

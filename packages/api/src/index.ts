@@ -1,4 +1,7 @@
-import { getActiveIdentity } from "@resora/auth/sr-access";
+import {
+	getActiveIdentity,
+	requiresPasswordChange,
+} from "@resora/auth/sr-access";
 import { initTRPC, TRPCError } from "@trpc/server";
 
 import type { Context } from "./context";
@@ -40,7 +43,7 @@ export const sessionProcedure = t.procedure.use(async ({ ctx, next }) => {
 });
 
 export const protectedProcedure = sessionProcedure.use(({ ctx, next }) => {
-	if (ctx.identity.mustChangePassword) {
+	if (requiresPasswordChange(ctx.identity)) {
 		throw new TRPCError({
 			code: "FORBIDDEN",
 			message: "PASSWORD_CHANGE_REQUIRED",

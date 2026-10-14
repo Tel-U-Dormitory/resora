@@ -578,7 +578,7 @@ const target = process.env.RESORA_IDENTITY_TEST_DB_URL;
 			expect((await call("better-auth.session_token=invalid")).status).toBe(
 				401,
 			);
-			expect((await call(await login(5))).status).toBe(403);
+			expect((await call(await login(5))).status).toBe(200);
 			const cookie = await login(0);
 			expect((await call(cookie)).status).toBe(200);
 			await db

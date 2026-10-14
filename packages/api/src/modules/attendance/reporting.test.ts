@@ -915,6 +915,27 @@ test("protected Phase 6 routes reject anonymous, inactive and password-change ga
 		);
 	}
 });
+test("KADEP HCO initial-password flag permits manual writes; a live SUPERADMIN grant still gates", async () => {
+	const f = fixture();
+	f.identity.mustChangePassword = true;
+	await manualInsert(f.db, f.identity, f.input);
+	expect(f.state.audits).toHaveLength(1);
+	await manualCorrect(f.db, f.identity, {
+		...f.correction,
+		attendanceId: f.state.record?.id as string,
+	});
+	expect(f.state.audits).toHaveLength(2);
+	expect(f.state.audits[1]?.actorUserId).toBe(f.identity.userId);
+	const privileged = fixture();
+	privileged.identity.mustChangePassword = true;
+	privileged.state.superadmin = true; // Re-read after event/session locks, not a stale request claim.
+	await expect(
+		manualInsert(privileged.db, privileged.identity, privileged.input),
+	).rejects.toThrow();
+	expect(privileged.state.record).toBeNull();
+	expect(privileged.state.audits).toHaveLength(0);
+});
+
 test("audit schema/new migration preserve chain and enforce append-only, origin and binding", () => {
 	const config = getTableConfig(attendanceAuditLogs);
 	expect(config.foreignKeys).toHaveLength(4);

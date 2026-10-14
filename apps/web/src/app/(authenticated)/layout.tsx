@@ -9,7 +9,7 @@ export default async function AuthenticatedLayout({
 }) {
 	const session = await getSrSession();
 	if (!session) redirect("/login?reason=session");
-	if (session.mustChangePassword) redirect("/change-password");
+	if (session.requiresPasswordChange) redirect("/change-password");
 	return (
 		<AppShell
 			name={session.name}

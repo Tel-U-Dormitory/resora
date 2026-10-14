@@ -91,7 +91,11 @@ for (const [label, identity, code] of [
 	["inactive", { isActive: false }, "UNAUTHORIZED"],
 	["non-SR", { actor: "MAHASISWA" }, "UNAUTHORIZED"],
 	["missing NIM", { nim: null }, "UNAUTHORIZED"],
-	["mandatory password change", { mustChangePassword: true }, "FORBIDDEN"],
+	[
+		"SUPERADMIN mandatory password change",
+		{ mustChangePassword: true, isSuperadmin: true },
+		"FORBIDDEN",
+	],
 ] as const)
 	test(`${label} cannot read profile`, async () => {
 		const f = fixture(identity);
@@ -103,6 +107,32 @@ for (const [label, identity, code] of [
 		}
 		expect(f.selections).toHaveLength(1);
 	});
+
+test("regular SR keeps its stored flag but can read profile and normal session permissions", async () => {
+	const f = fixture({ mustChangePassword: true, isSuperadmin: false });
+	expect(await f.caller.profile()).toMatchObject({ nim: "0000000001" });
+	const session = fixture({ mustChangePassword: true, isSuperadmin: false });
+	expect(await session.caller.session()).toMatchObject({
+		mustChangePassword: true,
+		requiresPasswordChange: false,
+		canManageInternalEvents: true,
+		canManageInternalAttendanceManually: true,
+		isSuperadmin: false,
+	});
+});
+
+test("privileged session reports the required gate even before admin permissions are available", async () => {
+	for (const actor of ["SR", "SYSTEM_ADMIN"]) {
+		const f = fixture({ actor, mustChangePassword: true, isSuperadmin: true });
+		expect(await f.caller.session()).toMatchObject({
+			mustChangePassword: true,
+			requiresPasswordChange: true,
+			canManageInternalEvents: false,
+			canManageInternalAttendanceManually: false,
+			isSuperadmin: false,
+		});
+	}
+});
 
 test("session permissions reflect DB SUPERADMIN grant/revocation without changing assignment", async () => {
 	for (const isSuperadmin of [true, false]) {

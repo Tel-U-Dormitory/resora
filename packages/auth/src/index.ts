@@ -11,7 +11,7 @@ import {
 import { username } from "better-auth/plugins";
 import { and, eq, inArray } from "drizzle-orm";
 
-import { getActiveIdentity } from "./sr-access";
+import { getActiveIdentity, requiresPasswordChange } from "./sr-access";
 
 export type AuthConfig = {
 	BETTER_AUTH_URL: string;
@@ -137,7 +137,10 @@ export function createAuth(
 						message: "Authentication required",
 					});
 				}
-				if (profile.mustChangePassword && !passwordGatePaths.has(ctx.path)) {
+				if (
+					requiresPasswordChange(profile) &&
+					!passwordGatePaths.has(ctx.path)
+				) {
 					throw new APIError("FORBIDDEN", {
 						code: "PASSWORD_CHANGE_REQUIRED",
 						message: "Password change required",

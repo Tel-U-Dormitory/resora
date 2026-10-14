@@ -87,3 +87,16 @@ export type ActiveIdentity = NonNullable<
 export type ActiveSrIdentity = NonNullable<
 	Awaited<ReturnType<typeof getActiveSr>>
 >;
+
+// Preserve the stored flag; only privileged accounts must rotate before access.
+export function requiresPasswordChange(
+	identity: Pick<
+		ActiveIdentity,
+		"actor" | "mustChangePassword" | "isSuperadmin"
+	>,
+) {
+	return (
+		identity.mustChangePassword &&
+		(identity.actor === "SYSTEM_ADMIN" || identity.isSuperadmin === true)
+	);
+}

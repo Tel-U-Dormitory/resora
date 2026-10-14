@@ -187,10 +187,10 @@ const target = process.env.RESORA_IDENTITY_TEST_DB_URL;
 				canManageInternalAttendanceManually(await getActiveSr(db, id(1))),
 			).toBe(true);
 		});
-		test("anonymous/invalid sessions and first-password-change accounts fail existing protected API", async () => {
+		test("anonymous/invalid sessions fail; regular SR initial credentials permit protected API", async () => {
 			expect((await rpc()).status).toBe(401);
 			expect((await rpc("better-auth.session_token=invalid")).status).toBe(401);
-			expect((await rpc(await login(4))).status).toBe(403);
+			expect((await rpc(await login(4))).status).toBe(200);
 		});
 		test("deactivation blocks an existing session and all policies", async () => {
 			const cookie = await login(0);

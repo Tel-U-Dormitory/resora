@@ -28,6 +28,55 @@ export function createApp(
 			: response;
 	});
 	app.disable("x-powered-by");
+	// Observe the final HTTP status, including failures before a tRPC resolver runs.
+	app.use((req, res, next) => {
+		const authMutation =
+			req.method === "POST" &&
+			(req.path === "/api/auth/sign-in/username" ||
+				req.path === "/api/auth/change-password");
+		const operation = authMutation
+			? req.path === "/api/auth/sign-in/username"
+				? "LOGIN"
+				: "PASSWORD_CHANGE"
+			: req.path === "/api/auth/get-session"
+				? "AUTH_SESSION"
+				: req.path === "/trpc/identity.session"
+					? "IDENTITY_SESSION"
+					: req.path === "/trpc" || req.path.startsWith("/trpc/")
+						? "TRPC"
+						: null;
+		if (operation) {
+			const started = Date.now();
+			res.once("finish", () => {
+				const status = res.statusCode;
+				if (!authMutation && status < 500) return;
+				const pool = services.db.$client;
+				console.info("AUTH_REQUEST_RESULT", {
+					operation,
+					status,
+					outcome:
+						status === 503
+							? "UNAVAILABLE"
+							: status >= 500
+								? "ERROR"
+								: status === 429
+									? "RATE_LIMITED"
+									: status >= 200 && status < 300
+										? "SUCCESS"
+										: "REJECTED",
+					durationMs: Date.now() - started,
+					...(status >= 500 && pool
+						? {
+								poolTotal: pool.totalCount,
+								poolIdle: pool.idleCount,
+								poolWaiting: pool.waitingCount,
+							}
+						: {}),
+				});
+			});
+		}
+		next();
+	});
 	app.use((_req, res, next) => {
 		res.set({
 			"X-Content-Type-Options": "nosniff",
@@ -64,39 +113,6 @@ export function createApp(
 		}),
 	);
 	app.all("/api/auth{/*path}", async (req, res) => {
-		const operation =
-			req.path === "/api/auth/sign-in/username"
-				? "LOGIN"
-				: req.path === "/api/auth/change-password"
-					? "PASSWORD_CHANGE"
-					: null;
-		if (req.method === "POST" && operation) {
-			const started = Date.now();
-			res.once("finish", () => {
-				const status = res.statusCode;
-				const pool = services.db.$client;
-				console.info("AUTH_REQUEST_RESULT", {
-					operation,
-					status,
-					outcome:
-						status === 429
-							? "RATE_LIMITED"
-							: status === 503
-								? "UNAVAILABLE"
-								: status >= 200 && status < 300
-									? "SUCCESS"
-									: "REJECTED",
-					durationMs: Date.now() - started,
-					...(status === 503 && pool
-						? {
-								poolTotal: pool.totalCount,
-								poolIdle: pool.idleCount,
-								poolWaiting: pool.waitingCount,
-							}
-						: {}),
-				});
-			});
-		}
 		// Never accept an arbitrary client-supplied forwarded IP as a limiter key.
 		// Trust proxy stays false until deployment's proxy boundary is approved.
 		req.headers["x-resora-client-ip"] = req.socket.remoteAddress || "127.0.0.1";

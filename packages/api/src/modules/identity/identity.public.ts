@@ -1,4 +1,8 @@
-import { type ActiveIdentity, getActiveIdentity } from "@resora/auth/sr-access";
+import {
+	type ActiveIdentity,
+	getActiveIdentity,
+	requiresPasswordChange,
+} from "@resora/auth/sr-access";
 import type { Database, DatabaseTransaction } from "@resora/db";
 import { isValidSrAssignment } from "@resora/db/organization";
 import { user } from "@resora/db/schema/auth";
@@ -88,14 +92,31 @@ export async function getActiveSrDirectory(
 }
 
 // Lock only the target's live identity/assignment/reference rows during check-in.
-// Roster building still includes invited first-login accounts; only scan is gated.
+// Regular SR may scan with initial credentials; privileged SR retain the live gate.
 export async function getCheckInSr(
 	db: Database | DatabaseTransaction,
 	userId: string,
 ) {
 	const { candidates } = await readActiveSrDirectory(db, true, userId);
 	const candidate = candidates[0];
-	return candidate && !candidate.mustChangePassword ? candidate : null;
+	if (!candidate) return null;
+	const grants = await db
+		.select({ userId: systemPrivileges.userId })
+		.from(systemPrivileges)
+		.where(
+			and(
+				eq(systemPrivileges.userId, userId),
+				eq(systemPrivileges.privilegeCode, "SUPERADMIN"),
+			),
+		)
+		.for("share");
+	return requiresPasswordChange({
+		actor: "SR",
+		mustChangePassword: candidate.mustChangePassword,
+		isSuperadmin: grants.length > 0,
+	})
+		? null
+		: candidate;
 }
 
 // Call after event/session locks: reload eligible identity and the latest explicit grant.
@@ -126,8 +147,9 @@ export async function getLiveOperationalIdentity(
 		)
 		.for("share");
 	const identity = await getActiveIdentity(tx, userId);
-	if (!identity || identity.mustChangePassword) return null;
-	if (identity.actor === "SR" && !(await getCheckInSr(tx, userId))) return null;
+	if (!identity || requiresPasswordChange(identity)) return null;
+	if (identity.actor === "SR" && !(await getActiveSrCandidate(tx, userId)))
+		return null;
 	return identity;
 }
 

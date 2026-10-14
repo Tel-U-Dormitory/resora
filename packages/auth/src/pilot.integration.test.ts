@@ -359,10 +359,10 @@ test("auth integration guard rejects remote and ordinary application targets", (
 			);
 			expect((await rpc(sessionCookie)).status).toBe(401);
 		});
-		test("first-login gate blocks APIs and releases only after verified password change", async () => {
+		test("regular SR initial credentials permit APIs and voluntary rotation revokes old sessions", async () => {
 			const originalCookie = await login(3);
 			const otherCookie = await login(3);
-			expect((await rpc(originalCookie)).status).toBe(403);
+			expect((await rpc(originalCookie)).status).toBe(200);
 			expect(
 				(await rpc(originalCookie, "identity.session")).body.result.data
 					?.mustChangePassword,
@@ -379,7 +379,7 @@ test("auth integration guard rejects remote and ordinary application targets", (
 				originalCookie,
 			);
 			expect(unchanged.status).toBe(400);
-			expect((await rpc(originalCookie)).status).toBe(403);
+			expect((await rpc(originalCookie)).status).toBe(200);
 			const response = await native(
 				"change-password",
 				{ currentPassword: password, newPassword, revokeOtherSessions: false },
