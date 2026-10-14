@@ -16,6 +16,8 @@ PM supplies administrative username (starts with a letter; 3–30 letters/digits
 
 Set `RESORA_SYSTEM_ADMIN_BOOTSTRAP_DB_URL` privately for this process only; there is no `.env` load or DATABASE_URL/PROD_* fallback. Production also requires `RESORA_SYSTEM_ADMIN_BOOTSTRAP_SSL_CA` containing its verified CA PEM. Use an explicit Direct/Session connection on 5432 to database postgres; project hostname or pooler username must match `--project-reference`, and the SQL role must be postgres. Do not put URLs/passwords in command arguments, shell history or shared logs.
 
+TLS preflight checks an established bootstrap `pg` connection against the validated hostname: explicit nonblank CA, `rejectUnauthorized=true`, encrypted/authorized live TLS socket, and peer-certificate hostname validation. Missing evidence or connection/certificate errors stop bootstrap without writes. Direct Connection additionally requires `pg_stat_ssl.ssl=true` on that same connection. Session Pooler does **not** use `pg_stat_ssl` as client-side TLS evidence: it describes the pooler-to-PostgreSQL hop, not the bootstrap-client-to-pooler hop. Never disable verification or replace the CA to suppress an error. The common runtime pool configuration is unchanged.
+
 Production preflight **only after approval**, with PM-supplied non-secret argument variables:
 
 ```powershell

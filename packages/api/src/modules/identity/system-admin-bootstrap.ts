@@ -1,6 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import {
+	type ConnectionOptions,
+	checkServerIdentity,
+	TLSSocket,
+} from "node:tls";
 import { type AuthConfig, createAuth } from "@resora/auth";
 import type { Database } from "@resora/db";
 import { user } from "@resora/db/schema/auth";
@@ -86,12 +91,71 @@ export function validateBootstrapTarget(target: BootstrapTarget) {
 	return parsed;
 }
 
+export async function verifyBootstrapTls(
+	db: Database,
+	target: BootstrapTarget,
+) {
+	const parsed = validateBootstrapTarget(target);
+	if (target.mode !== "production") return;
+	const ssl = db.$client.options.ssl;
+	if (
+		db.$client.options.connectionString !== target.url ||
+		!ssl ||
+		typeof ssl !== "object" ||
+		ssl.rejectUnauthorized !== true ||
+		typeof ssl.ca !== "string" ||
+		!ssl.ca.trim()
+	)
+		throw new BootstrapError("VERIFIED_PRODUCTION_TLS_CA_REQUIRED");
+	const client = await db.$client.connect().catch(() => {
+		throw new BootstrapError("PRODUCTION_TLS_CONNECTION_FAILED");
+	});
+	let verified = false;
+	try {
+		// pg exposes these runtime Client fields, but PoolClient's types omit them.
+		const connected = client as typeof client & {
+			host?: string;
+			port?: number;
+			ssl?: ConnectionOptions;
+			connection?: { stream?: TLSSocket };
+		};
+		const socket = connected.connection?.stream;
+		if (
+			connected.host !== parsed.hostname ||
+			connected.port !== 5432 ||
+			connected.ssl?.rejectUnauthorized !== true ||
+			connected.ssl.ca !== ssl.ca ||
+			!(socket instanceof TLSSocket) ||
+			!socket.encrypted ||
+			!socket.authorized ||
+			socket.destroyed ||
+			!socket.getProtocol() ||
+			checkServerIdentity(parsed.hostname, socket.getPeerCertificate())
+		)
+			throw new BootstrapError("PRODUCTION_TLS_REQUIRED");
+		// Direct SQL observes this connection; Session Pooler SQL observes a different hop.
+		if (parsed.hostname === `db.${target.reference}.supabase.co`) {
+			const tls = await client.query<{ ssl: boolean }>(
+				"SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()",
+			);
+			if (!tls.rows[0]?.ssl)
+				throw new BootstrapError("PRODUCTION_TLS_REQUIRED");
+		}
+		verified = true;
+	} catch {
+		throw new BootstrapError("PRODUCTION_TLS_REQUIRED");
+	} finally {
+		client.release(!verified);
+	}
+}
+
 export async function verifyBootstrapDatabase(
 	db: Database,
 	target: BootstrapTarget,
 	projectRoot: string,
 ) {
 	const parsed = validateBootstrapTarget(target);
+	await verifyBootstrapTls(db, target);
 	const result = await db.execute<{
 		name: string;
 		role: string;
@@ -112,12 +176,6 @@ export async function verifyBootstrapDatabase(
 		throw new BootstrapError("LOCAL_DATABASE_IDENTITY_MISMATCH");
 	if (target.mode === "production" && actual.role !== "postgres")
 		throw new BootstrapError("PRODUCTION_MIGRATION_ROLE_REQUIRED");
-	if (target.mode === "production") {
-		const tls = await db.execute<{ ssl: boolean }>(
-			sql`SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()`,
-		);
-		if (!tls.rows[0]?.ssl) throw new BootstrapError("PRODUCTION_TLS_REQUIRED");
-	}
 	const root = join(projectRoot, "packages/db/src/migrations");
 	const folders = (await readdir(root))
 		.filter((name) => /^\d{14}_/.test(name))
