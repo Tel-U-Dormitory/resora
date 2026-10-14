@@ -14,7 +14,12 @@ export const appRouter = router({
 			user: {
 				id: ctx.identity.userId,
 				name: ctx.session.user.name,
-				nim: ctx.identity.nim,
+				...(ctx.identity.actor === "SR"
+					? { actor: "SR" as const, nim: ctx.identity.nim }
+					: {
+							actor: "SYSTEM_ADMIN" as const,
+							username: ctx.identity.username,
+						}),
 			},
 		};
 	}),

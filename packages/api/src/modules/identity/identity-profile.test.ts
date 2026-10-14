@@ -10,6 +10,9 @@ function fixture(overrides: Record<string, unknown> = {}) {
 		actor: "SR",
 		isActive: true,
 		mustChangePassword: false,
+		departmentCode: "HCO",
+		positionCode: "KADEP",
+		buildingId: "synthetic-building",
 		nim: "0000000001",
 		...overrides,
 	};
@@ -54,7 +57,12 @@ test("profile derives identity from session, keeps leading zeros and projects sa
 	const result = await Reflect.apply(f.caller.profile, null, [
 		{ userId: "forged-user", department: "INTI" },
 	]);
-	expect(result).toEqual({ ...f.profile, nim: "0000000001", isActive: true });
+	expect(result).toEqual({
+		...f.profile,
+		actor: "SR",
+		nim: "0000000001",
+		isActive: true,
+	});
 	expect(f.conditions).toEqual([["own-user"], ["own-user"]]);
 	expect(f.selections[1]).toEqual([
 		"name",
@@ -95,6 +103,22 @@ for (const [label, identity, code] of [
 		}
 		expect(f.selections).toHaveLength(1);
 	});
+
+test("session permissions reflect DB SUPERADMIN grant/revocation without changing assignment", async () => {
+	for (const isSuperadmin of [true, false]) {
+		const f = fixture({
+			departmentCode: "INTI",
+			positionCode: "KETUM",
+			isSuperadmin,
+		});
+		expect(await f.caller.session()).toMatchObject({
+			isSuperadmin,
+			canManageInternalEvents: isSuperadmin,
+			canManageInternalAttendanceManually: isSuperadmin,
+			canOperateGeneralActivity: isSuperadmin,
+		});
+	}
+});
 
 for (const [departmentCode, positionCode, allowed] of [
 	["HCO", "ANGGOTA", true],

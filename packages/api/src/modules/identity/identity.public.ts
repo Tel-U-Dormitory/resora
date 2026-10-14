@@ -1,3 +1,4 @@
+import { type ActiveIdentity, getActiveIdentity } from "@resora/auth/sr-access";
 import type { Database, DatabaseTransaction } from "@resora/db";
 import { isValidSrAssignment } from "@resora/db/organization";
 import { user } from "@resora/db/schema/auth";
@@ -6,6 +7,7 @@ import {
 	departments,
 	positions,
 	srProfiles,
+	systemPrivileges,
 	userProfiles,
 } from "@resora/db/schema/identity";
 import { and, eq } from "drizzle-orm";
@@ -15,6 +17,7 @@ export {
 	canAccessPersonalSr,
 	canManageInternalAttendanceManually,
 	canManageInternalEvent,
+	hasSuperadminPrivilege,
 } from "./identity-policy";
 
 // Backend-only directory contract. Attendance must not read Identity's tables itself.
@@ -93,6 +96,39 @@ export async function getCheckInSr(
 	const { candidates } = await readActiveSrDirectory(db, true, userId);
 	const candidate = candidates[0];
 	return candidate && !candidate.mustChangePassword ? candidate : null;
+}
+
+// Call after event/session locks: reload eligible identity and the latest explicit grant.
+// Share-lock a present grant so its revocation cannot commit during an authorized write.
+export async function getLiveOperationalIdentity(
+	tx: DatabaseTransaction,
+	userId: string,
+): Promise<ActiveIdentity | null> {
+	const [profile] = await tx
+		.select({ userId: userProfiles.userId })
+		.from(userProfiles)
+		.where(eq(userProfiles.userId, userId))
+		.for("share");
+	if (!profile) return null;
+	await tx
+		.select({ userId: user.id })
+		.from(user)
+		.where(eq(user.id, userId))
+		.for("share");
+	await tx
+		.select({ userId: systemPrivileges.userId })
+		.from(systemPrivileges)
+		.where(
+			and(
+				eq(systemPrivileges.userId, userId),
+				eq(systemPrivileges.privilegeCode, "SUPERADMIN"),
+			),
+		)
+		.for("share");
+	const identity = await getActiveIdentity(tx, userId);
+	if (!identity || identity.mustChangePassword) return null;
+	if (identity.actor === "SR" && !(await getCheckInSr(tx, userId))) return null;
+	return identity;
 }
 
 // Manual insertion needs an active eligible target, not completion of their first login.

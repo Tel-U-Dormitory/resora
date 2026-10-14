@@ -258,3 +258,23 @@ Ready for next phase? yes/no, reason:
 **Phase 7 live-profile gate:** Pending live PostgreSQL combinations: new inactive-target insertion denial; historical inactive correction; HCO non-KADEP/KADEP non-HCO manual denial; non-HCO SUPERADMIN bypass denial. Offline policy/service and loopback HTTP with auth/DB doubles cover these negative paths but are not live-profile proof. The smallest additional gate is PM-approved synthetic identities/status transitions with rollback or explicitly retained immutable audit fixtures; no real SR accounts/remote writes are authorized by Phase 7.
 
 **Phase 7 CLI evidence (2026-10-12):** offline suite 99/99 (14 files), additional WIB tests 3/3, changed HTTP fixture rerun 8/8; 102 distinct cases covered across executions, without PostgreSQL connections. Global read-only Biome 0 errors/warnings; six workspace typechecks pass; server/web production builds pass with synthetic CI env, frontend rechecked only after final WIB change; Varlock codegen/Next typegen and diff checks pass. Source/schema/dependency lock unchanged outside the stated fixes. Workflow statically reviewed and local commands validated; GitHub runner/fresh frozen install remain pending actual PR CI. No remote mutation or deployment.
+
+## SA-01 approved update - 2026-10-13
+
+Eligible active SR with explicit DB SUPERADMIN now satisfies existing HCO, KADEP HCO manual/audit and Adaptif operator policies across departments. Earlier dated no-bypass rules and SUPERADMIN-denial test evidence are superseded, not current requirements. Users without that grant keep existing department/position boundaries. Auth/password-change, valid assignment, event/session/QR lifecycle, invitation/target validation, original attendance fields and audit remain enforced. Session/navigation capabilities come from backend policy; transactional event/QR/manual writes reload current privilege after lifecycle locks. No new schema, account, module or remote mutation is included.
+
+## SA-02 account management - accepted by PM
+
+- SUPERADMIN-only SR list/search/department/status filter with bounded server pagination and inactive-account visibility.
+- Single-account creation uses DB references, valid organization pairs, transaction-bound Better Auth internal adapter/hash and mandatory first-password-change; no automatic privilege grant.
+- Atomic durable ACCOUNT_CREATED audit; additive `20261013170324_sa02_account_management` SQL/snapshot unchanged, applied locally during SA-03 and **not applied remotely**.
+- Authenticated `/admin/users` and `/admin/users/new`, desktop/mobile admin navigation and one-time memory-only password/copy screen. CSV passwords/export remain unchanged.
+- Targeted offline coverage is supplemented by SA-03 local PostgreSQL locks/concurrency/trigger and rollback validation below; manual UI UAT remains a gate. No edit/reset/delete/grant UI, remote data mutation or deployment.
+
+## SA-03 dedicated admin - ready for PM review, no remote application
+
+- Additive SYSTEM_ADMIN enum and conditional bootstrap audit migration prepared after unchanged SA-02 migration.
+- Authentication/password change/session DTO and operational identity support SR plus dedicated admin; roster/check-in/own history remain SR-only.
+- Explicit standalone bootstrap defaults dry-run, verifies target/schema/history, serializes duplicates and preserves secure COMMITTED/UNCONFIRMED export semantics; no startup seed or Production mutation.
+- Local PostgreSQL 18: nine migrations verified; final 12 integration groups plus two additional SQL/service integrity checks PASS. Concurrent bootstrap/account creation/corrections and privilege revoke during lock wait verified. Initial harness failed on expected auth 401; corrected harness passed on a fresh local DB, without deleting immutable audits.
+- Two isolated synthetic databases/exports retained; final fixture has one system admin, three SR profiles, four account audits and four attendance audits. No real SR data changed. Manual UI/HTTPS and approved Production rollout remain separate gates; see [bootstrap runbook](../../superadmin-bootstrap.md).

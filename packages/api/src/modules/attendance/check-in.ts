@@ -1,4 +1,4 @@
-import type { ActiveSrIdentity } from "@resora/auth/sr-access";
+import type { ActiveIdentity } from "@resora/auth/sr-access";
 import type { Database } from "@resora/db";
 import {
 	attendanceRecords,
@@ -24,7 +24,7 @@ function denied(message: string): never {
 
 export async function checkIn(
 	db: Database,
-	identity: ActiveSrIdentity,
+	identity: ActiveIdentity,
 	secret: string,
 	input: CheckInInput,
 ) {

@@ -273,8 +273,8 @@ const target = process.env.RESORA_IDENTITY_TEST_DB_URL;
 				)[0]?.positionCode,
 			).toBe("KETUM");
 		});
-		test("HCO manages events; INTI and explicit SUPERADMIN do not bypass", async () => {
-			for (const index of [1, 3, 7])
+		test("HCO and explicit SUPERADMIN manage events; unprivileged INTI/invalid assignments do not", async () => {
+			for (const index of [1, 7])
 				await rejects(
 					service.createEvent(db, await identity(index), draft()),
 					"FORBIDDEN",
@@ -289,10 +289,15 @@ const target = process.env.RESORA_IDENTITY_TEST_DB_URL;
 					error instanceof Error && error.message === "Event unavailable";
 			}
 			expect(denied).toBe(true);
-			await rejects(
-				service.getQr(db, await identity(3), eventId, secret),
-				"FORBIDDEN",
+			expect(
+				(await service.getQr(db, await identity(3), eventId, secret)).state,
+			).toBe("NONE");
+			const superadminEvent = await service.createEvent(
+				db,
+				await identity(3),
+				draft(),
 			);
+			ownedEvents.push(superadminEvent.eventId);
 			await rejects(
 				service.getRosterDirectory(db, await identity(7)),
 				"FORBIDDEN",
@@ -399,8 +404,11 @@ const target = process.env.RESORA_IDENTITY_TEST_DB_URL;
 			const invited = await service.getEvent(db, await identity(1), eventId);
 			expect(invited.participants).toEqual([]);
 			expect(invited.event.rosterCriteria).toBeNull();
+			expect(
+				(await service.getEvent(db, await identity(3), eventId)).canManage,
+			).toBe(true);
 			await rejects(
-				service.getEvent(db, await identity(3), eventId),
+				service.getEvent(db, await identity(7), eventId),
 				"NOT_FOUND",
 			);
 			await rejects(
@@ -585,7 +593,7 @@ const target = process.env.RESORA_IDENTITY_TEST_DB_URL;
 					.set({ isActive: true })
 					.where(eq(userProfiles.userId, id(0)));
 			}
-			const nonHco = await login(3);
+			const nonHco = await login(1);
 			const response = await request(`${base}/trpc/attendance.create`, {
 				method: "POST",
 				headers: { cookie: nonHco, origin, "content-type": "application/json" },

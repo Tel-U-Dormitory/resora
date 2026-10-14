@@ -1,5 +1,5 @@
 import { appRouter } from "@resora/api/routers/index";
-import type { Auth } from "@resora/auth";
+import type { Auth, AuthConfig } from "@resora/auth";
 import type { Database } from "@resora/db";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { toNodeHandler } from "better-auth/node";
@@ -9,7 +9,7 @@ import express from "express";
 import { createContext } from "./context";
 
 export function createApp(
-	services: { db: Database; auth: Auth },
+	services: { db: Database; auth: Auth; authConfig?: AuthConfig },
 	origin: string,
 ) {
 	const app = express();

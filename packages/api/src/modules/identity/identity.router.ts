@@ -1,4 +1,4 @@
-import { getActiveSr } from "@resora/auth/sr-access";
+import { getActiveIdentity } from "@resora/auth/sr-access";
 import { user } from "@resora/db/schema/auth";
 import {
 	buildings,
@@ -10,10 +10,48 @@ import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 
 import { protectedProcedure, publicProcedure, router } from "../../index";
-import { canManageInternalEvent } from "./identity-policy";
+import {
+	accountReferences,
+	createAccount,
+	listAccounts,
+} from "./account-admin";
+import {
+	createAccountSchema,
+	listAccountsSchema,
+} from "./account-admin.schema";
+import {
+	canManageInternalAttendanceManually,
+	canManageInternalEvent,
+	canOperateGeneralActivity,
+	hasSuperadminPrivilege,
+} from "./identity-policy";
 
 export const identityRouter = router({
+	listAccounts: protectedProcedure
+		.input(listAccountsSchema)
+		.query(({ ctx, input }) => listAccounts(ctx.db, ctx.identity, input)),
+	accountReferences: protectedProcedure.query(({ ctx }) =>
+		accountReferences(ctx.db, ctx.identity),
+	),
+	createAccount: protectedProcedure
+		.input(createAccountSchema)
+		.mutation(({ ctx, input }) =>
+			createAccount(ctx.db, ctx.identity, ctx.authConfig, input),
+		),
 	profile: protectedProcedure.query(async ({ ctx }) => {
+		if (ctx.identity.actor === "SYSTEM_ADMIN") {
+			const [profile] = await ctx.db
+				.select({ name: user.name, email: user.email })
+				.from(user)
+				.where(eq(user.id, ctx.identity.userId));
+			if (!profile) throw new TRPCError({ code: "UNAUTHORIZED" });
+			return {
+				...profile,
+				actor: "SYSTEM_ADMIN" as const,
+				username: ctx.identity.username,
+				isActive: ctx.identity.isActive,
+			};
+		}
 		const [profile] = await ctx.db
 			.select({
 				name: user.name,
@@ -35,20 +73,27 @@ export const identityRouter = router({
 			});
 		return {
 			...profile,
+			actor: "SR" as const,
 			nim: ctx.identity.nim,
 			isActive: ctx.identity.isActive,
 		};
 	}),
 	session: publicProcedure.query(async ({ ctx }) => {
 		if (!ctx.session) return null;
-		const identity = await getActiveSr(ctx.db, ctx.session.user.id);
+		const identity = await getActiveIdentity(ctx.db, ctx.session.user.id);
 		if (!identity) return null;
 		return {
 			userId: identity.userId,
-			nim: identity.nim,
+			...(identity.actor === "SR"
+				? { actor: "SR" as const, nim: identity.nim }
+				: { actor: "SYSTEM_ADMIN" as const, username: identity.username }),
 			mustChangePassword: identity.mustChangePassword,
 			name: ctx.session.user.name,
 			canManageInternalEvents: canManageInternalEvent(identity),
+			canManageInternalAttendanceManually:
+				canManageInternalAttendanceManually(identity),
+			canOperateGeneralActivity: canOperateGeneralActivity(identity),
+			isSuperadmin: hasSuperadminPrivilege(identity),
 		};
 	}),
 });

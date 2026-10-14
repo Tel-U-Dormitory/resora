@@ -13,6 +13,9 @@ export type InitialCredential = {
 	email: string;
 	temporary_password: string;
 };
+export type InitialSystemCredential = Omit<InitialCredential, "nim"> & {
+	username: string;
+};
 export type ExportState = "PREPARED" | "COMMITTED" | "FAILED" | "UNCONFIRMED";
 export type CredentialBundle = {
 	path: string;
@@ -102,11 +105,18 @@ async function syncDirectory(path: string) {
 
 export async function prepareCredentials(
 	projectRoot: string,
-	records: readonly InitialCredential[],
+	records: readonly (InitialCredential | InitialSystemCredential)[],
 ): Promise<CredentialBundle> {
 	try {
 		const root = await realpath(projectRoot);
-		const base = join(root, ".private", "sr-provisioning");
+		const systemExport = records.some((row) => "username" in row);
+		if (systemExport && records.some((row) => !("username" in row)))
+			throw new Error("Mixed credential identity types");
+		const base = join(
+			root,
+			".private",
+			systemExport ? "system-admin-bootstrap" : "sr-provisioning",
+		);
 		await exec(
 			"git",
 			[
@@ -125,9 +135,14 @@ export async function prepareCredentials(
 		await syncDirectory(base);
 		const path = join(directory, "credentials.csv");
 		const csv = encodeCsv([
-			["nim", "name", "email", "temporary_password"],
+			[
+				systemExport ? "username" : "nim",
+				"name",
+				"email",
+				"temporary_password",
+			],
 			...records.map((row) => [
-				row.nim,
+				"username" in row ? row.username : row.nim,
 				row.name,
 				row.email,
 				row.temporary_password,

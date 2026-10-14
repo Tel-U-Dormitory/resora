@@ -22,10 +22,12 @@ import { queryClient } from "@/utils/trpc";
 
 export default function UserMenu({
 	name,
+	accountLabel = "Akun RESORA",
 	onNavigate,
 	container,
 }: {
 	name?: string;
+	accountLabel?: string;
 	onNavigate?: () => void;
 	container?: RefObject<HTMLDialogElement | null>;
 }) {
@@ -83,7 +85,7 @@ export default function UserMenu({
 						{name ?? session.user.name}
 					</span>
 					<span className="block text-muted-foreground text-xs">
-						{pending ? "Memproses…" : "Akun SR"}
+						{pending ? "Memproses…" : accountLabel}
 					</span>
 				</span>
 				<ChevronDown className="size-4 shrink-0" aria-hidden="true" />
@@ -94,7 +96,7 @@ export default function UserMenu({
 				className="min-w-48 rounded-lg bg-card"
 			>
 				<DropdownMenuGroup>
-					<DropdownMenuLabel>Akun SR</DropdownMenuLabel>
+					<DropdownMenuLabel>{accountLabel}</DropdownMenuLabel>
 					<DropdownMenuSeparator />
 					<DropdownMenuItem
 						onClick={onNavigate}

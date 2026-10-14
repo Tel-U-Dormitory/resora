@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { ActiveSrIdentity } from "@resora/auth/sr-access";
+import type { ActiveIdentity, ActiveSrIdentity } from "@resora/auth/sr-access";
 import {
 	canAccessPersonalSr,
 	canManageInternalAttendanceManually,
@@ -47,12 +47,61 @@ for (const [department, position, internal, manual, general] of [
 		expect(hasSuperadminPrivilege(current)).toBe(false);
 	});
 }
-test("explicit superadmin grants identity administration without operational bypass", () => {
-	const current = identity("RND", "KADEP", true);
-	expect(hasSuperadminPrivilege(current)).toBe(true);
+for (const [department, position] of [
+	["RND", "ANGGOTA"],
+	["SOSIAL", "KADEP"],
+	["INTI", "KETUM"],
+	["HCO", "ANGGOTA"],
+] as const)
+	test(`explicit SUPERADMIN ${department}/${position} overrides operational department/position gates`, () => {
+		const current = identity(department, position, true);
+		expect(hasSuperadminPrivilege(current)).toBe(true);
+		expect(canManageInternalEvent(current)).toBe(true);
+		expect(canManageInternalAttendanceManually(current)).toBe(true);
+		expect(canOperateGeneralActivity(current)).toBe(true);
+		expect(current).toMatchObject({
+			departmentCode: department,
+			positionCode: position,
+		});
+	});
+test("invalid HCO/KETUM assignment denies every SUPERADMIN permission", () => {
+	const current = identity("HCO", "KETUM", true);
+	expect(hasSuperadminPrivilege(current)).toBe(false);
 	expect(canManageInternalEvent(current)).toBe(false);
 	expect(canManageInternalAttendanceManually(current)).toBe(false);
 	expect(canOperateGeneralActivity(current)).toBe(false);
+});
+
+test("dedicated SYSTEM_ADMIN grants operations without SR assignment or participant permissions", () => {
+	const admin: ActiveIdentity = {
+		userId: "synthetic-system",
+		actor: "SYSTEM_ADMIN",
+		username: "resora.admin",
+		isActive: true,
+		mustChangePassword: false,
+		isSuperadmin: true,
+	};
+	for (const policy of [
+		hasSuperadminPrivilege,
+		canManageInternalEvent,
+		canManageInternalAttendanceManually,
+		canOperateGeneralActivity,
+	])
+		expect(policy(admin)).toBe(true);
+	expect(canAccessPersonalSr(admin)).toBe(false);
+	for (const invalid of [
+		{ ...admin, isActive: false },
+		{ ...admin, mustChangePassword: true },
+		{ ...admin, isSuperadmin: false },
+		{ ...admin, actor: "MAHASISWA" },
+	])
+		for (const policy of [
+			hasSuperadminPrivilege,
+			canManageInternalEvent,
+			canManageInternalAttendanceManually,
+			canOperateGeneralActivity,
+		])
+			expect(policy(invalid as ActiveIdentity)).toBe(false);
 });
 test("missing identity, inactive/non-SR identity and first-change gate deny every action", () => {
 	const base = identity("HCO", "KADEP", true);

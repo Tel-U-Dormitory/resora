@@ -9,9 +9,9 @@ import {
 	getSessionFromCtx,
 } from "better-auth/api";
 import { username } from "better-auth/plugins";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
-import { getActiveSr } from "./sr-access";
+import { getActiveIdentity } from "./sr-access";
 
 export type AuthConfig = {
 	BETTER_AUTH_URL: string;
@@ -81,7 +81,7 @@ export function createAuth(
 			session: {
 				create: {
 					before: async (session) => {
-						if (!(await getActiveSr(database, session.userId))) {
+						if (!(await getActiveIdentity(database, session.userId))) {
 							throw new APIError("UNAUTHORIZED", {
 								code: "INVALID_USERNAME_OR_PASSWORD",
 								message: "Invalid username or password",
@@ -117,7 +117,7 @@ export function createAuth(
 					disableCookieCache: true,
 				});
 				if (!session) return; // Native endpoints handle missing/expired sessions.
-				const profile = await getActiveSr(database, session.user.id);
+				const profile = await getActiveIdentity(database, session.user.id);
 				if (!profile) {
 					throw new APIError("UNAUTHORIZED", {
 						code: "UNAUTHORIZED",
@@ -184,7 +184,7 @@ export function createAuth(
 					.where(
 						and(
 							eq(userProfiles.userId, userId),
-							eq(userProfiles.actor, "SR"),
+							inArray(userProfiles.actor, ["SR", "SYSTEM_ADMIN"]),
 							eq(userProfiles.isActive, true),
 						),
 					)

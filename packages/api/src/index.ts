@@ -1,4 +1,4 @@
-import { getActiveSr } from "@resora/auth/sr-access";
+import { getActiveIdentity } from "@resora/auth/sr-access";
 import { initTRPC, TRPCError } from "@trpc/server";
 
 import type { Context } from "./context";
@@ -22,7 +22,7 @@ export const publicProcedure = t.procedure;
 
 export const sessionProcedure = t.procedure.use(async ({ ctx, next }) => {
 	const identity = ctx.session
-		? await getActiveSr(ctx.db, ctx.session.user.id)
+		? await getActiveIdentity(ctx.db, ctx.session.user.id)
 		: null;
 	if (!ctx.session || !identity) {
 		throw new TRPCError({

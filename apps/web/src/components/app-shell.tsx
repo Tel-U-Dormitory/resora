@@ -10,10 +10,14 @@ import { Button } from "@/components/ui/button";
 export function AppShell({
 	name,
 	canManageEvents,
+	isSuperadmin,
+	isSr,
 	children,
 }: {
 	name: string;
 	canManageEvents: boolean;
+	isSuperadmin: boolean;
+	isSr: boolean;
 	children: ReactNode;
 }) {
 	const pathname = usePathname();
@@ -42,7 +46,12 @@ export function AppShell({
 	return (
 		<div className="min-h-dvh lg:flex">
 			<div className="hidden lg:sticky lg:top-0 lg:block lg:h-dvh lg:w-64 lg:shrink-0">
-				<AppSidebar name={name} canManageEvents={canManageEvents} />
+				<AppSidebar
+					name={name}
+					canManageEvents={canManageEvents}
+					isSuperadmin={isSuperadmin}
+					isSr={isSr}
+				/>
 			</div>
 			<div className="min-w-0 flex-1">
 				<div className="sticky top-0 z-20 flex items-center justify-between border-border border-b bg-surface/95 px-4 py-3 backdrop-blur-md lg:hidden">
@@ -101,6 +110,8 @@ export function AppShell({
 					<AppSidebar
 						name={name}
 						canManageEvents={canManageEvents}
+						isSuperadmin={isSuperadmin}
+						isSr={isSr}
 						menuContainer={drawer}
 						onNavigate={() => drawer.current?.close()}
 					/>

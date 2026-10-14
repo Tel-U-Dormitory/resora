@@ -8,7 +8,7 @@ import {
 import { and, eq, sql } from "drizzle-orm";
 
 // Read current identity on every request; a session is not an active-account claim.
-export async function getActiveSr(
+export async function getActiveIdentity(
 	database: Pick<Database, "select">,
 	userId: string,
 ) {
@@ -22,10 +22,11 @@ export async function getActiveSr(
 			departmentCode: srProfiles.departmentCode,
 			positionCode: srProfiles.positionCode,
 			buildingId: srProfiles.buildingId,
+			srUserId: srProfiles.userId,
 			isSuperadmin: sql<boolean>`${systemPrivileges.userId} IS NOT NULL`,
 		})
 		.from(userProfiles)
-		.innerJoin(srProfiles, eq(srProfiles.userId, userProfiles.userId))
+		.leftJoin(srProfiles, eq(srProfiles.userId, userProfiles.userId))
 		.innerJoin(user, eq(user.id, userProfiles.userId))
 		.leftJoin(
 			systemPrivileges,
@@ -35,11 +36,53 @@ export async function getActiveSr(
 			),
 		)
 		.where(eq(userProfiles.userId, userId));
-	if (profile?.actor !== "SR" || !profile.isActive || !profile.nim?.trim()) {
-		return null;
-	}
-	return { ...profile, actor: profile.actor, nim: profile.nim };
+	if (!profile?.isActive || !profile.nim?.trim()) return null;
+	const common = {
+		userId: profile.userId,
+		isActive: profile.isActive as boolean,
+		mustChangePassword: profile.mustChangePassword,
+	};
+	if (
+		profile.actor === "SR" &&
+		profile.departmentCode &&
+		profile.positionCode &&
+		profile.buildingId
+	)
+		return {
+			...common,
+			actor: "SR" as const,
+			nim: profile.nim,
+			departmentCode: profile.departmentCode,
+			positionCode: profile.positionCode,
+			buildingId: profile.buildingId,
+			isSuperadmin: profile.isSuperadmin,
+		};
+	if (
+		profile.actor === "SYSTEM_ADMIN" &&
+		profile.isSuperadmin &&
+		!profile.srUserId
+	)
+		return {
+			...common,
+			actor: "SYSTEM_ADMIN" as const,
+			username: profile.nim,
+			isSuperadmin: true as const,
+		};
+	return null;
 }
+
+// Participant-only contract remains separate from operational authentication.
+export async function getActiveSr(
+	database: Pick<Database, "select">,
+	userId: string,
+) {
+	const identity = await getActiveIdentity(database, userId);
+	return identity?.actor === "SR" ? identity : null;
+}
+
+export type ActiveIdentity = NonNullable<
+	Awaited<ReturnType<typeof getActiveIdentity>>
+>;
 
 export type ActiveSrIdentity = NonNullable<
 	Awaited<ReturnType<typeof getActiveSr>>
