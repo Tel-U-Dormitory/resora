@@ -4,7 +4,7 @@ import { Input } from "@resora/ui/components/input";
 import { Label } from "@resora/ui/components/label";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -15,7 +15,11 @@ export default function LoginForm({ expired = false }: { expired?: boolean }) {
 	const router = useRouter();
 	const [nim, setNim] = useState("");
 	const [password, setPassword] = useState("");
-	const [pending, setPending] = useState(false);
+	const [status, setStatus] = useState<"idle" | "processing" | "redirecting">(
+		"idle",
+	);
+	const pending = status !== "idle";
+	const submitting = useRef(false);
 	const [error, setError] = useState("");
 	return (
 		<Card className="mx-auto my-10 w-[calc(100%-2rem)] max-w-md">
@@ -45,9 +49,11 @@ export default function LoginForm({ expired = false }: { expired?: boolean }) {
 					className="space-y-4"
 					onSubmit={async (event) => {
 						event.preventDefault();
-						if (pending) return;
-						setPending(true);
+						if (submitting.current) return;
+						submitting.current = true;
+						setStatus("processing");
 						setError("");
+						let redirecting = false;
 						try {
 							const result = await authClient.signIn.username({
 								username: nim,
@@ -73,17 +79,20 @@ export default function LoginForm({ expired = false }: { expired?: boolean }) {
 								);
 								return;
 							}
-							setPassword("");
+							setStatus("redirecting");
 							router.replace(
 								identity.mustChangePassword ? "/change-password" : "/dashboard",
 							);
-							router.refresh();
+							redirecting = true;
 						} catch {
 							setError(
 								"Tidak dapat menghubungi layanan masuk. Silakan coba kembali.",
 							);
 						} finally {
-							setPending(false);
+							if (!redirecting) {
+								submitting.current = false;
+								setStatus("idle");
+							}
 						}
 					}}
 				>
@@ -124,7 +133,11 @@ export default function LoginForm({ expired = false }: { expired?: boolean }) {
 						disabled={pending}
 						loading={pending}
 					>
-						{pending ? "Memproses…" : "Masuk"}
+						{status === "redirecting"
+							? "Mengalihkan…"
+							: pending
+								? "Memproses…"
+								: "Masuk"}
 					</Button>
 				</form>
 				<p className="mt-4 text-center text-muted-foreground text-sm">

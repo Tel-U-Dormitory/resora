@@ -15,6 +15,12 @@ import {
 	parseWibDateTimeInput,
 	toWibDateTimeInput,
 } from "./event-ui";
+import { participantPage } from "./participant-list";
+import {
+	isInvited,
+	type RosterCandidate,
+	setParticipantInvitation,
+} from "./roster-selection";
 
 const fieldClass =
 	"focus-ring block w-full rounded-lg border border-border bg-background px-3 py-2 text-sm aria-invalid:border-destructive aria-invalid:ring-1 aria-invalid:ring-destructive";
@@ -115,13 +121,6 @@ export default function EventForm({ eventId }: { eventId?: string }) {
 		/>
 	);
 }
-type Candidate = {
-	userId: string;
-	nim: string;
-	name: string;
-	departmentCode: string;
-	positionCode: string;
-};
 function DraftEditor({
 	initial,
 	eventId,
@@ -130,7 +129,7 @@ function DraftEditor({
 }: {
 	initial: Draft;
 	eventId?: string;
-	candidates: Candidate[];
+	candidates: RosterCandidate[];
 	invalidCount: number;
 }) {
 	const [draft, setDraft] = useState(initial);
@@ -143,6 +142,7 @@ function DraftEditor({
 	const [error, setError] = useState("");
 	const [endError, setEndError] = useState("");
 	const [search, setSearch] = useState("");
+	const [page, setPage] = useState(1);
 	const [saving, setSaving] = useState(false);
 	const submitLock = useRef(false);
 	const router = useRouter();
@@ -151,30 +151,12 @@ function DraftEditor({
 	const criteria = draft.rosterCriteria ?? empty.rosterCriteria;
 	const session = draft.session;
 	if (!criteria) return null;
-	const matchingCandidates = candidates.filter((sr) =>
-		`${sr.nim} ${sr.name}`.toLowerCase().includes(search.trim().toLowerCase()),
-	);
-	const manualCount = new Set(
-		[...(criteria.individuals ?? []), ...(criteria.include ?? [])].filter(
-			(id) => !criteria.exclude?.includes(id),
-		),
+	const candidatePage = participantPage(candidates, search, page);
+	const invitedCount = new Set(
+		candidates.filter((sr) => isInvited(sr, criteria)).map((sr) => sr.userId),
 	).size;
-	const toggle = (
-		key: "individuals" | "include" | "exclude",
-		id: string,
-		checked: boolean,
-	) =>
-		setDraft({
-			...draft,
-			rosterCriteria: {
-				...criteria,
-				[key]: checked
-					? [...(criteria[key] ?? []), id]
-					: (criteria[key] ?? []).filter((value) => value !== id),
-			},
-		});
 	return (
-		<section className="max-w-5xl space-y-6">
+		<section className="min-w-0 space-y-6">
 			<nav aria-label="Breadcrumb event" className="text-sm">
 				<ol className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
 					<li>
@@ -374,12 +356,18 @@ function DraftEditor({
 						))}
 					</CardContent>
 				</Card>
-				<fieldset className="space-y-4 rounded-xl border border-border bg-surface p-5 shadow-xs">
-					<legend className="font-semibold">Pemilihan peserta</legend>
+				<section
+					aria-labelledby="roster-heading"
+					className="space-y-4 rounded-xl border border-border bg-surface p-5 shadow-xs"
+				>
+					<h2 id="roster-heading" className="font-semibold">
+						Pemilihan peserta
+					</h2>
 					<p className="text-muted-foreground text-sm">
 						Gabungkan beberapa kelompok atau pilih peserta satu per satu.
-						Peserta yang sama hanya diundang sekali. Pilihan Kecualikan selalu
-						menghapus peserta dari undangan.
+						Centang Diundang untuk menyertakan peserta, atau hapus centang untuk
+						mengecualikannya dari kelompok yang dipilih. Peserta hanya diundang
+						sekali.
 					</p>
 					<div className="flex flex-wrap items-center gap-3">
 						{(
@@ -415,7 +403,11 @@ function DraftEditor({
 							onClick={() =>
 								setDraft({
 									...draft,
-									rosterCriteria: { ...criteria, inti: true, kadep: true },
+									rosterCriteria: {
+										...criteria,
+										inti: !(criteria.inti && criteria.kadep),
+										kadep: !(criteria.inti && criteria.kadep),
+									},
 								})
 							}
 						>
@@ -463,15 +455,17 @@ function DraftEditor({
 							className={fieldClass}
 							placeholder="Cari nama atau NIM"
 							value={search}
-							onChange={(e) => setSearch(e.target.value)}
+							onChange={(e) => {
+								setSearch(e.target.value);
+								setPage(1);
+							}}
 						/>
 					</label>
 					<p className="text-muted-foreground text-sm" role="status">
-						Menampilkan {matchingCandidates.length} dari {candidates.length} SR
-						· {manualCount} pilihan individu · {criteria.exclude?.length ?? 0}{" "}
-						dikecualikan
+						{invitedCount} peserta diundang dari {candidates.length} SR aktif ·{" "}
+						{candidatePage.matching} hasil pencarian
 					</p>
-					<div className="max-h-80 overflow-auto rounded-lg border border-border">
+					<div className="overflow-x-auto rounded-lg border border-border">
 						<table className="w-full text-left text-sm">
 							<caption className="sr-only">
 								Daftar SR aktif untuk pilihan peserta individu
@@ -482,28 +476,22 @@ function DraftEditor({
 										Peserta
 									</th>
 									<th scope="col" className="p-3">
-										Pilih
-									</th>
-									<th scope="col" className="p-3">
-										Tambahkan
-									</th>
-									<th scope="col" className="p-3">
-										Kecualikan
+										Diundang
 									</th>
 								</tr>
 							</thead>
 							<tbody>
-								{matchingCandidates.length === 0 && (
+								{candidatePage.matching === 0 && (
 									<tr>
 										<td
-											colSpan={4}
+											colSpan={2}
 											className="p-6 text-center text-muted-foreground"
 										>
 											Tidak ada peserta yang cocok.
 										</td>
 									</tr>
 								)}
-								{matchingCandidates.map((sr) => (
+								{candidatePage.rows.map((sr) => (
 									<tr
 										key={sr.userId}
 										className="border-border border-b last:border-0 hover:bg-muted/30"
@@ -512,32 +500,57 @@ function DraftEditor({
 											{sr.nim} · {sr.name} ({sr.departmentCode}/
 											{sr.positionCode})
 										</td>
-										{(["individuals", "include", "exclude"] as const).map(
-											(key) => (
-												<td key={key} className="p-3">
-													<input
-														type="checkbox"
-														aria-label={`${key === "exclude" ? "Kecualikan" : key === "include" ? "Tambahkan" : "Pilih"} ${sr.name} ${sr.nim}`}
-														checked={
-															criteria[key]?.includes(sr.userId) ?? false
-														}
-														onChange={(e) =>
-															toggle(key, sr.userId, e.target.checked)
-														}
-													/>
-												</td>
-											),
-										)}
+										<td className="p-3">
+											<input
+												type="checkbox"
+												className="focus-ring size-4 accent-primary"
+												aria-label={`Diundang: ${sr.name} ${sr.nim}`}
+												checked={isInvited(sr, criteria)}
+												onChange={(e) =>
+													setDraft({
+														...draft,
+														rosterCriteria: setParticipantInvitation(
+															criteria,
+															sr,
+															e.target.checked,
+														),
+													})
+												}
+											/>
+										</td>
 									</tr>
 								))}
 							</tbody>
 						</table>
 					</div>
+					<div className="flex flex-wrap items-center justify-between gap-3">
+						<p className="text-muted-foreground text-sm">
+							Halaman {candidatePage.page} dari {candidatePage.pages}
+						</p>
+						<div className="flex gap-2">
+							<Button
+								variant="outline"
+								size="sm"
+								disabled={candidatePage.page === 1}
+								onClick={() => setPage(candidatePage.page - 1)}
+							>
+								Sebelumnya
+							</Button>
+							<Button
+								variant="outline"
+								size="sm"
+								disabled={candidatePage.page === candidatePage.pages}
+								onClick={() => setPage(candidatePage.page + 1)}
+							>
+								Berikutnya
+							</Button>
+						</div>
+					</div>
 					<p className="text-muted-foreground text-sm">
 						Simpan draft untuk melihat preview seluruh undangan sebelum
 						publikasi.
 					</p>
-				</fieldset>
+				</section>
 				{error && (
 					<p
 						className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-destructive text-sm"
