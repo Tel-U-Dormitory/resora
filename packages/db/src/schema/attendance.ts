@@ -240,6 +240,63 @@ export const attendanceAuditLogs = pgTable(
 		),
 	],
 );
+export type EventEditAuditState = {
+	title: string;
+	description: string;
+	startsAt: string;
+	endsAt: string;
+	rosterCriteria?: RosterCriteria;
+	session?: Pick<
+		typeof attendanceSessions.$inferSelect,
+		| "centerLat"
+		| "centerLng"
+		| "geofenceRadiusM"
+		| "lateGraceMinutes"
+		| "qrTtlMinutes"
+	>;
+	participants?: {
+		count: number;
+		addedUserIds?: string[];
+		removedUserIds?: string[];
+	};
+};
+export const eventAuditLogs = pgTable(
+	"event_audit_logs",
+	{
+		id: uuid("id").defaultRandom().primaryKey(),
+		eventId: uuid("event_id")
+			.notNull()
+			.references(() => events.id),
+		actorUserId: text("actor_user_id")
+			.notNull()
+			.references(() => user.id),
+		action: text("action")
+			.$type<
+				| "PUBLISHED_CONFIGURATION_EDITED"
+				| "PUBLISHED_DETAILS_EDITED"
+				| "CLOSED_METADATA_EDITED"
+			>()
+			.notNull(),
+		reason: text("reason").notNull(),
+		beforeState: jsonb("before_state").$type<EventEditAuditState>().notNull(),
+		afterState: jsonb("after_state").$type<EventEditAuditState>().notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.defaultNow()
+			.notNull(),
+	},
+	(t) => [
+		index("event_audit_logs_event_time_idx").on(t.eventId, t.createdAt),
+		check("event_audit_logs_reason", sql`length(btrim(${t.reason})) > 0`),
+		check(
+			"event_audit_logs_action",
+			sql`${t.action} IN ('PUBLISHED_CONFIGURATION_EDITED', 'PUBLISHED_DETAILS_EDITED', 'CLOSED_METADATA_EDITED')`,
+		),
+		check(
+			"event_audit_logs_states",
+			sql`jsonb_typeof(${t.beforeState}) = 'object' AND jsonb_typeof(${t.afterState}) = 'object'`,
+		),
+	],
+);
 export const attendanceRelations = defineRelationsPart(
 	{
 		events,
@@ -248,10 +305,15 @@ export const attendanceRelations = defineRelationsPart(
 		qrChallenges,
 		attendanceRecords,
 		attendanceAuditLogs,
+		eventAuditLogs,
 		user,
 	},
 	(r) => ({
 		events: {
+			audits: r.many.eventAuditLogs({
+				from: r.events.id,
+				to: r.eventAuditLogs.eventId,
+			}),
 			session: r.one.attendanceSessions({
 				from: r.events.id,
 				to: r.attendanceSessions.internalEventId,
@@ -330,6 +392,18 @@ export const attendanceRelations = defineRelationsPart(
 			}),
 			actor: r.one.user({
 				from: r.attendanceAuditLogs.actorUserId,
+				to: r.user.id,
+				optional: false,
+			}),
+		},
+		eventAuditLogs: {
+			event: r.one.events({
+				from: r.eventAuditLogs.eventId,
+				to: r.events.id,
+				optional: false,
+			}),
+			actor: r.one.user({
+				from: r.eventAuditLogs.actorUserId,
 				to: r.user.id,
 				optional: false,
 			}),

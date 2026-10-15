@@ -332,6 +332,14 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 					</CardContent>
 				</Card>
 			)}
+			{detail.data.advancedEditMode && (
+				<Link
+					href={`/events/${eventId}/edit`}
+					className="focus-ring inline-flex rounded-md border border-border px-4 py-2 font-semibold text-sm hover:bg-muted"
+				>
+					Edit event (SUPERADMIN)
+				</Link>
+			)}
 			{canManage && event.status === "PUBLISHED" && (
 				<>
 					<div className="grid items-stretch gap-6 xl:grid-cols-2">
@@ -339,59 +347,70 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 							<CardHeader
 								title="Informasi event"
 								icon={<CalendarDays size={20} aria-hidden="true" />}
-								description="Hanya judul dan deskripsi yang dapat diubah setelah publikasi."
+								description={
+									detail.data.advancedEditMode
+										? "Perubahan SUPERADMIN mengikuti status sesi dan kehadiran terkini."
+										: "Hanya judul dan deskripsi yang dapat diubah setelah publikasi."
+								}
 							/>
 							<CardContent>
-								<form
-									key={event.updatedAt}
-									className="space-y-4"
-									onSubmit={(e) => {
-										e.preventDefault();
-										const data = new FormData(e.currentTarget);
-										void act(
-											"metadata",
-											"Perubahan event berhasil disimpan.",
-											() =>
-												metadata.mutateAsync({
-													eventId,
-													title: String(data.get("title") ?? ""),
-													description: String(data.get("description") ?? ""),
-												}),
-										);
-									}}
-								>
-									<label className="block space-y-2 text-sm">
-										Judul
-										<input
-											name="title"
-											disabled={busy}
-											required
-											maxLength={200}
-											defaultValue={event.title}
-											className="focus-ring block w-full rounded-lg border border-border bg-background px-3 py-2"
-										/>
-									</label>
-									<label className="block space-y-2 text-sm">
-										Deskripsi
-										<textarea
-											name="description"
-											disabled={busy}
-											rows={4}
-											maxLength={5000}
-											defaultValue={event.description}
-											className="focus-ring block w-full rounded-lg border border-border bg-background px-3 py-2"
-										/>
-									</label>
-									<Button
-										type="submit"
-										disabled={busy}
-										loading={activeAction === "metadata"}
+								{detail.data.advancedEditMode ? (
+									<p className="text-muted-foreground text-sm">
+										Gunakan Edit event (SUPERADMIN) untuk perubahan
+										administratif dengan alasan dan audit.
+									</p>
+								) : (
+									<form
+										key={event.updatedAt}
+										className="space-y-4"
+										onSubmit={(e) => {
+											e.preventDefault();
+											const data = new FormData(e.currentTarget);
+											void act(
+												"metadata",
+												"Perubahan event berhasil disimpan.",
+												() =>
+													metadata.mutateAsync({
+														eventId,
+														title: String(data.get("title") ?? ""),
+														description: String(data.get("description") ?? ""),
+													}),
+											);
+										}}
 									>
-										{activeAction === "metadata"
-											? "Menyimpan perubahan…"
-											: "Simpan perubahan"}
-									</Button>
-								</form>
+										<label className="block space-y-2 text-sm">
+											Judul
+											<input
+												name="title"
+												disabled={busy}
+												required
+												maxLength={200}
+												defaultValue={event.title}
+												className="focus-ring block w-full rounded-lg border border-border bg-background px-3 py-2"
+											/>
+										</label>
+										<label className="block space-y-2 text-sm">
+											Deskripsi
+											<textarea
+												name="description"
+												disabled={busy}
+												rows={4}
+												maxLength={5000}
+												defaultValue={event.description}
+												className="focus-ring block w-full rounded-lg border border-border bg-background px-3 py-2"
+											/>
+										</label>
+										<Button
+											type="submit"
+											disabled={busy}
+											loading={activeAction === "metadata"}
+										>
+											{activeAction === "metadata"
+												? "Menyimpan perubahan…"
+												: "Simpan perubahan"}
+										</Button>
+									</form>
+								)}
 							</CardContent>
 						</Card>
 						<Card>

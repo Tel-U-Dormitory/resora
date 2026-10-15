@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
-import { parseWibDateTimeInput } from "./event-ui";
+import { parseWibDateTimeInput, toWibDateTimeInput } from "./event-ui";
 
 // Execute the actual JSX callbacks with small UI/API doubles, without a browser or DB.
 function jsxCallback(file: string, attribute: string, contains = "") {
@@ -159,6 +159,137 @@ test("login resets pending on credential, rate-limit, service and session failur
 		expect(fixture.observed.error.length).toBeGreaterThan(0);
 		expect(fixture.observed.error).not.toContain(fixture.scope.password);
 	}
+});
+
+test("event editor submits only permitted advanced fields, requires a reason and retains draft behavior", async () => {
+	for (const advancedMode of [
+		undefined,
+		"FULL",
+		"LIMITED",
+		"METADATA",
+	] as const) {
+		for (const changedEnd of [false, true]) {
+			const calls: { kind: string; input: Record<string, unknown> }[] = [];
+			const initial = {
+				startsAt: "2030-10-12T06:00:15.123Z",
+				// Existing sub-minute events must remain metadata-editable without rounding their schedule.
+				endsAt: advancedMode
+					? "2030-10-12T06:00:16.456Z"
+					: "2030-10-12T08:00:16.456Z",
+			};
+			const observed = { saving: false, error: "", path: "", refreshes: 0 };
+			const mutation = (kind: string) => ({
+				mutateAsync: async (input: Record<string, unknown>) => {
+					calls.push({ kind, input });
+				},
+			});
+			const scope = {
+				advancedMode,
+				initial,
+				eventId: "synthetic-event",
+				submitLock: { current: false },
+				draft: {
+					title: "Synthetic event",
+					description: "Description",
+					rosterCriteria: {},
+					session: {},
+				},
+				start: toWibDateTimeInput(initial.startsAt),
+				end: changedEnd
+					? "2030-10-12T16:30"
+					: toWibDateTimeInput(initial.endsAt),
+				reason: "Administrative correction",
+				parseWibDateTimeInput,
+				toWibDateTimeInput,
+				setError: (value: string) => {
+					observed.error = value;
+				},
+				setEndError: (value: string) => {
+					observed.error = value;
+				},
+				setSaving: (value: boolean) => {
+					observed.saving = value;
+				},
+				advanced: mutation("advanced"),
+				edit: mutation("draft"),
+				create: mutation("create"),
+				queryClient: {},
+				attendanceQueryKeys: {},
+				refreshAttendanceQueries: async () => {
+					observed.refreshes++;
+				},
+				router: {
+					push: (path: string) => {
+						observed.path = path;
+					},
+				},
+				eventErrorMessage: () => "Perubahan ditolak.",
+				timeRangeMessage: "Waktu tidak valid.",
+			};
+			const submit = () =>
+				compile<Submit>(jsxCallback("event-form.tsx", "onSubmit"), scope);
+			if (advancedMode) {
+				scope.reason = " ";
+				await submit()(event);
+				expect(calls).toHaveLength(0);
+				expect(observed.error).toContain("Alasan");
+				expect(observed.saving).toBe(false);
+				scope.reason = "Administrative correction";
+			}
+			await submit()(event);
+			expect(calls).toHaveLength(1);
+			expect(observed.error).toBe("");
+			expect(observed.refreshes).toBe(1);
+			expect(observed.path).toBe("/events/synthetic-event");
+			const call = calls[0];
+			if (!call) throw new Error("Expected mutation");
+			expect(call.kind).toBe(advancedMode ? "advanced" : "draft");
+			if (advancedMode === "LIMITED" || advancedMode === "METADATA") {
+				expect(Object.keys(call.input).sort()).toEqual(
+					[
+						"description",
+						"eventId",
+						"mode",
+						"reason",
+						"title",
+						...(advancedMode === "LIMITED" && changedEnd ? ["endsAt"] : []),
+					].sort(),
+				);
+			} else if (advancedMode === "FULL") {
+				expect(call.input).toMatchObject({
+					mode: "FULL",
+					reason: scope.reason,
+					draft: {
+						startsAt: initial.startsAt,
+						endsAt: changedEnd ? "2030-10-12T09:30:00.000Z" : initial.endsAt,
+					},
+				});
+			}
+			await submit()(event);
+			expect(calls).toHaveLength(1);
+			// A failed mutation releases the submission lock and shows a local error.
+			scope.submitLock.current = false;
+			scope.advanced.mutateAsync = scope.edit.mutateAsync = async () => {
+				throw new Error("Synthetic rejection");
+			};
+			await submit()(event);
+			expect(observed.error).toBe("Perubahan ditolak.");
+			expect(scope.submitLock.current).toBe(false);
+			expect(observed.saving).toBe(false);
+		}
+	}
+	const source = readFileSync(
+		new URL("event-form.tsx", import.meta.url),
+		"utf8",
+	);
+	expect(source).toContain('advancedMode !== "METADATA"');
+	expect(source).toContain("{fullEditing && (");
+	const detail = readFileSync(
+		new URL("event-detail.tsx", import.meta.url),
+		"utf8",
+	);
+	expect(detail).toContain("detail.data.advancedEditMode");
+	expect(detail).toContain("metadata.mutateAsync");
 });
 
 test("dialog Escape closes only when idle; native modal opening/focus/cleanup remain explicit", () => {

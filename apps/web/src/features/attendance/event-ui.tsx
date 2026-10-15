@@ -44,6 +44,10 @@ export function parseWibDateTimeInput(value: string) {
 
 export function eventErrorMessage(error: unknown) {
 	if (error instanceof TRPCClientError) {
+		if (error.message === "ADVANCED_EDIT_END_INVALID")
+			return "Waktu selesai harus setelah waktu mulai dan tidak boleh di masa lalu. Jadwal event yang sudah ditutup tidak dapat diubah.";
+		if (error.message === "ADVANCED_EDIT_STATE_CHANGED")
+			return "Status event atau kehadiran telah berubah. Muat ulang untuk melihat field yang masih dapat diedit.";
 		if (error.message === "PASSWORD_CHANGE_REQUIRED")
 			return "Ganti password terlebih dahulu untuk melanjutkan.";
 		switch (error.data?.code) {

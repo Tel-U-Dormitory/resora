@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../../index";
 import {
+	advancedEventEditSchema,
 	auditHistorySchema,
 	checkInSchema,
 	eventDraftSchema,
@@ -16,6 +17,11 @@ import { manualCorrect, manualInsert } from "./manual-attendance";
 import { auditHistory, exportCsv, ownHistory, recap } from "./reporting";
 
 export const attendanceRouter = router({
+	advancedEdit: protectedProcedure
+		.input(advancedEventEditSchema)
+		.mutation(({ ctx, input }) =>
+			attendance.advancedEditEvent(ctx.db, ctx.identity, input),
+		),
 	manualInsert: protectedProcedure
 		.input(manualInsertSchema)
 		.mutation(({ ctx, input }) => manualInsert(ctx.db, ctx.identity, input)),

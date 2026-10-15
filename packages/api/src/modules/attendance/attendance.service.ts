@@ -1,13 +1,17 @@
 import type { ActiveIdentity } from "@resora/auth/sr-access";
 import type { Database, DatabaseTransaction } from "@resora/db";
 import {
+	attendanceRecords,
 	attendanceSessions,
+	type EventEditAuditState,
+	eventAuditLogs,
 	eventParticipants,
 	events,
 	qrChallenges,
+	type RosterCriteria,
 } from "@resora/db/schema/attendance";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import QRCode from "qrcode";
 import {
 	canAccessPersonalSr,
@@ -16,7 +20,11 @@ import {
 	getLiveOperationalIdentity,
 	hasSuperadminPrivilege,
 } from "../identity/identity.public";
-import type { EventDraft } from "./attendance.schema";
+import {
+	type AdvancedEventEdit,
+	advancedEventEditSchema,
+	type EventDraft,
+} from "./attendance.schema";
 import { signChallenge } from "./qr";
 import { resolveRoster } from "./roster";
 
@@ -28,6 +36,7 @@ async function lockedEvent(
 	tx: DatabaseTransaction,
 	eventId: string,
 	identity: ActiveIdentity,
+	superadminOnly = false,
 ) {
 	const [event] = await tx
 		.select()
@@ -42,8 +51,212 @@ async function lockedEvent(
 		.where(eq(attendanceSessions.internalEventId, eventId))
 		.for("update");
 	if (!session) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-	operator(await getLiveOperationalIdentity(tx, identity.userId));
+	const live = await getLiveOperationalIdentity(tx, identity.userId);
+	if (superadminOnly) {
+		if (!hasSuperadminPrivilege(live))
+			throw new TRPCError({ code: "FORBIDDEN" });
+	} else operator(live);
 	return { event, session };
+}
+
+async function advancedEditMode(
+	db: Database | DatabaseTransaction,
+	event: typeof events.$inferSelect,
+	session: typeof attendanceSessions.$inferSelect,
+) {
+	if (event.status === "CLOSED" && session.status === "CLOSED")
+		return "METADATA" as const;
+	if (event.status !== "PUBLISHED") return null;
+	if (session.status === "ACTIVE") return "LIMITED" as const;
+	if (session.status !== "INACTIVE") return null;
+	const [record] = await db
+		.select({ id: attendanceRecords.id })
+		.from(attendanceRecords)
+		.where(eq(attendanceRecords.sessionId, session.id))
+		.limit(1);
+	return record ? ("LIMITED" as const) : ("FULL" as const);
+}
+
+function sameRoster(left: RosterCriteria, right: RosterCriteria) {
+	const normalize = (criteria: RosterCriteria) => ({
+		allSr: criteria.allSr,
+		inti: criteria.inti,
+		kadep: criteria.kadep,
+		departments: [...new Set(criteria.departments)].sort(),
+		individuals: [...new Set(criteria.individuals)].sort(),
+		include: [...new Set(criteria.include)].sort(),
+		exclude: [...new Set(criteria.exclude)].sort(),
+	});
+	return JSON.stringify(normalize(left)) === JSON.stringify(normalize(right));
+}
+
+function sessionConfiguration(session: typeof attendanceSessions.$inferSelect) {
+	const {
+		centerLat,
+		centerLng,
+		geofenceRadiusM,
+		lateGraceMinutes,
+		qrTtlMinutes,
+	} = session;
+	return {
+		centerLat,
+		centerLng,
+		geofenceRadiusM,
+		lateGraceMinutes,
+		qrTtlMinutes,
+	};
+}
+
+export async function advancedEditEvent(
+	db: Database,
+	identity: ActiveIdentity,
+	input: AdvancedEventEdit,
+) {
+	if (!hasSuperadminPrivilege(identity))
+		throw new TRPCError({ code: "FORBIDDEN" });
+	const parsed = advancedEventEditSchema.safeParse(input);
+	if (!parsed.success)
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "Invalid advanced event edit",
+		});
+	const data = parsed.data;
+	return db.transaction(async (tx) => {
+		const { event, session } = await lockedEvent(
+			tx,
+			data.eventId,
+			identity,
+			true,
+		);
+		const mode = await advancedEditMode(tx, event, session);
+		if (!mode || (data.mode === "FULL" && mode !== "FULL"))
+			throw new TRPCError({
+				code: "CONFLICT",
+				message: "ADVANCED_EDIT_STATE_CHANGED",
+			});
+		const before: EventEditAuditState = {
+			title: event.title,
+			description: event.description,
+			startsAt: event.startsAt.toISOString(),
+			endsAt: event.endsAt.toISOString(),
+		};
+		const after: EventEditAuditState = { ...before };
+		if (data.mode === "FULL") {
+			const draft = data.draft;
+			const rosterChanged = !sameRoster(
+				event.rosterCriteria,
+				draft.rosterCriteria,
+			);
+			before.rosterCriteria = event.rosterCriteria;
+			before.session = sessionConfiguration(session);
+			Object.assign(after, {
+				title: draft.title,
+				description: draft.description,
+				startsAt: draft.startsAt,
+				endsAt: draft.endsAt,
+				rosterCriteria: rosterChanged
+					? draft.rosterCriteria
+					: event.rosterCriteria,
+				session: draft.session,
+			});
+			// A changed criterion uses the same locked live directory as publication.
+			// Retained invitees keep their original personal/organization snapshot.
+			if (rosterChanged) {
+				const directory = await getActiveSrDirectory(tx, true);
+				const roster = resolveRoster(
+					directory.candidates,
+					draft.rosterCriteria,
+				);
+				const existing = await tx
+					.select({ userId: eventParticipants.userId })
+					.from(eventParticipants)
+					.where(eq(eventParticipants.eventId, event.id));
+				const oldIds = new Set(existing.map((sr) => sr.userId));
+				const newIds = new Set(roster.map((sr) => sr.userId));
+				const added = roster.filter((sr) => !oldIds.has(sr.userId));
+				const removed = existing
+					.filter((sr) => !newIds.has(sr.userId))
+					.map((sr) => sr.userId);
+				before.participants = { count: existing.length };
+				after.participants = {
+					count: roster.length,
+					addedUserIds: added.map((sr) => sr.userId),
+					removedUserIds: removed,
+				};
+				if (removed.length)
+					await tx
+						.delete(eventParticipants)
+						.where(
+							and(
+								eq(eventParticipants.eventId, event.id),
+								inArray(eventParticipants.userId, removed),
+							),
+						);
+				if (added.length)
+					await tx.insert(eventParticipants).values(
+						added.map((sr) => ({
+							eventId: event.id,
+							userId: sr.userId,
+							nim: sr.nim,
+							name: sr.name,
+							departmentCode: sr.departmentCode,
+							positionCode: sr.positionCode,
+							buildingCode: sr.buildingCode,
+							buildingName: sr.buildingName,
+						})),
+					);
+			}
+			await tx
+				.update(events)
+				.set({
+					title: draft.title,
+					description: draft.description,
+					startsAt: new Date(draft.startsAt),
+					endsAt: new Date(draft.endsAt),
+					...(rosterChanged ? { rosterCriteria: draft.rosterCriteria } : {}),
+				})
+				.where(eq(events.id, event.id));
+			await tx
+				.update(attendanceSessions)
+				.set(draft.session)
+				.where(eq(attendanceSessions.id, session.id));
+		} else {
+			if (data.endsAt !== undefined) {
+				const end = new Date(data.endsAt);
+				if (mode === "METADATA" || end <= event.startsAt || end < new Date())
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: "ADVANCED_EDIT_END_INVALID",
+					});
+				after.endsAt = end.toISOString();
+			}
+			after.title = data.title;
+			after.description = data.description;
+			await tx
+				.update(events)
+				.set({
+					title: data.title,
+					description: data.description,
+					...(data.endsAt !== undefined
+						? { endsAt: new Date(data.endsAt) }
+						: {}),
+				})
+				.where(eq(events.id, event.id));
+		}
+		await tx.insert(eventAuditLogs).values({
+			eventId: event.id,
+			actorUserId: identity.userId,
+			reason: data.reason,
+			action:
+				data.mode === "FULL"
+					? "PUBLISHED_CONFIGURATION_EDITED"
+					: mode === "METADATA"
+						? "CLOSED_METADATA_EDITED"
+						: "PUBLISHED_DETAILS_EDITED",
+			beforeState: before,
+			afterState: after,
+		});
+	});
 }
 function requireState(actual: string, expected: string) {
 	if (actual !== expected)
@@ -184,6 +397,9 @@ export async function getEvent(
 		: [];
 	return {
 		canManage,
+		advancedEditMode: hasSuperadminPrivilege(identity)
+			? await advancedEditMode(db, row.event, row.session)
+			: null,
 		event: {
 			...row.event,
 			rosterCriteria: canManage ? row.event.rosterCriteria : null,

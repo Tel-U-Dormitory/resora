@@ -65,6 +65,19 @@ export const checkInSchema = z
 export type CheckInInput = z.infer<typeof checkInSchema>;
 
 const reasonSchema = z.string().trim().min(1).max(2000);
+export const advancedEventEditSchema = z.discriminatedUnion("mode", [
+	eventIdSchema.extend({
+		mode: z.literal("FULL"),
+		reason: reasonSchema,
+		draft: eventDraftSchema,
+	}),
+	eventMetadataSchema.extend({
+		mode: z.literal("LIMITED"),
+		reason: reasonSchema,
+		endsAt: z.iso.datetime({ offset: true }).optional(),
+	}),
+]);
+export type AdvancedEventEdit = z.infer<typeof advancedEventEditSchema>;
 const attendanceTimeSchema = z.iso.datetime({ offset: true });
 export const manualInsertSchema = eventIdSchema.extend({
 	userId: z.string().min(1).max(128),
