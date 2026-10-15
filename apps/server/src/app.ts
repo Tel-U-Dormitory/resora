@@ -193,5 +193,19 @@ export function createApp(
 		}),
 	);
 	app.get("/", (_req, res) => res.status(200).send("OK"));
+	// Liveness stays independent of storage; readiness checks the runtime pool only.
+	app.get("/readyz", async (_req, res) => {
+		res.set("Cache-Control", "no-store");
+		try {
+			const probe = {
+				text: "SELECT 1",
+				query_timeout: 2_000,
+			};
+			await services.db.$client.query(probe);
+			res.status(200).json({ status: "ready" });
+		} catch {
+			res.status(503).json({ status: "unavailable" });
+		}
+	});
 	return app;
 }
