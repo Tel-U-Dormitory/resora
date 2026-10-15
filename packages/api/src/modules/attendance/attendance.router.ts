@@ -4,9 +4,12 @@ import {
 	advancedEventEditSchema,
 	auditHistorySchema,
 	checkInSchema,
+	deleteDraftSchema,
 	eventDraftSchema,
 	eventIdSchema,
+	eventListSchema,
 	eventMetadataSchema,
+	eventVisibilitySchema,
 	manualCorrectSchema,
 	manualInsertSchema,
 	ownHistorySchema,
@@ -17,6 +20,16 @@ import { manualCorrect, manualInsert } from "./manual-attendance";
 import { auditHistory, exportCsv, ownHistory, recap } from "./reporting";
 
 export const attendanceRouter = router({
+	setVisibility: protectedProcedure
+		.input(eventVisibilitySchema)
+		.mutation(({ ctx, input }) =>
+			attendance.setEventVisibility(ctx.db, ctx.identity, input),
+		),
+	deleteDraft: protectedProcedure
+		.input(deleteDraftSchema)
+		.mutation(({ ctx, input }) =>
+			attendance.deleteEventDraft(ctx.db, ctx.identity, input),
+		),
 	advancedEdit: protectedProcedure
 		.input(advancedEventEditSchema)
 		.mutation(({ ctx, input }) =>
@@ -47,9 +60,11 @@ export const attendanceRouter = router({
 				throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 			return checkIn(ctx.db, ctx.identity, ctx.qrSigningSecret, input);
 		}),
-	list: protectedProcedure.query(({ ctx }) =>
-		attendance.listEvents(ctx.db, ctx.identity),
-	),
+	list: protectedProcedure
+		.input(eventListSchema)
+		.query(({ ctx, input }) =>
+			attendance.listEvents(ctx.db, ctx.identity, input),
+		),
 	detail: protectedProcedure
 		.input(eventIdSchema)
 		.query(({ ctx, input }) =>

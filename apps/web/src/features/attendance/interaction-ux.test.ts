@@ -292,6 +292,160 @@ test("event editor submits only permitted advanced fields, requires a reason and
 	expect(detail).toContain("metadata.mutateAsync");
 });
 
+test("visibility/deletion UI requires reason and confirmation, respects pending state and selects the existing mutation", async () => {
+	for (const action of [
+		"HIDE",
+		"UNHIDE",
+		"ARCHIVE",
+		"RESTORE",
+		"DELETE_DRAFT",
+	]) {
+		const calls: { kind: string; input: unknown }[] = [];
+		const jobs: Promise<unknown>[] = [];
+		let confirmed = false;
+		let feedback = "";
+		const scope = {
+			busy: false,
+			administrativeAction: action,
+			administrativeOptions: [action],
+			administrativeReason: " ",
+			eventId: "synthetic-event",
+			event: { title: "Synthetic draft" },
+			administrativeLabels: { [action]: "Synthetic action" },
+			window: { confirm: () => confirmed },
+			setError: (value: string) => {
+				feedback = value;
+			},
+			setAdministrativeAction: (value: string) => {
+				scope.administrativeAction = value;
+			},
+			setAdministrativeReason: (value: string) => {
+				scope.administrativeReason = value;
+			},
+			visibility: {
+				mutateAsync: async (input: unknown) => {
+					calls.push({ kind: "visibility", input });
+				},
+			},
+			deleteDraft: {
+				mutateAsync: async (input: unknown) => {
+					calls.push({ kind: "delete", input });
+				},
+			},
+			act: (
+				_kind: string,
+				_message: string,
+				operation: () => Promise<unknown>,
+			) => {
+				jobs.push(operation());
+			},
+		};
+		const submit = () =>
+			compile<(event: SubmitEvent) => void>(
+				jsxCallback("event-detail.tsx", "onSubmit", "administrativeOptions"),
+				scope,
+			)(event);
+		submit();
+		expect(feedback).toContain("Alasan");
+		expect(calls).toHaveLength(0);
+		scope.administrativeReason = "Synthetic reason";
+		submit();
+		expect(calls).toHaveLength(0); // Native confirmation cancelled.
+		confirmed = true;
+		scope.busy = true;
+		submit();
+		expect(calls).toHaveLength(0);
+		scope.busy = false;
+		submit();
+		await Promise.all(jobs);
+		expect(calls).toEqual([
+			{
+				kind: action === "DELETE_DRAFT" ? "delete" : "visibility",
+				input: {
+					eventId: scope.eventId,
+					reason: "Synthetic reason",
+					...(action !== "DELETE_DRAFT" ? { action } : {}),
+				},
+			},
+		]);
+		expect(scope.administrativeAction).toBe("");
+		expect(scope.administrativeReason).toBe("");
+	}
+	const detail = readFileSync(
+		new URL("event-detail.tsx", import.meta.url),
+		"utf8",
+	);
+	expect(detail).toContain("{administration && (");
+	expect(detail).toContain('disabled={busy || event.visibility !== "VISIBLE"}');
+	const list = readFileSync(new URL("event-list.tsx", import.meta.url), "utf8");
+	expect(list).toContain("management && query.data?.isSuperadmin");
+	expect(list).toContain('event.visibility === "VISIBLE"');
+});
+
+test("successful DRAFT deletion redirects without refetching deleted detail; failure retains retry feedback", async () => {
+	const source = ts.createSourceFile(
+		"event-detail.tsx",
+		readFileSync(new URL("event-detail.tsx", import.meta.url), "utf8"),
+		ts.ScriptTarget.Latest,
+		true,
+		ts.ScriptKind.TSX,
+	);
+	let expression = "";
+	function visit(node: ts.Node) {
+		if (ts.isVariableDeclaration(node) && node.name.getText(source) === "act")
+			expression = node.initializer?.getText(source) ?? "";
+		ts.forEachChild(node, visit);
+	}
+	visit(source);
+	for (const failure of [false, true]) {
+		const paths: string[] = [];
+		const invalidations: unknown[] = [];
+		let error = "";
+		const scope = {
+			actionLock: { current: false },
+			eventId: "synthetic-event",
+			setActiveAction: () => {},
+			setFeedback: () => {},
+			setError: (value: string) => {
+				error = value;
+			},
+			attendanceQueryKeys: { all: ["attendance"] },
+			queryClient: {
+				cancelQueries: async () => {},
+				invalidateQueries: async (input: unknown) => {
+					invalidations.push(input);
+				},
+			},
+			router: {
+				replace: (path: string) => {
+					paths.push(path);
+				},
+			},
+			refreshAttendanceQueries: async () => {
+				throw new Error("Deleted detail must not refetch");
+			},
+			eventErrorMessage: () =>
+				"Permintaan belum berhasil. Muat ulang sebelum mencoba kembali.",
+		};
+		const act = compile<
+			(
+				kind: string,
+				message: string,
+				operation: () => Promise<void>,
+			) => Promise<void>
+		>(expression, scope);
+		await act("deleteDraft", "Draft dihapus", async () => {
+			if (failure) throw new Error("Synthetic failure");
+		});
+		expect(paths).toEqual(failure ? [] : ["/events?view=manage"]);
+		expect(invalidations).toEqual(
+			failure ? [] : [{ queryKey: ["attendance"], refetchType: "none" }],
+		);
+		expect(Boolean(error)).toBe(failure);
+		expect(scope.actionLock.current).toBe(false);
+	}
+});
+
 test("dialog Escape closes only when idle; native modal opening/focus/cleanup remain explicit", () => {
 	for (const busy of [false, true]) {
 		let closes = 0;

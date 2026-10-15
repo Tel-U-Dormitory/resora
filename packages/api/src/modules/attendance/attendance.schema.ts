@@ -65,6 +65,24 @@ export const checkInSchema = z
 export type CheckInInput = z.infer<typeof checkInSchema>;
 
 const reasonSchema = z.string().trim().min(1).max(2000);
+export const visibilitySchema = z.enum(["VISIBLE", "HIDDEN", "ARCHIVED"]);
+export const eventListSchema = z
+	.object({
+		visibility: z
+			.union([visibilitySchema, z.literal("NON_ARCHIVED")])
+			.default("NON_ARCHIVED"),
+	})
+	.strict()
+	.default({ visibility: "NON_ARCHIVED" });
+export type EventListInput = z.infer<typeof eventListSchema>;
+export const eventVisibilitySchema = eventIdSchema.extend({
+	action: z.enum(["HIDE", "UNHIDE", "ARCHIVE", "RESTORE"]),
+	reason: reasonSchema,
+});
+export type VisibilityAction = z.infer<typeof eventVisibilitySchema>["action"];
+export type EventVisibilityInput = z.infer<typeof eventVisibilitySchema>;
+export const deleteDraftSchema = eventIdSchema.extend({ reason: reasonSchema });
+export type DeleteDraftInput = z.infer<typeof deleteDraftSchema>;
 export const advancedEventEditSchema = z.discriminatedUnion("mode", [
 	eventIdSchema.extend({
 		mode: z.literal("FULL"),

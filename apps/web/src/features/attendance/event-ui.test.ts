@@ -16,6 +16,18 @@ test("advanced edit errors explain stale eligibility and end-time restrictions s
 	).toContain("tidak boleh di masa lalu");
 });
 
+test("visibility and deletion errors describe restrictions without exposing internal details", () => {
+	expect(
+		eventErrorMessage(new TRPCClientError("EVENT_VISIBILITY_CONFLICT")),
+	).toContain("Visibilitas atau status");
+	expect(
+		eventErrorMessage(new TRPCClientError("HIDDEN_EVENT_ACTIVATION_FORBIDDEN")),
+	).toContain("SUPERADMIN");
+	expect(
+		eventErrorMessage(new TRPCClientError("DRAFT_DELETE_NOT_ALLOWED")),
+	).toContain("tidak dapat dihapus");
+});
+
 test("draft and manual input use explicit WIB independent of device timezone", () => {
 	expect(toWibDateTimeInput("2026-10-12T06:00:00Z")).toBe("2026-10-12T13:00");
 	expect(parseWibDateTimeInput("2026-10-12T13:00").toISOString()).toBe(

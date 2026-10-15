@@ -1,17 +1,19 @@
 import type { ActiveIdentity } from "@resora/auth/sr-access";
 import type { Database, DatabaseTransaction } from "@resora/db";
 import {
+	attendanceAuditLogs,
 	attendanceRecords,
 	attendanceSessions,
 	type EventEditAuditState,
 	eventAuditLogs,
+	eventDeletionAudits,
 	eventParticipants,
 	events,
 	qrChallenges,
 	type RosterCriteria,
 } from "@resora/db/schema/attendance";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import QRCode from "qrcode";
 import {
 	canAccessPersonalSr,
@@ -23,7 +25,14 @@ import {
 import {
 	type AdvancedEventEdit,
 	advancedEventEditSchema,
+	type DeleteDraftInput,
+	deleteDraftSchema,
 	type EventDraft,
+	type EventListInput,
+	type EventVisibilityInput,
+	eventListSchema,
+	eventVisibilitySchema,
+	type VisibilityAction,
 } from "./attendance.schema";
 import { signChallenge } from "./qr";
 import { resolveRoster } from "./roster";
@@ -265,6 +274,177 @@ function requireState(actual: string, expected: string) {
 			message: "Event/session state does not permit this action",
 		});
 }
+
+function visibilityActions(
+	event: typeof events.$inferSelect,
+	session: typeof attendanceSessions.$inferSelect,
+): VisibilityAction[] {
+	const closed = event.status === "CLOSED" && session.status === "CLOSED";
+	const inactive =
+		event.status === "PUBLISHED" && session.status === "INACTIVE";
+	if (!closed && !inactive) return [];
+	if (event.visibility === "ARCHIVED") return closed ? ["RESTORE"] : [];
+	const actions: VisibilityAction[] = [];
+	if (event.visibility === "VISIBLE") actions.push("HIDE");
+	if (event.visibility === "HIDDEN") actions.push("UNHIDE");
+	if (closed) actions.push("ARCHIVE");
+	return actions;
+}
+
+async function draftDeletionBlocker(
+	db: Database | DatabaseTransaction,
+	event: typeof events.$inferSelect,
+	session: typeof attendanceSessions.$inferSelect,
+) {
+	if (event.status !== "DRAFT") return "DRAFT_REQUIRED" as const;
+	if (
+		event.visibility !== "VISIBLE" ||
+		session.status !== "INACTIVE" ||
+		session.activatedAt ||
+		session.closedAt
+	)
+		return "UNUSED_SESSION_REQUIRED" as const;
+	// One bounded existence query covers every current operational/audit FK.
+	// Parent row locks also block concurrent FK insertions; FKs remain the final guard.
+	const [references] = await db
+		.select({
+			hasReferences: sql<boolean>`
+		EXISTS (SELECT 1 FROM ${attendanceRecords} WHERE ${attendanceRecords.sessionId} = ${session.id})
+		OR EXISTS (SELECT 1 FROM ${eventParticipants} WHERE ${eventParticipants.eventId} = ${event.id})
+		OR EXISTS (SELECT 1 FROM ${qrChallenges} WHERE ${qrChallenges.sessionId} = ${session.id})
+		OR EXISTS (SELECT 1 FROM ${eventAuditLogs} WHERE ${eventAuditLogs.eventId} = ${event.id})
+		OR EXISTS (SELECT 1 FROM ${attendanceAuditLogs} WHERE ${attendanceAuditLogs.sessionId} = ${session.id})
+	`,
+		})
+		.from(attendanceSessions)
+		.where(eq(attendanceSessions.id, session.id));
+	return references?.hasReferences === false
+		? null
+		: ("REFERENCES_EXIST" as const);
+}
+
+export async function setEventVisibility(
+	db: Database,
+	identity: ActiveIdentity,
+	input: EventVisibilityInput,
+) {
+	if (!hasSuperadminPrivilege(identity))
+		throw new TRPCError({ code: "FORBIDDEN" });
+	const parsed = eventVisibilitySchema.safeParse(input);
+	if (!parsed.success)
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "Invalid visibility request",
+		});
+	const data = parsed.data;
+	return db.transaction(async (tx) => {
+		const { event, session } = await lockedEvent(
+			tx,
+			data.eventId,
+			identity,
+			true,
+		);
+		if (!visibilityActions(event, session).includes(data.action))
+			throw new TRPCError({
+				code: "CONFLICT",
+				message: "EVENT_VISIBILITY_CONFLICT",
+			});
+		const changes = {
+			HIDE: { visibility: "HIDDEN", action: "EVENT_HIDDEN" },
+			UNHIDE: { visibility: "VISIBLE", action: "EVENT_UNHIDDEN" },
+			ARCHIVE: { visibility: "ARCHIVED", action: "EVENT_ARCHIVED" },
+			RESTORE: { visibility: "VISIBLE", action: "EVENT_RESTORED" },
+		} as const;
+		const change = changes[data.action];
+		const previousVisibility = event.visibility;
+		await tx
+			.update(events)
+			.set({ visibility: change.visibility })
+			.where(eq(events.id, event.id));
+		await tx.insert(eventAuditLogs).values({
+			eventId: event.id,
+			actorUserId: identity.userId,
+			action: change.action,
+			reason: data.reason,
+			beforeState: { visibility: previousVisibility },
+			afterState: { visibility: change.visibility },
+		});
+		return { visibility: change.visibility };
+	});
+}
+
+export async function deleteEventDraft(
+	db: Database,
+	identity: ActiveIdentity,
+	input: DeleteDraftInput,
+) {
+	if (!hasSuperadminPrivilege(identity))
+		throw new TRPCError({ code: "FORBIDDEN" });
+	const parsed = deleteDraftSchema.safeParse(input);
+	if (!parsed.success)
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "Invalid deletion request",
+		});
+	const data = parsed.data;
+	try {
+		return await db.transaction(async (tx) => {
+			const { event, session } = await lockedEvent(
+				tx,
+				data.eventId,
+				identity,
+				true,
+			);
+			if (await draftDeletionBlocker(tx, event, session))
+				throw new TRPCError({
+					code: "CONFLICT",
+					message: "DRAFT_DELETE_NOT_ALLOWED",
+				});
+			// The inverse session constraint is deferred: once BOTH rows are gone,
+			// it finds no parent at commit. No cascade or trigger bypass is needed.
+			const [deletedSession] = await tx
+				.delete(attendanceSessions)
+				.where(eq(attendanceSessions.id, session.id))
+				.returning({ id: attendanceSessions.id });
+			const [deletedEvent] = await tx
+				.delete(events)
+				.where(eq(events.id, event.id))
+				.returning({ id: events.id });
+			if (!deletedSession || !deletedEvent)
+				throw new TRPCError({
+					code: "CONFLICT",
+					message: "DRAFT_DELETE_NOT_ALLOWED",
+				});
+			await tx.insert(eventDeletionAudits).values({
+				eventId: event.id,
+				actorUserId: identity.userId,
+				action: "EVENT_DRAFT_DELETED",
+				reason: data.reason,
+				eventSnapshot: {
+					title: event.title,
+					status: "DRAFT",
+					startsAt: event.startsAt.toISOString(),
+					endsAt: event.endsAt.toISOString(),
+				},
+			});
+			return { eventId: event.id };
+		});
+	} catch (error) {
+		const cause =
+			error instanceof Error && "cause" in error ? error.cause : error;
+		if (
+			cause &&
+			typeof cause === "object" &&
+			"code" in cause &&
+			["23503", "23514", "23505"].includes(String(cause.code))
+		)
+			throw new TRPCError({
+				code: "CONFLICT",
+				message: "DRAFT_DELETE_NOT_ALLOWED",
+			});
+		throw error;
+	}
+}
 export async function createEvent(
 	db: Database,
 	identity: ActiveIdentity,
@@ -331,10 +511,18 @@ export async function editMetadata(
 		await tx.update(events).set(metadata).where(eq(events.id, eventId));
 	});
 }
-export async function listEvents(db: Database, identity: ActiveIdentity) {
+export async function listEvents(
+	db: Database,
+	identity: ActiveIdentity,
+	input: EventListInput = { visibility: "NON_ARCHIVED" },
+) {
 	if (!canAccessPersonalSr(identity) && !hasSuperadminPrivilege(identity))
 		throw new TRPCError({ code: "FORBIDDEN" });
 	const canManage = canManageInternalEvent(identity);
+	const isSuperadmin = hasSuperadminPrivilege(identity);
+	const filter = eventListSchema.parse(input);
+	if (!isSuperadmin && filter.visibility !== "NON_ARCHIVED")
+		throw new TRPCError({ code: "FORBIDDEN" });
 	const selection = {
 		id: events.id,
 		title: events.title,
@@ -342,9 +530,18 @@ export async function listEvents(db: Database, identity: ActiveIdentity) {
 		status: events.status,
 		startsAt: events.startsAt,
 		endsAt: events.endsAt,
+		visibility: events.visibility,
 	};
 	const rows = canManage
-		? await db.select(selection).from(events).orderBy(desc(events.startsAt))
+		? await db
+				.select(selection)
+				.from(events)
+				.where(
+					filter.visibility === "NON_ARCHIVED"
+						? ne(events.visibility, "ARCHIVED")
+						: eq(events.visibility, filter.visibility),
+				)
+				.orderBy(desc(events.startsAt))
 		: await db
 				.select(selection)
 				.from(events)
@@ -352,11 +549,12 @@ export async function listEvents(db: Database, identity: ActiveIdentity) {
 				.where(
 					and(
 						eq(events.status, "PUBLISHED"),
+						eq(events.visibility, "VISIBLE"),
 						eq(eventParticipants.userId, identity.userId),
 					),
 				)
 				.orderBy(desc(events.startsAt));
-	return { canManage, events: rows };
+	return { canManage, isSuperadmin, events: rows };
 }
 export async function getEvent(
 	db: Database,
@@ -377,6 +575,8 @@ export async function getEvent(
 		throw new TRPCError({ code: "NOT_FOUND", message: "Event unavailable" });
 	const canManage = canManageInternalEvent(identity);
 	if (!canManage) {
+		if (row.event.visibility !== "VISIBLE")
+			throw new TRPCError({ code: "NOT_FOUND", message: "Event unavailable" });
 		const [invited] = await db
 			.select({ userId: eventParticipants.userId })
 			.from(eventParticipants)
@@ -395,8 +595,18 @@ export async function getEvent(
 				.from(eventParticipants)
 				.where(eq(eventParticipants.eventId, eventId))
 		: [];
+	const deletionBlockedReason = hasSuperadminPrivilege(identity)
+		? await draftDeletionBlocker(db, row.event, row.session)
+		: null;
 	return {
 		canManage,
+		administration: hasSuperadminPrivilege(identity)
+			? {
+					visibilityActions: visibilityActions(row.event, row.session),
+					canDeleteDraft: deletionBlockedReason === null,
+					deletionBlockedReason,
+				}
+			: null,
 		advancedEditMode: hasSuperadminPrivilege(identity)
 			? await advancedEditMode(db, row.event, row.session)
 			: null,
@@ -475,6 +685,11 @@ export async function activateSession(
 		const { event, session } = await lockedEvent(tx, eventId, identity);
 		requireState(event.status, "PUBLISHED");
 		requireState(session.status, "INACTIVE");
+		if (event.visibility !== "VISIBLE")
+			throw new TRPCError({
+				code: "CONFLICT",
+				message: "HIDDEN_EVENT_ACTIVATION_FORBIDDEN",
+			});
 		const now = new Date();
 		await tx
 			.update(attendanceSessions)

@@ -216,6 +216,7 @@ function fixture() {
 		id: randomUUID(),
 		title: "Synthetic",
 		status: "PUBLISHED",
+		visibility: "VISIBLE",
 		startsAt: start,
 		closedAt: null as Date | null,
 		rosterCriteria: rosterSchema.parse({ allSr: true }),
@@ -611,6 +612,56 @@ test("recap starts at historical snapshots including missing records; origin/GPS
 	expect(report.counts.absent).toBe(1);
 	expect(report.participants[1]?.lateMinutes).toBeNull();
 	expect(report.participants[0]).not.toHaveProperty("scanLat");
+});
+
+test("hidden and archived historical evidence remains in own history, recap, CSV and attendance audit", async () => {
+	for (const visibility of ["HIDDEN", "ARCHIVED"]) {
+		const f = fixture();
+		f.event.visibility = visibility;
+		f.event.status = visibility === "ARCHIVED" ? "CLOSED" : "PUBLISHED";
+		const participant = {
+			userId: f.identity.userId,
+			nim: "0000000001",
+			name: "Historical SR",
+			departmentCode: "HCO",
+			positionCode: "KADEP",
+			buildingCode: "A",
+			buildingName: "Gedung A",
+		};
+		f.state.reports = [
+			{ event: f.event, grace: 15, participant, record: f.original },
+		];
+		expect((await ownHistory(f.db, f.identity, {})).items).toHaveLength(1);
+		expect((await recap(f.db, f.identity, f.event.id)).counts.present).toBe(1);
+		expect((await exportCsv(f.db, f.identity, f.event.id)).content).toContain(
+			"Historical SR",
+		);
+		f.state.audits = [
+			{
+				id: randomUUID(),
+				action: "ATTENDANCE_CORRECTED",
+				reason: "Historical correction",
+				beforeState: {
+					attendanceAt: start.toISOString(),
+					timingClass: "ON_TIME",
+				},
+				afterState: {
+					attendanceAt: start.toISOString(),
+					timingClass: "ON_TIME",
+				},
+			},
+		];
+		expect(
+			(
+				await auditHistory(f.db, f.identity, {
+					eventId: f.event.id,
+					userId: participant.userId,
+				})
+			).items,
+		).toHaveLength(1);
+		for (const query of f.state.filters)
+			expect(query.params).not.toContain(visibility);
+	}
 });
 
 for (const [departmentCode, positionCode] of [
