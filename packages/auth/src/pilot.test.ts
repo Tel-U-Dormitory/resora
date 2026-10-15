@@ -103,7 +103,7 @@ test("auth POST rejects missing and foreign Origin before credential work", asyn
 
 test("actual auth login limiter throttles invalid body requests without connecting to database", async () => {
 	const statuses: number[] = [];
-	for (let attempt = 0; attempt < 6; attempt++) {
+	for (let attempt = 0; attempt < 76; attempt++) {
 		const response = await auth.handler(
 			new Request("http://localhost:3000/api/auth/sign-in/username", {
 				method: "POST",
@@ -121,8 +121,8 @@ test("actual auth login limiter throttles invalid body requests without connecti
 		);
 		statuses.push(response.status);
 	}
-	expect(statuses.slice(0, 5)).toEqual([400, 400, 400, 400, 400]);
-	expect(statuses[5]).toBe(429);
+	expect(statuses.slice(0, 75)).toEqual(Array(75).fill(400));
+	expect(statuses[75]).toBe(429);
 });
 
 test("diagnostic limiter-off mode keeps public signup closed and Origin/cookie/session protections", async () => {

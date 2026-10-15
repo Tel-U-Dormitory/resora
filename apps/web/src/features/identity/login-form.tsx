@@ -2,6 +2,7 @@
 
 import { Input } from "@resora/ui/components/input";
 import { Label } from "@resora/ui/components/label";
+import { Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
@@ -15,6 +16,7 @@ export default function LoginForm({ expired = false }: { expired?: boolean }) {
 	const router = useRouter();
 	const [nim, setNim] = useState("");
 	const [password, setPassword] = useState("");
+	const [showPassword, setShowPassword] = useState(false);
 	const [status, setStatus] = useState<"idle" | "processing" | "redirecting">(
 		"idle",
 	);
@@ -113,16 +115,38 @@ export default function LoginForm({ expired = false }: { expired?: boolean }) {
 					</div>
 					<div className="space-y-2">
 						<Label htmlFor="password">Password</Label>
-						<Input
-							id="password"
-							name="password"
-							type="password"
-							autoComplete="current-password"
-							required
-							value={password}
-							onChange={(e) => setPassword(e.target.value)}
-							disabled={pending}
-						/>
+						<div className="relative">
+							<Input
+								id="password"
+								name="password"
+								type={showPassword ? "text" : "password"}
+								autoComplete="current-password"
+								required
+								value={password}
+								onChange={(e) => setPassword(e.target.value)}
+								disabled={pending}
+								className="pr-10"
+							/>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon"
+								className="absolute inset-y-0 right-0 h-8 w-9 rounded-none text-muted-foreground hover:text-foreground"
+								aria-label={
+									showPassword ? "Sembunyikan password" : "Tampilkan password"
+								}
+								aria-pressed={showPassword}
+								aria-controls="password"
+								disabled={pending}
+								onClick={() => setShowPassword((visible) => !visible)}
+							>
+								{showPassword ? (
+									<EyeOff className="size-4" aria-hidden="true" />
+								) : (
+									<Eye className="size-4" aria-hidden="true" />
+								)}
+							</Button>
+						</div>
 					</div>
 					{error && (
 						<p role="alert" className="text-destructive">

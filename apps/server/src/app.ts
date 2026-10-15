@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 import { appRouter } from "@resora/api/routers/index";
 import type { Auth, AuthConfig } from "@resora/auth";
 import type { Database } from "@resora/db";
@@ -8,11 +9,25 @@ import express from "express";
 
 import { createContext } from "./context";
 
+export function resolveClientIp(
+	remoteAddress: string | undefined,
+	vercelForwardedFor: string | string[] | undefined,
+	isVercel: boolean,
+) {
+	// Only genuine Vercel ingress may supply the platform header. Elsewhere,
+	// ignore every forwarded header. Invalid/missing values share one bucket.
+	const candidate = isVercel ? vercelForwardedFor : remoteAddress;
+	return typeof candidate === "string" && isIP(candidate)
+		? candidate
+		: "127.0.0.1";
+}
+
 export function createApp(
 	services: { db: Database; auth: Auth; authConfig?: AuthConfig },
 	origin: string,
 ) {
 	const app = express();
+	const isVercel = process.env.VERCEL === "1";
 	const trustedOrigin = new URL(origin).origin;
 	const authHandler = toNodeHandler(async (request) => {
 		const response = await services.auth.handler(request);
@@ -113,9 +128,12 @@ export function createApp(
 		}),
 	);
 	app.all("/api/auth{/*path}", async (req, res) => {
-		// Never accept an arbitrary client-supplied forwarded IP as a limiter key.
-		// Trust proxy stays false until deployment's proxy boundary is approved.
-		req.headers["x-resora-client-ip"] = req.socket.remoteAddress || "127.0.0.1";
+		// Always replace the client-supplied limiter header; trust proxy stays false.
+		req.headers["x-resora-client-ip"] = resolveClientIp(
+			req.socket.remoteAddress,
+			req.headers["x-vercel-forwarded-for"],
+			isVercel,
+		);
 		try {
 			await authHandler(req, res);
 		} catch {
