@@ -210,9 +210,9 @@ test("password change keeps the mandatory redirect and gives voluntary changes l
 	expect(revokesOtherSessions).toBe(true);
 });
 
-test("login and protected layouts redirect using the derived password requirement, not the stored flag", () => {
+test("SSR login and protected layouts redirect using the derived password requirement, not the stored flag", () => {
 	for (const path of [
-		"login-form.tsx",
+		"sr-dashboard.tsx",
 		"../../app/login/page.tsx",
 		"../../app/(authenticated)/layout.tsx",
 		"../../app/(authenticated)/admin/users/layout.tsx",
