@@ -22,3 +22,15 @@ test("Vercel packages generated chunks and API Varlock schema with the bridge", 
 		"{dist/**,.env.schema}",
 	);
 });
+
+test("native and Vercel entrypoints use the same opt-in typed diagnostic switch", () => {
+	for (const path of ["src/index.ts", "src/vercel-app.ts"]) {
+		expect(readFileSync(new URL(path, root), "utf8")).toContain(
+			'authPerfDiagnosticsEnabled: ENV.AUTH_PERF_DIAGNOSTICS_ENABLED === "true"',
+		);
+	}
+	const turbo = JSON.parse(
+		readFileSync(new URL("../../turbo.json", root), "utf8"),
+	);
+	expect(turbo.globalEnv).toContain("AUTH_PERF_DIAGNOSTICS_ENABLED");
+});

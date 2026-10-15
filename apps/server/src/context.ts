@@ -6,11 +6,19 @@ import { APIError } from "better-auth/api";
 import { fromNodeHeaders } from "better-auth/node";
 
 export async function createContext(
-	services: { db: Database; auth: Auth; authConfig?: AuthConfig },
+	services: {
+		db: Database;
+		auth: Auth;
+		authConfig?: AuthConfig;
+		authPerfDiagnosticsEnabled?: boolean;
+	},
 	opts: CreateExpressContextOptions,
 ): Promise<ApiContext> {
 	const { auth, db } = services;
 	let session = null;
+	const sessionStarted = services.authPerfDiagnosticsEnabled
+		? performance.now()
+		: null;
 	try {
 		session = await auth.api.getSession({
 			headers: fromNodeHeaders(opts.req.headers),
@@ -18,6 +26,14 @@ export async function createContext(
 		});
 	} catch (error) {
 		if (!(error instanceof APIError) || error.statusCode !== 401) throw error;
+	} finally {
+		// One scalar per HTTP context, including storage failures; no session data
+		// or additional retrieval. Do not change the authoritative read's behavior.
+		if (sessionStarted !== null)
+			opts.res.locals.authSessionDurationMs = Math.max(
+				0,
+				Math.round(performance.now() - sessionStarted),
+			);
 	}
 	return {
 		db,

@@ -499,3 +499,160 @@ test("auth preserves credential rejection/429/success and sanitizes returned int
 		log.mockRestore();
 	}
 });
+
+test("opt-in latency diagnostics log only targeted successes with safe request/session timing", async () => {
+	const listener = createApp(
+		{ db, auth, authPerfDiagnosticsEnabled: true },
+		origin,
+	).listen(0, "127.0.0.1");
+	await new Promise<void>((resolve) => listener.once("listening", resolve));
+	const address = listener.address() as AddressInfo;
+	const diagnosticBase = `http://127.0.0.1:${address.port}`;
+	const records: unknown[][] = [];
+	const log = spyOn(console, "info").mockImplementation(
+		(...args: unknown[]) => {
+			records.push(args);
+		},
+	);
+	try {
+		const paths = [
+			["/api/auth/sign-in/username", "LOGIN", "POST"],
+			["/api/auth/get-session", "AUTH_SESSION", "GET"],
+			["/trpc/identity.session", "IDENTITY_SESSION", "GET"],
+			["/trpc/privateData", "DASHBOARD_DATA", "GET"],
+		] as const;
+		for (const [path, operation, method] of paths) {
+			const response = await fetch(
+				`${diagnosticBase}${path}?private=synthetic-query-secret`,
+				{
+					method,
+					headers: {
+						origin,
+						cookie: "synthetic-cookie-secret",
+						authorization: "Bearer synthetic-token-secret",
+						"content-type": "application/json",
+					},
+					...(method === "POST"
+						? {
+								body: JSON.stringify({
+									username: "synthetic-private-nim",
+									password: "synthetic-private-password",
+								}),
+							}
+						: {}),
+				},
+			);
+			expect(response.status).toBe(200);
+			await response.text();
+			const record = records.at(-1)?.[1] as Record<string, unknown>;
+			expect(record).toMatchObject({
+				operation,
+				status: 200,
+				outcome: "SUCCESS",
+				poolTotal: 1,
+				poolIdle: 0,
+				poolWaiting: 3,
+			});
+			expect(record.durationMs).toBeGreaterThanOrEqual(0);
+			const keys = [
+				"durationMs",
+				"operation",
+				"outcome",
+				"poolIdle",
+				"poolTotal",
+				"poolWaiting",
+				"status",
+			];
+			if (path.startsWith("/trpc/")) {
+				keys.push("sessionLookupDurationMs");
+				expect(record.sessionLookupDurationMs).toBeGreaterThanOrEqual(0);
+			}
+			expect(Object.keys(record).sort()).toEqual(keys.sort());
+		}
+		expect(sessions).toBe(2); // Exactly one authoritative lookup for each tRPC request.
+		const batch = await fetch(
+			`${diagnosticBase}/trpc/privateData,identity.session?batch=1`,
+		);
+		expect(batch.status).toBe(200);
+		await batch.text();
+		expect(sessions).toBe(3); // A batch shares one context; diagnostics never re-read storage.
+		expect(
+			records
+				.slice(-2)
+				.map((row) => (row[1] as Record<string, unknown>).operation),
+		).toEqual(["IDENTITY_SESSION", "DASHBOARD_DATA"]);
+		for (const row of records.slice(-2))
+			expect(row[1]).toMatchObject({ batched: true, status: 200 });
+		const batchDurations = records
+			.slice(-2)
+			.map((row) => (row[1] as Record<string, unknown>).durationMs);
+		expect(batchDurations[0]).toBe(batchDurations[1]);
+		expect(records).toHaveLength(6);
+		await (await fetch(`${diagnosticBase}/trpc/healthCheck`)).text();
+		await (await fetch(`${diagnosticBase}/`)).text();
+		expect(records).toHaveLength(6); // No new global tRPC or health-success logging.
+		expect(JSON.stringify(records)).not.toMatch(
+			/synthetic|cookie|password|token|authorization|postgresql|127\.0|stack|headers|username/i,
+		);
+	} finally {
+		log.mockRestore();
+		await new Promise<void>((resolve, reject) =>
+			listener.close((error) => (error ? reject(error) : resolve())),
+		);
+	}
+});
+
+test("opt-in diagnostics retain final error status and session timing for context/resolver failures", async () => {
+	const listener = createApp(
+		{ db, auth, authPerfDiagnosticsEnabled: true },
+		origin,
+	).listen(0, "127.0.0.1");
+	await new Promise<void>((resolve) => listener.once("listening", resolve));
+	const address = listener.address() as AddressInfo;
+	const records: unknown[][] = [];
+	const log = spyOn(console, "info").mockImplementation(
+		(...args: unknown[]) => {
+			records.push(args);
+		},
+	);
+	try {
+		for (const contextFailure of [true, false]) {
+			failContext = contextFailure;
+			failQuery = !contextFailure;
+			const response = await fetch(
+				`http://127.0.0.1:${address.port}/trpc/identity.session?private=synthetic-query-secret`,
+			);
+			expect(response.status).toBe(500);
+			expect(await response.text()).not.toContain("synthetic-private");
+			const record = records.at(-1)?.[1] as Record<string, unknown>;
+			expect(record).toMatchObject({
+				operation: "IDENTITY_SESSION",
+				status: 500,
+				outcome: "ERROR",
+				poolTotal: 1,
+				poolIdle: 0,
+				poolWaiting: 3,
+			});
+			expect(record.sessionLookupDurationMs).toBeGreaterThanOrEqual(0);
+			expect(Object.keys(record).sort()).toEqual([
+				"durationMs",
+				"operation",
+				"outcome",
+				"poolIdle",
+				"poolTotal",
+				"poolWaiting",
+				"sessionLookupDurationMs",
+				"status",
+			]);
+		}
+		expect(records).toHaveLength(2);
+		expect(JSON.stringify(records)).not.toMatch(
+			/synthetic|cookie|password|token|postgresql|stack/i,
+		);
+	} finally {
+		log.mockRestore();
+		await new Promise<void>((resolve, reject) =>
+			listener.close((error) => (error ? reject(error) : resolve())),
+		);
+	}
+});
