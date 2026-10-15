@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { cache } from "react";
 import ts from "typescript";
 import { parseWibDateTimeInput, toWibDateTimeInput } from "./event-ui";
 
@@ -36,7 +37,7 @@ function jsxCallback(file: string, attribute: string, contains = "") {
 }
 function compile<T>(expression: string, scope: Record<string, unknown>): T {
 	const js = ts.transpileModule(`const handler = ${expression};`, {
-		compilerOptions: { target: ts.ScriptTarget.ES2022 },
+		compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React },
 	}).outputText;
 	return new Function(...Object.keys(scope), `${js}\nreturn handler;`)(
 		...Object.values(scope),
@@ -51,6 +52,7 @@ function loginFixture() {
 		status: "idle",
 		error: "",
 		calls: 0,
+		clears: 0,
 		paths: [] as string[],
 	};
 	const submitting = { current: false };
@@ -72,18 +74,17 @@ function loginFixture() {
 				},
 			},
 		},
+
 		queryClient: {
-			clear: () => {},
-			fetchQuery: async () =>
-				({ mustChangePassword: true, requiresPasswordChange: false }) as {
-					mustChangePassword: boolean;
-					requiresPasswordChange: boolean;
-				} | null,
+			clear: () => {
+				observed.clears++;
+			},
 		},
-		trpc: { identity: { session: { queryOptions: () => ({}) } } },
-		router: {
-			replace: (path: string) => {
-				observed.paths.push(path);
+		window: {
+			location: {
+				replace: (path: string) => {
+					observed.paths.push(path);
+				},
 			},
 		},
 	};
@@ -95,52 +96,53 @@ function loginFixture() {
 	return { observed, submitting, scope, submit };
 }
 
-test("login stays pending through session lookup/navigation and blocks repeated submits", async () => {
-	for (const requiresPasswordChange of [false, true]) {
-		const fixture = loginFixture();
-		let release: () => void = () => {};
-		let started: () => void = () => {};
-		const ready = new Promise<void>((resolve) => {
-			started = resolve;
-		});
-		const gate = new Promise<void>((resolve) => {
-			release = resolve;
-		});
-		fixture.scope.queryClient.fetchQuery = async () => {
-			started();
-			await gate;
-			return { mustChangePassword: true, requiresPasswordChange };
-		};
-		const submit = fixture.submit();
-		const first = submit(event);
-		await ready;
-		expect(fixture.observed.status).toBe("processing");
-		await submit(event);
-		expect(fixture.observed.calls).toBe(1);
-		release();
-		await first;
-		expect(fixture.observed.status).toBe("redirecting");
-		expect(fixture.submitting.current).toBe(true);
-		expect(fixture.observed.paths).toEqual([
-			requiresPasswordChange ? "/change-password" : "/dashboard",
-		]);
-		await submit(event);
-		expect(fixture.observed.calls).toBe(1);
-		expect(fixture.observed.error).toBe("");
-	}
+test("login stays pending through sign-in and fresh SSR navigation without a client identity fetch", async () => {
+	const fixture = loginFixture();
+	let release: () => void = () => {};
+	const gate = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	fixture.scope.authClient.signIn.username = async () => {
+		fixture.observed.calls++;
+		await gate;
+		return { error: null };
+	};
+	const submit = fixture.submit();
+	const first = submit(event);
+	expect(fixture.observed.status).toBe("processing");
+	await submit(event);
+	expect(fixture.observed.calls).toBe(1);
+	release();
+	await first;
+	expect(fixture.observed.status).toBe("redirecting");
+	expect(fixture.submitting.current).toBe(true);
+	expect(fixture.observed.paths).toEqual(["/dashboard"]);
+	expect(fixture.observed.clears).toBe(1);
+	await submit(event);
+	expect(fixture.observed.calls).toBe(1);
+	expect(fixture.observed.error).toBe("");
+	const source = readFileSync(
+		new URL("../identity/login-form.tsx", import.meta.url),
+		"utf8",
+	);
+	expect(source).not.toContain("fetchQuery");
+	expect(source).not.toContain("trpc.identity");
+	expect(source).not.toContain("router.refresh");
 });
 
-test("login resets pending on credential, rate-limit, service and session failures", async () => {
+test("login resets pending on credential, rate-limit, service, navigation and network failures", async () => {
 	for (const failure of [
 		"credentials",
 		"rate",
 		"service",
-		"session",
+		"navigation",
 		"network",
 	]) {
 		const fixture = loginFixture();
-		if (failure === "session")
-			fixture.scope.queryClient.fetchQuery = async () => null;
+		if (failure === "navigation")
+			fixture.scope.window.location.replace = () => {
+				throw new Error("Synthetic navigation failure");
+			};
 		else
 			fixture.scope.authClient.signIn.username = async () => {
 				if (failure === "network")
@@ -730,4 +732,197 @@ test("administrative audit UI is backend-gated, expandable, paginated and render
 	expect(history).toContain("item.participants.addedCount");
 	expect(history).toContain("setOffset(Math.max(0, offset - 20))");
 	expect(history).not.toContain("JSON.stringify");
+});
+
+// Execute existing server functions with synthetic request/RPC/JSX boundaries.
+// These are offline tests, not a real Next.js RSC/browser integration run.
+function serverComponent(file: string, scope: Record<string, unknown>) {
+	const source = ts.createSourceFile(
+		file,
+		readFileSync(new URL(file, import.meta.url), "utf8"),
+		ts.ScriptTarget.Latest,
+		true,
+		ts.ScriptKind.TSX,
+	);
+	const fn = source.statements.find(ts.isFunctionDeclaration);
+	if (!fn) throw new Error("Server component missing");
+	return compile<(props?: unknown) => Promise<unknown>>(
+		fn.getText(source).replace(/^export default\s+/, ""),
+		scope,
+	);
+}
+const jsxScope = {
+	React: {
+		createElement: (tag: unknown, props: unknown, ...children: unknown[]) => ({
+			tag,
+			props,
+			children,
+		}),
+	},
+	DashboardHeader: "DashboardHeader",
+	Card: "Card",
+	CardContent: "CardContent",
+	AppShell: "AppShell",
+	LoginForm: "LoginForm",
+};
+function redirected(path: string): never {
+	throw new Error(`REDIRECT:${path}`);
+}
+
+test("SSR dashboard and authenticated layout enforce invalid-session and mandatory-password redirects", async () => {
+	for (const file of [
+		"../identity/sr-dashboard.tsx",
+		"../../app/(authenticated)/layout.tsx",
+	]) {
+		for (const session of [null, { requiresPasswordChange: true }]) {
+			const component = serverComponent(file, {
+				...jsxScope,
+				getSrSession: async () => session,
+				redirect: redirected,
+			});
+			await expect(component({ children: null })).rejects.toThrow(
+				session
+					? "REDIRECT:/change-password"
+					: "REDIRECT:/login?reason=session",
+			);
+		}
+	}
+});
+
+test("SSR login routes existing sessions and renders an expired-session message without a redirect loop", async () => {
+	for (const session of [
+		null,
+		{ requiresPasswordChange: false },
+		{ requiresPasswordChange: true },
+	]) {
+		const page = serverComponent("../../app/login/page.tsx", {
+			...jsxScope,
+			getSrSession: async () => session,
+			redirect: redirected,
+		});
+		const result = page({
+			searchParams: Promise.resolve({ reason: "session" }),
+		});
+		if (session)
+			await expect(result).rejects.toThrow(
+				session.requiresPasswordChange
+					? "REDIRECT:/change-password"
+					: "REDIRECT:/dashboard",
+			);
+		else
+			expect(await result).toMatchObject({
+				tag: "LoginForm",
+				props: { expired: true },
+			});
+	}
+});
+
+test("dashboard renders SR and system identity from verified SSR data without client requests or polling", async () => {
+	for (const session of [
+		{
+			actor: "SR",
+			name: "Synthetic SR",
+			nim: "00000123",
+			requiresPasswordChange: false,
+			mustChangePassword: true,
+		},
+		{
+			actor: "SYSTEM_ADMIN",
+			name: "Synthetic administrator",
+			username: "synthetic.admin",
+			requiresPasswordChange: false,
+		},
+	]) {
+		const component = serverComponent("../identity/sr-dashboard.tsx", {
+			...jsxScope,
+			getSrSession: async () => session,
+			redirect: redirected,
+		});
+		const rendered = JSON.stringify(await component());
+		expect(rendered).toContain(session.name);
+		expect(rendered).toContain(
+			session.actor === "SR" ? "NIM: 00000123" : "Username: synthetic.admin",
+		);
+		expect(rendered).toContain(
+			`"isSystem":${session.actor === "SYSTEM_ADMIN"}`,
+		);
+	}
+	const dashboard = readFileSync(
+		new URL("../identity/sr-dashboard.tsx", import.meta.url),
+		"utf8",
+	);
+	for (const token of [
+		'"use client"',
+		"privateData",
+		"useQuery",
+		"refetchInterval",
+	])
+		expect(dashboard).not.toContain(token);
+});
+
+test("SSR session reads remain backend-authoritative, no-store and fail closed on revocation/storage failure", async () => {
+	const text = readFileSync(
+		new URL("../identity/server-session.ts", import.meta.url),
+		"utf8",
+	);
+	const source = ts.createSourceFile(
+		"session.ts",
+		text,
+		ts.ScriptTarget.Latest,
+		true,
+	);
+	let expression: ts.Expression | undefined;
+	const visit = (node: ts.Node) => {
+		if (
+			ts.isVariableDeclaration(node) &&
+			node.name.getText(source) === "getSrSession"
+		)
+			expression = node.initializer;
+		ts.forEachChild(node, visit);
+	};
+	visit(source);
+	if (!expression) throw new Error("SSR session function missing");
+	expect(expression.getText(source)).toStartWith("cache(");
+	expect(text).toContain('import { cache } from "react"');
+	let reads = 0;
+	let current: { actor: string; requiresPasswordChange: boolean } | null = {
+		actor: "SR",
+		requiresPasswordChange: false,
+	};
+	let failing = false;
+	let forwarded: unknown;
+	const read = compile<() => Promise<unknown>>(expression.getText(source), {
+		cache,
+		headers: async () => new Headers({ cookie: "synthetic-session-cookie" }),
+		getServerUrl: () => "http://synthetic.invalid",
+		httpBatchLink: (options: unknown) => {
+			forwarded = options;
+			return options;
+		},
+		createTRPCClient: () => ({
+			identity: {
+				session: {
+					query: async () => {
+						reads++;
+						if (failing) throw new Error("Synthetic storage unavailable");
+						return current;
+					},
+				},
+			},
+		}),
+	});
+	expect(await read()).toEqual(current);
+	expect(reads).toBe(1);
+	expect((forwarded as { headers: { cookie: string } }).headers.cookie).toBe(
+		"synthetic-session-cookie",
+	);
+	// React.cache is intentionally not persistent outside a server render pass.
+	current = null;
+	expect(await read()).toBeNull();
+	expect(reads).toBe(2);
+	failing = true;
+	expect(await read()).toBeNull();
+	expect(reads).toBe(3);
+	expect(text).toContain('cache: "no-store"');
+	expect(text).not.toMatch(/unstable_cache|use cache|@resora\/db/);
 });

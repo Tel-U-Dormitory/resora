@@ -4,16 +4,14 @@ import { Input } from "@resora/ui/components/input";
 import { Label } from "@resora/ui/components/label";
 import { Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { authClient } from "@/lib/auth-client";
-import { queryClient, trpc } from "@/utils/trpc";
+import { queryClient } from "@/utils/trpc";
 
 export default function LoginForm({ expired = false }: { expired?: boolean }) {
-	const router = useRouter();
 	const [nim, setNim] = useState("");
 	const [password, setPassword] = useState("");
 	const [showPassword, setShowPassword] = useState(false);
@@ -72,21 +70,10 @@ export default function LoginForm({ expired = false }: { expired?: boolean }) {
 								return;
 							}
 							queryClient.clear();
-							const identity = await queryClient.fetchQuery(
-								trpc.identity.session.queryOptions(),
-							);
-							if (!identity) {
-								setError(
-									"Sesi belum tersedia. Pastikan cookie diizinkan lalu coba kembali.",
-								);
-								return;
-							}
 							setStatus("redirecting");
-							router.replace(
-								identity.requiresPasswordChange
-									? "/change-password"
-									: "/dashboard",
-							);
+							// A fresh SSR navigation reads the new cookie, avoids stale router
+							// payloads, and applies the authoritative password-change gate.
+							window.location.replace("/dashboard");
 							redirecting = true;
 						} catch {
 							setError(

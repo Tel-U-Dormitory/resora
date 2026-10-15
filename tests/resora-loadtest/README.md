@@ -1,50 +1,89 @@
-# RESORA — controlled login/concurrency test
+# RESORA - Preview login-to-dashboard HTTP validation
 
-## Prerequisite (do not skip)
+## Safety gate
 
-Test ONLY an explicitly approved environment with its own isolated test PostgreSQL database, and synthetic SR accounts. Verify Preview API `DATABASE_URL` points to the test database; verify Preview Web `API_UPSTREAM_URL` points to the Preview API. **A Preview URL is not proof of database isolation.** Never use Production credentials or copy Production data.
+Use only an explicitly verified Preview Web -> Preview API -> isolated DEV database
+and the approved synthetic roster `sr-loadtest-50.csv`. A Preview hostname and
+`APPROVE_ISOLATED_TARGET=yes` are operator assertions, not proof of DB isolation.
+Before each series, verify Web/API code revision, Web `API_UPSTREAM_URL`, API
+`DATABASE_URL` DEV project reference and `AUTH_RATE_LIMIT_ENABLED=true`.
+Do not use Production accounts/traffic or change rate limits, pool settings or deployments.
 
-The application checks POST `Origin`. Set `WEB_ORIGIN` to the exact URL accepted by Preview API's `CORS_ORIGIN` and `BETTER_AUTH_URL`. `TARGET_ORIGIN` is either the Preview Web origin (exercises the rewrite) or the Preview API origin (direct). For a local direct setup, use target `http://localhost:3000` and web origin `http://localhost:3001`. To test Web rewrite locally, use target `http://localhost:3001` only if that rewrite is configured to the isolated local API.
+`TARGET_ORIGIN` and `WEB_ORIGIN` must be the same HTTPS Preview Web origin,
+without a path/trailing slash. Direct API testing is not this journey. The known
+Production Web origin is refused. This guard cannot identify every Production alias;
+independent target verification is mandatory. Missing approval stops before HTTP.
 
-## Windows PowerShell setup
+Use the existing private `accounts.local.json` generated from a COMMITTED synthetic
+credential export (see SETUP-ACCOUNTS.md); never copy placeholder credentials or
+reset existing accounts. Every selected username must match the approved load-test
+prefix/range, have a nonblank password and be unique within the run. No credentials
+are printed. Do not enable HTTP debug/body logging, k6 cloud uploads or `k6 archive`
+(the latter embeds fixtures). Reports and credential files remain Git-ignored.
+
+## HTTP journey and acceptance
+
+Each VU performs exactly one POST `/api/auth/sign-in/username`, then GET `/dashboard`
+through Preview Web. The existing per-VU k6 cookie jar carries the login cookie.
+Both requests disable redirect following. Dashboard validation requires HTTP 200,
+HTML with the actual Dashboard SR heading, welcome text and the VU's own synthetic
+NIM, and no password form or streamed meta redirect. A login page with HTTP 200 fails.
+No extra identity.session/privateData request or retry is made.
+
+Metrics:
+- `resora_login_ms`, `resora_dashboard_ms`: k6 HTTP duration, excluding connection setup.
+- `resora_journey_ms`: elapsed HTTP journey including connection setup between login
+  start and dashboard receipt, excluding HTML assertions. Failed attempts are also sampled;
+  success/failure counters must be checked before interpreting its percentiles.
+- All three trends explicitly export p50/p95.
+- `resora_journey_success` must equal VUs, `resora_journey_failed` must be zero,
+  journey p95 <= 10000 ms, and all HTTP/network failure counts must be zero.
+- `resora_http_429`, `resora_http_4xx` (excludes 429), `resora_http_5xx`,
+  `resora_network_failures` are separate counters; redirects/invalid HTML fail the journey too.
+
+These are HTTP timings including server-rendered HTML, not browser paint, hydration,
+asset loading or rendering measurements. The script does not execute JavaScript.
+
+## Execution after verification
+
+From `tests/resora-loadtest`, set the confirmed public origins and local fixture path:
 
 ```powershell
-winget install k6 --source winget
-# Open a new PowerShell if the command is not yet in PATH
-k6 version
-Copy-Item .\accounts.example.json .\accounts.local.json
-# Edit accounts.local.json with DISTINCT synthetic accounts that exist in test DB.
-New-Item -ItemType Directory -Force .\reports | Out-Null
-```
-
-Set the following in the PowerShell process running k6; replace origins with your actual isolated target:
-
-```powershell
-$env:TARGET_ORIGIN = 'http://localhost:3000'
-$env:WEB_ORIGIN = 'http://localhost:3001'
+$env:TARGET_ORIGIN = '<verified Preview Web HTTPS origin>'
+$env:WEB_ORIGIN = $env:TARGET_ORIGIN
 $env:ACCOUNTS_FILE = './accounts.local.json'
-$env:APPROVE_ISOLATED_TARGET = 'yes'  # ONLY after verifying isolation
-$env:VUS = '2'
+$env:APPROVE_ISOLATED_TARGET = 'yes' # Only after independently verifying every hop and limiter ON.
 $env:ACCOUNT_OFFSET = '0'
-k6 run --summary-export .\reports\smoke-2.json .\loadtest.js
+$env:VUS = '2'
+k6 inspect -e "VUS=$env:VUS" --execution-requirements ./loadtest.js # Local compilation only; no HTTP.
+k6 run -e "VUS=$env:VUS" --summary-export ./reports/phase4-2.json ./loadtest.js
 ```
 
-For a protected Vercel Preview deployment, use `$env:VERCEL_BYPASS_SECRET` only if the target is configured for Vercel Automation Bypass. If Web and API are in different Vercel projects, each may need separate bypass handling. Never store or paste the secret in reports or Git. A 401/403 from Vercel protection is different from RESORA auth behavior.
+Run 2, 5, 10, then 20 VUs **manually, one run at a time**, with at least 65 seconds
+after each completed run and no competing login traffic. Change VUS/report filename
+together; stop on any failed check, threshold, unexplained HTTP failure or timeout.
+Do not automatically escalate after failure or switch the limiter OFF. Earlier
+API-only/limiter-OFF experiments are historical and do not apply to this phase.
 
-## Test sequence
+Protected Preview requires an existing, approved automation bypass. Load its value
+privately into `VERCEL_WEB_BYPASS_SECRET` (`VERCEL_BYPASS_SECRET` remains a fallback); never put the value in commands/reports/Git.
+`VERCEL_API_BYPASS_SECRET` is reserved for read-only API preflight, not sent to Web.
+Web/API are different projects: verify bypass forwarding works for both; do not
+create bypasses or disable deployment protection merely to run this test. A 302 to
+vercel.com or an authentication-protection page is a blocker, not an application result.
 
-1. **Smoke, limiter ON:** 2 distinct synthetic users from one machine. Expected login 200 and valid identity session.
-2. **Single-IP controlled concurrency, limiter OFF in the isolated Preview API only:** run VUS=5, then 10, then 25, optionally 50. Provide at least VUS unique synthetic accounts. Inspect `resora_login_200`, `resora_login_429`, `resora_login_5xx`, `resora_session_valid`, `resora_session_5xx`, p95 `resora_login_ms`/`resora_session_ms` and Vercel `AUTH_REQUEST_RESULT` / poolWaiting. Stop if 5xx occurs and assess before increasing load.
-3. **Limiter ON multi-IP probe:** wait >60s after the prior login tests, then coordinate 3 logins from machine/network A (account offset 0) and 3 from machine/network B (account offset 3) within the same minute. Confirm that the machines actually have *different egress public IPs* privately (e.g., `curl.exe https://api.ipify.org`). Keep other login traffic at zero. If a network gets 429 before its own 75th attempt, investigate proxy bucket sharing. Repeat through Web and direct API independently after separate limiter windows. A 3+3 run is now only a smoke check: it cannot prove bucket separation under the 75-request limit. Verify ingress preservation/spoof rejection separately before interpreting multi-IP results. Never spoof `X-Forwarded-For`.
-4. **A/B with same load:** same test target, code revision, region, fixtures, measured VUS, and account set. Toggle `AUTH_RATE_LIMIT_ENABLED=true/false` on isolated Preview API and redeploy; compare 429 and 5xx separately. Restore ON afterward and redeploy.
+Record UTC run windows, both deployment revisions, VUs, all p50/p95/counters and
+threshold status. Correlate with Preview API `AUTH_REQUEST_RESULT` (LOGIN,
+IDENTITY_SESSION; DASHBOARD_DATA is no longer expected after Phase 3), poolWaiting
+and HTTP 5xx within that same window if Vercel log access is available. Do not export
+raw runtime messages containing secrets or identity data. Shared HTTP batch timing
+is not per-resolver timing; pool snapshots are not peak utilization.
 
-For multi-IP networks: use `$env:VUS='3'; $env:ACCOUNT_OFFSET='0'` on A and `$env:VUS='3'; $env:ACCOUNT_OFFSET='3'` on B, coordinating the start. All runners must have identical fixture accounts. This script uses one login and one identity.session request per VU, no retry. Run only with the service owner's permission, within a controlled test window.
 
-## Notes
+Offline verification (no remote requests):
 
-- `VUS=50` from one machine is **not 50 IP addresses**. When limiter is ON the shared IP/path bucket is limited to 75 login requests / 60s (or may be shared by proxying).
-- k6's `resora_session_valid` verifies an authenticated identity response; 200 with `null` identity is not a pass.
-- This is HTTP-level testing; it does not simulate browser rendering, SSR redirects, or automatic route transitions. It models the two primary backend requests seen in the RESORA login form.
-- Different load-generator origins verify buckets only when the actual egress public IPs differ, not merely because the username differs.
-- Report files include timing/host-level metadata. Keep them private and do not commit test credentials.
-- A 5xx may arise from pool checkout timeout, pooler, or infrastructure; numeric pool metrics are point-in-time only. Do not interpret 0/1 connection counts as definitive diagnosis of Supavisor.
+```powershell
+# From repository root:
+bun --no-env-file test tests/resora-loadtest/loadtest.test.ts
+pnpm exec tsc --project tests/resora-loadtest/tsconfig.json --noEmit
+```

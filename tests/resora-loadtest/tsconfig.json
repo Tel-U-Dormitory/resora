@@ -3,5 +3,5 @@
 	"compilerOptions": {
 		"noEmit": true
 	},
-	"include": ["provision-dev.ts", "provision-dev.test.ts"]
+	"include": ["provision-dev.ts", "provision-dev.test.ts", "loadtest.test.ts"]
 }

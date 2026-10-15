@@ -23,10 +23,16 @@ export function resolveClientIp(
 }
 
 export function createApp(
-	services: { db: Database; auth: Auth; authConfig?: AuthConfig },
+	services: {
+		db: Database;
+		auth: Auth;
+		authConfig?: AuthConfig;
+		authPerfDiagnosticsEnabled?: boolean;
+	},
 	origin: string,
 ) {
 	const app = express();
+	const perfDiagnostics = services.authPerfDiagnosticsEnabled === true;
 	const isVercel = process.env.VERCEL === "1";
 	const trustedOrigin = new URL(origin).origin;
 	const authHandler = toNodeHandler(async (request) => {
@@ -60,34 +66,65 @@ export function createApp(
 					: req.path === "/trpc" || req.path.startsWith("/trpc/")
 						? "TRPC"
 						: null;
+		// Browser tRPC queries may be batched. Emit at most two fixed operation
+		// records with shared HTTP timing/status; never log raw procedure paths/inputs.
+		const procedures =
+			perfDiagnostics && req.path.startsWith("/trpc/")
+				? req.path.slice("/trpc/".length).split(",")
+				: [];
+		const diagnosticOperations = [
+			...(procedures.includes("identity.session") ? ["IDENTITY_SESSION"] : []),
+			...(procedures.includes("privateData") ? ["DASHBOARD_DATA"] : []),
+		];
+		const operations = diagnosticOperations.length
+			? diagnosticOperations
+			: [operation];
 		if (operation) {
 			const started = Date.now();
 			res.once("finish", () => {
 				const status = res.statusCode;
-				if (!authMutation && status < 500) return;
+				if (
+					!authMutation &&
+					status < 500 &&
+					!(
+						perfDiagnostics &&
+						(operation === "AUTH_SESSION" || diagnosticOperations.length)
+					)
+				)
+					return;
+				const durationMs = Date.now() - started;
 				const pool = services.db.$client;
-				console.info("AUTH_REQUEST_RESULT", {
-					operation,
-					status,
-					outcome:
-						status === 503
-							? "UNAVAILABLE"
-							: status >= 500
-								? "ERROR"
-								: status === 429
-									? "RATE_LIMITED"
-									: status >= 200 && status < 300
-										? "SUCCESS"
-										: "REJECTED",
-					durationMs: Date.now() - started,
-					...(status >= 500 && pool
-						? {
-								poolTotal: pool.totalCount,
-								poolIdle: pool.idleCount,
-								poolWaiting: pool.waitingCount,
-							}
-						: {}),
-				});
+				for (const measuredOperation of operations)
+					console.info("AUTH_REQUEST_RESULT", {
+						operation: measuredOperation,
+						status,
+						outcome:
+							status === 503
+								? "UNAVAILABLE"
+								: status >= 500
+									? "ERROR"
+									: status === 429
+										? "RATE_LIMITED"
+										: status >= 200 && status < 300
+											? "SUCCESS"
+											: "REJECTED",
+						durationMs,
+						...(perfDiagnostics &&
+						diagnosticOperations.length &&
+						typeof res.locals.authSessionDurationMs === "number"
+							? { sessionLookupDurationMs: res.locals.authSessionDurationMs }
+							: {}),
+						...(perfDiagnostics && procedures.length > 1
+							? { batched: true }
+							: {}),
+						...((status >= 500 || perfDiagnostics) && pool
+							? {
+									poolTotal: pool.totalCount,
+									poolIdle: pool.idleCount,
+									poolWaiting: pool.waitingCount,
+								}
+							: {}),
+					});
 			});
 		}
 		next();

@@ -1,66 +1,25 @@
-"use client";
-
-import { useQuery } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { redirect } from "next/navigation";
 
 import { DashboardHeader } from "@/components/dashboard-header";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { queryClient, trpc } from "@/utils/trpc";
+import { getSrSession } from "./server-session";
 
-export default function SrDashboard() {
-	const router = useRouter();
-	const redirected = useRef(false);
-	const data = useQuery({
-		...trpc.privateData.queryOptions(),
-		retry: false,
-		refetchInterval: 30_000,
-	});
-	useEffect(() => {
-		if (!data.error || redirected.current) return;
-		if (
-			data.error.data?.code === "UNAUTHORIZED" ||
-			data.error.message === "PASSWORD_CHANGE_REQUIRED"
-		) {
-			redirected.current = true;
-			queryClient.clear();
-			router.replace(
-				data.error.message === "PASSWORD_CHANGE_REQUIRED"
-					? "/change-password"
-					: "/login?reason=session",
-			);
-			router.refresh();
-		}
-	}, [data.error, router]);
-	if (data.isPending)
-		return (
-			<div role="status" className="space-y-4">
-				<p>Memuat dashboard…</p>
-				<Skeleton className="h-8 w-48" />
-				<Skeleton className="h-40 w-full" />
-			</div>
-		);
-	if (data.error)
-		return (
-			<Card className="max-w-md space-y-4 p-5">
-				<p role="alert">Sesi atau layanan tidak tersedia.</p>
-				<Button onClick={() => data.refetch()}>Coba kembali</Button>
-			</Card>
-		);
+export default async function SrDashboard() {
+	const session = await getSrSession();
+	if (!session) redirect("/login?reason=session");
+	if (session.requiresPasswordChange) redirect("/change-password");
 	return (
 		<section className="space-y-6">
-			<DashboardHeader isSystem={data.data.user.actor === "SYSTEM_ADMIN"} />
+			<DashboardHeader isSystem={session.actor === "SYSTEM_ADMIN"} />
 			<Card>
 				<CardContent className="space-y-2">
 					<h2 className="font-semibold text-lg">
-						Selamat datang, {data.data.user.name}.
+						Selamat datang, {session.name}.
 					</h2>
 					<p className="text-muted-foreground text-sm">
-						{data.data.user.actor === "SR"
-							? `NIM: ${data.data.user.nim}`
-							: `Username: ${data.data.user.username}`}
+						{session.actor === "SR"
+							? `NIM: ${session.nim}`
+							: `Username: ${session.username}`}
 					</p>
 				</CardContent>
 			</Card>
