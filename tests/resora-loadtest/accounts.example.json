@@ -1,0 +1,10 @@
+{
+  "accounts": [
+    { "username": "synthetic_sr_001", "password": "REPLACE_WITH_UNIQUE_TEST_PASSWORD_1" },
+    { "username": "synthetic_sr_002", "password": "REPLACE_WITH_UNIQUE_TEST_PASSWORD_2" },
+    { "username": "synthetic_sr_003", "password": "REPLACE_WITH_UNIQUE_TEST_PASSWORD_3" },
+    { "username": "synthetic_sr_004", "password": "REPLACE_WITH_UNIQUE_TEST_PASSWORD_4" },
+    { "username": "synthetic_sr_005", "password": "REPLACE_WITH_UNIQUE_TEST_PASSWORD_5" },
+    { "username": "synthetic_sr_006", "password": "REPLACE_WITH_UNIQUE_TEST_PASSWORD_6" }
+  ]
+}

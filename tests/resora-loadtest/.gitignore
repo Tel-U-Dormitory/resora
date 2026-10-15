@@ -1,0 +1,8 @@
+accounts.local.json
+reports/
+*.har
+*.log
+.env*
+credentials.csv
+credentials-*.csv
+*.crt

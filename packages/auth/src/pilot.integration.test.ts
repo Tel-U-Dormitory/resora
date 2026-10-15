@@ -430,7 +430,7 @@ test("auth integration guard rejects remote and ordinary application targets", (
 		});
 		test("login throttling rejects repeated attempts despite spoofed IP headers", async () => {
 			let status = 0;
-			for (let index = 0; index < 6; index++) {
+			for (let index = 0; index < 76; index++) {
 				const response = await fetch(`${base}/api/auth/sign-in/username`, {
 					method: "POST",
 					headers: {
@@ -440,8 +440,9 @@ test("auth integration guard rejects remote and ordinary application targets", (
 						"x-resora-client-ip": `192.0.2.${index + 1}`,
 					},
 					body: JSON.stringify({
-						username: nims[0],
-						password: randomBytes(24).toString("hex"),
+						// Exercise the limiter without 75 unnecessary password hashes.
+						username: 123,
+						password: "synthetic-invalid-body",
 					}),
 				});
 				status = response.status;

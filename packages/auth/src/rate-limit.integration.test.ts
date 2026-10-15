@@ -76,7 +76,7 @@ test("shared limiter integration guard rejects remote and application targets", 
 			}
 		});
 		for (const path of ["sign-in/username", "change-password"]) {
-			test(`${path}: concurrent independent instances admit five and return 429 for fifteen`, async () => {
+			test(`${path}: concurrent independent instances admit 75 and return 429 for 25`, async () => {
 				if (!db) throw new Error("Test database not initialized");
 				const ip = `198.18.${randomInt(0, 256)}.${randomInt(1, 255)}`;
 				const key = `${ip}|/${path}`;
@@ -88,7 +88,7 @@ test("shared limiter integration guard rejects remote and application targets", 
 				).toHaveLength(0);
 				keys.push(key);
 				const responses = await Promise.all(
-					Array.from({ length: 20 }, (_, index) =>
+					Array.from({ length: 100 }, (_, index) =>
 						(index % 2 ? auths[1] : auths[0]).handler(
 							new Request(`${config.BETTER_AUTH_URL}/api/auth/${path}`, {
 								method: "POST",
@@ -104,16 +104,16 @@ test("shared limiter integration guard rejects remote and application targets", 
 				);
 				expect(
 					responses.filter((response) => response.status === 400),
-				).toHaveLength(5);
+				).toHaveLength(75);
 				expect(
 					responses.filter((response) => response.status === 429),
-				).toHaveLength(15);
+				).toHaveLength(25);
 				const rows = await db
 					.select()
 					.from(rateLimit)
 					.where(inArray(rateLimit.key, [key]));
 				expect(rows).toHaveLength(1);
-				expect(rows[0]?.count).toBe(5);
+				expect(rows[0]?.count).toBe(75);
 			}, 15_000);
 		}
 	},

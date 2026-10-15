@@ -4,7 +4,7 @@ import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Auth } from "@resora/auth";
 import type { Database } from "@resora/db";
-import { createApp } from "./app";
+import { createApp, resolveClientIp } from "./app";
 
 const origin = "http://localhost:3001";
 let server: Server;
@@ -367,6 +367,71 @@ test("Express keeps proxy trust disabled and replaces spoofed auth limiter IP he
 		},
 	});
 	expect(await response.text()).toBe("127.0.0.1");
+});
+
+test("IP resolver accepts only a single valid address from the selected trusted source", () => {
+	for (const ip of ["198.51.100.70", "2001:db8::70"]) {
+		expect(resolveClientIp("127.0.0.1", ip, true)).toBe(ip);
+		expect(resolveClientIp(ip, "198.51.100.99", false)).toBe(ip);
+	}
+	for (const header of [
+		undefined,
+		"",
+		"invalid",
+		"198.51.100.70, 198.51.100.71",
+		["198.51.100.70"],
+	]) {
+		expect(resolveClientIp("192.0.2.1", header, true)).toBe("127.0.0.1");
+	}
+	expect(resolveClientIp(undefined, "198.51.100.70", false)).toBe("127.0.0.1");
+	expect(resolveClientIp("invalid", "198.51.100.70", false)).toBe("127.0.0.1");
+});
+
+test("Vercel auth overwrites spoofed limiter/forwarding headers and never skips invalid IPs", async () => {
+	const previous = process.env.VERCEL;
+	let vercelApp: ReturnType<typeof createApp>;
+	try {
+		process.env.VERCEL = "1";
+		vercelApp = createApp({ db, auth }, origin);
+	} finally {
+		if (previous === undefined) delete process.env.VERCEL;
+		else process.env.VERCEL = previous;
+	}
+	expect(vercelApp.get("trust proxy")).toBe(false);
+	const listener = vercelApp.listen(0, "127.0.0.1");
+	await new Promise<void>((resolve) => listener.once("listening", resolve));
+	const address = listener.address() as AddressInfo;
+	try {
+		for (const header of [
+			"198.51.100.70",
+			"2001:db8::70",
+			"",
+			"invalid",
+			"198.51.100.70, 198.51.100.71",
+			undefined,
+		]) {
+			const headers: Record<string, string> = {
+				"x-resora-client-ip": "198.51.100.99",
+				"x-forwarded-for": "198.51.100.98",
+				"x-real-ip": "198.51.100.97",
+			};
+			if (header !== undefined) headers["x-vercel-forwarded-for"] = header;
+			const response = await fetch(
+				`http://127.0.0.1:${address.port}/api/auth/synthetic-ip-probe`,
+				{ headers },
+			);
+			expect(response.status).toBe(200);
+			expect(await response.text()).toBe(
+				header === "198.51.100.70" || header === "2001:db8::70"
+					? header
+					: "127.0.0.1",
+			);
+		}
+	} finally {
+		await new Promise<void>((resolve, reject) =>
+			listener.close((error) => (error ? reject(error) : resolve())),
+		);
+	}
 });
 
 test("auth storage failure returns a private no-store 503 without raw error or stack", async () => {

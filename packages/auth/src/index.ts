@@ -71,8 +71,8 @@ export function createAuth(
 					? "database"
 					: "memory",
 			customRules: {
-				"/sign-in/username": { window: 60, max: 5 },
-				"/change-password": { window: 60, max: 5 },
+				"/sign-in/username": { window: 60, max: 75 },
+				"/change-password": { window: 60, max: 75 },
 			},
 		},
 		secret: env.BETTER_AUTH_SECRET,

@@ -103,42 +103,42 @@ test("rate limit schema matches the installed adapter contract", async () => {
 	expect(auth.options.rateLimit.storage).toBe("database");
 });
 
-test("independent auth instances share the unchanged login/password-change limits", async () => {
+test("independent auth instances share separate 75/60 login/password-change buckets", async () => {
 	const { auths, rows } = await sharedInstances();
 	for (const path of ["sign-in/username", "change-password"]) {
-		for (let attempt = 0; attempt < 7; attempt++) {
+		for (let attempt = 0; attempt < 76; attempt++) {
 			const response = await request(attempt % 2 ? auths[1] : auths[0], path);
-			expect(response.status).toBe(attempt < 5 ? 400 : 429);
-			if (attempt >= 5)
+			expect(response.status).toBe(attempt < 75 ? 400 : 429);
+			if (attempt >= 75)
 				expect(Number(response.headers.get("x-retry-after"))).toBeGreaterThan(
 					0,
 				);
 		}
 	}
 	expect(rows.size).toBe(2);
-	expect([...rows.values()].map((row) => row.count)).toEqual([5, 5]);
+	expect([...rows.values()].map((row) => row.count)).toEqual([75, 75]);
 });
 
 test("parallel initial requests are bounded across two database-backed auth contexts", async () => {
 	const { auths, rows } = await sharedInstances();
 	const responses = await Promise.all(
-		Array.from({ length: 20 }, (_, index) =>
+		Array.from({ length: 100 }, (_, index) =>
 			request(index % 2 ? auths[1] : auths[0], "sign-in/username"),
 		),
 	);
 	expect(responses.filter((response) => response.status === 400)).toHaveLength(
-		5,
+		75,
 	);
 	expect(responses.filter((response) => response.status === 429)).toHaveLength(
-		15,
+		25,
 	);
 	expect(rows.size).toBe(1);
-	expect([...rows.values()][0]?.count).toBe(5);
+	expect([...rows.values()][0]?.count).toBe(75);
 });
 
 test("NAT clients share an IP/path bucket; a different IP has its own bucket", async () => {
 	const { auths } = await sharedInstances();
-	for (let attempt = 0; attempt < 5; attempt++)
+	for (let attempt = 0; attempt < 75; attempt++)
 		expect(
 			(await request(attempt % 2 ? auths[1] : auths[0], "sign-in/username"))
 				.status,
@@ -183,8 +183,8 @@ test("rate limiter defaults on, accepts explicit true/false and rejects untyped 
 		expect(auth.options.rateLimit.enabled).toBe(enabled !== "false");
 		expect(auth.options.rateLimit.storage).toBe("database");
 		expect(auth.options.rateLimit.customRules).toEqual({
-			"/sign-in/username": { window: 60, max: 5 },
-			"/change-password": { window: 60, max: 5 },
+			"/sign-in/username": { window: 60, max: 75 },
+			"/change-password": { window: 60, max: 75 },
 		});
 	}
 	for (const enabled of ["off", "invalid", false, 0, null])
@@ -201,11 +201,11 @@ test("rate limiter defaults on, accepts explicit true/false and rejects untyped 
 
 test("explicit-on retains shared counters; explicit-off never consumes or reads limiter storage", async () => {
 	const enabled = await sharedInstances("true");
-	for (let attempt = 0; attempt < 6; attempt++)
+	for (let attempt = 0; attempt < 76; attempt++)
 		expect(
 			(await request(enabled.auths[attempt % 2 ? 1 : 0], "sign-in/username"))
 				.status,
-		).toBe(attempt < 5 ? 400 : 429);
+		).toBe(attempt < 75 ? 400 : 429);
 	expect(enabled.rows.size).toBe(1);
 	const disabled = await sharedInstances("false");
 	for (const auth of disabled.auths) {
@@ -221,7 +221,7 @@ test("explicit-on retains shared counters; explicit-off never consumes or reads 
 		};
 	}
 	for (const path of ["sign-in/username", "change-password"])
-		for (let attempt = 0; attempt < 8; attempt++) {
+		for (let attempt = 0; attempt < 80; attempt++) {
 			const response = await request(disabled.auths[attempt % 2 ? 1 : 0], path);
 			expect(response.status).toBe(400);
 		}
