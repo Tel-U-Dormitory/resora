@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
-import { parseWibDateTimeInput } from "./event-ui";
+import { parseWibDateTimeInput, toWibDateTimeInput } from "./event-ui";
 
 // Execute the actual JSX callbacks with small UI/API doubles, without a browser or DB.
 function jsxCallback(file: string, attribute: string, contains = "") {
@@ -158,6 +158,296 @@ test("login resets pending on credential, rate-limit, service and session failur
 		expect(fixture.observed.paths).toEqual([]);
 		expect(fixture.observed.error.length).toBeGreaterThan(0);
 		expect(fixture.observed.error).not.toContain(fixture.scope.password);
+	}
+});
+
+test("event editor submits only permitted advanced fields, requires a reason and retains draft behavior", async () => {
+	for (const advancedMode of [
+		undefined,
+		"FULL",
+		"LIMITED",
+		"METADATA",
+	] as const) {
+		for (const changedEnd of [false, true]) {
+			const calls: { kind: string; input: Record<string, unknown> }[] = [];
+			const initial = {
+				startsAt: "2030-10-12T06:00:15.123Z",
+				// Existing sub-minute events must remain metadata-editable without rounding their schedule.
+				endsAt: advancedMode
+					? "2030-10-12T06:00:16.456Z"
+					: "2030-10-12T08:00:16.456Z",
+			};
+			const observed = { saving: false, error: "", path: "", refreshes: 0 };
+			const mutation = (kind: string) => ({
+				mutateAsync: async (input: Record<string, unknown>) => {
+					calls.push({ kind, input });
+				},
+			});
+			const scope = {
+				advancedMode,
+				initial,
+				eventId: "synthetic-event",
+				submitLock: { current: false },
+				draft: {
+					title: "Synthetic event",
+					description: "Description",
+					rosterCriteria: {},
+					session: {},
+				},
+				start: toWibDateTimeInput(initial.startsAt),
+				end: changedEnd
+					? "2030-10-12T16:30"
+					: toWibDateTimeInput(initial.endsAt),
+				reason: "Administrative correction",
+				parseWibDateTimeInput,
+				toWibDateTimeInput,
+				setError: (value: string) => {
+					observed.error = value;
+				},
+				setEndError: (value: string) => {
+					observed.error = value;
+				},
+				setSaving: (value: boolean) => {
+					observed.saving = value;
+				},
+				advanced: mutation("advanced"),
+				edit: mutation("draft"),
+				create: mutation("create"),
+				queryClient: {},
+				attendanceQueryKeys: {},
+				refreshAttendanceQueries: async () => {
+					observed.refreshes++;
+				},
+				router: {
+					push: (path: string) => {
+						observed.path = path;
+					},
+				},
+				eventErrorMessage: () => "Perubahan ditolak.",
+				timeRangeMessage: "Waktu tidak valid.",
+			};
+			const submit = () =>
+				compile<Submit>(jsxCallback("event-form.tsx", "onSubmit"), scope);
+			if (advancedMode) {
+				scope.reason = " ";
+				await submit()(event);
+				expect(calls).toHaveLength(0);
+				expect(observed.error).toContain("Alasan");
+				expect(observed.saving).toBe(false);
+				scope.reason = "Administrative correction";
+			}
+			await submit()(event);
+			expect(calls).toHaveLength(1);
+			expect(observed.error).toBe("");
+			expect(observed.refreshes).toBe(1);
+			expect(observed.path).toBe("/events/synthetic-event");
+			const call = calls[0];
+			if (!call) throw new Error("Expected mutation");
+			expect(call.kind).toBe(advancedMode ? "advanced" : "draft");
+			if (advancedMode === "LIMITED" || advancedMode === "METADATA") {
+				expect(Object.keys(call.input).sort()).toEqual(
+					[
+						"description",
+						"eventId",
+						"mode",
+						"reason",
+						"title",
+						...(advancedMode === "LIMITED" && changedEnd ? ["endsAt"] : []),
+					].sort(),
+				);
+			} else if (advancedMode === "FULL") {
+				expect(call.input).toMatchObject({
+					mode: "FULL",
+					reason: scope.reason,
+					draft: {
+						startsAt: initial.startsAt,
+						endsAt: changedEnd ? "2030-10-12T09:30:00.000Z" : initial.endsAt,
+					},
+				});
+			}
+			await submit()(event);
+			expect(calls).toHaveLength(1);
+			// A failed mutation releases the submission lock and shows a local error.
+			scope.submitLock.current = false;
+			scope.advanced.mutateAsync = scope.edit.mutateAsync = async () => {
+				throw new Error("Synthetic rejection");
+			};
+			await submit()(event);
+			expect(observed.error).toBe("Perubahan ditolak.");
+			expect(scope.submitLock.current).toBe(false);
+			expect(observed.saving).toBe(false);
+		}
+	}
+	const source = readFileSync(
+		new URL("event-form.tsx", import.meta.url),
+		"utf8",
+	);
+	expect(source).toContain('advancedMode !== "METADATA"');
+	expect(source).toContain("{fullEditing && (");
+	const detail = readFileSync(
+		new URL("event-detail.tsx", import.meta.url),
+		"utf8",
+	);
+	expect(detail).toContain("detail.data.advancedEditMode");
+	expect(detail).toContain("metadata.mutateAsync");
+});
+
+test("visibility/deletion UI requires reason and confirmation, respects pending state and selects the existing mutation", async () => {
+	for (const action of [
+		"HIDE",
+		"UNHIDE",
+		"ARCHIVE",
+		"RESTORE",
+		"DELETE_DRAFT",
+	]) {
+		const calls: { kind: string; input: unknown }[] = [];
+		const jobs: Promise<unknown>[] = [];
+		let confirmed = false;
+		let feedback = "";
+		const scope = {
+			busy: false,
+			administrativeAction: action,
+			administrativeOptions: [action],
+			administrativeReason: " ",
+			eventId: "synthetic-event",
+			event: { title: "Synthetic draft" },
+			administrativeLabels: { [action]: "Synthetic action" },
+			window: {
+				confirm: (message: string) => {
+					expect(message).toContain("Synthetic draft");
+					return confirmed;
+				},
+			},
+			setError: (value: string) => {
+				feedback = value;
+			},
+			setAdministrativeAction: (value: string) => {
+				scope.administrativeAction = value;
+			},
+			setAdministrativeReason: (value: string) => {
+				scope.administrativeReason = value;
+			},
+			visibility: {
+				mutateAsync: async (input: unknown) => {
+					calls.push({ kind: "visibility", input });
+				},
+			},
+			deleteDraft: {
+				mutateAsync: async (input: unknown) => {
+					calls.push({ kind: "delete", input });
+				},
+			},
+			act: (
+				_kind: string,
+				_message: string,
+				operation: () => Promise<unknown>,
+			) => {
+				jobs.push(operation());
+			},
+		};
+		const submit = () =>
+			compile<(event: SubmitEvent) => void>(
+				jsxCallback("event-detail.tsx", "onSubmit", "administrativeOptions"),
+				scope,
+			)(event);
+		submit();
+		expect(feedback).toContain("Alasan");
+		expect(calls).toHaveLength(0);
+		scope.administrativeReason = "Synthetic reason";
+		submit();
+		expect(calls).toHaveLength(0); // Native confirmation cancelled.
+		confirmed = true;
+		scope.busy = true;
+		submit();
+		expect(calls).toHaveLength(0);
+		scope.busy = false;
+		submit();
+		await Promise.all(jobs);
+		expect(calls).toEqual([
+			{
+				kind: action === "DELETE_DRAFT" ? "delete" : "visibility",
+				input: {
+					eventId: scope.eventId,
+					reason: "Synthetic reason",
+					...(action !== "DELETE_DRAFT" ? { action } : {}),
+				},
+			},
+		]);
+		expect(scope.administrativeAction).toBe("");
+		expect(scope.administrativeReason).toBe("");
+	}
+	const detail = readFileSync(
+		new URL("event-detail.tsx", import.meta.url),
+		"utf8",
+	);
+	expect(detail).toContain("{administration && (");
+	expect(detail).toContain('disabled={busy || event.visibility !== "VISIBLE"}');
+	const list = readFileSync(new URL("event-list.tsx", import.meta.url), "utf8");
+	expect(list).toContain("management && query.data?.isSuperadmin");
+	expect(list).toContain('event.visibility === "VISIBLE"');
+});
+
+test("successful DRAFT deletion redirects without refetching deleted detail; failure retains retry feedback", async () => {
+	const source = ts.createSourceFile(
+		"event-detail.tsx",
+		readFileSync(new URL("event-detail.tsx", import.meta.url), "utf8"),
+		ts.ScriptTarget.Latest,
+		true,
+		ts.ScriptKind.TSX,
+	);
+	let expression = "";
+	function visit(node: ts.Node) {
+		if (ts.isVariableDeclaration(node) && node.name.getText(source) === "act")
+			expression = node.initializer?.getText(source) ?? "";
+		ts.forEachChild(node, visit);
+	}
+	visit(source);
+	for (const failure of [false, true]) {
+		const paths: string[] = [];
+		const invalidations: unknown[] = [];
+		let error = "";
+		const scope = {
+			actionLock: { current: false },
+			eventId: "synthetic-event",
+			setActiveAction: () => {},
+			setFeedback: () => {},
+			setError: (value: string) => {
+				error = value;
+			},
+			attendanceQueryKeys: { all: ["attendance"] },
+			queryClient: {
+				cancelQueries: async () => {},
+				invalidateQueries: async (input: unknown) => {
+					invalidations.push(input);
+				},
+			},
+			router: {
+				replace: (path: string) => {
+					paths.push(path);
+				},
+			},
+			refreshAttendanceQueries: async () => {
+				throw new Error("Deleted detail must not refetch");
+			},
+			eventErrorMessage: () =>
+				"Permintaan belum berhasil. Muat ulang sebelum mencoba kembali.",
+		};
+		const act = compile<
+			(
+				kind: string,
+				message: string,
+				operation: () => Promise<void>,
+			) => Promise<void>
+		>(expression, scope);
+		await act("deleteDraft", "Draft dihapus", async () => {
+			if (failure) throw new Error("Synthetic failure");
+		});
+		expect(paths).toEqual(failure ? [] : ["/events?view=manage"]);
+		expect(invalidations).toEqual(
+			failure ? [] : [{ queryKey: ["attendance"], refetchType: "none" }],
+		);
+		expect(Boolean(error)).toBe(failure);
+		expect(scope.actionLock.current).toBe(false);
 	}
 });
 
@@ -375,4 +665,69 @@ test("manual success closes the dialog and refreshes data; refresh failure remai
 			refreshFails ? "sudah disimpan" : "berhasil disimpan",
 		);
 	}
+});
+
+test("event submit labels reflect create, draft edit, advanced edit and pending contexts", () => {
+	const source = ts.createSourceFile(
+		"form.tsx",
+		readFileSync(new URL("event-form.tsx", import.meta.url), "utf8"),
+		ts.ScriptTarget.Latest,
+		true,
+		ts.ScriptKind.TSX,
+	);
+	let label: ts.ConditionalExpression | undefined;
+	const visit = (node: ts.Node) => {
+		if (
+			ts.isConditionalExpression(node) &&
+			node.condition.getText(source) === "saving" &&
+			node.getText(source).includes("Simpan perubahan draft")
+		)
+			label = node;
+		ts.forEachChild(node, visit);
+	};
+	visit(source);
+	expect(label).toBeDefined();
+	for (const [saving, advancedMode, eventId, expected] of [
+		[false, null, null, "Simpan draft"],
+		[false, null, "event", "Simpan perubahan draft"],
+		[false, "FULL", "event", "Simpan perubahan"],
+		[false, "METADATA", "event", "Simpan perubahan"],
+		[true, "LIMITED", "event", "Menyimpan perubahan…"],
+	] as const) {
+		expect(
+			compile<() => string>(`() => (${label?.getText(source)})`, {
+				saving,
+				advancedMode,
+				eventId,
+			})(),
+		).toBe(expected);
+	}
+});
+
+test("administrative audit UI is backend-gated, expandable, paginated and renders meaningful fields without JSON", () => {
+	const detail = readFileSync(
+		new URL("event-detail.tsx", import.meta.url),
+		"utf8",
+	);
+	const list = readFileSync(new URL("event-list.tsx", import.meta.url), "utf8");
+	const history = readFileSync(
+		new URL("event-admin-history.tsx", import.meta.url),
+		"utf8",
+	);
+	expect(detail).toContain(
+		"{administration && <EventAuditHistory eventId={eventId} />}",
+	);
+	expect(list).toContain(
+		"management && query.data?.isSuperadmin && <DeletedDraftHistory />",
+	);
+	expect(list).toContain("!query.error &&");
+	expect(list).toContain("!query.isPlaceholderData");
+	expect(history).toContain("aria-expanded={open}");
+	expect(history).toContain("enabled: open");
+	expect(history).toContain("item.operator");
+	expect(history).toContain("item.reason");
+	expect(history).toContain("item.changes.map");
+	expect(history).toContain("item.participants.addedCount");
+	expect(history).toContain("setOffset(Math.max(0, offset - 20))");
+	expect(history).not.toContain("JSON.stringify");
 });

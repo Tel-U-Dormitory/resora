@@ -26,6 +26,7 @@ export type RosterCriteria = {
 	include: string[];
 	exclude: string[];
 };
+export type EventVisibility = "VISIBLE" | "HIDDEN" | "ARCHIVED";
 export const events = pgTable(
 	"events",
 	{
@@ -39,6 +40,10 @@ export const events = pgTable(
 			.$type<"DRAFT" | "PUBLISHED" | "CLOSED">()
 			.notNull()
 			.default("DRAFT"),
+		visibility: text("visibility")
+			.$type<EventVisibility>()
+			.notNull()
+			.default("VISIBLE"),
 		startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
 		endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
 		rosterCriteria: jsonb("roster_criteria").$type<RosterCriteria>().notNull(),
@@ -54,6 +59,14 @@ export const events = pgTable(
 	},
 	(t) => [
 		check("events_title_nonblank", sql`length(btrim(${t.title})) > 0`),
+		check(
+			"events_visibility",
+			sql`${t.visibility} IN ('VISIBLE', 'HIDDEN', 'ARCHIVED')`,
+		),
+		check(
+			"events_visibility_lifecycle",
+			sql`(${t.status} <> 'DRAFT' OR ${t.visibility} = 'VISIBLE') AND (${t.visibility} <> 'ARCHIVED' OR ${t.status} = 'CLOSED')`,
+		),
 		check("events_schedule_order", sql`${t.endsAt} > ${t.startsAt}`),
 		check(
 			"events_lifecycle",
@@ -240,6 +253,107 @@ export const attendanceAuditLogs = pgTable(
 		),
 	],
 );
+export type EventEditAuditState = {
+	title: string;
+	description: string;
+	startsAt: string;
+	endsAt: string;
+	rosterCriteria?: RosterCriteria;
+	session?: Pick<
+		typeof attendanceSessions.$inferSelect,
+		| "centerLat"
+		| "centerLng"
+		| "geofenceRadiusM"
+		| "lateGraceMinutes"
+		| "qrTtlMinutes"
+	>;
+	participants?: {
+		count: number;
+		addedUserIds?: string[];
+		removedUserIds?: string[];
+	};
+};
+export const eventAuditLogs = pgTable(
+	"event_audit_logs",
+	{
+		id: uuid("id").defaultRandom().primaryKey(),
+		eventId: uuid("event_id")
+			.notNull()
+			.references(() => events.id),
+		actorUserId: text("actor_user_id")
+			.notNull()
+			.references(() => user.id),
+		action: text("action")
+			.$type<
+				| "PUBLISHED_CONFIGURATION_EDITED"
+				| "PUBLISHED_DETAILS_EDITED"
+				| "CLOSED_METADATA_EDITED"
+				| "EVENT_HIDDEN"
+				| "EVENT_UNHIDDEN"
+				| "EVENT_ARCHIVED"
+				| "EVENT_RESTORED"
+			>()
+			.notNull(),
+		reason: text("reason").notNull(),
+		beforeState: jsonb("before_state")
+			.$type<EventEditAuditState | { visibility: EventVisibility }>()
+			.notNull(),
+		afterState: jsonb("after_state")
+			.$type<EventEditAuditState | { visibility: EventVisibility }>()
+			.notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.defaultNow()
+			.notNull(),
+	},
+	(t) => [
+		index("event_audit_logs_event_time_idx").on(t.eventId, t.createdAt),
+		check("event_audit_logs_reason", sql`length(btrim(${t.reason})) > 0`),
+		check(
+			"event_audit_logs_action",
+			sql`${t.action} IN ('PUBLISHED_CONFIGURATION_EDITED', 'PUBLISHED_DETAILS_EDITED', 'CLOSED_METADATA_EDITED', 'EVENT_HIDDEN', 'EVENT_UNHIDDEN', 'EVENT_ARCHIVED', 'EVENT_RESTORED')`,
+		),
+		check(
+			"event_audit_logs_states",
+			sql`jsonb_typeof(${t.beforeState}) = 'object' AND jsonb_typeof(${t.afterState}) = 'object'`,
+		),
+	],
+);
+// No event FK: the immutable tombstone must outlive the deleted DRAFT.
+// All nondeleted event audits keep their original FK in event_audit_logs.
+export const eventDeletionAudits = pgTable(
+	"event_deletion_audits",
+	{
+		id: uuid("id").defaultRandom().primaryKey(),
+		eventId: uuid("event_id").notNull().unique(),
+		actorUserId: text("actor_user_id")
+			.notNull()
+			.references(() => user.id),
+		action: text("action").$type<"EVENT_DRAFT_DELETED">().notNull(),
+		reason: text("reason").notNull(),
+		eventSnapshot: jsonb("event_snapshot")
+			.$type<{
+				title: string;
+				status: "DRAFT";
+				startsAt: string;
+				endsAt: string;
+			}>()
+			.notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.defaultNow()
+			.notNull(),
+	},
+	(t) => [
+		check(
+			"event_deletion_audits_action",
+			sql`${t.action} = 'EVENT_DRAFT_DELETED'`,
+		),
+		check("event_deletion_audits_reason", sql`length(btrim(${t.reason})) > 0`),
+		check(
+			"event_deletion_audits_snapshot",
+			sql`jsonb_typeof(${t.eventSnapshot}) = 'object'`,
+		),
+	],
+);
 export const attendanceRelations = defineRelationsPart(
 	{
 		events,
@@ -248,10 +362,16 @@ export const attendanceRelations = defineRelationsPart(
 		qrChallenges,
 		attendanceRecords,
 		attendanceAuditLogs,
+		eventAuditLogs,
+		eventDeletionAudits,
 		user,
 	},
 	(r) => ({
 		events: {
+			audits: r.many.eventAuditLogs({
+				from: r.events.id,
+				to: r.eventAuditLogs.eventId,
+			}),
 			session: r.one.attendanceSessions({
 				from: r.events.id,
 				to: r.attendanceSessions.internalEventId,
@@ -330,6 +450,25 @@ export const attendanceRelations = defineRelationsPart(
 			}),
 			actor: r.one.user({
 				from: r.attendanceAuditLogs.actorUserId,
+				to: r.user.id,
+				optional: false,
+			}),
+		},
+		eventAuditLogs: {
+			event: r.one.events({
+				from: r.eventAuditLogs.eventId,
+				to: r.events.id,
+				optional: false,
+			}),
+			actor: r.one.user({
+				from: r.eventAuditLogs.actorUserId,
+				to: r.user.id,
+				optional: false,
+			}),
+		},
+		eventDeletionAudits: {
+			actor: r.one.user({
+				from: r.eventDeletionAudits.actorUserId,
 				to: r.user.id,
 				optional: false,
 			}),

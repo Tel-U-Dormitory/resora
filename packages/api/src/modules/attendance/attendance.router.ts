@@ -1,21 +1,51 @@
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../../index";
 import {
+	administrativeHistorySchema,
+	advancedEventEditSchema,
 	auditHistorySchema,
 	checkInSchema,
+	deleteDraftSchema,
+	eventAuditHistorySchema,
 	eventDraftSchema,
 	eventIdSchema,
+	eventListSchema,
 	eventMetadataSchema,
+	eventVisibilitySchema,
 	manualCorrectSchema,
 	manualInsertSchema,
 	ownHistorySchema,
 } from "./attendance.schema";
 import * as attendance from "./attendance.service";
 import { checkIn } from "./check-in";
+import { deletedDraftHistory, eventAuditHistory } from "./event-audit";
 import { manualCorrect, manualInsert } from "./manual-attendance";
 import { auditHistory, exportCsv, ownHistory, recap } from "./reporting";
 
 export const attendanceRouter = router({
+	eventAuditHistory: protectedProcedure
+		.input(eventAuditHistorySchema)
+		.query(({ ctx, input }) => eventAuditHistory(ctx.db, ctx.identity, input)),
+	deletedDraftHistory: protectedProcedure
+		.input(administrativeHistorySchema)
+		.query(({ ctx, input }) =>
+			deletedDraftHistory(ctx.db, ctx.identity, input),
+		),
+	setVisibility: protectedProcedure
+		.input(eventVisibilitySchema)
+		.mutation(({ ctx, input }) =>
+			attendance.setEventVisibility(ctx.db, ctx.identity, input),
+		),
+	deleteDraft: protectedProcedure
+		.input(deleteDraftSchema)
+		.mutation(({ ctx, input }) =>
+			attendance.deleteEventDraft(ctx.db, ctx.identity, input),
+		),
+	advancedEdit: protectedProcedure
+		.input(advancedEventEditSchema)
+		.mutation(({ ctx, input }) =>
+			attendance.advancedEditEvent(ctx.db, ctx.identity, input),
+		),
 	manualInsert: protectedProcedure
 		.input(manualInsertSchema)
 		.mutation(({ ctx, input }) => manualInsert(ctx.db, ctx.identity, input)),
@@ -41,9 +71,11 @@ export const attendanceRouter = router({
 				throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 			return checkIn(ctx.db, ctx.identity, ctx.qrSigningSecret, input);
 		}),
-	list: protectedProcedure.query(({ ctx }) =>
-		attendance.listEvents(ctx.db, ctx.identity),
-	),
+	list: protectedProcedure
+		.input(eventListSchema)
+		.query(({ ctx, input }) =>
+			attendance.listEvents(ctx.db, ctx.identity, input),
+		),
 	detail: protectedProcedure
 		.input(eventIdSchema)
 		.query(({ ctx, input }) =>

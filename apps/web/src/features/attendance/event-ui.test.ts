@@ -1,9 +1,32 @@
 import { expect, test } from "bun:test";
+import { TRPCClientError } from "@trpc/client";
 import {
+	eventErrorMessage,
 	formatEventTime,
 	parseWibDateTimeInput,
 	toWibDateTimeInput,
 } from "./event-ui";
+
+test("advanced edit errors explain stale eligibility and end-time restrictions safely", () => {
+	expect(
+		eventErrorMessage(new TRPCClientError("ADVANCED_EDIT_STATE_CHANGED")),
+	).toContain("kehadiran telah berubah");
+	expect(
+		eventErrorMessage(new TRPCClientError("ADVANCED_EDIT_END_INVALID")),
+	).toContain("tidak boleh di masa lalu");
+});
+
+test("visibility and deletion errors describe restrictions without exposing internal details", () => {
+	expect(
+		eventErrorMessage(new TRPCClientError("EVENT_VISIBILITY_CONFLICT")),
+	).toContain("Visibilitas atau status");
+	expect(
+		eventErrorMessage(new TRPCClientError("HIDDEN_EVENT_ACTIVATION_FORBIDDEN")),
+	).toContain("SUPERADMIN");
+	expect(
+		eventErrorMessage(new TRPCClientError("DRAFT_DELETE_NOT_ALLOWED")),
+	).toContain("tidak dapat dihapus");
+});
 
 test("draft and manual input use explicit WIB independent of device timezone", () => {
 	expect(toWibDateTimeInput("2026-10-12T06:00:00Z")).toBe("2026-10-12T13:00");

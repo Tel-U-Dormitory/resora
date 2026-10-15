@@ -4,17 +4,29 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { CalendarDays, MapPin, QrCode, Users } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { attendanceQueryKeys, queryClient, trpc } from "@/utils/trpc";
 import { refreshAttendanceQueries } from "./attendance-queries";
+import { EventAuditHistory } from "./event-admin-history";
 import EventRecap from "./event-recap";
 import { eventErrorMessage, formatEventTime, StatusBadge } from "./event-ui";
 import { participantPage } from "./participant-list";
 
+const administrativeLabels = {
+	HIDE: "Sembunyikan event",
+	UNHIDE: "Tampilkan event kembali",
+	ARCHIVE: "Arsipkan event",
+	RESTORE: "Pulihkan dari arsip",
+	DELETE_DRAFT: "Hapus draft permanen",
+} as const;
+type AdministrativeAction = keyof typeof administrativeLabels;
+
 export default function EventDetail({ eventId }: { eventId: string }) {
+	const router = useRouter();
 	const actionLock = useRef(false);
 	const [activeAction, setActiveAction] = useState<string | null>(null);
 	const [feedback, setFeedback] = useState("");
@@ -58,6 +70,16 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 	const revoke = useMutation(trpc.attendance.revokeQr.mutationOptions());
 	const reissue = useMutation(trpc.attendance.reissueQr.mutationOptions());
 	const metadata = useMutation(trpc.attendance.editMetadata.mutationOptions());
+	const visibility = useMutation(
+		trpc.attendance.setVisibility.mutationOptions(),
+	);
+	const deleteDraft = useMutation(
+		trpc.attendance.deleteDraft.mutationOptions(),
+	);
+	const [administrativeAction, setAdministrativeAction] = useState<
+		AdministrativeAction | ""
+	>("");
+	const [administrativeReason, setAdministrativeReason] = useState("");
 	const [error, setError] = useState("");
 	const [now, setNow] = useState(Date.now());
 	useEffect(() => {
@@ -88,6 +110,14 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 		}
 		setFeedback(message);
 		try {
+			if (action === "deleteDraft") {
+				await queryClient.invalidateQueries({
+					queryKey: attendanceQueryKeys.all,
+					refetchType: "none",
+				});
+				router.replace("/events?view=manage");
+				return;
+			}
 			if (["activate", "revoke", "reissue", "close"].includes(action))
 				await queryClient.resetQueries({
 					queryKey: trpc.attendance.qr.queryKey({ eventId }),
@@ -125,15 +155,25 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 			</Card>
 		);
 	const { event, session, participants } = detail.data;
+	const administration = detail.data.administration;
+	const administrativeOptions = administration
+		? [
+				...administration.visibilityActions,
+				...(administration.canDeleteDraft ? ["DELETE_DRAFT" as const] : []),
+			]
+		: [];
 	const busy =
-		close.isSuccess ||
+		(close.isSuccess && event.status !== "CLOSED") ||
+		deleteDraft.isSuccess ||
 		Boolean(activeAction) ||
 		publish.isPending ||
 		activate.isPending ||
 		close.isPending ||
 		revoke.isPending ||
 		reissue.isPending ||
-		metadata.isPending;
+		metadata.isPending ||
+		visibility.isPending ||
+		deleteDraft.isPending;
 	const expiry = qr.data?.expiresAt
 		? new Date(qr.data.expiresAt).getTime()
 		: null;
@@ -183,6 +223,9 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 						{event.title}
 					</h1>
 					<StatusBadge status={event.status} />
+					{event.visibility !== "VISIBLE" && (
+						<StatusBadge status={event.visibility} />
+					)}
 				</div>
 				<p className="whitespace-pre-wrap break-words text-muted-foreground">
 					{event.description || "Belum ada deskripsi event."}
@@ -211,9 +254,16 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 				</p>
 			)}
 			{activeAction &&
-				![publish, activate, close, revoke, reissue, metadata].some(
-					(mutation) => mutation.isPending,
-				) && (
+				![
+					publish,
+					activate,
+					close,
+					revoke,
+					reissue,
+					metadata,
+					visibility,
+					deleteDraft,
+				].some((mutation) => mutation.isPending) && (
 					<p role="status" className="text-muted-foreground text-sm">
 						Memperbarui tampilan event…
 					</p>
@@ -332,6 +382,129 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 					</CardContent>
 				</Card>
 			)}
+			{detail.data.advancedEditMode && (
+				<Link
+					href={`/events/${eventId}/edit`}
+					className="focus-ring inline-flex rounded-md border border-border px-4 py-2 font-semibold text-sm hover:bg-muted"
+				>
+					Edit event (SUPERADMIN)
+				</Link>
+			)}
+			{administration && (
+				<Card>
+					<CardHeader
+						title="Administrasi event"
+						description="Tindakan SUPERADMIN memerlukan alasan dan konfirmasi, serta dicatat dalam audit."
+					/>
+					<CardContent className="space-y-4">
+						{administrativeOptions.length === 0 ? (
+							<p className="text-muted-foreground text-sm">
+								{event.status === "DRAFT"
+									? "Draft memiliki sesi yang pernah digunakan atau referensi operasional/audit sehingga tidak dapat dihapus."
+									: "Perubahan visibilitas tidak tersedia pada kondisi sesi ini. Sesi aktif tidak dapat disembunyikan."}
+							</p>
+						) : (
+							<form
+								className="space-y-4"
+								onSubmit={(e) => {
+									e.preventDefault();
+									if (
+										busy ||
+										!administrativeAction ||
+										!administrativeOptions.includes(administrativeAction)
+									)
+										return;
+									if (!administrativeReason.trim()) {
+										setError("Alasan administratif wajib diisi.");
+										return;
+									}
+									const deleting = administrativeAction === "DELETE_DRAFT";
+									if (
+										!window.confirm(
+											deleting
+												? `Hapus draft "${event.title}" secara permanen? Tindakan ini tidak dapat dibatalkan dan bukti audit akan tetap disimpan.`
+												: `${administrativeLabels[administrativeAction]} "${event.title}"? Tindakan ini tidak mengubah status event, sesi, QR, atau catatan kehadiran.`,
+										)
+									)
+										return;
+									void act(
+										deleting ? "deleteDraft" : "visibility",
+										deleting
+											? "Draft berhasil dihapus. Mengalihkan ke kelola event…"
+											: "Visibilitas event berhasil diperbarui.",
+										async () => {
+											if (administrativeAction === "DELETE_DRAFT")
+												await deleteDraft.mutateAsync({
+													eventId,
+													reason: administrativeReason,
+												});
+											else
+												await visibility.mutateAsync({
+													eventId,
+													action: administrativeAction,
+													reason: administrativeReason,
+												});
+											setAdministrativeAction("");
+											setAdministrativeReason("");
+										},
+									);
+								}}
+							>
+								<label className="block space-y-2 text-sm">
+									Tindakan
+									<select
+										required
+										disabled={busy}
+										value={administrativeAction}
+										onChange={(e) =>
+											setAdministrativeAction(
+												e.target.value as AdministrativeAction | "",
+											)
+										}
+										className="focus-ring block w-full rounded-lg border border-border bg-background px-3 py-2"
+									>
+										<option value="">Pilih tindakan</option>
+										{administrativeOptions.map((action) => (
+											<option key={action} value={action}>
+												{administrativeLabels[action]}
+											</option>
+										))}
+									</select>
+								</label>
+								<label className="block space-y-2 text-sm">
+									Alasan administratif
+									<textarea
+										required
+										maxLength={2000}
+										disabled={busy}
+										value={administrativeReason}
+										onChange={(e) => setAdministrativeReason(e.target.value)}
+										className="focus-ring block w-full rounded-lg border border-border bg-background px-3 py-2"
+									/>
+								</label>
+								<Button
+									type="submit"
+									variant={
+										administrativeAction === "DELETE_DRAFT"
+											? "danger"
+											: "outline"
+									}
+									disabled={busy || !administrativeAction}
+									loading={
+										activeAction === "visibility" ||
+										activeAction === "deleteDraft"
+									}
+								>
+									{activeAction === "visibility" ||
+									activeAction === "deleteDraft"
+										? "Memproses…"
+										: "Konfirmasi tindakan"}
+								</Button>
+							</form>
+						)}
+					</CardContent>
+				</Card>
+			)}
 			{canManage && event.status === "PUBLISHED" && (
 				<>
 					<div className="grid items-stretch gap-6 xl:grid-cols-2">
@@ -339,59 +512,70 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 							<CardHeader
 								title="Informasi event"
 								icon={<CalendarDays size={20} aria-hidden="true" />}
-								description="Hanya judul dan deskripsi yang dapat diubah setelah publikasi."
+								description={
+									detail.data.advancedEditMode
+										? "Perubahan SUPERADMIN mengikuti status sesi dan kehadiran terkini."
+										: "Hanya judul dan deskripsi yang dapat diubah setelah publikasi."
+								}
 							/>
 							<CardContent>
-								<form
-									key={event.updatedAt}
-									className="space-y-4"
-									onSubmit={(e) => {
-										e.preventDefault();
-										const data = new FormData(e.currentTarget);
-										void act(
-											"metadata",
-											"Perubahan event berhasil disimpan.",
-											() =>
-												metadata.mutateAsync({
-													eventId,
-													title: String(data.get("title") ?? ""),
-													description: String(data.get("description") ?? ""),
-												}),
-										);
-									}}
-								>
-									<label className="block space-y-2 text-sm">
-										Judul
-										<input
-											name="title"
-											disabled={busy}
-											required
-											maxLength={200}
-											defaultValue={event.title}
-											className="focus-ring block w-full rounded-lg border border-border bg-background px-3 py-2"
-										/>
-									</label>
-									<label className="block space-y-2 text-sm">
-										Deskripsi
-										<textarea
-											name="description"
-											disabled={busy}
-											rows={4}
-											maxLength={5000}
-											defaultValue={event.description}
-											className="focus-ring block w-full rounded-lg border border-border bg-background px-3 py-2"
-										/>
-									</label>
-									<Button
-										type="submit"
-										disabled={busy}
-										loading={activeAction === "metadata"}
+								{detail.data.advancedEditMode ? (
+									<p className="text-muted-foreground text-sm">
+										Gunakan Edit event (SUPERADMIN) untuk perubahan
+										administratif dengan alasan dan audit.
+									</p>
+								) : (
+									<form
+										key={event.updatedAt}
+										className="space-y-4"
+										onSubmit={(e) => {
+											e.preventDefault();
+											const data = new FormData(e.currentTarget);
+											void act(
+												"metadata",
+												"Perubahan event berhasil disimpan.",
+												() =>
+													metadata.mutateAsync({
+														eventId,
+														title: String(data.get("title") ?? ""),
+														description: String(data.get("description") ?? ""),
+													}),
+											);
+										}}
 									>
-										{activeAction === "metadata"
-											? "Menyimpan perubahan…"
-											: "Simpan perubahan"}
-									</Button>
-								</form>
+										<label className="block space-y-2 text-sm">
+											Judul
+											<input
+												name="title"
+												disabled={busy}
+												required
+												maxLength={200}
+												defaultValue={event.title}
+												className="focus-ring block w-full rounded-lg border border-border bg-background px-3 py-2"
+											/>
+										</label>
+										<label className="block space-y-2 text-sm">
+											Deskripsi
+											<textarea
+												name="description"
+												disabled={busy}
+												rows={4}
+												maxLength={5000}
+												defaultValue={event.description}
+												className="focus-ring block w-full rounded-lg border border-border bg-background px-3 py-2"
+											/>
+										</label>
+										<Button
+											type="submit"
+											disabled={busy}
+											loading={activeAction === "metadata"}
+										>
+											{activeAction === "metadata"
+												? "Menyimpan perubahan…"
+												: "Simpan perubahan"}
+										</Button>
+									</form>
+								)}
 							</CardContent>
 						</Card>
 						<Card>
@@ -407,8 +591,14 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 											Sesi belum aktif. Aktifkan sesi untuk menampilkan QR
 											dengan masa berlaku yang telah ditetapkan.
 										</p>
+										{event.visibility !== "VISIBLE" && (
+											<p className="text-muted-foreground text-sm">
+												Event disembunyikan. SUPERADMIN perlu menampilkannya
+												kembali sebelum sesi dapat diaktifkan.
+											</p>
+										)}
 										<Button
-											disabled={busy}
+											disabled={busy || event.visibility !== "VISIBLE"}
 											loading={activeAction === "activate"}
 											onClick={() =>
 												act(
@@ -725,6 +915,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 					riwayat kehadiran untuk melihat status pribadi.
 				</p>
 			)}
+			{administration && <EventAuditHistory eventId={eventId} />}
 			{canManage && event.status !== "DRAFT" && (
 				<EventRecap eventId={eventId} />
 			)}
