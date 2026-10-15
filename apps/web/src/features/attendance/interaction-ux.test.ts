@@ -312,7 +312,12 @@ test("visibility/deletion UI requires reason and confirmation, respects pending 
 			eventId: "synthetic-event",
 			event: { title: "Synthetic draft" },
 			administrativeLabels: { [action]: "Synthetic action" },
-			window: { confirm: () => confirmed },
+			window: {
+				confirm: (message: string) => {
+					expect(message).toContain("Synthetic draft");
+					return confirmed;
+				},
+			},
 			setError: (value: string) => {
 				feedback = value;
 			},
@@ -660,4 +665,69 @@ test("manual success closes the dialog and refreshes data; refresh failure remai
 			refreshFails ? "sudah disimpan" : "berhasil disimpan",
 		);
 	}
+});
+
+test("event submit labels reflect create, draft edit, advanced edit and pending contexts", () => {
+	const source = ts.createSourceFile(
+		"form.tsx",
+		readFileSync(new URL("event-form.tsx", import.meta.url), "utf8"),
+		ts.ScriptTarget.Latest,
+		true,
+		ts.ScriptKind.TSX,
+	);
+	let label: ts.ConditionalExpression | undefined;
+	const visit = (node: ts.Node) => {
+		if (
+			ts.isConditionalExpression(node) &&
+			node.condition.getText(source) === "saving" &&
+			node.getText(source).includes("Simpan perubahan draft")
+		)
+			label = node;
+		ts.forEachChild(node, visit);
+	};
+	visit(source);
+	expect(label).toBeDefined();
+	for (const [saving, advancedMode, eventId, expected] of [
+		[false, null, null, "Simpan draft"],
+		[false, null, "event", "Simpan perubahan draft"],
+		[false, "FULL", "event", "Simpan perubahan"],
+		[false, "METADATA", "event", "Simpan perubahan"],
+		[true, "LIMITED", "event", "Menyimpan perubahan…"],
+	] as const) {
+		expect(
+			compile<() => string>(`() => (${label?.getText(source)})`, {
+				saving,
+				advancedMode,
+				eventId,
+			})(),
+		).toBe(expected);
+	}
+});
+
+test("administrative audit UI is backend-gated, expandable, paginated and renders meaningful fields without JSON", () => {
+	const detail = readFileSync(
+		new URL("event-detail.tsx", import.meta.url),
+		"utf8",
+	);
+	const list = readFileSync(new URL("event-list.tsx", import.meta.url), "utf8");
+	const history = readFileSync(
+		new URL("event-admin-history.tsx", import.meta.url),
+		"utf8",
+	);
+	expect(detail).toContain(
+		"{administration && <EventAuditHistory eventId={eventId} />}",
+	);
+	expect(list).toContain(
+		"management && query.data?.isSuperadmin && <DeletedDraftHistory />",
+	);
+	expect(list).toContain("!query.error &&");
+	expect(list).toContain("!query.isPlaceholderData");
+	expect(history).toContain("aria-expanded={open}");
+	expect(history).toContain("enabled: open");
+	expect(history).toContain("item.operator");
+	expect(history).toContain("item.reason");
+	expect(history).toContain("item.changes.map");
+	expect(history).toContain("item.participants.addedCount");
+	expect(history).toContain("setOffset(Math.max(0, offset - 20))");
+	expect(history).not.toContain("JSON.stringify");
 });

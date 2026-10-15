@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { trpc } from "@/utils/trpc";
+import { DeletedDraftHistory } from "./event-admin-history";
 import { eventErrorMessage, formatEventTime, StatusBadge } from "./event-ui";
 
 const visibilityFilters = [
@@ -115,25 +116,29 @@ export default function EventList() {
 					</CardContent>
 				</Card>
 			)}
-			{query.data && !query.isPlaceholderData && events.length === 0 && (
-				<Card>
-					<CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-						<span className="rounded-2xl bg-primary-soft p-4 text-primary">
-							<CalendarDays size={28} aria-hidden="true" />
-						</span>
-						<h2 className="font-semibold text-lg">Belum ada event</h2>
-						<p className="max-w-md text-muted-foreground text-sm">
-							{management && visibility !== "NON_ARCHIVED"
-								? "Tidak ada event yang sesuai dengan filter visibilitas ini."
-								: management
-									? "Mulai dengan membuat draft event, lalu pilih peserta yang ingin diundang."
-									: "Event akan muncul di sini setelah Anda menerima undangan."}
-						</p>
-					</CardContent>
-				</Card>
-			)}
+			{query.data &&
+				!query.error &&
+				!query.isPlaceholderData &&
+				events.length === 0 && (
+					<Card>
+						<CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+							<span className="rounded-2xl bg-primary-soft p-4 text-primary">
+								<CalendarDays size={28} aria-hidden="true" />
+							</span>
+							<h2 className="font-semibold text-lg">Belum ada event</h2>
+							<p className="max-w-md text-muted-foreground text-sm">
+								{management && visibility !== "NON_ARCHIVED"
+									? "Tidak ada event yang sesuai dengan filter visibilitas ini."
+									: management
+										? "Mulai dengan membuat draft event, lalu pilih peserta yang ingin diundang."
+										: "Event akan muncul di sini setelah Anda menerima undangan."}
+							</p>
+						</CardContent>
+					</Card>
+				)}
 			<div className="grid gap-4 md:grid-cols-2">
-				{!query.isPlaceholderData &&
+				{!query.error &&
+					!query.isPlaceholderData &&
 					events.map((event) => (
 						<Card key={event.id} className="flex flex-col">
 							<CardContent className="flex flex-1 flex-col gap-4">
@@ -178,6 +183,7 @@ export default function EventList() {
 						</Card>
 					))}
 			</div>
+			{management && query.data?.isSuperadmin && <DeletedDraftHistory />}
 		</section>
 	);
 }

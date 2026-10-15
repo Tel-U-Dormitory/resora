@@ -1,10 +1,12 @@
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../../index";
 import {
+	administrativeHistorySchema,
 	advancedEventEditSchema,
 	auditHistorySchema,
 	checkInSchema,
 	deleteDraftSchema,
+	eventAuditHistorySchema,
 	eventDraftSchema,
 	eventIdSchema,
 	eventListSchema,
@@ -16,10 +18,19 @@ import {
 } from "./attendance.schema";
 import * as attendance from "./attendance.service";
 import { checkIn } from "./check-in";
+import { deletedDraftHistory, eventAuditHistory } from "./event-audit";
 import { manualCorrect, manualInsert } from "./manual-attendance";
 import { auditHistory, exportCsv, ownHistory, recap } from "./reporting";
 
 export const attendanceRouter = router({
+	eventAuditHistory: protectedProcedure
+		.input(eventAuditHistorySchema)
+		.query(({ ctx, input }) => eventAuditHistory(ctx.db, ctx.identity, input)),
+	deletedDraftHistory: protectedProcedure
+		.input(administrativeHistorySchema)
+		.query(({ ctx, input }) =>
+			deletedDraftHistory(ctx.db, ctx.identity, input),
+		),
 	setVisibility: protectedProcedure
 		.input(eventVisibilitySchema)
 		.mutation(({ ctx, input }) =>

@@ -654,7 +654,13 @@ function DraftEditor({
 					</p>
 				)}
 				<Button type="submit" disabled={saving} loading={saving}>
-					{saving ? "Menyimpan draft…" : "Simpan draft"}
+					{saving
+						? "Menyimpan perubahan…"
+						: advancedMode
+							? "Simpan perubahan"
+							: eventId
+								? "Simpan perubahan draft"
+								: "Simpan draft"}
 				</Button>
 			</form>
 		</section>

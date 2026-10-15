@@ -121,3 +121,13 @@ export const ownHistorySchema = z
 	})
 	.strict()
 	.default({ limit: 25, offset: 0 });
+
+export const administrativeHistorySchema = z
+	.object({
+		limit: z.number().int().min(1).max(50).default(20),
+		offset: z.number().int().min(0).max(1_000_000).default(0),
+	})
+	.strict();
+export const eventAuditHistorySchema = administrativeHistorySchema.extend({
+	eventId: z.uuid(),
+});

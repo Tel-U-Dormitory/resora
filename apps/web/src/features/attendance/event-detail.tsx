@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { attendanceQueryKeys, queryClient, trpc } from "@/utils/trpc";
 import { refreshAttendanceQueries } from "./attendance-queries";
+import { EventAuditHistory } from "./event-admin-history";
 import EventRecap from "./event-recap";
 import { eventErrorMessage, formatEventTime, StatusBadge } from "./event-ui";
 import { participantPage } from "./participant-list";
@@ -422,7 +423,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 										!window.confirm(
 											deleting
 												? `Hapus draft "${event.title}" secara permanen? Tindakan ini tidak dapat dibatalkan dan bukti audit akan tetap disimpan.`
-												: `${administrativeLabels[administrativeAction]}? Tindakan ini tidak mengubah status event, sesi, QR, atau catatan kehadiran.`,
+												: `${administrativeLabels[administrativeAction]} "${event.title}"? Tindakan ini tidak mengubah status event, sesi, QR, atau catatan kehadiran.`,
 										)
 									)
 										return;
@@ -914,6 +915,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 					riwayat kehadiran untuk melihat status pribadi.
 				</p>
 			)}
+			{administration && <EventAuditHistory eventId={eventId} />}
 			{canManage && event.status !== "DRAFT" && (
 				<EventRecap eventId={eventId} />
 			)}
