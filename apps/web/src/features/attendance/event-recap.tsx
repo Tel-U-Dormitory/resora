@@ -1,6 +1,8 @@
 "use client";
 
 import type { AppRouter } from "@resora/api/routers/index";
+import { Input } from "@resora/ui/components/input";
+import { Textarea } from "@resora/ui/components/textarea";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import type { inferRouterOutputs } from "@trpc/server";
@@ -22,7 +24,7 @@ import { participantPage } from "./participant-list";
 type Participant =
 	inferRouterOutputs<AppRouter>["attendance"]["recap"]["participants"][number];
 const fieldClass =
-	"focus-ring w-full rounded-lg border border-border bg-background px-3 py-2 text-sm";
+	"aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-destructive/20";
 function manualError(error: unknown) {
 	if (error instanceof TRPCClientError) {
 		const messages: Record<string, string> = {
@@ -259,7 +261,7 @@ function ManualForm({
 					>
 						Waktu efektif (WIB)
 					</label>
-					<input
+					<Input
 						id="manual-effective-time"
 						className={fieldClass}
 						type="datetime-local"
@@ -279,7 +281,7 @@ function ManualForm({
 					<label htmlFor="manual-reason" className="font-medium text-sm">
 						Alasan {participant.attendanceId ? "koreksi" : "kehadiran manual"}
 					</label>
-					<textarea
+					<Textarea
 						id="manual-reason"
 						className={fieldClass}
 						required
@@ -344,7 +346,7 @@ export default function EventRecap({ eventId }: { eventId: string }) {
 						<label htmlFor="attendance-search" className="text-sm">
 							Cari nama atau NIM
 						</label>
-						<input
+						<Input
 							id="attendance-search"
 							className={fieldClass}
 							value={search}

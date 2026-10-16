@@ -1,12 +1,20 @@
 "use client";
 
+import { ActionDialog } from "@resora/ui/components/action-dialog";
+import { Button } from "@resora/ui/components/button";
 import { useMutation } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
-import { Camera, CheckCircle2, LoaderCircle } from "lucide-react";
+import {
+	ArrowLeft,
+	Camera,
+	CheckCircle2,
+	LoaderCircle,
+	ScanLine,
+} from "lucide-react";
+import Link from "next/link";
 import type QrScanner from "qr-scanner";
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { toast } from "sonner";
 import { attendanceQueryKeys, queryClient, trpc } from "@/utils/trpc";
 import { refreshAttendanceQueries } from "./attendance-queries";
 import { releaseCamera, scannerErrorMessage } from "./check-in-ui";
@@ -79,7 +87,10 @@ export default function CheckInScanner() {
 					accuracyMeters: position.coords.accuracy,
 				},
 			});
-			if (generation.current === attempt) setPhase("result");
+			if (generation.current === attempt) {
+				setPhase("result");
+				toast.success("Kehadiran terverifikasi");
+			}
 		} catch (cause) {
 			if (generation.current !== attempt) return;
 			if (cause instanceof TRPCClientError)
@@ -152,153 +163,140 @@ export default function CheckInScanner() {
 			if (generation.current === attempt) busy.current = false;
 		}
 	};
+	const processing =
+		phase === "starting" || phase === "locating" || phase === "submitting";
+	const stop = () => {
+		generation.current++;
+		busy.current = false;
+		stopCamera();
+		setPhase("idle");
+	};
 	return (
-		<section className="max-w-xl space-y-6">
-			<div className="space-y-2">
-				<h1 className="font-bold text-2xl tracking-tight">Scan QR kehadiran</h1>
-				<p className="text-muted-foreground text-sm">
-					Pindai QR event yang ditampilkan HCO dari lokasi kehadiran.
-				</p>
-			</div>
-			<Card>
-				<CardContent className="space-y-4">
-					<div className="relative aspect-square w-full overflow-hidden rounded-xl bg-ink">
-						<video
-							ref={video}
-							muted
-							playsInline
-							aria-label="Pratinjau kamera untuk scan QR"
-							className="h-full w-full object-cover"
+		<section className="mx-auto max-w-lg space-y-4">
+			<div className="relative isolate flex min-h-[min(72dvh,44rem)] flex-col overflow-hidden rounded-3xl bg-slate-950 text-white shadow-xl">
+				<video
+					ref={video}
+					muted
+					playsInline
+					aria-label="Pratinjau kamera untuk scan QR"
+					className="absolute inset-0 size-full object-cover"
+				/>
+				<div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/90" />
+				<div className="relative flex items-center justify-between p-4">
+					<Button
+						render={<Link href="/dashboard" />}
+						onClick={stop}
+						variant="ghost"
+						size="icon"
+						className="size-10 rounded-full bg-black/40 text-white hover:bg-black/60"
+						aria-label="Kembali ke dashboard"
+					>
+						<ArrowLeft />
+					</Button>
+					<h1 className="flex items-center gap-2 rounded-full bg-black/40 px-4 py-2 font-semibold text-xs">
+						<span
+							className={`size-2 rounded-full ${phase === "camera" ? "bg-emerald-400" : "bg-white/50"}`}
 						/>
+						Scan Presensi
+					</h1>
+					<span className="size-10" aria-hidden="true" />
+				</div>
+				<div className="relative flex flex-1 flex-col items-center justify-center gap-5 px-8 py-10">
+					<div
+						aria-hidden="true"
+						className="relative aspect-square w-full max-w-72 rounded-3xl border border-white/15 bg-white/5"
+					>
+						<span className="absolute top-0 left-0 size-7 rounded-tl-3xl border-red-500 border-t-[3px] border-l-[3px]" />
+						<span className="absolute top-0 right-0 size-7 rounded-tr-3xl border-red-500 border-t-[3px] border-r-[3px]" />
+						<span className="absolute bottom-0 left-0 size-7 rounded-bl-3xl border-red-500 border-b-[3px] border-l-[3px]" />
+						<span className="absolute right-0 bottom-0 size-7 rounded-br-3xl border-red-500 border-r-[3px] border-b-[3px]" />
 						{phase === "camera" ? (
-							<div
-								aria-hidden="true"
-								className="pointer-events-none absolute inset-[16.5%]"
-							>
-								<span className="absolute top-0 left-0 size-8 rounded-tl-lg border-white border-t-4 border-l-4" />
-								<span className="absolute top-0 right-0 size-8 rounded-tr-lg border-white border-t-4 border-r-4" />
-								<span className="absolute bottom-0 left-0 size-8 rounded-bl-lg border-white border-b-4 border-l-4" />
-								<span className="absolute right-0 bottom-0 size-8 rounded-br-lg border-white border-r-4 border-b-4" />
-								<span className="resora-scan-line absolute right-0 left-0 h-0.5 bg-primary" />
-							</div>
+							<span className="resora-scan-line absolute right-2 left-2 h-px bg-red-500 shadow-[0_0_12px_#ef4444]" />
 						) : (
-							<div
-								aria-hidden="true"
-								className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink px-6 text-center text-ink-foreground"
-							>
-								{phase === "starting" ||
-								phase === "locating" ||
-								phase === "submitting" ? (
-									<LoaderCircle
-										size={32}
-										className="animate-spin motion-reduce:animate-none"
-									/>
+							<div className="flex h-full items-center justify-center text-white/60">
+								{processing ? (
+									<LoaderCircle className="size-10 animate-spin motion-reduce:animate-none" />
 								) : (
-									<Camera size={40} />
+									<Camera className="size-12" />
 								)}
-								<span className="text-sm">
-									{phase === "starting"
-										? "Menyiapkan kamera…"
-										: phase === "locating"
-											? "Memeriksa lokasi…"
-											: phase === "submitting"
-												? "Menyimpan kehadiran…"
-												: "Kamera siap dibuka"}
-								</span>
 							</div>
 						)}
 					</div>
-					{phase === "idle" && (
-						<p className="text-muted-foreground text-sm">
-							Kamera dibuka setelah Anda menekan tombol. Lokasi dan akurasi GPS
-							saat check-in digunakan untuk verifikasi dan disimpan bersama
-							kehadiran. Izin lokasi diminta ketika QR diproses.
-						</p>
-					)}
-					{phase === "camera" && (
+					<p
+						role="status"
+						className="rounded-full bg-black/50 px-4 py-2 text-center text-xs"
+					>
+						{phase === "camera"
+							? "Arahkan kamera ke QR Code kegiatan"
+							: phase === "locating"
+								? "Memeriksa lokasi GPS…"
+								: phase === "submitting"
+									? "Menyimpan kehadiran…"
+									: phase === "starting"
+										? "Menyiapkan kamera…"
+										: "Buka kamera untuk scan kehadiran"}
+					</p>
+				</div>
+				<div className="relative flex flex-col items-center gap-3 px-5 pt-4 pb-7">
+					<p className="text-center text-white/70 text-xs">
+						Gunakan QR kegiatan yang ditampilkan HCO
+					</p>
+					<Button
+						size="icon"
+						disabled={processing}
+						onClick={phase === "camera" ? stop : startCamera}
+						aria-label={phase === "camera" ? "Hentikan kamera" : "Buka kamera"}
+						aria-describedby="scan-privacy"
+						className="size-16 rounded-full border-4 border-slate-950 bg-red-500 text-white ring-2 ring-white/80 hover:bg-red-600"
+					>
+						<ScanLine className="size-7" />
+					</Button>
+					<span className="text-white/80 text-xs">
+						{phase === "camera"
+							? "Memindai otomatis · Ketuk untuk berhenti"
+							: "Ketuk untuk membuka kamera"}
+					</span>
+				</div>
+			</div>
+			<p
+				id="scan-privacy"
+				className="px-2 text-muted-foreground text-xs leading-relaxed"
+			>
+				Kamera dibuka setelah Anda menekan tombol. Lokasi dan akurasi GPS
+				diminta ketika QR diproses, digunakan untuk verifikasi, dan disimpan
+				bersama kehadiran. RESORA tidak melacak lokasi secara terus-menerus.
+			</p>
+			<ActionDialog
+				open={phase === "error" || phase === "result"}
+				onOpenChange={(open) => {
+					if (!open) setPhase("idle");
+				}}
+				title={
+					phase === "error"
+						? "Kehadiran belum tercatat"
+						: mutation.data?.status === "ALREADY_CHECKED_IN"
+							? "Anda sudah melakukan check-in"
+							: "Check-in berhasil"
+				}
+				onRetry={phase === "error" ? startCamera : undefined}
+			>
+				{phase === "error" ? (
+					<p role="alert">{error}</p>
+				) : (
+					mutation.data && (
 						<>
-							<p role="status" className="text-muted-foreground text-sm">
-								Memindai QR… Arahkan QR RESORA ke dalam bingkai.
-							</p>
-							<Button
-								variant="outline"
-								onClick={() => {
-									generation.current++;
-									busy.current = false;
-									stopCamera();
-									setPhase("idle");
-								}}
-							>
-								Hentikan kamera
-							</Button>
-						</>
-					)}
-					{(phase === "locating" || phase === "submitting") && (
-						<p role="status" className="text-sm">
-							{phase === "locating"
-								? "Mengambil lokasi dan akurasi GPS…"
-								: "Memverifikasi dan menyimpan kehadiran…"}
-						</p>
-					)}
-					{phase === "error" && (
-						<p role="alert" className="text-destructive text-sm">
-							{error}
-						</p>
-					)}
-					{phase === "result" && mutation.data && (
-						<div role="status" className="space-y-3">
-							<CheckCircle2
-								className="text-success"
-								size={28}
-								aria-hidden="true"
-							/>
-							<h2 className="font-semibold text-lg">
-								{mutation.data.status === "ALREADY_CHECKED_IN"
-									? "Anda sudah melakukan check-in"
-									: "Check-in berhasil"}
-							</h2>
+							<CheckCircle2 className="text-success" aria-hidden="true" />
 							<p className="font-medium">{mutation.data.eventName}</p>
-							<p className="text-muted-foreground text-sm">
+							<p>
 								{formatEventTime(
 									new Date(mutation.data.attendanceAt).toISOString(),
 								)}
 							</p>
-							<p className="text-sm">
-								Klasifikasi:{" "}
-								<span className="font-semibold">
-									{mutation.data.timingClass}
-								</span>
-							</p>
-						</div>
-					)}
-					{(phase === "idle" ||
-						phase === "starting" ||
-						phase === "error" ||
-						phase === "result") && (
-						<Button
-							disabled={phase === "starting" || mutation.isPending}
-							loading={phase === "starting"}
-							leftIcon={<Camera size={18} aria-hidden="true" />}
-							onClick={startCamera}
-							aria-describedby="scan-privacy"
-						>
-							{phase === "starting"
-								? "Membuka kamera…"
-								: phase === "idle"
-									? "Buka kamera"
-									: "Coba lagi"}
-						</Button>
-					)}
-				</CardContent>
-			</Card>
-			<Card id="scan-privacy" className="scroll-mt-20">
-				<CardHeader title="Privasi lokasi" />
-				<CardContent className="text-muted-foreground text-sm">
-					Lokasi dan akurasi GPS saat check-in akan digunakan untuk verifikasi
-					dan disimpan bersama catatan kehadiran. RESORA tidak melacak lokasi
-					secara terus-menerus.
-				</CardContent>
-			</Card>
+							<p>Klasifikasi: {mutation.data.timingClass}</p>
+						</>
+					)
+				)}
+			</ActionDialog>
 		</section>
 	);
 }

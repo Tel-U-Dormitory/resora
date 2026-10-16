@@ -110,18 +110,43 @@ $env:VARLOCK_TELEMETRY_DISABLED = '1'
 
 Turbo passes this optional flag to child tasks. It is not forced in the project configuration. If it was previously unset, remove the session override afterward with `Remove-Item Env:VARLOCK_TELEMETRY_DISABLED`; otherwise restore its prior value.
 
-## 5. Optional local PostgreSQL
+## 5. Docker PostgreSQL and manual downloadable backups
 
-External Supabase is the default for Compose: `docker compose config --services` lists web/server; PostgreSQL is behind the `local-db` profile. `DATABASE_URL` is taken from `apps/server/.env` without a local override, and the server has no mandatory PostgreSQL dependency.
+The current scope is a dedicated Docker PostgreSQL primary and a file downloaded by an authenticated active SUPERADMIN. Scheduled backups and automatic restoration to Supabase are cancelled. No database is switched, migrated or restored during application startup. Existing environments still use their explicitly configured `DATABASE_URL` until an operator deliberately changes it.
 
-For isolated local development:
+For the isolated Docker database:
 
-1. Run `pnpm run db:start` (or `pnpm run db:watch`). Explicitly selecting `postgres` enables that profiled service.
-2. Wait for `docker compose exec postgres pg_isready -U postgres` to succeed.
-3. Privately configure `DATABASE_URL` for the local DB (`localhost:5432/resora` for Bun on the host); clear `DIRECT_DB_URL` for local-only migrations. For containerized Express use hostname `postgres` instead. Keep the database password consistent with `POSTGRES_PASSWORD`; the scaffold's default is disposable local development only.
-4. Run `pnpm run db:check`. Apply reviewed local migrations only when intentionally requested.
+1. Store a strong generated password in ignored `.private/postgres-password` (mode 0600), or set Compose `POSTGRES_PASSWORD_FILE` to another private absolute password-file path. There is no development credential fallback. The secret is mounted only in PostgreSQL; backend credentials use the existing private server environment.
+2. Run `docker compose --profile local-db up -d --wait postgres` only on the approved local/deployment host. The service uses PostgreSQL 17, its own `resora_postgres17_data` persistent volume, an internal network shared only with the backend, and no published database port. Container recreation preserves this volume; `down -v` destroys it. Never attach an existing PostgreSQL 18 data directory to PostgreSQL 17.
+3. Configure the backend privately with `DATABASE_URL=postgresql://<role>:<encoded-password>@postgres:5432/resora`. Clear remote `DB_SSL_CA`/SSL URL options and clear or deliberately realign `DIRECT_DB_URL`. Provision a reviewed runtime role with application access and SELECT on all application tables/sequences for exports; bootstrap `postgres` is not the intended production runtime role. Password-file changes do not rotate credentials of an initialized database.
+4. Review/apply the existing migrations only to the explicitly approved new database; no real-data transfer is included here. Run tooling inside the backend network, for example `docker compose run --rm --no-deps server bun run --cwd /app/packages/db db:migrate` with the correct private environment. Host tools cannot use `localhost:5432` because the database is not published. Do not run `db:push` or overwrite existing data.
+5. Build/start the local stack with `docker compose --profile local-db up -d --build` after schema preparation. Existing web/server env files are required as BuildKit secrets. Browser API remains `http://localhost:3000`, SSR uses `SERVER_URL=http://server:3000`. Server `/` is process liveness, not schema/database readiness; verify backend connectivity/login separately before directing users here.
 
-For a fully local Compose stack, use `docker compose --profile local-db up -d --build` after the database is healthy and the server env is configured for hostname `postgres`. For external Supabase use the existing `pnpm run docker:up`. These commands start services and are manual verification steps, not Phase 1 deployment approval. Builds require the existing `apps/web/.env` and `apps/server/.env` as BuildKit secrets. The browser API URL stays `http://localhost:3000`, while server-to-server traffic uses `SERVER_URL=http://server:3000`.
+### Download a backup
+
+Set `DATABASE_BACKUP_ENABLED=true` in the backend's existing private environment and recreate the **persistent Docker backend** after selecting the Docker primary. The default is false. The Vercel entrypoint never enables exports. The backend image includes native PostgreSQL 17 clients; local development needs those clients on PATH. The source is exclusively the configured Docker `postgres:5432/resora`; remote sources and URL query overrides are rejected. Only explicitly guarded loopback `resora_identity_test_*` sources are allowed for tests. There is no Supabase credential/configuration requirement for downloading.
+
+In **Kelola akun SR** (`/admin/users`), use **Unduh backup data**. The backend checks the authoritative session and live SUPERADMIN grant before creating the archive and again before sending it. Requests use POST, require the exact trusted Origin, and return `no-store` attachments. A database advisory lock prevents concurrent exports across backend instances; 409 means another download/export is still active, while 503 means disabled/unavailable/failed. Re-login for 401/403. Check sanitized `DATABASE_BACKUP_RESULT` server logs for outcome/duration. TRANSFERRED means the HTTP transfer completed, not proof the user saved a recoverable copy.
+
+The `.dump` file is native PostgreSQL custom format: a consistent `pg_dump` snapshot of `public` and `drizzle`, including application rows, constraints, indexes, sequences, functions/triggers and migration metadata. It excludes other schemas, cluster roles, ownership/ACL requirements, publications and subscriptions. The server checks the archive's object scope/migration data and fully decodes it using `pg_restore` before download. Avoid concurrent migrations during export. There is no background job, upload, retention or restore endpoint.
+
+Limits are 128 MiB compressed archive and 10 minutes for generation/validation. The browser temporarily buffers the download; large databases need a separately reviewed transfer approach. Temporary directories/files are private (0700/0600) and removed after failure, cancellation or transfer; the lock is released when the dedicated database connection closes. A process/host crash can leave private `resora-backup-*` temporary files: an operator must confirm no export is active before removing them. Use encrypted server storage and HTTPS for real data. The downloaded archive is **not encrypted** and contains password hashes, sessions and personal/GPS data: keep it in encrypted restricted storage and protect it from sharing/source control.
+
+### Manual import into PostgreSQL or Supabase
+
+Use native PostgreSQL 17 `pg_restore` (not CSV import or the Supabase SQL editor). Restore first into an approved **empty application schema** on PostgreSQL 17 or a separately verified newer version. Other database engines and older PostgreSQL versions are not guaranteed compatible. Use a private libpq service/password file for the target; never put passwords in command arguments. The examples below are manual operational steps, not permission to modify a remote database.
+
+```sh
+pg_restore --list /private/resora-backup.dump > /private/backup.list
+# Review this list. Comment out SCHEMA entries for public and drizzle, plus
+# schema comments/ACLs. Keep application object/data entries only.
+# Confirm public exists and create an empty drizzle schema on the approved target.
+PGSERVICE=approved_empty_target pg_restore --no-password --single-transaction --no-owner --no-acl --use-list=/private/backup.list --dbname=service=approved_empty_target /private/resora-backup.dump
+```
+
+Do not use broad `--clean`, drop managed schemas, restore over a live database, or use a data-only import with RESORA's immutable audit triggers. For Supabase, leave managed `auth`/`storage` objects intact, disable the Data API until application grants/RLS are reviewed, and use Direct/Session Pooler with verified TLS. Re-provision required runtime privileges; role passwords/ACLs are not in the archive. Verify migration history, representative records, relationships, sequence state and login against the restored database before use. Preserve the intended Better Auth secret/origins for session compatibility; a historical restore may resurrect old sessions/password state. No Supabase import has been executed or verified by this change.
+
+`bun --no-env-file run test:backup` runs guard tests without a database. Native integration tests opt in with **both** `RESORA_BACKUP_TEST_DB_URL` and `RESORA_BACKUP_RESTORE_TEST_DB_URL`: fresh same-host/same-credential loopback databases named `resora_identity_test_*` and `resora_backup_restore_test_*`. Tests migrate/insert synthetic data only into those empty scratch databases, restore the generated archive, and check metadata/triggers/sequences, overlap and cancellation. Never point these variables at existing databases.
 
 ### Phase 2A.5 disposable identity validation
 

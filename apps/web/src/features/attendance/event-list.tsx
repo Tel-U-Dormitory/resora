@@ -1,5 +1,6 @@
 "use client";
 
+import { Select } from "@resora/ui/components/select";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, CalendarDays, Plus } from "lucide-react";
 import Link from "next/link";
@@ -65,22 +66,25 @@ export default function EventList() {
 				)}
 			</div>
 			{management && query.data?.isSuperadmin && (
-				<label className="block max-w-xs space-y-2 text-sm">
+				<label
+					htmlFor="event-visibility"
+					className="block max-w-xs space-y-2 text-sm"
+				>
 					Visibilitas event
-					<select
+					<Select
+						id="event-visibility"
 						value={visibility}
 						disabled={query.isFetching}
 						onChange={(event) =>
 							setVisibility(event.target.value as typeof visibility)
 						}
-						className="focus-ring block w-full rounded-lg border border-border bg-background px-3 py-2"
 					>
 						{visibilityFilters.map(([value, label]) => (
 							<option key={value} value={value}>
 								{label}
 							</option>
 						))}
-					</select>
+					</Select>
 				</label>
 			)}
 			{(query.isPending || query.isPlaceholderData) && (
