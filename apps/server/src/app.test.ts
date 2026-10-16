@@ -1,10 +1,14 @@
 import { afterAll, beforeAll, beforeEach, expect, spyOn, test } from "bun:test";
 import { randomUUID } from "node:crypto";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Auth } from "@resora/auth";
 import type { Database } from "@resora/db";
 import { createApp, resolveClientIp } from "./app";
+import { DatabaseBackupError } from "./database-backup";
 
 const origin = "http://localhost:3001";
 let server: Server;
@@ -654,5 +658,127 @@ test("opt-in diagnostics retain final error status and session timing for contex
 		await new Promise<void>((resolve, reject) =>
 			listener.close((error) => (error ? reject(error) : resolve())),
 		);
+	}
+});
+
+test("backup endpoint enforces origin, current session, explicit SUPERADMIN and password gates before exporting", async () => {
+	let calls = 0;
+	const listener = createApp(
+		{
+			db,
+			auth,
+			backup: async () => {
+				calls++;
+				throw new Error("synthetic-private-password");
+			},
+		},
+		origin,
+	).listen(0, "127.0.0.1");
+	await new Promise<void>((resolve) => listener.once("listening", resolve));
+	const url = `http://127.0.0.1:${(listener.address() as AddressInfo).port}/api/admin/database-backup`;
+	try {
+		for (const requestOrigin of [
+			undefined,
+			"https://foreign.invalid",
+			"null",
+		]) {
+			expect(
+				(
+					await fetch(url, {
+						method: "POST",
+						headers: requestOrigin ? { origin: requestOrigin } : undefined,
+					})
+				).status,
+			).toBe(403);
+		}
+		for (const [candidate, status] of [
+			[null, 401],
+			[{ ...identity, isSuperadmin: false }, 403],
+			[{ ...identity, isSuperadmin: true, isActive: false }, 401],
+			[{ ...identity, isSuperadmin: true, mustChangePassword: true }, 403],
+		] as const) {
+			identity = candidate;
+			expect(
+				(await fetch(url, { method: "POST", headers: { origin } })).status,
+			).toBe(status);
+		}
+		expect(calls).toBe(0);
+		identity = {
+			actor: "SYSTEM_ADMIN",
+			userId: "synthetic-admin",
+			nim: "resora.admin",
+			isActive: true,
+			mustChangePassword: false,
+			isSuperadmin: true,
+		};
+		const failure = await fetch(url, { method: "POST", headers: { origin } });
+		expect(failure.status).toBe(503);
+		expect(await failure.text()).not.toContain("synthetic-private");
+		expect(failure.headers.get("cache-control")).toBe("no-store");
+		expect((await fetch(url)).status).toBe(404);
+		expect(calls).toBe(1);
+	} finally {
+		await new Promise<void>((resolve) => listener.close(() => resolve()));
+	}
+});
+
+test("backup download is private, rechecks revoked privileges and cleans up on success or rejection", async () => {
+	const directory = await mkdtemp(join(tmpdir(), "resora-http-backup-test-"));
+	const path = join(directory, "synthetic.dump");
+	await writeFile(path, "synthetic-backup-bytes");
+	let cleaned = 0;
+	let revoked = false;
+	let busy = false;
+	const listener = createApp(
+		{
+			db,
+			auth,
+			backup: async () => {
+				if (busy) throw new DatabaseBackupError("BACKUP_BUSY");
+				if (revoked) identity = { ...identity, isSuperadmin: false };
+				return {
+					path,
+					filename: "resora-2026-10-16T00-00-00-000Z.dump",
+					cleanup: async () => {
+						cleaned++;
+					},
+				};
+			},
+		},
+		origin,
+	).listen(0, "127.0.0.1");
+	await new Promise<void>((resolve) => listener.once("listening", resolve));
+	const url = `http://127.0.0.1:${(listener.address() as AddressInfo).port}/api/admin/database-backup`;
+	try {
+		identity = { ...identity, isSuperadmin: true };
+		const response = await fetch(url, {
+			method: "POST",
+			headers: { origin, range: "bytes=0-2" },
+		});
+		expect(response.status).toBe(200);
+		expect(response.headers.get("content-disposition")).toContain(
+			"attachment;",
+		);
+		expect(response.headers.get("cache-control")).toBe("no-store");
+		expect(response.headers.get("access-control-expose-headers")).toContain(
+			"Content-Disposition",
+		);
+		expect(await response.text()).toBe("synthetic-backup-bytes");
+		await Bun.sleep(10);
+		expect(cleaned).toBe(1);
+		busy = true;
+		expect(
+			(await fetch(url, { method: "POST", headers: { origin } })).status,
+		).toBe(409);
+		busy = false;
+		revoked = true;
+		const rejected = await fetch(url, { method: "POST", headers: { origin } });
+		expect(rejected.status).toBe(403);
+		expect(await rejected.text()).not.toContain("synthetic-backup-bytes");
+		await Bun.sleep(10);
+		expect(cleaned).toBe(2);
+	} finally {
+		await new Promise<void>((resolve) => listener.close(() => resolve()));
+		await rm(directory, { recursive: true, force: true });
 	}
 });

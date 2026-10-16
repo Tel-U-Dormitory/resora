@@ -8,6 +8,8 @@ Retain Docker images/Compose for **web and server**, with pnpm installation, Bun
 
 ## Consequences / gates
 
+**Revised database scope (2026-10-16):** a dedicated Docker PostgreSQL 17 primary with manual downloadable application backups restricted to active SUPERADMIN. The earlier database warm-standby Phase 1–4 plan is cancelled; no scheduled synchronization or automatic restore/failover. Supabase remains an optional manually prepared import destination. Existing deployments/data are unchanged; see [setup](../setup.md#5-docker-postgresql-and-manual-downloadable-backups).
+
 Need authorized manual/import source of truth, secure credentials, domain/TLS, reverse proxy, secret rotation, Supabase backup/restore verification (separate local-volume backup if local PostgreSQL is used), production observability and rollback. No production credentials/data committed to Git.
 
 **Synchronization (2026-10-10):** external Supabase and pnpm/Docker configuration are implemented, while VPS deployment remains planned. No migrations/deployment are authorized by this document. [Verification limitations](../pnpm-migration.md) include the final Docker repeat blocked by host disk space.

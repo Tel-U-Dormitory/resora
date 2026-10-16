@@ -19,5 +19,9 @@ export function getApiRewrites(upstream: string | undefined) {
 			destination: `${url.origin}/api/auth/:path*`,
 		},
 		{ source: "/trpc/:path*", destination: `${url.origin}/trpc/:path*` },
+		{
+			source: "/api/admin/database-backup",
+			destination: `${url.origin}/api/admin/database-backup`,
+		},
 	];
 }

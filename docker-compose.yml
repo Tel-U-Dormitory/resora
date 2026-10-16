@@ -51,6 +51,7 @@ services:
         required: false
     environment:
       CORS_ORIGIN: http://localhost:3001
+    networks: [default, database]
     healthcheck:
       test:
         [
@@ -67,28 +68,33 @@ services:
 
   postgres:
     profiles: [local-db]
-    image: postgres:18
-    container_name: resora-postgres
+    image: postgres:17
     environment:
       POSTGRES_DB: resora
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
-    ports:
-      - "5432:5432"
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets: [postgres_password]
+    networks: [database]
     volumes:
-      - resora_postgres_data:/var/lib/postgresql
+      - resora_postgres17_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", 'pg_isready -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
 
 volumes:
-  resora_postgres_data:
+  resora_postgres17_data:
+
+networks:
+  database:
+    internal: true
 
 # BuildKit makes these available only while pnpm install/build commands run.
 secrets:
+  postgres_password:
+    file: ${POSTGRES_PASSWORD_FILE:-./.private/postgres-password}
   web_env:
     file: apps/web/.env
   server_env:
