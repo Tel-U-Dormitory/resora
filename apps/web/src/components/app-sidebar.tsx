@@ -207,7 +207,7 @@ export function AppSidebar({
 			<div className="mt-auto space-y-4 border-border border-t px-3 pt-5">
 				<UserMenu
 					name={name}
-					accountLabel={isSr ? "Akun SR" : "Akun Sistem"}
+					accountLabel={isSr ? "Senior Resident" : "Administrator Sistem"}
 					onNavigate={onNavigate}
 					container={menuContainer}
 				/>

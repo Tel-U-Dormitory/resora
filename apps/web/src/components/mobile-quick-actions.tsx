@@ -153,12 +153,12 @@ export function MobileQuickActions({
 							transitionDelay: `${open ? index * 25 : (items.length - index - 1) * 15}ms`,
 						};
 						const classes =
-							"absolute size-[3.25rem] rounded-full border-2 border-primary bg-surface text-primary shadow-lg transition-[transform,opacity,background-color] duration-350 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-primary-soft hover:text-primary-soft-foreground motion-reduce:transition-none";
+							"absolute size-[3.25rem] rounded-full border-0 bg-surface text-primary shadow-lg transition-[transform,opacity,background-color] duration-350 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-primary-soft hover:text-primary-soft-foreground motion-reduce:transition-none";
 						return item.href === "settings" ? (
 							<Button
 								key={item.href}
 								size="icon"
-								variant="outline"
+								variant="ghost"
 								style={style}
 								className={classes}
 								aria-label={item.title}
@@ -168,21 +168,21 @@ export function MobileQuickActions({
 									setEditing(true);
 								}}
 							>
-								<Icon className="size-7" aria-hidden="true" />
+								<Icon className="size-6" aria-hidden="true" />
 							</Button>
 						) : (
 							<Button
 								key={item.href}
 								render={<Link href={item.href} />}
 								size="icon"
-								variant="outline"
+								variant="ghost"
 								style={style}
 								className={classes}
 								aria-label={item.title}
 								title={item.title}
 								onClick={() => setOpenPath(null)}
 							>
-								<Icon className="size-7" aria-hidden="true" />
+								<Icon className="size-6" aria-hidden="true" />
 							</Button>
 						);
 					})}
@@ -196,7 +196,7 @@ export function MobileQuickActions({
 					aria-controls="mobile-quick-links"
 					onClick={() => setOpenPath(open ? null : pathname)}
 				>
-					{open ? <X className="size-8" /> : <Menu className="size-8" />}
+					{open ? <X className="size-7" /> : <Menu className="size-7" />}
 				</Button>
 			</div>
 			<ActionDialog
