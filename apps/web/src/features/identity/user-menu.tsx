@@ -4,16 +4,13 @@ import { Button } from "@resora/ui/components/button";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
-	DropdownMenuGroup,
 	DropdownMenuItem,
-	DropdownMenuLabel,
-	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@resora/ui/components/dropdown-menu";
-import { ChevronDown, LogOut, UserRound } from "lucide-react";
+import { ChevronDown, ChevronUp, LogOut, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type RefObject, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Avatar } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,7 +19,7 @@ import { queryClient } from "@/utils/trpc";
 
 export default function UserMenu({
 	name,
-	accountLabel = "Akun RESORA",
+	accountLabel = "Pengguna RESORA",
 	onNavigate,
 	container,
 }: {
@@ -34,6 +31,32 @@ export default function UserMenu({
 	const router = useRouter();
 	const { data: session, isPending } = authClient.useSession();
 	const [pending, setPending] = useState(false);
+	const [open, setOpen] = useState(false);
+	const inline = Boolean(container);
+	const inlineRoot = useRef<HTMLDivElement>(null);
+	const displayName = name ?? session?.user.name ?? "Pengguna RESORA";
+	useEffect(() => {
+		if (!inline || !open) return;
+		const handlePointerDown = (event: PointerEvent) => {
+			if (
+				event.target instanceof Node &&
+				!inlineRoot.current?.contains(event.target)
+			)
+				setOpen(false);
+		};
+		const handleEscape = (event: KeyboardEvent) => {
+			if (event.key === "Escape") {
+				event.stopPropagation();
+				setOpen(false);
+			}
+		};
+		document.addEventListener("pointerdown", handlePointerDown);
+		document.addEventListener("keydown", handleEscape);
+		return () => {
+			document.removeEventListener("pointerdown", handlePointerDown);
+			document.removeEventListener("keydown", handleEscape);
+		};
+	}, [inline, open]);
 	const signOut = async () => {
 		if (pending) return;
 		setPending(true);
@@ -63,57 +86,123 @@ export default function UserMenu({
 				Masuk sebagai SR
 			</Link>
 		);
+	const triggerContents = (
+		<>
+			<Avatar name={displayName} shape="squircle" size="sm" />
+			<span className="min-w-0 flex-1 text-left">
+				<span className="block truncate font-semibold text-sm">
+					{displayName}
+				</span>
+				<span className="block truncate text-muted-foreground text-xs">
+					{accountLabel}
+				</span>
+			</span>
+			{open ? (
+				<ChevronUp className="size-4 shrink-0" aria-hidden="true" />
+			) : (
+				<ChevronDown className="size-4 shrink-0" aria-hidden="true" />
+			)}
+		</>
+	);
+	const triggerClass = `h-auto min-h-11 ${name ? "w-full" : "w-auto max-w-56"} justify-start gap-2.5 rounded-xl p-2 text-left`;
+	const profileItem = (
+		<Button
+			render={
+				<Link
+					href="/profile"
+					onClick={() => {
+						setOpen(false);
+						onNavigate?.();
+					}}
+				/>
+			}
+			variant="ghost"
+			className="min-h-11 w-full justify-start gap-2.5 rounded-lg px-3 text-sm"
+		>
+			<UserRound aria-hidden="true" /> Profil Saya
+		</Button>
+	);
+	const logoutItem = (
+		<Button
+			variant="destructive"
+			disabled={pending}
+			className="min-h-11 w-full justify-start gap-2.5 rounded-lg px-3 text-sm"
+			onClick={signOut}
+		>
+			<LogOut aria-hidden="true" /> {pending ? "Memproses…" : "Keluar"}
+		</Button>
+	);
+	const accountHeader = (
+		<div className="flex min-w-0 items-center gap-3 border-border border-b px-3 py-3">
+			<Avatar name={displayName} shape="squircle" size="md" />
+			<div className="min-w-0 flex-1">
+				<p className="truncate font-semibold text-sm" title={displayName}>
+					{displayName}
+				</p>
+				<p className="truncate text-muted-foreground text-xs">{accountLabel}</p>
+			</div>
+		</div>
+	);
+	if (inline)
+		return (
+			<div ref={inlineRoot} className="w-full">
+				<Button
+					variant="ghost"
+					disabled={pending}
+					aria-label={`Menu akun ${displayName}`}
+					aria-expanded={open}
+					aria-controls="account-menu-options"
+					onClick={() => setOpen(!open)}
+					className={triggerClass}
+				>
+					{triggerContents}
+				</Button>
+				{open && (
+					<div
+						id="account-menu-options"
+						className="mt-2 space-y-1 rounded-xl border border-border bg-surface p-2 shadow-sm"
+					>
+						{accountHeader}
+						{profileItem}
+						{logoutItem}
+					</div>
+				)}
+			</div>
+		);
 	return (
-		<DropdownMenu>
+		<DropdownMenu open={open} onOpenChange={setOpen}>
 			<DropdownMenuTrigger
 				disabled={pending}
-				aria-label={`Menu akun ${name ?? session.user.name}`}
-				render={
-					<Button
-						variant="ghost"
-						className={
-							name
-								? "h-auto w-full justify-start rounded-lg p-2 text-left"
-								: "h-auto rounded-lg p-2"
-						}
-					/>
-				}
+				aria-label={`Menu akun ${displayName}`}
+				render={<Button variant="ghost" className={triggerClass} />}
 			>
-				<Avatar name={name ?? session.user.name} shape="squircle" size="sm" />
-				<span className="min-w-0 flex-1">
-					<span className="block max-w-40 truncate font-semibold text-sm">
-						{name ?? session.user.name}
-					</span>
-					<span className="block text-muted-foreground text-xs">
-						{pending ? "Memproses…" : accountLabel}
-					</span>
-				</span>
-				<ChevronDown className="size-4 shrink-0" aria-hidden="true" />
+				{triggerContents}
 			</DropdownMenuTrigger>
 			<DropdownMenuContent
 				container={container}
-				align="end"
-				className="min-w-48 rounded-lg bg-card"
+				side="top"
+				sideOffset={6}
+				align="start"
+				className="!w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-popover p-2 shadow-xl"
 			>
-				<DropdownMenuGroup>
-					<DropdownMenuLabel>{accountLabel}</DropdownMenuLabel>
-					<DropdownMenuSeparator />
+				{accountHeader}
+				<div className="space-y-1 pt-2">
 					<DropdownMenuItem
 						onClick={onNavigate}
 						render={<Link href="/profile" />}
+						className="min-h-11 rounded-lg px-3 text-sm"
 					>
-						<UserRound aria-hidden="true" />
-						Profil Saya
+						<UserRound aria-hidden="true" /> Profil Saya
 					</DropdownMenuItem>
 					<DropdownMenuItem
 						variant="destructive"
 						disabled={pending}
 						onClick={signOut}
+						className="min-h-11 rounded-lg px-3 text-sm"
 					>
-						<LogOut aria-hidden="true" />
-						{pending ? "Memproses…" : "Keluar"}
+						<LogOut aria-hidden="true" /> {pending ? "Memproses…" : "Keluar"}
 					</DropdownMenuItem>
-				</DropdownMenuGroup>
+				</div>
 			</DropdownMenuContent>
 		</DropdownMenu>
 	);

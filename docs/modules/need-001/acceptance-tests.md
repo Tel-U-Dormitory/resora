@@ -221,3 +221,17 @@ SA-03 supersedes SR-only login/first-admin assumptions above. SUPERADMIN is stil
 | AT-SA3-08 | One-time bootstrap credentials/logout/duplicate bootstrap | Restrictive private username CSV export COMMITTED; password change/logout work; duplicate bootstrap stops |
 
 Verification: final 12 guarded PostgreSQL integration groups + two extra SQL/service checks PASS, nine exact history hashes/schema prerequisites verified on loopback only. Offline policy/auth/input/UI regressions are separate evidence. Initial harness 401 handling/import issues were corrected; no application authorization was weakened. Local synthetic fixtures retained because account/attendance audits are append-only. Remote migrations/bootstrap and frontend/mobile UAT are not claimed.
+
+
+### Frontend navigation and scan presentation (2026-10-16)
+
+Implemented UI changes, pending manual desktop/mobile UAT:
+
+- Navigation separates Menu utama from Aktivitas & riwayat. SR Absensi expands to Scan kehadiran; own attendance history remains separate. Existing management/account access gates remain unchanged.
+- Desktop sidebar can collapse and expand from its edge control; the authenticated header has no duplicate logo. Mobile drawer slides and retains modal focus handling. All submenus have icons and full-width hover/active backgrounds, including own attendance history. A circular mobile quick-action menu links eligible SR users to the scanner. Its icon-only shortcuts expand smoothly from the main button on an inward arc without circular outlines; radius and angular spread shrink when fewer shortcuts are selected, with Scan QR fixed and up to four optional links chosen from currently accessible menus. Preferences are scoped per account in this browser; they do not sync between devices. The settings icon opens customization and is separate from the five navigation shortcuts.
+- New theme preference defaults to light; saved user preferences and explicit light/dark/system selection remain supported.
+- Scanner uses the camera preview, red scan frame, and circular camera control. QR decoding remains automatic. Camera starts only on request; GPS consent and verification remain unchanged.
+- Scan failure opens a retry dialog; success/already-recorded results show an informational dialog with returned event/time/classification and a success toast. No event location or schedule is invented before QR verification.
+- Manual UAT must verify keyboard focus, Escape/backdrop dismissal, drawer entrance/exit animation, reduced motion, saved themes, small screens, radial-menu Escape/outside dismissal, fixed Scan QR, optional-link selection limits, per-account preference restoration and unavailable browser storage, camera permissions, GPS failures, and successful/duplicate scans on real devices.
+
+CLI geometry coverage verifies all one-to-five navigation shortcut counts plus settings: no overlapping 52px buttons, bounds within a 320px viewport, and tighter grouping for fewer shortcuts. This is mathematical layout coverage, not rendered-device UAT.

@@ -1,4 +1,5 @@
 "use client";
+import { Button } from "@resora/ui/components/button";
 import Image from "next/image";
 import Link from "next/link";
 import UserMenu from "@/features/identity/user-menu";
@@ -29,19 +30,21 @@ export default function Header() {
 						aria-label="Navigasi utama"
 						className="flex gap-4 font-medium text-muted-foreground text-sm"
 					>
-						<a
-							href="#fitur"
-							className="focus-ring hidden rounded-md hover:text-primary md:inline"
+						<Button
+							render={<a href="#fitur" />}
+							variant="ghost"
+							className="hidden rounded-full md:inline-flex"
 						>
 							Fitur
-						</a>
+						</Button>
 						{session && (
-							<Link
-								href="/dashboard"
-								className="focus-ring rounded-md hover:text-primary"
+							<Button
+								render={<Link href="/dashboard" />}
+								variant="secondary"
+								className="rounded-full"
 							>
 								Dashboard
-							</Link>
+							</Button>
 						)}
 					</nav>
 				</div>
