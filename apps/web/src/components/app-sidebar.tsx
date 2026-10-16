@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@resora/ui/components/button";
 import {
 	CalendarDays,
 	ChevronDown,
@@ -63,8 +64,7 @@ export function AppSidebar({
 			</p>
 			<nav aria-label="Navigasi aplikasi" className="flex flex-col gap-1">
 				{MAIN_NAVIGATION.filter(
-					({ href }) =>
-						isSr || (href !== "/scan" && href !== "/attendance/history"),
+					({ href }) => href !== "/scan" && href !== "/attendance/history",
 				).map(({ title, href, icon }) => {
 					const active =
 						(pathname === href || pathname.startsWith(`${href}/`)) &&
@@ -74,16 +74,14 @@ export function AppSidebar({
 							? LayoutDashboard
 							: icon === "events"
 								? CalendarDays
-								: icon === "scan"
-									? ScanLine
-									: History;
+								: History;
 					return (
 						<Link
 							key={href}
 							href={href}
 							onClick={onNavigate}
 							aria-current={active ? "page" : undefined}
-							className={`focus-ring flex min-h-10 items-center gap-2.5 rounded-md px-3 py-2 text-[13px] leading-5 transition-colors ${active ? "bg-primary-soft font-semibold text-primary-soft-foreground" : "font-medium text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+							className={`focus-ring flex min-h-10 items-center gap-2.5 rounded-xl px-3 py-2 text-[13px] leading-5 transition-colors ${active ? "bg-primary-soft font-semibold text-primary-soft-foreground" : "font-medium text-muted-foreground hover:bg-muted hover:text-foreground"}`}
 						>
 							<Icon size={16} aria-hidden="true" />
 							{title}
@@ -91,6 +89,43 @@ export function AppSidebar({
 					);
 				})}
 			</nav>
+			{isSr && (
+				<details
+					className="group mt-1"
+					open={pathname === "/scan" || undefined}
+				>
+					<summary className="focus-ring flex min-h-11 cursor-pointer list-none items-center gap-2.5 rounded-xl px-3 font-medium text-sm hover:bg-muted [&::-webkit-details-marker]:hidden">
+						<ScanLine size={16} aria-hidden="true" /> Absensi
+						<ChevronDown
+							size={16}
+							className="ml-auto transition-transform group-open:rotate-180"
+							aria-hidden="true"
+						/>
+					</summary>
+					<Button
+						render={<Link href="/scan" onClick={onNavigate} />}
+						variant={pathname === "/scan" ? "secondary" : "ghost"}
+						className="my-1 ml-6 min-h-10 rounded-xl px-4"
+						aria-current={pathname === "/scan" ? "page" : undefined}
+					>
+						Scan kehadiran
+					</Button>
+				</details>
+			)}
+			<p className="mt-7 mb-2 px-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">
+				Aktivitas & riwayat
+			</p>
+			{isSr && (
+				<Button
+					render={<Link href="/attendance/history" onClick={onNavigate} />}
+					variant={pathname === "/attendance/history" ? "secondary" : "ghost"}
+					className="min-h-11 justify-start gap-2.5 rounded-xl px-3"
+					aria-current={pathname === "/attendance/history" ? "page" : undefined}
+				>
+					<History size={16} aria-hidden="true" /> Riwayat kehadiran
+				</Button>
+			)}
+
 			{canManageEvents && (
 				<details className="group mt-5" open={hcoArea || undefined}>
 					<summary className="focus-ring flex min-h-10 cursor-pointer list-none items-center justify-between rounded-md px-3 py-2 font-semibold text-[13px] leading-5 transition-colors hover:bg-muted [&::-webkit-details-marker]:hidden">
@@ -119,7 +154,7 @@ export function AppSidebar({
 									href={href}
 									onClick={onNavigate}
 									aria-current={active ? "page" : undefined}
-									className={`focus-ring flex min-h-10 items-center rounded-md px-3 py-2 text-[13px] leading-5 transition-colors ${active ? "bg-primary-soft font-semibold text-primary-soft-foreground" : "font-medium text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+									className={`focus-ring flex min-h-10 items-center rounded-xl px-3 py-2 text-[13px] leading-5 transition-colors ${active ? "bg-primary-soft font-semibold text-primary-soft-foreground" : "font-medium text-muted-foreground hover:bg-muted hover:text-foreground"}`}
 								>
 									{title}
 								</Link>
@@ -154,7 +189,7 @@ export function AppSidebar({
 								href={href}
 								onClick={onNavigate}
 								aria-current={pathname === href ? "page" : undefined}
-								className={`focus-ring flex min-h-10 items-center rounded-md px-3 py-2 text-[13px] leading-5 transition-colors ${pathname === href ? "bg-primary-soft font-semibold text-primary-soft-foreground" : "font-medium text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+								className={`focus-ring flex min-h-10 items-center rounded-xl px-3 py-2 text-[13px] leading-5 transition-colors ${pathname === href ? "bg-primary-soft font-semibold text-primary-soft-foreground" : "font-medium text-muted-foreground hover:bg-muted hover:text-foreground"}`}
 							>
 								{title}
 							</Link>

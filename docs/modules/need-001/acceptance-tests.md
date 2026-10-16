@@ -221,3 +221,15 @@ SA-03 supersedes SR-only login/first-admin assumptions above. SUPERADMIN is stil
 | AT-SA3-08 | One-time bootstrap credentials/logout/duplicate bootstrap | Restrictive private username CSV export COMMITTED; password change/logout work; duplicate bootstrap stops |
 
 Verification: final 12 guarded PostgreSQL integration groups + two extra SQL/service checks PASS, nine exact history hashes/schema prerequisites verified on loopback only. Offline policy/auth/input/UI regressions are separate evidence. Initial harness 401 handling/import issues were corrected; no application authorization was weakened. Local synthetic fixtures retained because account/attendance audits are append-only. Remote migrations/bootstrap and frontend/mobile UAT are not claimed.
+
+
+### Frontend navigation and scan presentation (2026-10-16)
+
+Implemented UI changes, pending manual desktop/mobile UAT:
+
+- Navigation separates Menu utama from Aktivitas & riwayat. SR Absensi expands to Scan kehadiran; own attendance history remains separate. Existing management/account access gates remain unchanged.
+- Desktop sidebar can collapse and expand; mobile drawer slides and retains modal focus handling. A circular mobile quick-action menu links eligible SR users to the scanner.
+- New theme preference defaults to light; saved user preferences and explicit light/dark/system selection remain supported.
+- Scanner uses the camera preview, red scan frame, and circular camera control. QR decoding remains automatic. Camera starts only on request; GPS consent and verification remain unchanged.
+- Scan failure opens a retry dialog; success/already-recorded results show an informational dialog with returned event/time/classification and a success toast. No event location or schedule is invented before QR verification.
+- Manual UAT must verify keyboard focus, Escape/backdrop dismissal, drawer entrance/exit animation, reduced motion, saved themes, small screens, camera permissions, GPS failures, and successful/duplicate scans on real devices.
