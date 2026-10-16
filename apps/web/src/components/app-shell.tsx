@@ -1,18 +1,11 @@
 "use client";
 
 import { Button } from "@resora/ui/components/button";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger,
-} from "@resora/ui/components/dropdown-menu";
-import { Menu, PanelLeftClose, PanelLeftOpen, ScanLine, X } from "lucide-react";
-import Image from "next/image";
-import Link from "next/link";
+import { Menu, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
+import { MobileQuickActions } from "./mobile-quick-actions";
 import { ModeToggle } from "./mode-toggle";
 
 export function AppShell({
@@ -66,6 +59,22 @@ export function AppShell({
 					/>
 				</div>
 			</div>
+			<div
+				className="pointer-events-none fixed top-5 left-0 z-30 hidden transition-[left] duration-300 motion-reduce:transition-none lg:block"
+				style={{ left: collapsed ? 8 : 236 }}
+			>
+				<Button
+					variant="outline"
+					size="icon"
+					className="pointer-events-auto size-10 rounded-full bg-surface shadow-sm"
+					aria-label={collapsed ? "Buka sidebar" : "Tutup sidebar"}
+					aria-expanded={!collapsed}
+					onClick={() => setCollapsed(!collapsed)}
+				>
+					{collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
+				</Button>
+			</div>
+
 			<div className="min-w-0 flex-1">
 				<div className="sticky top-0 z-20 flex items-center justify-between border-border border-b bg-surface/95 px-4 py-3 backdrop-blur-md">
 					<Button
@@ -83,27 +92,7 @@ export function AppShell({
 					>
 						<Menu size={22} aria-hidden="true" />
 					</Button>
-					<span className="flex items-center gap-2 font-bold tracking-tight">
-						<Image
-							src="/Logo-Teldorm.png"
-							alt=""
-							width={937}
-							height={1024}
-							className="h-10 w-auto object-contain"
-						/>
-						RESORA
-					</span>
-					<div className="flex items-center gap-2">
-						<Button
-							variant="ghost"
-							size="icon"
-							className="hidden rounded-full lg:inline-flex"
-							aria-label={collapsed ? "Buka sidebar" : "Tutup sidebar"}
-							aria-expanded={!collapsed}
-							onClick={() => setCollapsed(!collapsed)}
-						>
-							{collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
-						</Button>
+					<div className="ml-auto flex items-center gap-2">
 						<ModeToggle />
 					</div>
 				</div>
@@ -111,35 +100,7 @@ export function AppShell({
 					{children}
 				</main>
 			</div>
-			{isSr && pathname !== "/scan" && (
-				<div className="fixed right-5 bottom-[max(1.25rem,env(safe-area-inset-bottom))] z-30 lg:hidden">
-					<DropdownMenu>
-						<DropdownMenuTrigger
-							render={
-								<Button
-									size="icon"
-									className="size-14 rounded-full shadow-lg"
-								/>
-							}
-							aria-label="Buka aksi cepat"
-						>
-							<Menu className="size-6" />
-						</DropdownMenuTrigger>
-						<DropdownMenuContent
-							side="top"
-							align="end"
-							className="mb-2 min-w-48 rounded-xl p-2"
-						>
-							<DropdownMenuItem
-								render={<Link href="/scan" />}
-								className="gap-2 rounded-lg"
-							>
-								<ScanLine /> Scan kehadiran
-							</DropdownMenuItem>
-						</DropdownMenuContent>
-					</DropdownMenu>
-				</div>
-			)}
+			{isSr && <MobileQuickActions canManageEvents={canManageEvents} />}
 
 			<dialog
 				ref={drawer}

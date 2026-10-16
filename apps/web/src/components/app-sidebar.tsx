@@ -6,7 +6,10 @@ import {
 	ChevronDown,
 	History,
 	LayoutDashboard,
+	ListChecks,
+	Plus,
 	ScanLine,
+	UserPlus,
 	Users,
 } from "lucide-react";
 import Image from "next/image";
@@ -104,11 +107,11 @@ export function AppSidebar({
 					</summary>
 					<Button
 						render={<Link href="/scan" onClick={onNavigate} />}
-						variant={pathname === "/scan" ? "secondary" : "ghost"}
-						className="my-1 ml-6 min-h-10 rounded-xl px-4"
+						variant="ghost"
+						className={`my-1 flex min-h-10 w-full justify-start gap-2.5 rounded-xl pr-3 pl-9 text-[13px] ${pathname === "/scan" ? "bg-primary-soft font-semibold text-primary-soft-foreground hover:bg-primary-soft hover:text-primary-soft-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
 						aria-current={pathname === "/scan" ? "page" : undefined}
 					>
-						Scan kehadiran
+						<ScanLine size={16} aria-hidden="true" /> Scan kehadiran
 					</Button>
 				</details>
 			)}
@@ -118,8 +121,8 @@ export function AppSidebar({
 			{isSr && (
 				<Button
 					render={<Link href="/attendance/history" onClick={onNavigate} />}
-					variant={pathname === "/attendance/history" ? "secondary" : "ghost"}
-					className="min-h-11 justify-start gap-2.5 rounded-xl px-3"
+					variant="ghost"
+					className={`min-h-10 w-full justify-start gap-2.5 rounded-xl px-3 text-[13px] ${pathname === "/attendance/history" ? "bg-primary-soft font-semibold text-primary-soft-foreground hover:bg-primary-soft hover:text-primary-soft-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
 					aria-current={pathname === "/attendance/history" ? "page" : undefined}
 				>
 					<History size={16} aria-hidden="true" /> Riwayat kehadiran
@@ -139,10 +142,7 @@ export function AppSidebar({
 							aria-hidden="true"
 						/>
 					</summary>
-					<nav
-						aria-label="Pengelolaan HCO"
-						className="mt-1 ml-3 space-y-1 border-border border-l pl-3"
-					>
+					<nav aria-label="Pengelolaan HCO" className="mt-1 space-y-1">
 						{HCO_NAVIGATION.map(({ title, href }) => {
 							const active =
 								href === "/events/new"
@@ -154,8 +154,13 @@ export function AppSidebar({
 									href={href}
 									onClick={onNavigate}
 									aria-current={active ? "page" : undefined}
-									className={`focus-ring flex min-h-10 items-center rounded-xl px-3 py-2 text-[13px] leading-5 transition-colors ${active ? "bg-primary-soft font-semibold text-primary-soft-foreground" : "font-medium text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+									className={`focus-ring flex min-h-10 w-full items-center gap-2.5 rounded-xl py-2 pr-3 pl-9 text-[13px] leading-5 transition-colors ${active ? "bg-primary-soft font-semibold text-primary-soft-foreground" : "font-medium text-muted-foreground hover:bg-muted hover:text-foreground"}`}
 								>
+									{href === "/events/new" ? (
+										<Plus size={16} aria-hidden="true" />
+									) : (
+										<ListChecks size={16} aria-hidden="true" />
+									)}
 									{title}
 								</Link>
 							);
@@ -179,18 +184,20 @@ export function AppSidebar({
 							aria-hidden="true"
 						/>
 					</summary>
-					<nav
-						aria-label="Administrasi akun"
-						className="mt-1 ml-3 space-y-1 border-border border-l pl-3"
-					>
+					<nav aria-label="Administrasi akun" className="mt-1 space-y-1">
 						{ADMIN_NAVIGATION.map(({ title, href }) => (
 							<Link
 								key={href}
 								href={href}
 								onClick={onNavigate}
 								aria-current={pathname === href ? "page" : undefined}
-								className={`focus-ring flex min-h-10 items-center rounded-xl px-3 py-2 text-[13px] leading-5 transition-colors ${pathname === href ? "bg-primary-soft font-semibold text-primary-soft-foreground" : "font-medium text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+								className={`focus-ring flex min-h-10 w-full items-center gap-2.5 rounded-xl py-2 pr-3 pl-9 text-[13px] leading-5 transition-colors ${pathname === href ? "bg-primary-soft font-semibold text-primary-soft-foreground" : "font-medium text-muted-foreground hover:bg-muted hover:text-foreground"}`}
 							>
+								{href === "/admin/users/new" ? (
+									<UserPlus size={16} aria-hidden="true" />
+								) : (
+									<Users size={16} aria-hidden="true" />
+								)}
 								{title}
 							</Link>
 						))}
