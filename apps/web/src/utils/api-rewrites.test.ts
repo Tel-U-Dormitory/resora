@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 
 import { getApiRewrites } from "./api-rewrites";
 
-test("same-origin proxy covers auth and tRPC only and keeps backend paths", () => {
+test("same-origin proxy covers auth, tRPC and the explicit backup endpoint", () => {
 	expect(getApiRewrites("https://api.example.test/")).toEqual([
 		{
 			source: "/api/auth/:path*",
@@ -11,6 +11,10 @@ test("same-origin proxy covers auth and tRPC only and keeps backend paths", () =
 		{
 			source: "/trpc/:path*",
 			destination: "https://api.example.test/trpc/:path*",
+		},
+		{
+			source: "/api/admin/database-backup",
+			destination: "https://api.example.test/api/admin/database-backup",
 		},
 	]);
 	expect(getApiRewrites(undefined)).toEqual([]);

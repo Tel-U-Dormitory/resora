@@ -12,7 +12,7 @@ export async function createContext(
 		authConfig?: AuthConfig;
 		authPerfDiagnosticsEnabled?: boolean;
 	},
-	opts: CreateExpressContextOptions,
+	opts: Pick<CreateExpressContextOptions, "req" | "res">,
 ): Promise<ApiContext> {
 	const { auth, db } = services;
 	let session = null;
