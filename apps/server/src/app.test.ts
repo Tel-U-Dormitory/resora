@@ -16,7 +16,6 @@ let failContext = false;
 let failAuth = false;
 let failQuery = false;
 let authStatus: number | undefined;
-let failReadiness = false;
 const query = {
 	innerJoin: () => query,
 	leftJoin: () => query,
@@ -26,15 +25,7 @@ const query = {
 	},
 };
 const db = {
-	$client: {
-		totalCount: 1,
-		idleCount: 0,
-		waitingCount: 3,
-		query: async () => {
-			if (failReadiness) throw new Error("synthetic-private-db-credential");
-			return { rows: [{ value: 1 }] };
-		},
-	},
+	$client: { totalCount: 1, idleCount: 0, waitingCount: 3 },
 	select: () => ({ from: () => query }),
 	transaction: () => {
 		writes++;
@@ -92,28 +83,6 @@ beforeEach(() => {
 	failAuth = false;
 	failQuery = false;
 	authStatus = undefined;
-	failReadiness = false;
-});
-
-test("readiness reports database availability without auth, while liveness survives storage failure", async () => {
-	identity = null;
-	failContext = failAuth = true;
-	const ready = await fetch(`${base}/readyz`);
-	expect(ready.status).toBe(200);
-	expect(ready.headers.get("cache-control")).toBe("no-store");
-	expect(await ready.json()).toEqual({ status: "ready" });
-	failReadiness = true;
-	const unavailable = await fetch(`${base}/readyz`);
-	expect(unavailable.status).toBe(503);
-	expect(unavailable.headers.get("cache-control")).toBe("no-store");
-	expect(await unavailable.json()).toEqual({ status: "unavailable" });
-	const live = await fetch(`${base}/`);
-	expect(live.status).toBe(200);
-	expect(await live.text()).toBe("OK");
-	failReadiness = false;
-	expect((await fetch(`${base}/readyz`)).status).toBe(200);
-	expect(sessions).toBe(0);
-	expect(writes).toBe(0);
 });
 
 test("initial-password SR can use protected API; live grant adds the mandatory gate", async () => {

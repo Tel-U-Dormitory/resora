@@ -11,12 +11,7 @@
 		"db:generate": "drizzle-kit generate",
 		"db:migrate:deploy": "pnpm run db:migrate",
 		"db:studio": "drizzle-kit studio",
-		"db:migrate": "bun run scripts/check-migration.ts && drizzle-kit migrate",
-		"db:backup": "bun --no-env-file run scripts/standby.ts backup",
-		"db:standby:verify": "bun --no-env-file run scripts/standby.ts verify",
-		"db:standby:restore": "bun --no-env-file run scripts/standby.ts restore",
-		"db:standby:reconcile": "bun --no-env-file run scripts/standby.ts reconcile",
-		"test:standby": "bun --no-env-file test scripts/standby.test.ts scripts/standby.integration.test.ts"
+		"db:migrate": "bun run scripts/check-migration.ts && drizzle-kit migrate"
 	},
 	"dependencies": {
 		"drizzle-orm": "catalog:",

@@ -51,57 +51,44 @@ services:
         required: false
     environment:
       CORS_ORIGIN: http://localhost:3001
-    networks:
-      - default
-      - database
     healthcheck:
       test:
         [
           "CMD",
           "bun",
           "-e",
-          "fetch('http://localhost:3000/readyz').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+          "fetch('http://localhost:3000/').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
         ]
       interval: 10s
-      timeout: 15s
+      timeout: 5s
       retries: 5
       start_period: 10s
     restart: unless-stopped
 
   postgres:
     profiles: [local-db]
-    image: postgres:17
+    image: postgres:18
+    container_name: resora-postgres
     environment:
       POSTGRES_DB: resora
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
-    secrets:
-      - postgres_password
-    networks:
-      - database
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+    ports:
+      - "5432:5432"
     volumes:
-      - resora_postgres17_data:/var/lib/postgresql/data
+      - resora_postgres_data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", 'pg_isready -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 20s
     restart: unless-stopped
 
 volumes:
-  # New major-specific volume: never mount a PostgreSQL 18 data directory here.
-  resora_postgres17_data:
+  resora_postgres_data:
 
-networks:
-  database:
-    internal: true
-
+# BuildKit makes these available only while pnpm install/build commands run.
 secrets:
-  # Runtime secret; keep this file private and outside image layers.
-  postgres_password:
-    file: ${POSTGRES_PASSWORD_FILE:-./.private/postgres-password}
-  # BuildKit secrets are available only while pnpm install/build commands run.
   web_env:
     file: apps/web/.env
   server_env:

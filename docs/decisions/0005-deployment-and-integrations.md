@@ -8,8 +8,6 @@ Retain Docker images/Compose for **web and server**, with pnpm installation, Bun
 
 ## Consequences / gates
 
-**Approved database direction / Phase 2 (2026-10-16):** Docker PostgreSQL 17 is the primary target; Supabase PostgreSQL is the scheduled logical warm standby target (initially 00:00 Asia/Jakarta), with manual failover/failback. This supersedes the external-primary direction above for the new architecture, without changing existing deployments. Phase 2 prepares a private persistent Docker database and separate backend readiness only. Drizzle/`pg`, existing business rules and API contracts remain; no Redis, PgBouncer, synchronization or automatic failover is introduced. The existing profile still requires deliberate activation and explicit connection secrets. See [Docker setup and switching constraints](../setup.md#5-docker-postgresql-primary-preparation). Standby restore safety and production rollout require later approval and validation.
-
 Need authorized manual/import source of truth, secure credentials, domain/TLS, reverse proxy, secret rotation, Supabase backup/restore verification (separate local-volume backup if local PostgreSQL is used), production observability and rollback. No production credentials/data committed to Git.
 
 **Synchronization (2026-10-10):** external Supabase and pnpm/Docker configuration are implemented, while VPS deployment remains planned. No migrations/deployment are authorized by this document. [Verification limitations](../pnpm-migration.md) include the final Docker repeat blocked by host disk space.
