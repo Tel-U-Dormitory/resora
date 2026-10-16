@@ -3,6 +3,7 @@
 import type { AppRouter } from "@resora/api/routers/index";
 import { Input } from "@resora/ui/components/input";
 import { Label } from "@resora/ui/components/label";
+import { Select } from "@resora/ui/components/select";
 import { useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import Link from "next/link";
@@ -287,11 +288,10 @@ export default function AccountCreateForm() {
 								</div>
 								<div className="space-y-2">
 									<Label htmlFor="new-account-department">Departemen</Label>
-									<select
+									<Select
 										id="new-account-department"
 										required
 										disabled={pending}
-										className="focus-ring h-10 w-full rounded-md border border-border bg-surface px-3 text-sm"
 										value={values.departmentCode}
 										onChange={(event) =>
 											setValues({
@@ -307,15 +307,14 @@ export default function AccountCreateForm() {
 												{row.name}
 											</option>
 										))}
-									</select>
+									</Select>
 								</div>
 								<div className="space-y-2">
 									<Label htmlFor="new-account-position">Jabatan</Label>
-									<select
+									<Select
 										id="new-account-position"
 										required
 										disabled={pending || !values.departmentCode}
-										className="focus-ring h-10 w-full rounded-md border border-border bg-surface px-3 text-sm"
 										value={values.positionCode}
 										onChange={(event) =>
 											setValues({ ...values, positionCode: event.target.value })
@@ -327,15 +326,14 @@ export default function AccountCreateForm() {
 												{row.name}
 											</option>
 										))}
-									</select>
+									</Select>
 								</div>
 								<div className="space-y-2">
 									<Label htmlFor="new-account-building">Gedung</Label>
-									<select
+									<Select
 										id="new-account-building"
 										required
 										disabled={pending}
-										className="focus-ring h-10 w-full rounded-md border border-border bg-surface px-3 text-sm"
 										value={values.buildingCode}
 										onChange={(event) =>
 											setValues({ ...values, buildingCode: event.target.value })
@@ -347,7 +345,7 @@ export default function AccountCreateForm() {
 												{row.name}
 											</option>
 										))}
-									</select>
+									</Select>
 								</div>
 							</div>
 							{error && (

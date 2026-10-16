@@ -1,6 +1,8 @@
 "use client";
 
 import type { AppRouter } from "@resora/api/routers/index";
+import { Input } from "@resora/ui/components/input";
+import { Textarea } from "@resora/ui/components/textarea";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { inferRouterInputs } from "@trpc/server";
 import Link from "next/link";
@@ -23,7 +25,7 @@ import {
 } from "./roster-selection";
 
 const fieldClass =
-	"focus-ring block w-full rounded-lg border border-border bg-background px-3 py-2 text-sm aria-invalid:border-destructive aria-invalid:ring-1 aria-invalid:ring-destructive";
+	"aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-destructive/20";
 const timeRangeMessage = "Waktu selesai harus lebih lambat dari waktu mulai.";
 
 type Draft = inferRouterInputs<AppRouter>["attendance"]["create"];
@@ -294,9 +296,10 @@ function DraftEditor({
 						</p>
 					</div>
 					<CardContent className="grid gap-4 sm:grid-cols-2">
-						<label>
+						<label htmlFor="event-title">
 							Judul
-							<input
+							<Input
+								id="event-title"
 								required
 								maxLength={200}
 								className={fieldClass}
@@ -304,9 +307,10 @@ function DraftEditor({
 								onChange={(e) => setDraft({ ...draft, title: e.target.value })}
 							/>
 						</label>
-						<label>
+						<label htmlFor="event-description">
 							Deskripsi
-							<textarea
+							<Textarea
+								id="event-description"
 								className={fieldClass}
 								maxLength={5000}
 								value={draft.description}
@@ -327,9 +331,10 @@ function DraftEditor({
 						</div>
 						<CardContent className="grid gap-4 sm:grid-cols-2">
 							{fullEditing && (
-								<label>
+								<label htmlFor="event-start">
 									Waktu mulai (WIB)
-									<input
+									<Input
+										id="event-start"
 										required
 										type="datetime-local"
 										className={fieldClass}
@@ -341,9 +346,9 @@ function DraftEditor({
 									/>
 								</label>
 							)}
-							<label>
+							<label htmlFor="event-end">
 								Waktu selesai (WIB)
-								<input
+								<Input
 									required
 									type="datetime-local"
 									id="event-end"
@@ -394,9 +399,10 @@ function DraftEditor({
 										["qrTtlMinutes", "Masa berlaku QR (menit)", 1, undefined],
 									] as const
 								).map(([key, label, min, max]) => (
-									<label key={key}>
+									<label key={key} htmlFor={`event-${key}`}>
 										{label}
-										<input
+										<Input
+											id={`event-${key}`}
 											required
 											type="number"
 											step={
@@ -522,9 +528,13 @@ function DraftEditor({
 									organisasi tidak valid. Hubungi pengelola akun.
 								</p>
 							)}
-							<label className="block space-y-2 font-medium text-sm">
+							<label
+								htmlFor="form-field-2"
+								className="block space-y-2 font-medium text-sm"
+							>
 								Cari peserta
-								<input
+								<Input
+									id="form-field-2"
 									type="search"
 									className={fieldClass}
 									placeholder="Cari nama atau NIM"
@@ -633,9 +643,10 @@ function DraftEditor({
 					</>
 				)}
 				{advancedMode && (
-					<label className="block space-y-2 text-sm">
+					<label htmlFor="form-field-3" className="block space-y-2 text-sm">
 						Alasan perubahan administratif
-						<textarea
+						<Textarea
+							id="form-field-3"
 							required
 							maxLength={2000}
 							className={fieldClass}

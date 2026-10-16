@@ -2,6 +2,7 @@
 
 import { Input } from "@resora/ui/components/input";
 import { Label } from "@resora/ui/components/label";
+import { Select } from "@resora/ui/components/select";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
@@ -71,9 +72,8 @@ export default function AccountList() {
 						</div>
 						<div className="space-y-2">
 							<Label htmlFor="account-department">Departemen</Label>
-							<select
+							<Select
 								id="account-department"
-								className="focus-ring h-10 w-full rounded-md border border-border bg-surface px-3 text-sm"
 								value={departmentCode}
 								onChange={(event) => {
 									setDepartmentCode(event.target.value);
@@ -87,13 +87,12 @@ export default function AccountList() {
 										{row.name}
 									</option>
 								))}
-							</select>
+							</Select>
 						</div>
 						<div className="space-y-2">
 							<Label htmlFor="account-status">Status</Label>
-							<select
+							<Select
 								id="account-status"
-								className="focus-ring h-10 w-full rounded-md border border-border bg-surface px-3 text-sm"
 								value={status}
 								onChange={(event) => {
 									setStatus(event.target.value);
@@ -103,7 +102,7 @@ export default function AccountList() {
 								<option value="">Semua status</option>
 								<option value="active">Aktif</option>
 								<option value="inactive">Nonaktif</option>
-							</select>
+							</Select>
 						</div>
 						<Button
 							type="submit"
