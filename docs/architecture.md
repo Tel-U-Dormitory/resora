@@ -15,7 +15,7 @@
 | Backend entrypoint   | **Express.js** with **Bun 1.3.13** runtime                        | Repo present; keep runtime bootstrap thin.                                                                                                           |
 | API boundary         | **tRPC** + Zod schema validation                                  | Existing `packages/api`; Identity and Phase 4 Attendance modules implemented.                                                                                                    |
 | Identity             | **Better Auth** + Username Plugin (`username=NIM` for SR)         | Phase 2B SR login/logout, live active-account enforcement and first-password-change gate tested locally; provisioning/recovery and pilot UAT pending. |
-| Primary database     | **Supabase managed PostgreSQL**                                   | Supabase **Development** configured through backend, not directly from browser.                                                                      |
+| Primary database     | **Docker PostgreSQL 17 target**                                   | Dedicated private persistent database; manual SUPERADMIN file backups. Existing Supabase Development is unchanged until deliberate migration.                                                                      |
 | ORM & schema         | **Drizzle**                                                       | Existing schema and **three applied/verified identity foundation migrations** in Supabase Development. Attendance/domain migrations **not applied**. |
 | Workspace            | **pnpm 10.33.4**, pnpm workspaces, Turborepo                      | Project scaffold exists.                                                                                                                             |
 | Shared packages      | `packages/api`, `auth`, `db`, `config`, `ui`                      | Some package content still scaffold-level.                                                                                                           |
@@ -348,7 +348,7 @@ A universal attendance FK to `event_participants` is not part of the shared-engi
 
 - Workspace commands follow existing package scripts, verified via `package.json` rather than assumed. Start the web app on its Next.js-supported runtime and the Express server on **Bun**.
 - The current remote dev database is **Supabase Development**. Runtime backend connectivity uses a configured `DATABASE_URL` (Session Pooler); reviewed migration operations prefer `DIRECT_DB_URL` (Direct Connection). Do not silently fall back to a different DB connection when one fails; document and approve any deliberate alternative.
-- Optional local Docker PostgreSQL is disposable and separated from remote Development. Label and inspect the connection target before every migration command.
+- The approved new direction is a dedicated Docker PostgreSQL 17 primary and manual SUPERADMIN `.dump` downloads, with operator-run imports elsewhere. No scheduled synchronization, Supabase restore endpoint or automatic failover is implemented. Docker activation/data movement remain deliberate operational steps; see [setup](setup.md#5-docker-postgresql-and-manual-downloadable-backups).
 - Keep secrets in ignored environment files or deployment secret stores; env schemas/examples must have placeholders only. Do not embed private credentials, SMTP secret, raw QR tokens or user production data in source/tests.
 - Maintain synthetic SR accounts in development until a PM-approved real roster has been supplied securely.
 

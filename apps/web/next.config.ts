@@ -6,6 +6,9 @@ import type { NextConfig } from "next";
 import { getApiRewrites } from "./src/utils/api-rewrites";
 
 const nextConfig: NextConfig = {
+	compiler: {
+		styledComponents: true,
+	},
 	typedRoutes: true,
 	reactCompiler: true,
 	output: "standalone",

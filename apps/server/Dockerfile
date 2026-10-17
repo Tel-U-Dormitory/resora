@@ -10,7 +10,9 @@ RUN --mount=type=secret,id=web_env,target=/app/apps/web/.env.local --mount=type=
 ENV NODE_ENV=production
 RUN --mount=type=secret,id=web_env,target=/app/apps/web/.env.local --mount=type=secret,id=server_env,target=/app/apps/server/.env.local pnpm --filter server run build
 
-FROM node:24-slim AS runner
+FROM node:24-trixie-slim AS runner
+# Native PostgreSQL utilities are required for verified custom-format downloads.
+RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client-17 && rm -rf /var/lib/apt/lists/*
 COPY --from=bun-runtime /usr/local/bin/bun /usr/local/bin/bun
 # Node is needed by pnpm-generated Varlock CLI shims; Express still runs on Bun.
 WORKDIR /app

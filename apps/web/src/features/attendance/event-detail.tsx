@@ -1,5 +1,8 @@
 "use client";
 
+import { Input } from "@resora/ui/components/input";
+import { Select } from "@resora/ui/components/select";
+import { Textarea } from "@resora/ui/components/textarea";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CalendarDays, MapPin, QrCode, Users } from "lucide-react";
 import Image from "next/image";
@@ -450,9 +453,13 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 									);
 								}}
 							>
-								<label className="block space-y-2 text-sm">
+								<label
+									htmlFor="administrative-action"
+									className="block space-y-2 text-sm"
+								>
 									Tindakan
-									<select
+									<Select
+										id="administrative-action"
 										required
 										disabled={busy}
 										value={administrativeAction}
@@ -461,7 +468,6 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 												e.target.value as AdministrativeAction | "",
 											)
 										}
-										className="focus-ring block w-full rounded-lg border border-border bg-background px-3 py-2"
 									>
 										<option value="">Pilih tindakan</option>
 										{administrativeOptions.map((action) => (
@@ -469,17 +475,20 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 												{administrativeLabels[action]}
 											</option>
 										))}
-									</select>
+									</Select>
 								</label>
-								<label className="block space-y-2 text-sm">
+								<label
+									htmlFor="administrative-reason"
+									className="block space-y-2 text-sm"
+								>
 									Alasan administratif
-									<textarea
+									<Textarea
+										id="administrative-reason"
 										required
 										maxLength={2000}
 										disabled={busy}
 										value={administrativeReason}
 										onChange={(e) => setAdministrativeReason(e.target.value)}
-										className="focus-ring block w-full rounded-lg border border-border bg-background px-3 py-2"
 									/>
 								</label>
 								<Button
@@ -543,26 +552,32 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 											);
 										}}
 									>
-										<label className="block space-y-2 text-sm">
+										<label
+											htmlFor="metadata-title"
+											className="block space-y-2 text-sm"
+										>
 											Judul
-											<input
+											<Input
+												id="metadata-title"
 												name="title"
 												disabled={busy}
 												required
 												maxLength={200}
 												defaultValue={event.title}
-												className="focus-ring block w-full rounded-lg border border-border bg-background px-3 py-2"
 											/>
 										</label>
-										<label className="block space-y-2 text-sm">
+										<label
+											htmlFor="metadata-description"
+											className="block space-y-2 text-sm"
+										>
 											Deskripsi
-											<textarea
+											<Textarea
+												id="metadata-description"
 												name="description"
 												disabled={busy}
 												rows={4}
 												maxLength={5000}
 												defaultValue={event.description}
-												className="focus-ring block w-full rounded-lg border border-border bg-background px-3 py-2"
 											/>
 										</label>
 										<Button
@@ -789,16 +804,19 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 						hidden={!invitationsOpen}
 						className="space-y-3"
 					>
-						<label className="block space-y-2 text-sm">
+						<label
+							htmlFor="invitation-search"
+							className="block space-y-2 text-sm"
+						>
 							Cari nama atau NIM
-							<input
+							<Input
+								id="invitation-search"
 								type="search"
 								value={invitationSearch}
 								onChange={(e) => {
 									setInvitationSearch(e.target.value);
 									setInvitationPage(1);
 								}}
-								className="focus-ring block w-full rounded-lg border border-border bg-background px-3 py-2"
 							/>
 						</label>
 						{event.status === "DRAFT" && preview.isPending && (
