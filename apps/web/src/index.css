@@ -89,6 +89,7 @@
 	--shadow-sm: 0 1px 3px rgb(15 23 42 / 0.08);
 	--shadow-brand: 0 10px 24px -8px rgb(225 59 48 / 0.45);
 	--animate-shimmer: shimmer 1.6s linear infinite;
+	--animate-wiggle: wiggle 0.6s ease-in-out infinite;
 }
 
 @keyframes shimmer {
@@ -100,6 +101,19 @@
 	}
 }
 
+@keyframes wiggle {
+	0%,
+	100% {
+		transform: rotate(0deg);
+	}
+	25% {
+		transform: rotate(-12deg);
+	}
+	75% {
+		transform: rotate(12deg);
+	}
+}
+
 @utility focus-ring {
 	&:focus-visible {
 		outline: 2px solid var(--ring);
@@ -108,7 +122,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.animate-shimmer {
+	.animate-shimmer,
+	.animate-wiggle {
 		animation: none;
 	}
 }

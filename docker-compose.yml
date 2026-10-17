@@ -1,3 +1,4 @@
+
 name: resora
 
 services:
@@ -10,14 +11,17 @@ services:
         - server_env
       args:
         NEXT_PUBLIC_SERVER_URL: http://localhost:3000
+    container_name: resora-web
     init: true
     ports:
-      - "3001:3001"
+      - "3001:80"
     env_file:
       - path: apps/web/.env
         required: false
     environment:
+      PORT: 80
       SERVER_URL: http://server:3000
+      API_UPSTREAM_URL: http://server:3000
       NEXT_PUBLIC_SERVER_URL: http://localhost:3000
     depends_on:
       server:
@@ -28,13 +32,15 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://localhost:3001/').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+          "fetch('http://localhost:80/').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
         ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
     restart: unless-stopped
+    networks:
+      - resora-network
 
   server:
     build:
@@ -43,6 +49,7 @@ services:
       secrets:
         - web_env
         - server_env
+    container_name: resora-server
     init: true
     ports:
       - "3000:3000"
@@ -51,7 +58,6 @@ services:
         required: false
     environment:
       CORS_ORIGIN: http://localhost:3001
-    networks: [default, database]
     healthcheck:
       test:
         [
@@ -65,33 +71,47 @@ services:
       retries: 5
       start_period: 10s
     restart: unless-stopped
+    networks:
+      - resora-network
+      - database
 
   postgres:
     profiles: [local-db]
-    image: postgres:17
+    image: postgres:18
+    container_name: resora-postgres
     environment:
       POSTGRES_DB: resora
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
-    secrets: [postgres_password]
-    networks: [database]
+    secrets:
+      - postgres_password
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
-      - resora_postgres17_data:/var/lib/postgresql/data
+      - resora_postgres_data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", 'pg_isready -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      test:
+        [
+          "CMD-SHELL",
+          'pg_isready -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"',
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    networks:
+      - database
 
 volumes:
-  resora_postgres17_data:
+  resora_postgres_data:
 
 networks:
+  resora-network:
+    name: resora-network
   database:
+    name: resora-database
     internal: true
 
-# BuildKit makes these available only while pnpm install/build commands run.
 secrets:
   postgres_password:
     file: ${POSTGRES_PASSWORD_FILE:-./.private/postgres-password}
