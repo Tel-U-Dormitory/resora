@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { isIP } from "node:net";
 import { hasSuperadminPrivilege } from "@resora/api/modules/identity/identity.public";
 import { appRouter } from "@resora/api/routers/index";
@@ -25,17 +26,39 @@ export function resolveClientIp(
 		: "127.0.0.1";
 }
 
+// NPM must overwrite both headers in the effective proxy location. Never use XFF.
+export function resolveProxyClientIp(
+	ip: string | string[] | undefined,
+	token: string | string[] | undefined,
+	secret: string,
+) {
+	if (typeof ip !== "string" || !isIP(ip) || ip.includes("%")) return;
+	if (typeof token !== "string") return;
+	const supplied = Buffer.from(token);
+	const expected = Buffer.from(secret);
+	if (
+		supplied.length !== expected.length ||
+		!timingSafeEqual(supplied, expected)
+	)
+		return;
+	return ip;
+}
+
 export function createApp(
 	services: {
 		db: Database;
 		auth: Auth;
 		authConfig?: AuthConfig;
+		authProxySecret?: string;
 		authPerfDiagnosticsEnabled?: boolean;
 		backup?: (signal: AbortSignal) => Promise<DownloadBackup>;
 	},
 	origin: string,
 ) {
 	const app = express();
+	const proxySecret = services.authProxySecret;
+	if (proxySecret !== undefined && proxySecret.length < 32)
+		throw new Error("AUTH_PROXY_SECRET must contain at least 32 characters");
 	const perfDiagnostics = services.authPerfDiagnosticsEnabled === true;
 	const isVercel = process.env.VERCEL === "1";
 	const trustedOrigin = new URL(origin).origin;
@@ -240,12 +263,27 @@ export function createApp(
 		}
 	});
 	app.all("/api/auth{/*path}", async (req, res) => {
-		// Always replace the client-supplied limiter header; trust proxy stays false.
-		req.headers["x-resora-client-ip"] = resolveClientIp(
-			req.socket.remoteAddress,
-			req.headers["x-vercel-forwarded-for"],
-			isVercel,
-		);
+		const proxyIp = proxySecret
+			? resolveProxyClientIp(
+					req.headers["x-resora-client-ip"],
+					req.headers["x-resora-proxy-token"],
+					proxySecret,
+				)
+			: undefined;
+		// Remove the proxy credential before Better Auth receives the request.
+		delete req.headers["x-resora-proxy-token"];
+		if (proxySecret && !proxyIp) {
+			res.status(403).json({ code: "UNTRUSTED_AUTH_PROXY" });
+			return;
+		}
+		// Keep Express proxy trust disabled; Better Auth only reads our selected IP.
+		req.headers["x-resora-client-ip"] =
+			proxyIp ??
+			resolveClientIp(
+				req.socket.remoteAddress,
+				req.headers["x-vercel-forwarded-for"],
+				isVercel,
+			);
 		try {
 			await authHandler(req, res);
 		} catch {
