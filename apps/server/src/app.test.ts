@@ -782,3 +782,43 @@ test("backup download is private, rechecks revoked privileges and cleans up on s
 		await rm(directory, { recursive: true, force: true });
 	}
 });
+
+test("authenticated proxy selects its IP and removes the ingress secret before auth", async () => {
+	const secret = "synthetic-http-proxy-secret-000000000000000";
+	const proxyAuth = {
+		...auth,
+		handler: async (request: Request) =>
+			Response.json({
+				ip: request.headers.get("x-resora-client-ip"),
+				token: request.headers.get("x-resora-proxy-token"),
+			}),
+	} as Auth;
+	const app = createApp(
+		{ db, auth: proxyAuth, authProxySecret: secret },
+		origin,
+	);
+	const listener = app.listen(0, "127.0.0.1");
+	await new Promise<void>((resolve) => listener.once("listening", resolve));
+	try {
+		const url = `http://127.0.0.1:${(listener.address() as AddressInfo).port}/api/auth/synthetic-ip-probe`;
+		const result = await fetch(url, {
+			headers: {
+				"x-resora-client-ip": "2001:db8::70",
+				"x-resora-proxy-token": secret,
+				"x-forwarded-for": "198.51.100.99",
+			},
+		});
+		expect(await result.json()).toEqual({ ip: "2001:db8::70", token: null });
+		expect(
+			(await fetch(url, { headers: { "x-resora-client-ip": "198.51.100.99" } }))
+				.status,
+		).toBe(403);
+	} finally {
+		await new Promise<void>((resolve, reject) =>
+			listener.close((error) => (error ? reject(error) : resolve())),
+		);
+	}
+	expect(() =>
+		createApp({ db, auth, authProxySecret: "short" }, origin),
+	).toThrow("AUTH_PROXY_SECRET");
+});

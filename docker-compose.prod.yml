@@ -1,0 +1,92 @@
+# Standalone production configuration; do not merge with docker-compose.yml.
+name: resora-prod
+
+services:
+  web:
+    image: ghcr.io/tel-u-dormitory/resora-web:${RESORA_IMAGE_TAG:?Set RESORA_IMAGE_TAG to the published full commit SHA}
+    pull_policy: always
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      secrets:
+        - web_env
+        - server_env
+      args:
+        NEXT_PUBLIC_SERVER_URL: /
+        API_UPSTREAM_URL: http://server:3000
+        SERVER_URL: http://server:3000
+    init: true
+    env_file:
+      - .private/production/web.env
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      NEXT_PUBLIC_SERVER_URL: /
+      SERVER_URL: http://server:3000
+      API_UPSTREAM_URL: http://server:3000
+    depends_on:
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      default:
+      proxy:
+        aliases:
+          - resora-prod-web
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  server:
+    image: ghcr.io/tel-u-dormitory/resora-server:${RESORA_IMAGE_TAG:?Set RESORA_IMAGE_TAG to the published full commit SHA}
+    pull_policy: always
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+      secrets:
+        - web_env
+        - server_env
+    init: true
+    env_file:
+      - .private/production/server.env
+    environment:
+      NODE_ENV: production
+      BETTER_AUTH_URL: https://telkomdormitory.com
+      CORS_ORIGIN: https://telkomdormitory.com
+      DATABASE_BACKUP_ENABLED: "false"
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://127.0.0.1:3000/').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - default
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  # Normal bridge permits backend egress to external Supabase.
+  default:
+  proxy:
+    external: true
+    name: resora-proxy
+
+# Build configuration is synthetic; production credentials are runtime-only.
+secrets:
+  web_env:
+    file: apps/web/.env.example
+  server_env:
+    file: apps/server/.env.example
