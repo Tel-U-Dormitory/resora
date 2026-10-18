@@ -690,21 +690,45 @@ before clearing the go-live gate. No VPS/NPM settings have been changed here.
   remains pending PM review and approved operator execution.
 
 
-## 11. GHCR manual publication (Phase 4.3; not published)
+## 11. Permanent CI/CD and artifact promotion (configured; remote runs unverified)
 
-`.github/workflows/docker-publish.yml` is manual-only (`workflow_dispatch`). After
-PM review/merge, select the reviewed ref in Actions → Publish Docker images to
-GHCR → Run workflow. The selected event commit's full `github.sha` tags both:
+Branch flow is `feature/fix → dev → staging → main`. Integration checks are
+automatic, publication is automatic on staging pushes, and all deployment remains
+manual. No workflow has `workflow_dispatch` or a deployment step.
 
-- `ghcr.io/tel-u-dormitory/resora-web:<full-commit-sha>`
-- `ghcr.io/tel-u-dormitory/resora-server:<full-commit-sha>`
+| Workflow | Trigger | Token permissions |
+| --- | --- | --- |
+| `CI — Code Quality` (`ci.yml`) | PR targeting `dev`, `staging`, `main` | `contents: read` |
+| `CI — Docker Build` (`docker-verify.yml`) | PR targeting `staging` only | `contents: read` |
+| `CD — Publish Images` (`docker-publish.yml`) | Push to `staging` only | `contents: read`, `packages: write` |
 
-An Ubuntu GitHub-hosted runner builds `linux/amd64` using the existing monorepo
-Dockerfiles. The workflow only checks out, sets up Buildx, logs in to GHCR and
-builds/pushes; it does not start services, migrate, or deploy. Login uses the built-in
-`GITHUB_TOKEN` with `contents: read` and `packages: write`. Both images carry OCI
-source/revision labels. Existing `ci.yml` remains unchanged and is a separate
-quality gate; a publication run does not imply that quality CI or UAT passed.
+Code Quality retains pinned pnpm, Node 24/Bun 1.3.13, frozen dependency install,
+Varlock codegen, Next type generation, Biome, typecheck, offline tests and application
+build with synthetic env. Application builds on PRs to main are quality checks,
+not new container images. Docker PR verification uses default PR integration merge
+checkout, Buildx and `push: false` for both existing Dockerfiles; it never logs in
+to a registry. The PR event is `pull_request`, not `pull_request_target`.
+
+After required PR checks and review, merging `dev → staging` triggers publication.
+Any direct push to staging also triggers it, so branch protection must restrict
+those pushes. The Ubuntu GitHub-hosted runner builds both `linux/amd64` images,
+logs in with built-in `GITHUB_TOKEN`, and tags each with that staging push's full
+`github.sha` (no latest tag):
+
+- `ghcr.io/tel-u-dormitory/resora-web:<full-staging-commit-sha>`
+- `ghcr.io/tel-u-dormitory/resora-server:<full-staging-commit-sha>`
+
+Both carry OCI source/revision labels. Any failed build/push fails the workflow;
+there is no ignored build failure. A fixed staging publication concurrency group
+serializes runs with `cancel-in-progress: false`, so a newer push does not cancel
+an in-flight image pair. GitHub can replace an older pending run with a newer one;
+not every intermediate commit is guaranteed a publication. Always check the
+successful run's exact SHA instead of assuming the latest branch head is ready.
+
+Buildx uses separate `gha` cache scopes for server and web. Only staging publication
+exports cache; PRs only import it, subject to GitHub's branch access restrictions.
+No cache is exported to GHCR. This is build acceleration, not artifact promotion;
+publication still builds the actual staging commit. See [Docker GHA cache docs](https://docs.docker.com/build/cache/backends/gha/).
 
 BuildKit secret-files mount only `apps/web/.env.example` and
 `apps/server/.env.example` at the existing secret IDs. Their synthetic validation
@@ -747,18 +771,65 @@ Record the published digests when approving a release. Preserve the prior approv
 SHA for an operator-reviewed rollback. No automatic deployment or rollback exists.
 
 Actual GitHub-hosted execution, registry publication/pull, organization permissions,
-package visibility and VPS rollout remain unverified until PM authorizes them.
+package visibility and host rollout remain unverified locally. This task did not
+trigger a remote run. After merge, staging pushes trigger publication automatically;
+host deployment still needs separate authorization.
 Phase 3 NPM client-IP/TLS/UAT gates still apply. Image sizes and runtime memory
 remain production capacity considerations; this workflow moves build work off VPS.
 
 
-Phase 4.3 local validation: actionlint v1.7.12 accepted the publication workflow
-and unchanged quality CI; four Docker/workflow regression tests (54 assertions),
-backend typecheck, focused Biome, and Compose checks passed. Both images rebuilt
-successfully with templates excluded from COPY; final images were linux/amd64,
-non-root, without project env templates, dotenv value files, or the synthetic build
-credential marker. All 53 frontend static assets passed credential/development-URL
-marker checks. No GHCR authentication, push, Actions dispatch, or deployment ran.
-The new workflow/templates and preceding required Docker changes must be included
-in the reviewed Git commit before GitHub can build them; local uncommitted files
-are not available to a GitHub-hosted runner.
+### Manual staging and production promotion
+
+1. Feature/fix PRs target `dev` and pass Code Quality/review. The `dev → staging`
+   PR must pass both Code Quality and Docker Build before merge.
+2. In GitHub Actions, open the successful **CD — Publish Images** run for the
+   staging push. Read the full commit SHA from that run's associated commit (the
+   build steps' tags use exactly `github.sha`) and record both image digests from
+   the build summaries. Confirm both packages have that SHA before using either.
+3. An authorized operator pulls that pair and deploys manually to the developer's
+   home staging server, using separate staging runtime secrets/origins. The staging
+   hostname, TLS/ingress and host configuration remain PM/operator setup; this task
+   does not create a staging deployment or assume the production hostname is safe
+   there. Production Compose pins production origins, so it must not be used
+   unchanged as staging runtime configuration. The images themselves remain unchanged.
+4. Run staging UAT and record approval together with the tested image SHA **and both
+   digests**, staging source commit, successful publication run, and tested scope.
+   Only after UAT approval open the `staging → main` PR and require Code Quality
+   plus review. Confirm that the approved staging source/content is what the PR
+   promotes; additional changes/conflicts require another staged verification.
+5. After main review/merge and separate production approval, use the **recorded
+   staging image SHA**, not `git rev-parse HEAD` on main. Merge/squash/rebase can give
+   main a different SHA. No Docker verification or publication workflow runs for
+   PRs/pushes to main. Pull the existing pair on VPS; do not rebuild:
+
+   ```sh
+   export RESORA_IMAGE_TAG='<approved-full-staging-image-sha>'
+   docker compose -f docker-compose.prod.yml config --quiet
+   docker compose -f docker-compose.prod.yml pull
+   # Compare both pulled repo digests with the approved staging record.
+   docker compose -f docker-compose.prod.yml up -d --no-build --pull never --wait
+   docker compose -f docker-compose.prod.yml ps
+   ```
+
+   The same SHA/digests must be used at staging and production. A rerun can replace
+   a SHA tag: if its digests differ from the approved record, stop instead of
+   silently deploying changed artifacts. Retain the prior approved pair for a
+   separately authorized rollback. No automatic promotion/deployment is configured.
+
+### Branch protection (PM applies manually)
+
+| Target PR | Required status checks |
+| --- | --- |
+| `dev` | `CI — Code Quality` |
+| `staging` | `CI — Code Quality`, `CI — Docker Build` |
+| `main` | `CI — Code Quality` |
+
+The quality and Docker jobs have explicit names matching this table. After the
+first actual workflow runs, choose the corresponding **job status checks** in
+GitHub Branch Protection/Rulesets; workflow display names alone are not settings.
+Require a PR and reviewer approval before merge, restrict direct pushes to these
+branches, and disallow force pushes/deletion as appropriate to repository policy.
+Configure strict/up-to-date checks if that is the team's integration requirement.
+No repository settings/rulesets were changed by this implementation. Required
+checks/review settings are necessary because `push: staging` cannot distinguish a
+reviewed merge from a direct push. UAT approval remains a manual release gate.

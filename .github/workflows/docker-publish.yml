@@ -1,11 +1,17 @@
-name: Publish Docker images to GHCR
+name: CD — Publish Images
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [staging]
 
 permissions:
   contents: read
   packages: write
+
+# Serialize publication; a newer staging push does not cancel an in-flight pair.
+concurrency:
+  group: ghcr-publish-staging
+  cancel-in-progress: false
 
 jobs:
   publish:
@@ -28,6 +34,8 @@ jobs:
         with:
           context: .
           file: apps/server/Dockerfile
+          cache-from: type=gha,scope=resora-server
+          cache-to: type=gha,mode=max,scope=resora-server
           platforms: linux/amd64
           push: true
           tags: ghcr.io/tel-u-dormitory/resora-server:${{ github.sha }}
@@ -42,6 +50,8 @@ jobs:
         with:
           context: .
           file: apps/web/Dockerfile
+          cache-from: type=gha,scope=resora-web
+          cache-to: type=gha,mode=max,scope=resora-web
           platforms: linux/amd64
           push: true
           tags: ghcr.io/tel-u-dormitory/resora-web:${{ github.sha }}

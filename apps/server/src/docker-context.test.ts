@@ -101,44 +101,126 @@ test("production isolates ingress, database and runtime credentials", () => {
 		expect(readFileSync(new URL(file, root), "utf8")).toContain("USER node");
 });
 
-test("GHCR publication is manual, uses paired SHA tags and synthetic secret files only", () => {
-	const workflow = Bun.YAML.parse(
-		readFileSync(new URL(".github/workflows/docker-publish.yml", root), "utf8"),
-	) as {
-		on: Record<string, unknown>;
-		permissions: Record<string, string>;
-		jobs: {
-			publish: {
-				steps: {
-					uses?: string;
-					run?: string;
-					with?: Record<string, string | boolean>;
-				}[];
-			};
-		};
+test("permanent CI/CD scopes PR validation and staging-only publication safely", () => {
+	type Step = {
+		uses?: string;
+		run?: string;
+		"continue-on-error"?: boolean;
+		with?: Record<string, string | boolean>;
 	};
-	expect(Object.keys(workflow.on)).toEqual(["workflow_dispatch"]);
-	expect(workflow.permissions).toEqual({ contents: "read", packages: "write" });
-	const steps = workflow.jobs.publish.steps;
-	expect(steps.some((step) => step.run !== undefined)).toBe(false);
-	const builds = steps.filter((step) =>
-		step.uses?.startsWith("docker/build-push-action@"),
-	);
-	expect(builds).toHaveLength(2);
+	type Workflow = {
+		name: string;
+		on: Record<string, { branches: string[] }>;
+		permissions: Record<string, string>;
+		concurrency?: { group: string; "cancel-in-progress": boolean };
+		jobs: Record<
+			string,
+			{
+				name?: string;
+				"runs-on": string;
+				permissions?: Record<string, string>;
+				steps: Step[];
+			}
+		>;
+	};
+	const readWorkflow = (file: string) =>
+		Bun.YAML.parse(
+			readFileSync(new URL(`.github/workflows/${file}.yml`, root), "utf8"),
+		) as Workflow;
+	const quality = readWorkflow("ci");
+	const verify = readWorkflow("docker-verify");
+	const publish = readWorkflow("docker-publish");
+	expect(quality.name).toBe("CI — Code Quality");
+	expect(verify.name).toBe("CI — Docker Build");
+	expect(publish.name).toBe("CD — Publish Images");
+	expect(quality.on).toEqual({
+		pull_request: { branches: ["dev", "staging", "main"] },
+	});
+	expect(verify.on).toEqual({ pull_request: { branches: ["staging"] } });
+	expect(publish.on).toEqual({ push: { branches: ["staging"] } });
+	expect(publish.concurrency).toEqual({
+		group: "ghcr-publish-staging",
+		"cancel-in-progress": false,
+	});
+	for (const workflow of [quality, verify, publish]) {
+		const secretReferences = [
+			...JSON.stringify(workflow).matchAll(/secrets\.([A-Z_]+)/g),
+		].map((match) => match[1]);
+		expect(secretReferences).toEqual(
+			workflow === publish ? ["GITHUB_TOKEN"] : [],
+		);
+		expect(workflow.permissions).toEqual(
+			workflow === publish
+				? { contents: "read", packages: "write" }
+				: { contents: "read" },
+		);
+		for (const job of Object.values(workflow.jobs)) {
+			expect(job["runs-on"]).toBe("ubuntu-latest");
+			expect(job.permissions).toBeUndefined();
+		}
+	}
+	const qualityJob = Object.values(quality.jobs)[0];
+	expect(qualityJob?.name).toBe("CI — Code Quality");
+	expect(
+		qualityJob?.steps.filter((step) => step.run).map((step) => step.run),
+	).toEqual([
+		"pnpm install --frozen-lockfile",
+		"pnpm --filter web exec next typegen",
+		"pnpm exec biome check .",
+		"pnpm run check-types",
+		"pnpm run test:offline",
+		"pnpm run build",
+	]);
 	// biome-ignore lint/suspicious/noTemplateCurlyInString: Literal GitHub Actions expression.
 	const shaExpression = "${{ github.sha }}";
-	expect(builds.map((step) => step.with?.tags).sort()).toEqual([
-		`ghcr.io/tel-u-dormitory/resora-server:${shaExpression}`,
-		`ghcr.io/tel-u-dormitory/resora-web:${shaExpression}`,
-	]);
-	for (const build of builds) {
-		expect(build.with?.platforms).toBe("linux/amd64");
-		expect(build.with?.push).toBe(true);
-		expect(build.with?.["secret-files"]).toBe(
-			"web_env=apps/web/.env.example\nserver_env=apps/server/.env.example\n",
+	for (const workflow of [verify, publish]) {
+		const steps = Object.values(workflow.jobs).flatMap((job) => job.steps);
+		expect(steps.some((step) => step.run !== undefined)).toBe(false);
+		expect(
+			steps.filter((step) => step.uses?.startsWith("docker/login-action@")),
+		).toHaveLength(workflow === publish ? 1 : 0);
+		const checkout = steps.find((step) =>
+			step.uses?.startsWith("actions/checkout@"),
 		);
-		expect(String(build.with?.labels)).toContain(
-			"org.opencontainers.image.source=https://github.com/Tel-U-Dormitory/resora",
+		expect(checkout?.with?.ref).toBeUndefined(); // PR default is the integration merge ref.
+		expect(checkout?.with?.["persist-credentials"]).toBe(false);
+		const builds = steps.filter((step) =>
+			step.uses?.startsWith("docker/build-push-action@"),
+		);
+		expect(builds).toHaveLength(2);
+		expect(builds.map((step) => step.with?.file).sort()).toEqual([
+			"apps/server/Dockerfile",
+			"apps/web/Dockerfile",
+		]);
+		for (const build of builds) {
+			expect(build["continue-on-error"]).not.toBe(true);
+			expect(build.with?.platforms).toBe("linux/amd64");
+			expect(build.with?.push).toBe(workflow === publish);
+			expect(build.with?.["secret-files"]).toBe(
+				"web_env=apps/web/.env.example\nserver_env=apps/server/.env.example\n",
+			);
+			if (workflow === publish) {
+				const image =
+					build.with?.file === "apps/web/Dockerfile" ? "web" : "server";
+				expect(build.with?.tags).toBe(
+					`ghcr.io/tel-u-dormitory/resora-${image}:${shaExpression}`,
+				);
+				expect(String(build.with?.labels)).toContain(
+					"org.opencontainers.image.source=https://github.com/Tel-U-Dormitory/resora",
+				);
+				expect(String(build.with?.labels)).toContain(
+					`org.opencontainers.image.revision=${shaExpression}`,
+				);
+			} else {
+				expect(build.with?.tags).toBeUndefined();
+				expect(build.with?.["cache-to"]).toBeUndefined(); // PRs cannot export publication caches.
+			}
+		}
+		const web = builds.find(
+			(step) => step.with?.file === "apps/web/Dockerfile",
+		);
+		expect(web?.with?.["build-args"]).toBe(
+			"NEXT_PUBLIC_SERVER_URL=/\nAPI_UPSTREAM_URL=http://server:3000\nSERVER_URL=http://server:3000\n",
 		);
 	}
 });
