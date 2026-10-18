@@ -1,0 +1,48 @@
+name: CI — Docker Build
+
+on:
+  pull_request:
+    branches: [staging]
+
+permissions:
+  contents: read
+
+jobs:
+  docker:
+    name: CI — Docker Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      # Default pull_request checkout validates the integration merge ref.
+      # Never use pull_request_target or a write token for PR build code.
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v4
+      # PRs only import cache populated by staging; no registry login or push.
+      - name: Verify server image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/server/Dockerfile
+          platforms: linux/amd64
+          push: false
+          cache-from: type=gha,scope=resora-server
+          secret-files: |
+            web_env=apps/web/.env.example
+            server_env=apps/server/.env.example
+      - name: Verify web image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          platforms: linux/amd64
+          push: false
+          cache-from: type=gha,scope=resora-web
+          build-args: |
+            NEXT_PUBLIC_SERVER_URL=/
+            API_UPSTREAM_URL=http://server:3000
+            SERVER_URL=http://server:3000
+          secret-files: |
+            web_env=apps/web/.env.example
+            server_env=apps/server/.env.example
