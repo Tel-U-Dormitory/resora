@@ -7,11 +7,16 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import type { inferRouterInputs } from "@trpc/server";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { attendanceQueryKeys, queryClient, trpc } from "@/utils/trpc";
 import { refreshAttendanceQueries } from "./attendance-queries";
+import {
+	DORM_HALL,
+	EventLocationPicker,
+	type LocationPoint,
+} from "./event-location-picker";
 import {
 	eventErrorMessage,
 	parseWibDateTimeInput,
@@ -45,8 +50,7 @@ const empty: Draft = {
 	startsAt: "",
 	endsAt: "",
 	session: {
-		centerLat: 0,
-		centerLng: 0,
+		...DORM_HALL,
 		geofenceRadiusM: 20,
 		lateGraceMinutes: 15,
 		qrTtlMinutes: 360,
@@ -145,6 +149,12 @@ function DraftEditor({
 	invalidCount: number;
 }) {
 	const [draft, setDraft] = useState(initial);
+	const setLocation = useCallback((point: LocationPoint) => {
+		setDraft((current) => ({
+			...current,
+			session: { ...current.session, ...point },
+		}));
+	}, []);
 	const [start, setStart] = useState(
 		initial.startsAt ? toWibDateTimeInput(initial.startsAt) : "",
 	);
@@ -385,10 +395,16 @@ function DraftEditor({
 								</p>
 							</div>
 							<CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+								<div className="sm:col-span-2 lg:col-span-3">
+									<EventLocationPicker
+										centerLat={session.centerLat}
+										centerLng={session.centerLng}
+										radius={session.geofenceRadiusM ?? 20}
+										onChange={setLocation}
+									/>
+								</div>
 								{(
 									[
-										["centerLat", "Latitude pusat", -90, 90],
-										["centerLng", "Longitude pusat", -180, 180],
 										["geofenceRadiusM", "Radius (meter)", 1, undefined],
 										[
 											"lateGraceMinutes",
@@ -405,9 +421,7 @@ function DraftEditor({
 											id={`event-${key}`}
 											required
 											type="number"
-											step={
-												key === "centerLat" || key === "centerLng" ? "any" : 1
-											}
+											step={1}
 											min={min}
 											max={max}
 											className={fieldClass}

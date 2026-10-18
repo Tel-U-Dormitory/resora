@@ -926,3 +926,75 @@ test("SSR session reads remain backend-authoritative, no-store and fail closed o
 	expect(text).toContain('cache: "no-store"');
 	expect(text).not.toMatch(/unstable_cache|use cache|@resora\/db/);
 });
+
+test("location preset restores Dorm Hall and custom selection preserves the existing point", () => {
+	const dormHall = { centerLat: -6.9712891, centerLng: 107.628339 };
+	for (const value of [false, true]) {
+		let custom: boolean | undefined;
+		let point = { centerLat: -6.9, centerLng: 107.6 };
+		const handler = compile<() => void>(
+			jsxCallback("./event-location-picker.tsx", "onChange", "setCustom"),
+			{
+				value,
+				DORM_HALL: dormHall,
+				setCustom: (next: boolean) => {
+					custom = next;
+				},
+				onChange: (next: typeof point) => {
+					point = next;
+				},
+			},
+		);
+		handler();
+		expect(custom).toBe(value);
+		expect(point).toEqual(
+			value ? { centerLat: -6.9, centerLng: 107.6 } : dormHall,
+		);
+	}
+});
+
+test("keyboard map selection uses wrapped center coordinates", () => {
+	let selected: unknown;
+	const handler = compile<() => void>(
+		jsxCallback("./event-location-map.tsx", "onClick", "getCenter"),
+		{
+			map: { getCenter: () => ({ wrap: () => ({ lat: -6.97, lng: 107.62 }) }) },
+			onChange: (point: unknown) => {
+				selected = point;
+			},
+		},
+	);
+	handler();
+	expect(selected).toEqual({ centerLat: -6.97, centerLng: 107.62 });
+});
+
+test("map zoom controls invoke Leaflet zoom in and out and tolerate a loading map", () => {
+	let zoom = 18;
+	const map = {
+		zoomIn: () => {
+			zoom += 1;
+		},
+		zoomOut: () => {
+			zoom -= 1;
+		},
+	};
+	const zoomIn = compile<() => void>(
+		jsxCallback("./event-location-map.tsx", "onClick", "zoomIn"),
+		{ map },
+	);
+	const zoomOut = compile<() => void>(
+		jsxCallback("./event-location-map.tsx", "onClick", "zoomOut"),
+		{ map },
+	);
+	zoomOut();
+	expect(zoom).toBe(17);
+	zoomIn();
+	expect(zoom).toBe(18);
+	for (const action of ["zoomIn", "zoomOut"]) {
+		const withoutMap = compile<() => void>(
+			jsxCallback("./event-location-map.tsx", "onClick", action),
+			{ map: null },
+		);
+		expect(withoutMap).not.toThrow();
+	}
+});
