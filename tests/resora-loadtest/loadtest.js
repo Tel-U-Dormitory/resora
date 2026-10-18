@@ -1,5 +1,5 @@
 // RESORA controlled authentication load test (Grafana k6).
-// Use ONLY against an isolated, approved local/Preview environment.
+// Use ONLY against an isolated, approved HTTPS VPS/Preview environment.
 // One synthetic account: Web login, then authenticated dashboard SSR per VU.
 
 import { check } from "k6";
@@ -22,8 +22,6 @@ const users = new SharedArray("approved synthetic accounts", () => {
 
 const vus = Number(__ENV.VUS || "2");
 const offset = Number(__ENV.ACCOUNT_OFFSET || "0");
-const webBypassSecret =
-	__ENV.VERCEL_WEB_BYPASS_SECRET || __ENV.VERCEL_BYPASS_SECRET;
 const loginOk = new Counter("resora_login_200");
 const loginLimited = new Counter("resora_login_429");
 const login5xx = new Counter("resora_login_5xx");
@@ -84,10 +82,26 @@ export function setup() {
 	}
 	if (target !== web || !target.startsWith("https://"))
 		throw new Error(
-			"STOP: this journey must use the same verified HTTPS Preview Web origin for both requests",
+			"STOP: this journey must use the same verified isolated HTTPS Web origin for both requests",
 		);
-	if (/^https:\/\/resora-telu\.vercel\.app(?::443)?$/i.test(target))
-		throw new Error("STOP: Production Web is forbidden");
+	const hostname = target
+		.slice("https://".length)
+		.replace(/:\d+$/, "")
+		.replace(/\.$/, "")
+		.toLowerCase();
+	if (
+		[
+			"resora.telkomdormitory.com",
+			"www.resora.telkomdormitory.com",
+			"telkomdormitory.com",
+			"www.telkomdormitory.com",
+			"resora-telu.vercel.app",
+			"resora-api.vercel.app",
+		].includes(hostname)
+	)
+		throw new Error(
+			"STOP: Production origins are forbidden for authentication load tests",
+		);
 	if (!Number.isInteger(vus) || vus < 1 || vus > 50)
 		throw new Error("VUS must be 1..50");
 	if (!Number.isInteger(offset) || offset < 0)
@@ -173,6 +187,10 @@ function authenticatedDashboard(response, username) {
 
 export default function (cfg) {
 	const account = users[offset + vu.idInTest - 1];
+	// Do not forward an inherited Preview protection secret to a VPS.
+	const webBypassSecret = /\.vercel\.app\.?(?::\d+)?$/i.test(cfg.web)
+		? __ENV.VERCEL_WEB_BYPASS_SECRET || __ENV.VERCEL_BYPASS_SECRET
+		: undefined;
 	const headers = { "Content-Type": "application/json", Origin: cfg.web };
 	if (webBypassSecret) headers["x-vercel-protection-bypass"] = webBypassSecret;
 	// Explicit zero samples make failure counts/thresholds available on successful runs.

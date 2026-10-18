@@ -100,6 +100,7 @@ function fixture(overrides: Record<string, string> = {}, malformed = false) {
 		journey: (config: unknown) => void;
 		options: {
 			summaryTrendStats: string[];
+			scenarios: { auth_journey: { vus: number; iterations: number } };
 			thresholds: Record<string, unknown>;
 		};
 	};
@@ -133,7 +134,12 @@ function fixture(overrides: Record<string, string> = {}, malformed = false) {
 test("target guard refuses unapproved, direct API, Production and malformed targets before HTTP", () => {
 	const invalidTargets: Record<string, string>[] = [
 		{ APPROVE_ISOLATED_TARGET: "no" },
+		{ APPROVE_ISOLATED_TARGET: "" },
 		{ TARGET_ORIGIN: "https://synthetic-api.vercel.app" },
+		{
+			TARGET_ORIGIN: "http://isolated-resora.example.invalid",
+			WEB_ORIGIN: "http://isolated-resora.example.invalid",
+		},
 		{
 			TARGET_ORIGIN: "https://resora-telu.vercel.app",
 			WEB_ORIGIN: "https://resora-telu.vercel.app",
@@ -147,6 +153,52 @@ test("target guard refuses unapproved, direct API, Production and malformed targ
 		expect(() => f.runtime.setup()).toThrow();
 		expect(f.requests).toHaveLength(0);
 	}
+});
+
+test("isolated approval never unlocks known Production hosts, aliases or alternate ports", () => {
+	for (const hostname of [
+		"resora.telkomdormitory.com",
+		"www.resora.telkomdormitory.com",
+		"telkomdormitory.com",
+		"www.telkomdormitory.com",
+		"resora-telu.vercel.app",
+		"resora-api.vercel.app",
+	]) {
+		for (const alias of [
+			hostname,
+			`${hostname.toUpperCase()}.:443`,
+			`${hostname}:8443`,
+		]) {
+			const origin = `https://${alias}`;
+			const f = fixture({ TARGET_ORIGIN: origin, WEB_ORIGIN: origin });
+			expect(() => f.runtime.setup()).toThrow(
+				"Production origins are forbidden",
+			);
+			expect(f.requests).toHaveLength(0);
+		}
+	}
+});
+
+test("verified isolated HTTPS VPS retains the authenticated journey without Preview secrets", () => {
+	const origin = "https://isolated-resora.example.invalid";
+	const f = fixture({
+		TARGET_ORIGIN: origin,
+		WEB_ORIGIN: origin,
+		VERCEL_WEB_BYPASS_SECRET: "synthetic-preview-secret",
+		VERCEL_BYPASS_SECRET: "synthetic-fallback-secret",
+	});
+	f.runtime.journey(f.runtime.setup());
+	expect(f.requests.map((r) => r.url)).toEqual([
+		`${origin}/api/auth/sign-in/username`,
+		`${origin}/dashboard`,
+	]);
+	expect(f.sum("resora_journey_success")).toBe(1);
+	expect(JSON.stringify(f.requests)).not.toContain("synthetic-preview-secret");
+	expect(JSON.stringify(f.requests)).not.toContain("synthetic-fallback-secret");
+	for (const request of f.requests)
+		expect(request.options.headers).not.toHaveProperty(
+			"x-vercel-protection-bypass",
+		);
 });
 
 test("synthetic fixtures reject duplicates, real-style identifiers, blank passwords and malformed records", () => {
@@ -241,10 +293,14 @@ test("malformed private fixture fails without including parse/input details", ()
 	);
 });
 
-test("2/5/10/20 VUs map unique synthetic identities without extra session requests", () => {
-	for (const count of [2, 5, 10, 20]) {
+test("2/5/10/20/25/50 VUs map unique synthetic identities without extra session requests", () => {
+	for (const count of [2, 5, 10, 20, 25, 50]) {
 		const f = fixture({ VUS: String(count) });
 		const cfg = f.runtime.setup();
+		expect(f.runtime.options.scenarios.auth_journey).toMatchObject({
+			vus: count,
+			iterations: 1,
+		});
 		for (let i = 1; i <= count; i++) {
 			f.execution.idInTest = i;
 			f.runtime.journey(cfg);
@@ -273,4 +329,120 @@ test("only approved Web bypass is sent on Web requests, never the separate API s
 		});
 	expect(JSON.stringify(f.requests)).not.toContain("synthetic-api-bypass");
 	expect(f.warnings).toHaveLength(0);
+});
+
+function smokeFixture(env: Record<string, string> = {}, status = 200) {
+	const metrics = new Map<string, number[]>();
+	const requests: { url: string; options: Record<string, unknown> }[] = [];
+	class Metric {
+		constructor(readonly name: string) {
+			metrics.set(name, []);
+		}
+		add(value: number) {
+			metrics.get(this.name)?.push(value);
+		}
+	}
+	const source = readFileSync(
+		new URL("smoke-public.js", import.meta.url),
+		"utf8",
+	)
+		.replace(/^import .*;\r?$/gm, "")
+		.replace("export const options", "const options")
+		.replace("export function setup", "function setup")
+		.replace("export default function ()", "function smoke()");
+	const runtime = runInNewContext(`${source}\n({setup,smoke,options});`, {
+		__ENV: env,
+		Counter: Metric,
+		Trend: Metric,
+		check: (
+			response: unknown,
+			assertions: Record<string, (value: unknown) => boolean>,
+		) => Object.values(assertions).every((assert) => assert(response)),
+		// No POST, fixture reader, cookies, credentials or network implementation.
+		http: {
+			get: (url: string, options: Record<string, unknown>) => {
+				requests.push({ url, options });
+				return { status, timings: { duration: 15 } };
+			},
+		},
+	}) as {
+		setup: () => void;
+		smoke: () => void;
+		options: {
+			summaryTrendStats: string[];
+			scenarios: {
+				public_smoke: { vus: number; iterations: number; executor: string };
+			};
+			thresholds: Record<string, string[]>;
+		};
+	};
+	return { runtime, requests, metrics };
+}
+
+test("public smoke fails closed without its own approval and rejects unsafe VU counts", () => {
+	const invalidEnvs: Record<string, string>[] = [
+		{},
+		{ APPROVE_ISOLATED_TARGET: "yes" },
+		{ APPROVE_PRODUCTION_SMOKE: "true" },
+		...["0", "6", "50", "1.5", "invalid"].map((count) => ({
+			APPROVE_PRODUCTION_SMOKE: "yes",
+			SMOKE_VUS: count,
+		})),
+	];
+	for (const env of invalidEnvs) {
+		const f = smokeFixture(env);
+		expect(() => f.runtime.setup()).toThrow();
+		expect(f.requests).toHaveLength(0);
+	}
+});
+
+test("approved public smoke is fixed to Production /login, one GET per VU, without credentials or redirects", () => {
+	for (const count of [1, 5]) {
+		const f = smokeFixture({
+			APPROVE_PRODUCTION_SMOKE: "yes",
+			...(count === 5 ? { SMOKE_VUS: "5" } : {}),
+			VUS: "50", // Auth test configuration cannot increase smoke VUs.
+			TARGET_ORIGIN: "https://unapproved.example.invalid",
+			ACCOUNTS_FILE: "must-not-be-read.json",
+			VERCEL_WEB_BYPASS_SECRET: "must-not-be-sent",
+		});
+		f.runtime.setup();
+		expect(f.runtime.options.scenarios.public_smoke).toMatchObject({
+			executor: "per-vu-iterations",
+			vus: count,
+			iterations: 1,
+		});
+		for (let i = 0; i < count; i++) f.runtime.smoke();
+		expect(f.requests).toHaveLength(count);
+		for (const request of f.requests) {
+			expect(request.url).toBe("https://resora.telkomdormitory.com/login");
+			expect(request.options.redirects).toBe(0);
+			expect(request.options).not.toHaveProperty("headers");
+			expect(request.options).not.toHaveProperty("cookies");
+		}
+		expect(f.runtime.options.summaryTrendStats).toContain("p(50)");
+		expect(f.runtime.options.summaryTrendStats).toContain("p(95)");
+		expect(f.runtime.options.thresholds.resora_public_smoke_ok).toEqual([
+			`count==${count}`,
+		]);
+		expect(f.metrics.get("resora_public_smoke_ms")).toHaveLength(count);
+	}
+});
+
+test("public smoke separates success, HTTP errors (including redirects) and network failures", () => {
+	for (const status of [200, 302, 429, 503, 0]) {
+		const f = smokeFixture({ APPROVE_PRODUCTION_SMOKE: "yes" }, status);
+		f.runtime.setup();
+		f.runtime.smoke();
+		const sum = (name: string) =>
+			f.metrics.get(name)?.reduce((a, b) => a + b, 0);
+		expect(sum("resora_public_smoke_ok")).toBe(Number(status === 200));
+		expect(sum("resora_public_smoke_http_errors")).toBe(
+			Number(status !== 200 && status !== 0),
+		);
+		expect(sum("resora_public_smoke_network_failures")).toBe(
+			Number(status === 0),
+		);
+		expect(f.requests).toHaveLength(1);
+	}
 });
