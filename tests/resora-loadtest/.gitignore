@@ -1,4 +1,5 @@
 accounts.local.json
+qr-fixture*.local.json
 reports/
 *.har
 *.log
