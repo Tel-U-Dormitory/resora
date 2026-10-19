@@ -17,12 +17,15 @@ import {
 	accountReferences,
 	createAccount,
 	listAccounts,
+	maintainAccount,
 	resetAccountPassword,
 } from "./account-admin";
 import {
+	archiveAccountSchema,
 	createAccountSchema,
 	listAccountsSchema,
 	resetAccountPasswordSchema,
+	updateAccountSchema,
 } from "./account-admin.schema";
 import {
 	assignPeriod,
@@ -43,6 +46,14 @@ import {
 } from "./identity-policy";
 
 export const identityRouter = router({
+	updateAccount: protectedProcedure
+		.input(updateAccountSchema)
+		.mutation(({ ctx, input }) => maintainAccount(ctx.db, ctx.identity, input)),
+	archiveAccount: protectedProcedure
+		.input(archiveAccountSchema)
+		.mutation(({ ctx, input }) =>
+			maintainAccount(ctx.db, ctx.identity, input, true),
+		),
 	listPeriods: protectedProcedure.query(({ ctx }) =>
 		listPeriods(ctx.db, ctx.identity),
 	),

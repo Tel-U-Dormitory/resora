@@ -20,9 +20,11 @@ import { TRPCError } from "@trpc/server";
 import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
 import type { z } from "zod";
 import {
+	archiveAccountSchema,
 	createAccountSchema,
 	listAccountsSchema,
 	resetAccountPasswordSchema,
+	updateAccountSchema,
 } from "./account-admin.schema";
 import { getLiveOperationalIdentity } from "./identity.public";
 import { hasSuperadminPrivilege } from "./identity-policy";
@@ -99,6 +101,7 @@ export async function listAccounts(
 			const query = tx
 				.select({
 					userId: user.id,
+					updatedAt: userProfiles.updatedAt,
 					tenureStatus: srTenureStatus(user.id),
 					periods: srTenurePeriods(user.id),
 					nim: user.username,
@@ -316,4 +319,152 @@ export async function resetAccountPassword(
 		});
 		return { temporaryPassword };
 	});
+}
+
+// Both actions lock the same profile as password reset and period assignment.
+// Audit and session revocation commit atomically with the account change.
+export async function maintainAccount(
+	db: Database,
+	identity: ActiveIdentity,
+	input:
+		| z.input<typeof updateAccountSchema>
+		| z.input<typeof archiveAccountSchema>,
+	archive = false,
+) {
+	requireAdmin(identity);
+	const data = archive
+		? { kind: "archive" as const, ...archiveAccountSchema.parse(input) }
+		: { kind: "edit" as const, ...updateAccountSchema.parse(input) };
+	try {
+		return await db.transaction(async (tx) => {
+			requireAdmin(await getLiveOperationalIdentity(tx, identity.userId));
+			await tx.execute(
+				sql`SELECT pg_advisory_xact_lock(hashtext('resora:sr-csv-provisioning'))`,
+			);
+			const [target] = await tx
+				.select()
+				.from(userProfiles)
+				.where(
+					and(
+						eq(userProfiles.userId, data.userId),
+						eq(userProfiles.actor, "SR"),
+					),
+				)
+				.for("update");
+			if (!target)
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: "SR_ACCOUNT_NOT_FOUND",
+				});
+			if (target.updatedAt.toISOString() !== data.expectedUpdatedAt)
+				throw new TRPCError({
+					code: "CONFLICT",
+					message:
+						"Data akun sudah berubah. Perbarui data sebelum mencoba lagi.",
+				});
+			const [before] = await tx
+				.select({
+					name: user.name,
+					email: user.email,
+					departmentCode: srProfiles.departmentCode,
+					positionCode: srProfiles.positionCode,
+					buildingId: srProfiles.buildingId,
+				})
+				.from(user)
+				.innerJoin(srProfiles, eq(srProfiles.userId, user.id))
+				.where(eq(user.id, data.userId));
+			if (!before)
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: "SR_ACCOUNT_NOT_FOUND",
+				});
+			if (data.kind === "edit") {
+				if (!isValidSrAssignment(data.departmentCode, data.positionCode))
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: "INVALID_ORGANIZATION_ASSIGNMENT",
+					});
+				const [department] = await tx
+					.select()
+					.from(departments)
+					.where(eq(departments.code, data.departmentCode))
+					.for("share");
+				const [position] = await tx
+					.select()
+					.from(positions)
+					.where(eq(positions.code, data.positionCode))
+					.for("share");
+				const [building] = await tx
+					.select()
+					.from(buildings)
+					.where(eq(buildings.code, data.buildingCode))
+					.for("share");
+				if (!department?.isActive || !position?.isActive || !building?.isActive)
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: "INVALID_OR_INACTIVE_ORGANIZATION_REFERENCE",
+					});
+				const [duplicate] = await tx
+					.select({ id: user.id })
+					.from(user)
+					.where(eq(sql`lower(${user.email})`, data.email));
+				if (duplicate && duplicate.id !== data.userId)
+					throw new TRPCError({ code: "CONFLICT", message: "EMAIL_EXISTS" });
+				await tx
+					.update(user)
+					.set({
+						name: data.name,
+						email: data.email,
+						...(data.email !== before.email ? { emailVerified: false } : {}),
+					})
+					.where(eq(user.id, data.userId));
+				await tx
+					.update(srProfiles)
+					.set({
+						departmentCode: data.departmentCode,
+						positionCode: data.positionCode,
+						buildingId: building.id,
+					})
+					.where(eq(srProfiles.userId, data.userId));
+			}
+			await tx
+				.update(userProfiles)
+				.set({
+					isActive: data.kind === "edit" ? data.isActive : false,
+					updatedAt: sql`greatest(clock_timestamp(), ${userProfiles.updatedAt} + interval '1 millisecond')`,
+				})
+				.where(eq(userProfiles.userId, data.userId));
+			await tx.delete(session).where(eq(session.userId, data.userId));
+			await tx.insert(accountAuditLogs).values({
+				actorUserId: identity.userId,
+				targetUserId: data.userId,
+				action: archive ? "ACCOUNT_ARCHIVED" : "ACCOUNT_UPDATED",
+				details: {
+					before: { ...before, isActive: target.isActive },
+					after:
+						data.kind === "edit"
+							? {
+									name: data.name,
+									email: data.email,
+									departmentCode: data.departmentCode,
+									positionCode: data.positionCode,
+									buildingCode: data.buildingCode,
+									isActive: data.isActive,
+								}
+							: { isActive: false },
+				},
+			});
+			return { userId: data.userId };
+		});
+	} catch (error) {
+		if (error instanceof TRPCError) throw error;
+		const failure = error as { code?: string; cause?: { code?: string } };
+		if (failure.code === "23505" || failure.cause?.code === "23505")
+			throw new TRPCError({ code: "CONFLICT", message: "EMAIL_EXISTS" });
+		throw new TRPCError({
+			code: "INTERNAL_SERVER_ERROR",
+			message:
+				"Perubahan belum dapat dipastikan. Perbarui data sebelum mencoba lagi.",
+		});
+	}
 }

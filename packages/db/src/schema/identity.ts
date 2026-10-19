@@ -194,7 +194,7 @@ export const accountAuditLogs = pgTable(
 	(table) => [
 		check(
 			"account_audit_logs_action_check",
-			sql`(${table.action} IN ('ACCOUNT_CREATED', 'PASSWORD_RESET', 'PERIOD_CREATED', 'PERIOD_EXTENDED', 'PERIOD_ASSIGNED') AND ${table.actorUserId} IS NOT NULL) OR (${table.action} = 'SYSTEM_ADMIN_BOOTSTRAPPED' AND ${table.actorUserId} IS NULL)`,
+			sql`(${table.action} IN ('ACCOUNT_CREATED', 'ACCOUNT_UPDATED', 'ACCOUNT_ARCHIVED', 'PASSWORD_RESET', 'PERIOD_CREATED', 'PERIOD_EXTENDED', 'PERIOD_ASSIGNED') AND ${table.actorUserId} IS NOT NULL) OR (${table.action} = 'SYSTEM_ADMIN_BOOTSTRAPPED' AND ${table.actorUserId} IS NULL)`,
 		),
 		index("account_audit_logs_actor_created_idx").on(
 			table.actorUserId,

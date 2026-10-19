@@ -9,8 +9,10 @@ import { getTableName, type SQL } from "drizzle-orm";
 import { getTableConfig, PgDialect } from "drizzle-orm/pg-core";
 import { appRouter } from "../../routers";
 import {
+	archiveAccountSchema,
 	createAccountSchema,
 	listAccountsSchema,
+	updateAccountSchema,
 } from "./account-admin.schema";
 import { provisionSrAccounts } from "./sr-provisioning";
 
@@ -622,4 +624,38 @@ test("password reset hashes a fresh credential, revokes only target sessions, ga
 	await expect(
 		f.caller.identity.resetAccountPassword({ userId: created.userId }),
 	).rejects.toMatchObject({ code: "FORBIDDEN" });
+});
+
+test("account maintenance validates version and rejects username/privilege forgery", () => {
+	const valid = {
+		...input,
+		userId: "synthetic-id",
+		isActive: true,
+		expectedUpdatedAt: "2026-10-19T00:00:00.001Z",
+	};
+	const { nim, ...editable } = valid;
+	expect(updateAccountSchema.safeParse(editable).success).toBe(true);
+	expect(updateAccountSchema.safeParse(valid).success).toBe(false);
+	expect(
+		updateAccountSchema.safeParse({ ...editable, isSuperadmin: true }).success,
+	).toBe(false);
+	expect(
+		updateAccountSchema.safeParse({
+			...editable,
+			expectedUpdatedAt: "yesterday",
+		}).success,
+	).toBe(false);
+	expect(
+		archiveAccountSchema.safeParse({
+			userId: valid.userId,
+			expectedUpdatedAt: valid.expectedUpdatedAt,
+		}).success,
+	).toBe(true);
+	expect(
+		archiveAccountSchema.safeParse({
+			userId: valid.userId,
+			expectedUpdatedAt: valid.expectedUpdatedAt,
+			isActive: true,
+		}).success,
+	).toBe(false);
 });

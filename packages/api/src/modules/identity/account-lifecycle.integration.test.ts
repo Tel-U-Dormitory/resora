@@ -612,5 +612,324 @@ test("lifecycle scratch guard and calendar-date validation", () => {
 				await db.execute(sql`DROP FUNCTION public.reject_lifecycle_session()`);
 			}
 		});
+		async function maintenanceResident() {
+			const suffix = randomUUID().slice(0, 8);
+			const period = await caller.identity.createPeriod({
+				name: `Maintenance ${suffix}`,
+				startsOn: "1990-01-01",
+				endsOn: "2999-12-31",
+			});
+			return caller.identity.createAccount({
+				name: "Synthetic maintenance",
+				nim: `maint.${suffix}`,
+				email: `maint.${suffix}@example.invalid`,
+				departmentCode: "HCO",
+				positionCode: "ANGGOTA",
+				buildingCode: "A",
+				periodId: period.id,
+			});
+		}
+		async function maintenanceInput(userId: string) {
+			const row = (await caller.identity.accountSnapshot()).accounts.find(
+				(a) => a.userId === userId,
+			);
+			if (!row) throw new Error("Missing synthetic account");
+			return {
+				userId,
+				name: row.name,
+				email: row.email,
+				departmentCode: row.departmentCode,
+				positionCode: row.positionCode,
+				buildingCode: row.buildingCode ?? "A",
+				isActive: row.isActive,
+				expectedUpdatedAt: row.updatedAt.toISOString(),
+			};
+		}
+		async function maintenanceSnapshot(userId: string) {
+			const event = await caller.attendance.create({
+				title: "Synthetic maintenance history",
+				startsAt: "2026-01-01T00:00:00Z",
+				endsAt: "2090-01-01T00:00:00Z",
+				rosterCriteria: { allSr: true },
+				session: { centerLat: 0, centerLng: 0 },
+			});
+			await caller.attendance.publish({ eventId: event.eventId });
+			const rows = await db
+				.select()
+				.from(eventParticipants)
+				.where(eq(eventParticipants.eventId, event.eventId));
+			expect(rows.some((row) => row.userId === userId)).toBe(true);
+			return { eventId: event.eventId, rows };
+		}
+		test("edit preserves login identity and membership, revokes sessions and records before/after", async () => {
+			const resident = await maintenanceResident();
+			const historical = await maintenanceSnapshot(resident.userId);
+			const login = await request("sign-in/username", {
+				username: resident.nim,
+				password: resident.temporaryPassword,
+			});
+			expect(login.status).toBe(200);
+			const beforeMemberships = await db
+				.select()
+				.from(srPeriodMemberships)
+				.where(eq(srPeriodMemberships.userId, resident.userId));
+			const input = await maintenanceInput(resident.userId);
+			await caller.identity.updateAccount({
+				...input,
+				name: "Updated synthetic resident",
+				email: "updated.maintenance@example.invalid",
+				buildingCode: "B",
+			});
+			expect(
+				await db
+					.select()
+					.from(eventParticipants)
+					.where(eq(eventParticipants.eventId, historical.eventId)),
+			).toEqual(historical.rows);
+			const [after] = await db
+				.select()
+				.from(user)
+				.where(eq(user.id, resident.userId));
+			expect(after?.name).toBe("Updated synthetic resident");
+			expect(after?.username).toBe(resident.nim);
+			expect(after?.emailVerified).toBe(false);
+			expect(
+				await db
+					.select()
+					.from(session)
+					.where(eq(session.userId, resident.userId)),
+			).toHaveLength(0);
+			expect(
+				await db
+					.select()
+					.from(srPeriodMemberships)
+					.where(eq(srPeriodMemberships.userId, resident.userId)),
+			).toEqual(beforeMemberships);
+			const logs = await db
+				.select()
+				.from(accountAuditLogs)
+				.where(eq(accountAuditLogs.targetUserId, resident.userId));
+			expect(
+				logs.find((log) => log.action === "ACCOUNT_UPDATED")?.details,
+			).toMatchObject({
+				before: { name: input.name, email: input.email },
+				after: { name: "Updated synthetic resident", buildingCode: "B" },
+			});
+			await expect(
+				caller.identity.updateAccount({ ...input, name: "Stale overwrite" }),
+			).rejects.toMatchObject({ code: "CONFLICT" });
+		});
+		test("invalid organization, duplicate email and non-admin edits are denied without changing account", async () => {
+			const resident = await maintenanceResident();
+			const input = await maintenanceInput(resident.userId);
+			const before = await db
+				.select()
+				.from(user)
+				.where(eq(user.id, resident.userId));
+			const logCount = (
+				await db
+					.select()
+					.from(accountAuditLogs)
+					.where(eq(accountAuditLogs.targetUserId, resident.userId))
+			).length;
+			await expect(
+				caller.identity.updateAccount({ ...input, positionCode: "UNKNOWN" }),
+			).rejects.toMatchObject({ code: "BAD_REQUEST" });
+			await expect(
+				caller.identity.updateAccount({
+					...input,
+					email: "admin@example.invalid",
+				}),
+			).rejects.toMatchObject({ code: "CONFLICT" });
+			expect(
+				await db.select().from(user).where(eq(user.id, resident.userId)),
+			).toEqual(before);
+			expect(
+				await db
+					.select()
+					.from(accountAuditLogs)
+					.where(eq(accountAuditLogs.targetUserId, resident.userId)),
+			).toHaveLength(logCount);
+			await db
+				.update(userProfiles)
+				.set({ mustChangePassword: false, passwordResetRequired: false })
+				.where(eq(userProfiles.userId, resident.userId));
+			const ordinary = appRouter.createCaller({
+				db,
+				authConfig: config,
+				session: { user: { id: resident.userId } } as never,
+			});
+			await expect(
+				ordinary.identity.updateAccount(input),
+			).rejects.toMatchObject({ code: "FORBIDDEN" });
+			await expect(
+				ordinary.identity.archiveAccount({
+					userId: resident.userId,
+					expectedUpdatedAt: input.expectedUpdatedAt,
+				}),
+			).rejects.toMatchObject({ code: "FORBIDDEN" });
+			await expect(
+				caller.identity.archiveAccount({
+					userId: adminId,
+					expectedUpdatedAt: input.expectedUpdatedAt,
+				}),
+			).rejects.toMatchObject({ code: "NOT_FOUND" });
+		});
+		test("archive disables native login and revokes sessions while preserving identity, audit and membership; edit restores access", async () => {
+			const resident = await maintenanceResident();
+			const historical = await maintenanceSnapshot(resident.userId);
+			expect(
+				(
+					await request("sign-in/username", {
+						username: resident.nim,
+						password: resident.temporaryPassword,
+					})
+				).status,
+			).toBe(200);
+			const input = await maintenanceInput(resident.userId);
+			const credentials = await db
+				.select()
+				.from(account)
+				.where(eq(account.userId, resident.userId));
+			const memberships = await db
+				.select()
+				.from(srPeriodMemberships)
+				.where(eq(srPeriodMemberships.userId, resident.userId));
+			const audit = await db
+				.select()
+				.from(accountAuditLogs)
+				.where(eq(accountAuditLogs.targetUserId, resident.userId));
+			await caller.identity.archiveAccount({
+				userId: resident.userId,
+				expectedUpdatedAt: input.expectedUpdatedAt,
+			});
+			expect(
+				await db
+					.select()
+					.from(eventParticipants)
+					.where(eq(eventParticipants.eventId, historical.eventId)),
+			).toEqual(historical.rows);
+			expect(await getActiveIdentity(db, resident.userId)).toBeNull();
+			expect(
+				(
+					await request("sign-in/username", {
+						username: resident.nim,
+						password: resident.temporaryPassword,
+					})
+				).status,
+			).not.toBe(200);
+			expect(
+				await db
+					.select()
+					.from(session)
+					.where(eq(session.userId, resident.userId)),
+			).toHaveLength(0);
+			expect(
+				await db
+					.select()
+					.from(account)
+					.where(eq(account.userId, resident.userId)),
+			).toEqual(credentials);
+			expect(
+				await db
+					.select()
+					.from(srPeriodMemberships)
+					.where(eq(srPeriodMemberships.userId, resident.userId)),
+			).toEqual(memberships);
+			const afterAudit = await db
+				.select()
+				.from(accountAuditLogs)
+				.where(eq(accountAuditLogs.targetUserId, resident.userId));
+			expect(afterAudit).toEqual(expect.arrayContaining(audit));
+			expect(afterAudit.some((log) => log.action === "ACCOUNT_ARCHIVED")).toBe(
+				true,
+			);
+			await caller.identity.updateAccount({
+				...(await maintenanceInput(resident.userId)),
+				isActive: true,
+			});
+			expect(
+				(
+					await request("sign-in/username", {
+						username: resident.nim,
+						password: resident.temporaryPassword,
+					})
+				).status,
+			).toBe(200);
+		});
+		test("concurrent account writes accept only one matching version", async () => {
+			const resident = await maintenanceResident();
+			const input = await maintenanceInput(resident.userId);
+			const results = await Promise.allSettled([
+				caller.identity.updateAccount({ ...input, name: "First update" }),
+				caller.identity.archiveAccount({
+					userId: resident.userId,
+					expectedUpdatedAt: input.expectedUpdatedAt,
+				}),
+			]);
+			expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+			expect(results.filter((r) => r.status === "rejected")).toHaveLength(1);
+		});
+		test("audit failure rolls back edit/archive and target session revocation", async () => {
+			const resident = await maintenanceResident();
+			expect(
+				(
+					await request("sign-in/username", {
+						username: resident.nim,
+						password: resident.temporaryPassword,
+					})
+				).status,
+			).toBe(200);
+			const input = await maintenanceInput(resident.userId);
+			const beforeUser = await db
+				.select()
+				.from(user)
+				.where(eq(user.id, resident.userId));
+			const beforeProfile = await db
+				.select()
+				.from(userProfiles)
+				.where(eq(userProfiles.userId, resident.userId));
+			const beforeSessions = await db
+				.select()
+				.from(session)
+				.where(eq(session.userId, resident.userId));
+			await db.execute(
+				sql`CREATE FUNCTION public.reject_maintenance_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action IN ('ACCOUNT_UPDATED','ACCOUNT_ARCHIVED') THEN RAISE EXCEPTION 'Synthetic maintenance audit failure'; END IF; RETURN NEW; END; $$`,
+			);
+			await db.execute(
+				sql`CREATE TRIGGER maintenance_audit_failure BEFORE INSERT ON public.account_audit_logs FOR EACH ROW EXECUTE FUNCTION public.reject_maintenance_audit()`,
+			);
+			try {
+				await expect(
+					caller.identity.updateAccount({ ...input, name: "Should roll back" }),
+				).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+				await expect(
+					caller.identity.archiveAccount({
+						userId: resident.userId,
+						expectedUpdatedAt: input.expectedUpdatedAt,
+					}),
+				).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+				expect(
+					await db.select().from(user).where(eq(user.id, resident.userId)),
+				).toEqual(beforeUser);
+				expect(
+					await db
+						.select()
+						.from(userProfiles)
+						.where(eq(userProfiles.userId, resident.userId)),
+				).toEqual(beforeProfile);
+				expect(
+					await db
+						.select()
+						.from(session)
+						.where(eq(session.userId, resident.userId)),
+				).toEqual(beforeSessions);
+			} finally {
+				await db.execute(
+					sql`DROP TRIGGER maintenance_audit_failure ON public.account_audit_logs`,
+				);
+				await db.execute(sql`DROP FUNCTION public.reject_maintenance_audit()`);
+			}
+		});
 	},
 );

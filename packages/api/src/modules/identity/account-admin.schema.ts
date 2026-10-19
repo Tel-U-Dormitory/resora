@@ -36,3 +36,18 @@ export const resetAccountPasswordSchema = z
 		userId: z.string().min(1).max(200),
 	})
 	.strict();
+
+export const updateAccountSchema = createAccountSchema
+	.omit({ nim: true, periodId: true })
+	.extend({
+		userId: z.string().min(1).max(200),
+		isActive: z.boolean(),
+		expectedUpdatedAt: z.iso.datetime(),
+	})
+	.strict();
+export const archiveAccountSchema = z
+	.object({
+		userId: z.string().min(1).max(200),
+		expectedUpdatedAt: z.iso.datetime(),
+	})
+	.strict();
