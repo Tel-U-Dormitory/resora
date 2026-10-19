@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { cache } from "react";
 import ts from "typescript";
+import { getSidebarGroups, isSidebarLinkActive } from "../../config/navigation";
 import { parseWibDateTimeInput, toWibDateTimeInput } from "./event-ui";
 
 // Execute the actual JSX callbacks with small UI/API doubles, without a browser or DB.
@@ -760,7 +761,20 @@ const jsxScope = {
 		}),
 	},
 	DashboardHeader: "DashboardHeader",
+	Avatar: "Avatar",
+	Link: "Link",
+	ArrowRight: "ArrowRight",
+	CalendarDays: "CalendarDays",
+	History: "History",
+	ListChecks: "ListChecks",
+	Plus: "Plus",
+	ScanLine: "ScanLine",
+	ShieldCheck: "ShieldCheck",
+	Users: "Users",
 	Card: "Card",
+	Button: "Button",
+	buttonVariants: () => "",
+	cn: (...values: string[]) => values.join(" "),
 	CardContent: "CardContent",
 	AppShell: "AppShell",
 	LoginForm: "LoginForm",
@@ -997,4 +1011,270 @@ test("map zoom controls invoke Leaflet zoom in and out and tolerate a loading ma
 		);
 		expect(withoutMap).not.toThrow();
 	}
+});
+
+test("dashboard shortcuts follow verified SR, HCO, and SUPERADMIN capabilities", async () => {
+	for (const actor of ["SR", "SYSTEM_ADMIN"]) {
+		for (const canManageInternalEvents of [false, true]) {
+			for (const isSuperadmin of [false, true]) {
+				const component = serverComponent("../identity/sr-dashboard.tsx", {
+					...jsxScope,
+					getSrSession: async () => ({
+						actor,
+						name: "Synthetic Operator",
+						nim: "000123",
+						username: "synthetic.admin",
+						requiresPasswordChange: false,
+						canManageInternalEvents,
+						isSuperadmin,
+					}),
+					redirect: redirected,
+				});
+				const rendered = JSON.stringify(await component());
+				expect(rendered.includes('"href":"/events?view=manage"')).toBe(
+					canManageInternalEvents,
+				);
+				expect(rendered.includes('"href":"/admin/users"')).toBe(isSuperadmin);
+				expect(rendered.includes('"href":"/attendance/history"')).toBe(
+					actor === "SR",
+				);
+				expect(rendered.includes('"href":"/scan"')).toBe(actor === "SR");
+				expect(rendered.includes('"href":"/admin/users/new"')).toBe(
+					actor !== "SR" && isSuperadmin,
+				);
+			}
+		}
+	}
+});
+
+test("grouped sidebar preserves capabilities and icon-only links in desktop rail", () => {
+	const source = ts.createSourceFile(
+		"sidebar.tsx",
+		readFileSync(
+			new URL("../../components/app-sidebar.tsx", import.meta.url),
+			"utf8",
+		),
+		ts.ScriptTarget.Latest,
+		true,
+		ts.ScriptKind.TSX,
+	);
+	const fn = source.statements.find(ts.isFunctionDeclaration);
+	if (!fn) throw new Error("Sidebar missing");
+	for (const isSr of [false, true]) {
+		for (const allowed of [false, true]) {
+			const sidebar = compile<(props: unknown) => unknown>(
+				fn.getText(source).replace(/^export\s+/, ""),
+				{
+					...jsxScope,
+					Image: "Image",
+					UserMenu: "UserMenu",
+					icons: {
+						dashboard: "DashboardIcon",
+						events: "EventsIcon",
+						scan: "ScanIcon",
+						history: "HistoryIcon",
+						manage: "ManageIcon",
+						accounts: "AccountsIcon",
+					},
+					getSidebarGroups,
+					isSidebarLinkActive,
+					useEffect: () => {},
+					useSidebar: () => ({
+						state: "collapsed",
+						isMobile: false,
+						setOpenMobile: () => {},
+					}),
+					Sidebar: "Sidebar",
+					SidebarHeader: "SidebarHeader",
+					SidebarContent: "SidebarContent",
+					SidebarFooter: "SidebarFooter",
+					SidebarGroup: "SidebarGroup",
+					SidebarGroupLabel: "SidebarGroupLabel",
+					SidebarGroupContent: "SidebarGroupContent",
+					SidebarMenu: "SidebarMenu",
+					SidebarMenuItem: "SidebarMenuItem",
+					SidebarMenuButton: "SidebarMenuButton",
+					usePathname: () => "/events/new",
+					useSearchParams: () => new URLSearchParams(),
+				},
+			);
+			const rendered = JSON.stringify(
+				sidebar({
+					isSr,
+					canManageEvents: allowed,
+					isSuperadmin: allowed,
+					name: "Synthetic Operator",
+				}),
+			);
+			expect(rendered.includes('"href":"/scan"')).toBe(isSr);
+			expect(rendered.includes('"href":"/attendance/history"')).toBe(isSr);
+			expect(rendered.includes('"href":"/events?view=manage"')).toBe(allowed);
+			expect(rendered.includes('"href":"/admin/users"')).toBe(allowed);
+			expect(rendered).toContain('"compact":true');
+			expect(rendered).toContain('"className":"sr-only"');
+			expect(rendered.includes("Departemen · HCO")).toBe(allowed);
+			expect(rendered.includes('"aria-label":"Administrasi"')).toBe(allowed);
+			if (allowed) expect(rendered).toContain('"isActive":true');
+		}
+	}
+});
+
+test("shadcn Sidebar trigger toggles the shared navigation state", () => {
+	let toggles = 0;
+	let forwarded = 0;
+	const trigger = compile<(event: unknown) => void>(
+		jsxCallback(
+			"../../../../../packages/ui/src/components/sidebar.tsx",
+			"onClick",
+			"toggleSidebar",
+		),
+		{
+			onClick: () => {
+				forwarded++;
+			},
+			toggleSidebar: () => {
+				toggles++;
+			},
+		},
+	);
+	trigger({});
+	expect(toggles).toBe(1);
+	expect(forwarded).toBe(1);
+});
+
+test("desktop collapse and mobile drawer toggle independently", () => {
+	const file = "../../../../../packages/ui/src/components/sidebar.tsx";
+	const source = ts.createSourceFile(
+		file,
+		readFileSync(new URL(file, import.meta.url), "utf8"),
+		ts.ScriptTarget.Latest,
+		true,
+		ts.ScriptKind.TSX,
+	);
+	let callback: ts.Expression | undefined;
+	function visit(node: ts.Node) {
+		if (
+			ts.isVariableDeclaration(node) &&
+			node.name.getText(source) === "toggleSidebar" &&
+			node.initializer &&
+			ts.isCallExpression(node.initializer)
+		)
+			callback = node.initializer.arguments[0];
+		ts.forEachChild(node, visit);
+	}
+	visit(source);
+	if (!callback) throw new Error("Sidebar toggle missing");
+	for (const isMobile of [false, true]) {
+		let desktopOpen = true;
+		let mobileOpen = false;
+		const toggle = compile<() => void>(callback.getText(source), {
+			isMobile,
+			setOpen: (update: (open: boolean) => boolean) => {
+				desktopOpen = update(desktopOpen);
+			},
+			setOpenMobile: (update: (open: boolean) => boolean) => {
+				mobileOpen = update(mobileOpen);
+			},
+		});
+		toggle();
+		expect(desktopOpen).toBe(isMobile);
+		expect(mobileOpen).toBe(isMobile);
+		toggle();
+		expect(desktopOpen).toBe(true);
+		expect(mobileOpen).toBe(false);
+	}
+});
+
+test("event form native validation reveals collapsed settings and identifies the first invalid field", () => {
+	for (const hasField of [true, false]) {
+		const details = { open: false };
+		const observed = {
+			prevented: false,
+			field: "",
+			message: "",
+			endError: "Previous time error",
+		};
+		const field = {
+			id: "event-qrTtlMinutes",
+			validationMessage: "Value must be greater than zero.",
+			closest: () => details,
+		};
+		const validate = compile<(event: { preventDefault: () => void }) => void>(
+			jsxCallback("./event-form.tsx", "onInvalidCapture"),
+			{
+				formRef: {
+					current: { querySelector: () => (hasField ? field : null) },
+				},
+				setInvalidFieldId: (value: string) => {
+					observed.field = value;
+				},
+				setError: (value: string) => {
+					observed.message = value;
+				},
+				setEndError: (value: string) => {
+					observed.endError = value;
+				},
+			},
+		);
+		validate({
+			preventDefault: () => {
+				observed.prevented = true;
+			},
+		});
+		expect(observed.prevented).toBe(true);
+		expect(observed.endError).toBe("");
+		expect(details.open).toBe(hasField);
+		expect(observed.field).toBe(hasField ? field.id : "");
+		expect(observed.message).toBe(
+			hasField ? field.validationMessage : "Periksa kembali isian form.",
+		);
+	}
+});
+
+test("event location changes cannot modify the submitted snapshot while saving", () => {
+	const source = ts.createSourceFile(
+		"event-form.tsx",
+		readFileSync(new URL("./event-form.tsx", import.meta.url), "utf8"),
+		ts.ScriptTarget.Latest,
+		true,
+		ts.ScriptKind.TSX,
+	);
+	let callback: ts.Expression | undefined;
+	function visit(node: ts.Node) {
+		if (
+			ts.isVariableDeclaration(node) &&
+			node.name.getText(source) === "setLocation" &&
+			node.initializer &&
+			ts.isCallExpression(node.initializer)
+		)
+			callback = node.initializer.arguments[0];
+		ts.forEachChild(node, visit);
+	}
+	visit(source);
+	if (!callback) throw new Error("Location callback missing");
+	let draft = {
+		title: "Synthetic event",
+		session: { centerLat: 1, centerLng: 2, geofenceRadiusM: 20 },
+	};
+	const submitLock = { current: true };
+	const select = compile<
+		(point: { centerLat: number; centerLng: number }) => void
+	>(callback.getText(source), {
+		submitLock,
+		setDraft: (update: (current: typeof draft) => typeof draft) => {
+			draft = update(draft);
+		},
+	});
+	select({ centerLat: 3, centerLng: 4 });
+	expect(draft.session).toEqual({
+		centerLat: 1,
+		centerLng: 2,
+		geofenceRadiusM: 20,
+	});
+	submitLock.current = false;
+	select({ centerLat: 3, centerLng: 4 });
+	expect(draft).toEqual({
+		title: "Synthetic event",
+		session: { centerLat: 3, centerLng: 4, geofenceRadiusM: 20 },
+	});
 });

@@ -79,12 +79,13 @@ export default function EventLocationMap({
 	return (
 		<div className="space-y-2">
 			<fieldset
-				className="flex flex-wrap items-center gap-2"
+				className="grid grid-cols-2 gap-2"
 				aria-label="Kontrol zoom peta"
 			>
 				<Button
 					type="button"
 					variant="outline"
+					className="w-full"
 					disabled={!map}
 					aria-label="Perkecil peta"
 					onClick={() => map?.zoomOut()}
@@ -94,13 +95,14 @@ export default function EventLocationMap({
 				<Button
 					type="button"
 					variant="outline"
+					className="w-full"
 					disabled={!map}
 					aria-label="Perbesar peta"
 					onClick={() => map?.zoomIn()}
 				>
 					+ Perbesar
 				</Button>
-				<span className="text-muted-foreground text-sm">
+				<span className="col-span-2 text-muted-foreground text-xs leading-relaxed">
 					Gunakan tombol, scroll, atau cubit peta untuk mengatur zoom.
 				</span>
 			</fieldset>
@@ -119,7 +121,8 @@ export default function EventLocationMap({
 			{editable && (
 				<Button
 					type="button"
-					variant="outline"
+					variant="primary"
+					className="w-full whitespace-normal text-center"
 					disabled={!map}
 					onClick={() => {
 						if (!map) return;

@@ -349,13 +349,13 @@ export default function LoginForm({ expired = false }: { expired?: boolean }) {
 										value={password}
 										onChange={(e) => setPassword(e.target.value)}
 										disabled={pending}
-										className="h-11 w-full rounded-xl border border-input bg-surface px-3 pr-10 text-sm transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+										className="h-11 w-full rounded-xl border border-input bg-surface px-3 pr-12 text-sm transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
 									/>
 									<Button
 										type="button"
 										variant="ghost"
 										size="icon"
-										className="absolute top-1/2 right-1 size-9 -translate-y-1/2 text-muted-foreground hover:bg-transparent hover:text-foreground"
+										className="resora-password-toggle text-muted-foreground hover:bg-transparent hover:text-foreground"
 										aria-label={
 											showPassword
 												? "Sembunyikan password"

@@ -1,7 +1,7 @@
 "use client";
 
 import { ActionDialog } from "@resora/ui/components/action-dialog";
-import { Button } from "@resora/ui/components/button";
+import { Button, buttonVariants } from "@resora/ui/components/button";
 import {
 	CalendarDays,
 	Check,
@@ -20,6 +20,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
+import { cn } from "@/lib/utils";
 import { quickActionPosition } from "./quick-action-layout";
 
 const choices = [
@@ -125,6 +126,7 @@ export function MobileQuickActions({
 		<>
 			<div
 				ref={root}
+				data-mobile-quick-actions=""
 				className="fixed right-5 bottom-[max(1.25rem,env(safe-area-inset-bottom))] z-30 lg:hidden"
 			>
 				<div
@@ -171,19 +173,20 @@ export function MobileQuickActions({
 								<Icon className="size-6" aria-hidden="true" />
 							</Button>
 						) : (
-							<Button
+							<Link
 								key={item.href}
-								render={<Link href={item.href} />}
-								size="icon"
-								variant="ghost"
+								href={item.href}
 								style={style}
-								className={classes}
+								className={cn(
+									buttonVariants({ variant: "ghost", size: "icon" }),
+									classes,
+								)}
 								aria-label={item.title}
 								title={item.title}
 								onClick={() => setOpenPath(null)}
 							>
 								<Icon className="size-6" aria-hidden="true" />
-							</Button>
+							</Link>
 						);
 					})}
 				</div>

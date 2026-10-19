@@ -1,5 +1,7 @@
+import { Button as ShadcnButton } from "@resora/ui/components/button";
 import type * as React from "react";
 import { cn } from "@/lib/utils";
+import { Spinner } from "./spinner";
 
 /**
  * Button — primitive aksi utama RESORA.
@@ -11,8 +13,9 @@ import { cn } from "@/lib/utils";
  */
 const variants = {
 	primary:
-		"bg-primary text-primary-foreground shadow-sm hover:bg-primary-hover hover:shadow-brand",
-	secondary: "bg-primary-soft text-primary-soft-foreground hover:bg-[#fddcd9]",
+		"bg-primary text-primary-foreground shadow-xs hover:bg-primary-hover",
+	secondary:
+		"bg-primary-soft text-primary-soft-foreground hover:bg-[color-mix(in_srgb,var(--primary-soft),var(--primary)_8%)]",
 	outline:
 		"border border-border bg-surface text-foreground shadow-xs hover:bg-muted",
 	ghost: "text-foreground hover:bg-muted",
@@ -55,12 +58,19 @@ export function Button({
 	...props
 }: ButtonProps) {
 	return (
-		<button
+		<ShadcnButton
+			data-resora-button=""
+			variant={
+				variant === "primary" || variant === "dark" || variant === "danger"
+					? "default"
+					: variant
+			}
+			size={size === "md" ? "default" : size}
 			type={type}
 			disabled={disabled || loading}
 			aria-busy={loading || undefined}
 			className={cn(
-				"focus-ring inline-flex shrink-0 items-center justify-center whitespace-nowrap font-semibold transition-all duration-200 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50",
+				"focus-ring inline-flex shrink-0 items-center justify-center whitespace-nowrap font-semibold transition-all duration-200 disabled:pointer-events-none disabled:opacity-50",
 				variants[variant],
 				sizes[size],
 				fullWidth && "w-full",
@@ -71,32 +81,6 @@ export function Button({
 			{loading ? <Spinner /> : leftIcon}
 			{children}
 			{!loading && rightIcon}
-		</button>
-	);
-}
-
-function Spinner() {
-	return (
-		<svg
-			className="size-4 animate-spin"
-			viewBox="0 0 24 24"
-			fill="none"
-			aria-hidden="true"
-		>
-			<circle
-				cx="12"
-				cy="12"
-				r="10"
-				stroke="currentColor"
-				strokeOpacity="0.25"
-				strokeWidth="3"
-			/>
-			<path
-				d="M22 12a10 10 0 0 0-10-10"
-				stroke="currentColor"
-				strokeWidth="3"
-				strokeLinecap="round"
-			/>
-		</svg>
+		</ShadcnButton>
 	);
 }

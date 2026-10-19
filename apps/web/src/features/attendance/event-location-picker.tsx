@@ -17,9 +17,11 @@ export function EventLocationPicker({
 	centerLng,
 	radius,
 	onChange,
+	disabled = false,
 }: LocationPoint & {
 	radius: number;
 	onChange: (point: LocationPoint) => void;
+	disabled?: boolean;
 }) {
 	const [custom, setCustom] = useState(
 		centerLat !== DORM_HALL.centerLat || centerLng !== DORM_HALL.centerLng,
@@ -32,10 +34,11 @@ export function EventLocationPicker({
 					{[false, true].map((value) => (
 						<label
 							key={String(value)}
-							className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm has-checked:border-primary has-checked:bg-primary-soft"
+							className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm has-checked:border-primary has-checked:bg-primary-soft"
 						>
 							<input
 								type="radio"
+								disabled={disabled}
 								name="event-location"
 								checked={custom === value}
 								onChange={() => {
@@ -51,19 +54,43 @@ export function EventLocationPicker({
 			<p id="location-help" className="text-muted-foreground text-sm">
 				{custom
 					? "Klik atau ketuk peta untuk memasang pin, atau geser pin ke lokasi kegiatan. Dengan keyboard, geser peta menggunakan tombol panah lalu pilih titik tengah."
-					: "Dorm Hall dipilih sebagai lokasi kegiatan. Pilih lokasi lain untuk memindahkan pin."}
+					: "Dorm Hall sudah dipilih. Gunakan lokasi lain untuk memasang pin sendiri."}
 			</p>
-			<LocationMap
-				centerLat={centerLat}
-				centerLng={centerLng}
-				radius={radius}
-				editable={custom}
-				onChange={onChange}
-			/>
-			<p role="status" className="text-muted-foreground text-sm">
-				{custom ? "Titik terpilih" : "Dorm Hall"}: {centerLat.toFixed(7)},{" "}
-				{centerLng.toFixed(7)}
+			<details
+				open={custom || undefined}
+				className="rounded-xl border border-border"
+			>
+				<summary className="focus-ring cursor-pointer rounded-xl px-4 py-3 font-medium text-sm">
+					{custom ? "Peta lokasi kegiatan" : "Lihat peta Dorm Hall"}
+				</summary>
+				<div className="border-border border-t p-3">
+					<LocationMap
+						centerLat={centerLat}
+						centerLng={centerLng}
+						radius={radius}
+						editable={custom && !disabled}
+						onChange={onChange}
+					/>
+				</div>
+			</details>
+			<p
+				role="status"
+				className="flex flex-wrap items-center gap-2 text-muted-foreground text-sm"
+			>
+				<span className="font-medium text-foreground">
+					{custom ? "Lokasi khusus" : "Dorm Hall"}
+				</span>
+				<span>· Radius {radius} m</span>
 			</p>
+			<details className="text-muted-foreground text-xs">
+				<summary className="focus-ring min-h-11 w-fit cursor-pointer rounded-md py-3">
+					Koordinat lokasi
+				</summary>
+				<p className="break-all pb-2">
+					{custom ? "Titik terpilih" : "Dorm Hall"}: {centerLat.toFixed(7)},{" "}
+					{centerLng.toFixed(7)}
+				</p>
+			</details>
 		</div>
 	);
 }
