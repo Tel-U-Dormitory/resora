@@ -18,6 +18,7 @@ export async function getActiveIdentity(
 			actor: userProfiles.actor,
 			isActive: userProfiles.isActive,
 			mustChangePassword: userProfiles.mustChangePassword,
+			passwordResetRequired: userProfiles.passwordResetRequired,
 			nim: user.username,
 			departmentCode: srProfiles.departmentCode,
 			positionCode: srProfiles.positionCode,
@@ -41,6 +42,9 @@ export async function getActiveIdentity(
 		userId: profile.userId,
 		isActive: profile.isActive as boolean,
 		mustChangePassword: profile.mustChangePassword,
+		...(profile.passwordResetRequired
+			? { passwordResetRequired: true as const }
+			: {}),
 	};
 	if (
 		profile.actor === "SR" &&
@@ -93,10 +97,11 @@ export function requiresPasswordChange(
 	identity: Pick<
 		ActiveIdentity,
 		"actor" | "mustChangePassword" | "isSuperadmin"
-	>,
+	> & { passwordResetRequired?: boolean },
 ) {
 	return (
-		identity.mustChangePassword &&
-		(identity.actor === "SYSTEM_ADMIN" || identity.isSuperadmin === true)
+		identity.passwordResetRequired === true ||
+		(identity.mustChangePassword &&
+			(identity.actor === "SYSTEM_ADMIN" || identity.isSuperadmin === true))
 	);
 }

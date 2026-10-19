@@ -17,10 +17,12 @@ import {
 	accountReferences,
 	createAccount,
 	listAccounts,
+	resetAccountPassword,
 } from "./account-admin";
 import {
 	createAccountSchema,
 	listAccountsSchema,
+	resetAccountPasswordSchema,
 } from "./account-admin.schema";
 import {
 	canManageInternalAttendanceManually,
@@ -30,6 +32,11 @@ import {
 } from "./identity-policy";
 
 export const identityRouter = router({
+	resetAccountPassword: protectedProcedure
+		.input(resetAccountPasswordSchema)
+		.mutation(({ ctx, input }) =>
+			resetAccountPassword(ctx.db, ctx.identity, ctx.authConfig, input),
+		),
 	accountSnapshot: protectedProcedure.query(({ ctx }) =>
 		listAccounts(ctx.db, ctx.identity, {}, true),
 	),

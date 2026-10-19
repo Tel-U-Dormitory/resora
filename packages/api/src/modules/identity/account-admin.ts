@@ -3,7 +3,7 @@ import { type AuthConfig, createAuth } from "@resora/auth";
 import type { ActiveIdentity } from "@resora/auth/sr-access";
 import type { Database } from "@resora/db";
 import { isValidSrAssignment } from "@resora/db/organization";
-import { user } from "@resora/db/schema/auth";
+import { account, session, user } from "@resora/db/schema/auth";
 import {
 	accountAuditLogs,
 	buildings,
@@ -19,6 +19,7 @@ import type { z } from "zod";
 import {
 	createAccountSchema,
 	listAccountsSchema,
+	resetAccountPasswordSchema,
 } from "./account-admin.schema";
 import { getLiveOperationalIdentity } from "./identity.public";
 import { hasSuperadminPrivilege } from "./identity-policy";
@@ -233,4 +234,61 @@ export async function createAccount(
 			message: "ACCOUNT_CREATE_OUTCOME_UNCONFIRMED",
 		});
 	}
+}
+
+export async function resetAccountPassword(
+	db: Database,
+	identity: ActiveIdentity,
+	authConfig: AuthConfig | undefined,
+	input: z.input<typeof resetAccountPasswordSchema>,
+) {
+	requireAdmin(identity);
+	const data = resetAccountPasswordSchema.parse(input);
+	if (!authConfig) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+	return db.transaction(async (tx) => {
+		requireAdmin(await getLiveOperationalIdentity(tx, identity.userId));
+		const [target] = await tx
+			.select({ userId: userProfiles.userId })
+			.from(userProfiles)
+			.where(
+				and(eq(userProfiles.userId, data.userId), eq(userProfiles.actor, "SR")),
+			)
+			.for("update");
+		if (!target)
+			throw new TRPCError({
+				code: "NOT_FOUND",
+				message: "SR_ACCOUNT_NOT_FOUND",
+			});
+		const context = await createAuth(authConfig, tx).$context;
+		const temporaryPassword = randomBytes(18).toString("base64url");
+		const hash = await context.password.hash(temporaryPassword);
+		const updated = await tx
+			.update(account)
+			.set({ password: hash })
+			.where(
+				and(
+					eq(account.userId, data.userId),
+					eq(account.providerId, "credential"),
+				),
+			)
+			.returning({ id: account.id });
+		if (updated.length !== 1)
+			throw new TRPCError({
+				code: "CONFLICT",
+				message: "INVALID_CREDENTIAL_ACCOUNT",
+			});
+		await tx
+			.update(userProfiles)
+			.set({ mustChangePassword: true, passwordResetRequired: true })
+			.where(eq(userProfiles.userId, data.userId));
+		await tx.delete(session).where(eq(session.userId, data.userId));
+		await tx
+			.insert(accountAuditLogs)
+			.values({
+				actorUserId: identity.userId,
+				targetUserId: data.userId,
+				action: "PASSWORD_RESET",
+			});
+		return { temporaryPassword };
+	});
 }

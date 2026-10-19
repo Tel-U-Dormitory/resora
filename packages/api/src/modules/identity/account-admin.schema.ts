@@ -29,3 +29,9 @@ export const createAccountSchema = z
 		buildingCode: z.string().trim().min(1).max(30),
 	})
 	.strict();
+
+export const resetAccountPasswordSchema = z
+	.object({
+		userId: z.string().min(1).max(200),
+	})
+	.strict();

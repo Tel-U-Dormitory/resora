@@ -12,6 +12,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { queryErrorMessage } from "@/utils/request-error";
 import { trpc } from "@/utils/trpc";
 
+import AccountPasswordReset from "./account-password-reset";
+
 export default function AccountList() {
 	const [search, setSearch] = useState("");
 	const [departmentCode, setDepartmentCode] = useState("");
@@ -191,6 +193,7 @@ export default function AccountList() {
 												"Jabatan",
 												"Gedung",
 												"Status",
+												"Tindakan",
 											].map((heading) => (
 												<th
 													key={heading}
@@ -276,6 +279,15 @@ export default function AccountList() {
 													>
 														{account.isActive ? "Aktif" : "Nonaktif"}
 													</span>
+												</td>
+												<td
+													data-label="Tindakan"
+													className="min-w-48 px-3 py-4"
+												>
+													<AccountPasswordReset
+														userId={account.userId}
+														name={account.name}
+													/>
 												</td>
 											</tr>
 										))}

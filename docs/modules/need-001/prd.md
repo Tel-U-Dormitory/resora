@@ -242,3 +242,7 @@ Official reference for SR attendance: **FR-086 and FR-119–FR-130**. Core depen
 **Handover rule:** The PRD, detailed NEED PRD, Architecture, FR Master and acceptance tests must agree before beginning attendance-domain migrations or event feature implementation. A document update does not change source code or authorize deployment.
 
 **Phase 4 PM FINAL (2026-10-11):** roster/schedule and center/radius/late-grace/QR TTL are immutable after publication; only title/description may change. HCO manages internal events regardless of creator; non-HCO can view only published events inviting them. INTI and explicit SUPERADMIN grant no HCO operational bypass. No cancel/reopen/republish, scanner, attendance record or export is delivered in this phase.
+
+### Approved administrator account lifecycle update (2026-10-19)
+
+The administrator panel must search the complete SR account list immediately while typing and reuse a memory cache across navigation, with explicit refresh and invalidation on account changes. Logout/account changes clear cached personal data. Administrators may reset an SR password to a securely generated one-time-displayed temporary credential; all target sessions are revoked, reset actions are audited, and rotation after administrator reset is mandatory for all SR. This is an exception to the 2026-10-14 voluntary *initial* SR password policy. No plaintext password is persisted or audited.

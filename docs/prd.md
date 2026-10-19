@@ -12,6 +12,8 @@
 
 **SA-03 final PM decision:** The first SUPERADMIN is a newly bootstrapped dedicated `SYSTEM_ADMIN`, never an elevated existing SR or a fabricated SR assignment. Login accepts SR NIM or administrative username through the same Better Auth flow. Both require active identity and mandatory password change; SYSTEM_ADMIN additionally requires a current explicit SUPERADMIN grant. SYSTEM_ADMIN has cross-department operational/admin permissions but is excluded from SR roster, attendance targets, QR check-in and own SR history. Explicit valid SR SUPERADMIN grants retain SA-01 behavior. Earlier SR-only login/first-admin assumptions are superseded; Production bootstrap still requires separate approval.
 
+**Administrator lifecycle update approved (2026-10-19):** Instant cached account search, audited SR password reset with mandatory rotation after reset, period membership/renewal and access expiry with preserved history are approved. Dedicated SYSTEM_ADMIN is exempt from SR tenure expiry. See [module requirements](modules/need-001/prd.md#approved-administrator-account-lifecycle-update-2026-10-19).
+
 ## 1. Product overview and objectives
 
 RESORA is an integrated digital platform for operations and services related to the Telkom University dormitory and Senior Residents (SR). Its candidate domains include internal SR attendance, student activities, inspections, resident services, SR performance, inventory, content/CoD, feedback, and analytics. Public landing pages, content delivery, and management interfaces may use distinct subdomains within the same product; final hostnames remain undecided.

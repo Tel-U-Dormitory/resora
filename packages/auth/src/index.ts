@@ -214,7 +214,7 @@ export function createAuth(
 				// Failure leaves the gate closed; never mark completion before credential success.
 				const [updated] = await database
 					.update(userProfiles)
-					.set({ mustChangePassword: false })
+					.set({ mustChangePassword: false, passwordResetRequired: false })
 					.where(
 						and(
 							eq(userProfiles.userId, userId),

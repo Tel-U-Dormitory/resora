@@ -31,6 +31,9 @@ export const userProfiles = pgTable(
 		actor: actorType("actor").notNull(),
 		isActive: boolean("is_active").default(true).notNull(),
 		mustChangePassword: boolean("must_change_password").default(true).notNull(),
+		passwordResetRequired: boolean("password_reset_required")
+			.default(false)
+			.notNull(),
 		createdAt: timestamp("created_at", { withTimezone: true })
 			.defaultNow()
 			.notNull(),
@@ -148,7 +151,7 @@ export const accountAuditLogs = pgTable(
 	(table) => [
 		check(
 			"account_audit_logs_action_check",
-			sql`(${table.action} = 'ACCOUNT_CREATED' AND ${table.actorUserId} IS NOT NULL) OR (${table.action} = 'SYSTEM_ADMIN_BOOTSTRAPPED' AND ${table.actorUserId} IS NULL)`,
+			sql`(${table.action} IN ('ACCOUNT_CREATED', 'PASSWORD_RESET') AND ${table.actorUserId} IS NOT NULL) OR (${table.action} = 'SYSTEM_ADMIN_BOOTSTRAPPED' AND ${table.actorUserId} IS NULL)`,
 		),
 		index("account_audit_logs_actor_created_idx").on(
 			table.actorUserId,

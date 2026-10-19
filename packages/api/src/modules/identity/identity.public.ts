@@ -41,6 +41,7 @@ async function readActiveSrDirectory(
 			buildingCode: buildings.code,
 			buildingName: buildings.name,
 			mustChangePassword: userProfiles.mustChangePassword,
+			passwordResetRequired: userProfiles.passwordResetRequired,
 		})
 		.from(userProfiles)
 		.innerJoin(user, eq(user.id, userProfiles.userId))
@@ -60,7 +61,10 @@ async function readActiveSrDirectory(
 		);
 	// FOR SHARE prevents concurrent assignment/deactivation from invalidating publication's view.
 	const rows = await (lock ? query.for("share") : query);
-	const candidates: (SrCandidate & { mustChangePassword: boolean })[] = [];
+	const candidates: (SrCandidate & {
+		mustChangePassword: boolean;
+		passwordResetRequired?: boolean;
+	})[] = [];
 	let invalidAssignmentCount = 0;
 	for (const row of rows) {
 		if (
@@ -85,7 +89,11 @@ export async function getActiveSrDirectory(
 	);
 	return {
 		candidates: candidates.map(
-			({ mustChangePassword: _gate, ...candidate }) => candidate,
+			({
+				mustChangePassword: _gate,
+				passwordResetRequired: _reset,
+				...candidate
+			}) => candidate,
 		),
 		invalidAssignmentCount,
 	};
@@ -113,6 +121,7 @@ export async function getCheckInSr(
 	return requiresPasswordChange({
 		actor: "SR",
 		mustChangePassword: candidate.mustChangePassword,
+		passwordResetRequired: candidate.passwordResetRequired,
 		isSuperadmin: grants.length > 0,
 	})
 		? null
