@@ -138,7 +138,7 @@ export const srPeriods = pgTable(
 		check("sr_periods_name_nonblank", sql`length(btrim(${table.name})) > 0`),
 		check("sr_periods_date_order", sql`${table.endsOn} >= ${table.startsOn}`),
 	],
-);
+).enableRLS();
 
 export const srPeriodMemberships = pgTable(
 	"sr_period_memberships",
@@ -157,7 +157,7 @@ export const srPeriodMemberships = pgTable(
 		primaryKey({ columns: [table.userId, table.periodId] }),
 		index("sr_period_memberships_period_idx").on(table.periodId),
 	],
-);
+).enableRLS();
 
 export const systemPrivileges = pgTable(
 	"system_privileges",

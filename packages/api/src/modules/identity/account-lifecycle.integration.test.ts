@@ -120,6 +120,21 @@ test("lifecycle scratch guard and calendar-date validation", () => {
 		afterAll(async () => {
 			await db?.$client.end();
 		});
+		test("tenure tables enforce RLS and deny inherited Data API privileges", async () => {
+			const tables = await db.execute<{
+				relname: string;
+				relrowsecurity: boolean;
+			}>(
+				sql`SELECT relname, relrowsecurity FROM pg_class WHERE oid IN ('public.sr_periods'::regclass,'public.sr_period_memberships'::regclass)`,
+			);
+			expect(tables.rows).toHaveLength(2);
+			expect(tables.rows.every((row) => row.relrowsecurity)).toBe(true);
+			const privileges = await db.execute<{ allowed: boolean }>(
+				sql`SELECT has_table_privilege(r.oid,c.oid,p.privilege) AS allowed FROM pg_roles r CROSS JOIN pg_class c CROSS JOIN (VALUES ('SELECT'),('INSERT'),('UPDATE'),('DELETE'),('TRUNCATE'),('REFERENCES'),('TRIGGER')) p(privilege) WHERE r.rolname IN ('anon','authenticated') AND c.oid IN ('public.sr_periods'::regclass,'public.sr_period_memberships'::regclass)`,
+			);
+			expect(privileges.rows.every((row) => !row.allowed)).toBe(true);
+		});
+
 		test("period creation, active membership, idempotent renewal and historical membership retention", async () => {
 			const current = await caller.identity.createPeriod({
 				name: "Current",
