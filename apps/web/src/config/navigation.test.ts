@@ -22,6 +22,11 @@ test("global, HCO and administration groups follow independent backend capabilit
 				expect(groups.some((group) => group.id === "administration")).toBe(
 					isSuperadmin,
 				);
+				expect(
+					groups
+						.find((group) => group.id === "administration")
+						?.items.map((item) => item.href) ?? [],
+				).toEqual(isSuperadmin ? ["/admin/users", "/admin/periods"] : []);
 				expect(groups.every((group) => group.items.length > 0)).toBe(true);
 			}
 		}
@@ -50,6 +55,18 @@ test("event management and global event links never highlight simultaneously", (
 		true,
 	);
 	expect(isSidebarLinkActive("/scan", "/attendance/history", false)).toBe(
+		false,
+	);
+});
+
+test("period settings and accounts highlight independently", () => {
+	expect(isSidebarLinkActive("/admin/periods", "/admin/periods", false)).toBe(
+		true,
+	);
+	expect(isSidebarLinkActive("/admin/users", "/admin/periods", false)).toBe(
+		false,
+	);
+	expect(isSidebarLinkActive("/admin/periods", "/admin/users", false)).toBe(
 		false,
 	);
 });

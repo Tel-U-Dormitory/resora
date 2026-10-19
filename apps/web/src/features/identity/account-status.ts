@@ -32,7 +32,7 @@ export function accountStatus(
 }
 export const accountStatusLabels: Record<AccountStatus, string> = {
 	active: "Aktif",
-	inactive: "Nonaktif manual",
+	inactive: "Diarsipkan manual",
 	archived: "Diarsipkan · Purna",
 	scheduled: "Belum mulai",
 	unassigned: "Belum ada periode",

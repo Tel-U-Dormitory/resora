@@ -24,15 +24,17 @@ export function AppShell({
 	const pathname = usePathname();
 	const sectionTitle = pathname.startsWith("/admin/users")
 		? "Manajemen akun"
-		: pathname.startsWith("/events")
-			? "Kegiatan internal"
-			: pathname.startsWith("/attendance")
-				? "Riwayat kehadiran"
-				: pathname === "/scan"
-					? "Scan kehadiran"
-					: pathname === "/profile"
-						? "Profil saya"
-						: "Dashboard";
+		: pathname.startsWith("/admin/periods")
+			? "Periode menjabat"
+			: pathname.startsWith("/events")
+				? "Kegiatan internal"
+				: pathname.startsWith("/attendance")
+					? "Riwayat kehadiran"
+					: pathname === "/scan"
+						? "Scan kehadiran"
+						: pathname === "/profile"
+							? "Profil saya"
+							: "Dashboard";
 	return (
 		<TooltipProvider delay={150}>
 			<SidebarProvider className="resora-workspace min-h-dvh">

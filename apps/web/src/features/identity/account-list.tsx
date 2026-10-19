@@ -11,8 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { queryErrorMessage } from "@/utils/request-error";
 import { queryClient, trpc } from "@/utils/trpc";
-import AccountPasswordReset from "./account-password-reset";
-import AccountPeriodManager from "./account-period-manager";
+import AccountActions from "./account-actions";
+
 import {
 	accountStatus,
 	accountStatusLabels,
@@ -24,7 +24,6 @@ export default function AccountList() {
 	const [departmentCode, setDepartmentCode] = useState("");
 	const [status, setStatus] = useState("");
 	const [page, setPage] = useState(1);
-	const [selected, setSelected] = useState<string[]>([]);
 	const [today, setToday] = useState(jakartaToday);
 	useEffect(() => {
 		const timer = setInterval(() => setToday(jakartaToday()), 60_000);
@@ -67,7 +66,7 @@ export default function AccountList() {
 				<div className="space-y-2">
 					<h1 className="font-bold text-2xl tracking-tight">Kelola akun SR</h1>
 					<p className="text-muted-foreground text-sm">
-						Cari dan lihat identitas serta status akun Senior Resident.
+						Kelola identitas, akses, dan keamanan akun Senior Resident.
 					</p>
 				</div>
 				<Link
@@ -77,10 +76,7 @@ export default function AccountList() {
 					<Plus size={17} aria-hidden="true" /> Tambah akun
 				</Link>
 			</div>
-			<AccountPeriodManager
-				selected={selected}
-				onAssigned={() => setSelected([])}
-			/>
+
 			<Card>
 				<CardContent>
 					<form
@@ -135,7 +131,7 @@ export default function AccountList() {
 							>
 								<option value="">Semua status</option>
 								<option value="active">Aktif</option>
-								<option value="inactive">Nonaktif manual</option>
+								<option value="inactive">Diarsipkan manual</option>
 								<option value="archived">Diarsipkan / Purna</option>
 								<option value="scheduled">Belum mulai</option>
 								<option value="unassigned">Belum ada periode</option>
@@ -143,6 +139,7 @@ export default function AccountList() {
 						</div>
 						<Button
 							type="button"
+							variant="outline"
 							onClick={() => {
 								void accounts.refetch();
 								void references.refetch();
@@ -194,28 +191,6 @@ export default function AccountList() {
 			)}
 			{accounts.data && (
 				<>
-					<div className="flex flex-wrap gap-2">
-						<Button
-							variant="outline"
-							onClick={() =>
-								setSelected((current) => [
-									...new Set([
-										...current,
-										...visible.map((account) => account.userId),
-									]),
-								])
-							}
-						>
-							Pilih halaman ini
-						</Button>
-						<Button
-							variant="outline"
-							disabled={!selected.length}
-							onClick={() => setSelected([])}
-						>
-							Hapus pilihan ({selected.length})
-						</Button>
-					</div>
 					<Card>
 						<CardContent className="overflow-x-auto">
 							{total === 0 ? (
@@ -230,7 +205,6 @@ export default function AccountList() {
 									<thead>
 										<tr className="border-border border-b">
 											{[
-												"Pilih",
 												"NIM",
 												"Nama / Email",
 												"Departemen",
@@ -256,22 +230,6 @@ export default function AccountList() {
 												key={account.userId}
 												className="border-border border-b last:border-0"
 											>
-												<td data-label="Pilih" className="px-3 py-4">
-													<input
-														type="checkbox"
-														aria-label={`Pilih ${account.name}`}
-														checked={selected.includes(account.userId)}
-														onChange={(event) =>
-															setSelected((current) =>
-																event.target.checked
-																	? [...current, account.userId]
-																	: current.filter(
-																			(id) => id !== account.userId,
-																		),
-															)
-														}
-													/>
-												</td>
 												<td
 													data-label="NIM"
 													className="whitespace-nowrap px-3 py-4"
@@ -353,14 +311,8 @@ export default function AccountList() {
 														{accountStatusLabels[accountStatus(account, today)]}
 													</span>
 												</td>
-												<td
-													data-label="Tindakan"
-													className="min-w-48 px-3 py-4"
-												>
-													<AccountPasswordReset
-														userId={account.userId}
-														name={account.name}
-													/>
+												<td data-label="Tindakan" className="px-3 py-4">
+													<AccountActions account={account} />
 												</td>
 											</tr>
 										))}
