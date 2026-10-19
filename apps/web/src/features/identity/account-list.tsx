@@ -10,15 +10,16 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { queryErrorMessage } from "@/utils/request-error";
-import { trpc } from "@/utils/trpc";
-
+import { queryClient, trpc } from "@/utils/trpc";
 import AccountPasswordReset from "./account-password-reset";
+import AccountPeriodManager from "./account-period-manager";
 
 export default function AccountList() {
 	const [search, setSearch] = useState("");
 	const [departmentCode, setDepartmentCode] = useState("");
 	const [status, setStatus] = useState("");
 	const [page, setPage] = useState(1);
+	const [selected, setSelected] = useState<string[]>([]);
 	const references = useQuery({
 		...trpc.identity.accountReferences.queryOptions(),
 		staleTime: Number.POSITIVE_INFINITY,
@@ -66,6 +67,10 @@ export default function AccountList() {
 					<Plus size={17} aria-hidden="true" /> Tambah akun
 				</Link>
 			</div>
+			<AccountPeriodManager
+				selected={selected}
+				onAssigned={() => setSelected([])}
+			/>
 			<Card>
 				<CardContent>
 					<form
@@ -128,6 +133,9 @@ export default function AccountList() {
 							onClick={() => {
 								void accounts.refetch();
 								void references.refetch();
+								void queryClient.invalidateQueries({
+									queryKey: trpc.identity.listPeriods.pathKey(),
+								});
 							}}
 							disabled={accounts.isFetching}
 							loading={accounts.isFetching}
@@ -187,11 +195,13 @@ export default function AccountList() {
 									<thead>
 										<tr className="border-border border-b">
 											{[
+												"Pilih",
 												"NIM",
 												"Nama / Email",
 												"Departemen",
 												"Jabatan",
 												"Gedung",
+												"Periode",
 												"Status",
 												"Tindakan",
 											].map((heading) => (
@@ -211,6 +221,22 @@ export default function AccountList() {
 												key={account.userId}
 												className="border-border border-b last:border-0"
 											>
+												<td data-label="Pilih" className="px-3 py-4">
+													<input
+														type="checkbox"
+														aria-label={`Pilih ${account.name}`}
+														checked={selected.includes(account.userId)}
+														onChange={(event) =>
+															setSelected((current) =>
+																event.target.checked
+																	? [...current, account.userId]
+																	: current.filter(
+																			(id) => id !== account.userId,
+																		),
+															)
+														}
+													/>
+												</td>
 												<td
 													data-label="NIM"
 													className="whitespace-nowrap px-3 py-4"
@@ -272,6 +298,18 @@ export default function AccountList() {
 													className="whitespace-nowrap px-3 py-4"
 												>
 													{account.building ?? account.buildingCode ?? "—"}
+												</td>
+												<td data-label="Periode" className="px-3 py-4">
+													{account.periods?.length
+														? account.periods.map((period) => (
+																<p key={period.id}>
+																	{period.name}
+																	<span className="block text-muted-foreground text-xs">
+																		{period.startsOn} – {period.endsOn}
+																	</span>
+																</p>
+															))
+														: "Belum ditetapkan"}
 												</td>
 												<td data-label="Status" className="px-3 py-4">
 													<span

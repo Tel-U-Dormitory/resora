@@ -30,12 +30,23 @@ export default function AccountCreateForm() {
 		departmentCode: "",
 		positionCode: "",
 		buildingCode: "",
+		periodId: "",
 	});
 	const references = useQuery({
 		...trpc.identity.accountReferences.queryOptions(),
 		retry: false,
 		meta: { errorHandledLocally: true },
 	});
+	const periods = useQuery({
+		...trpc.identity.listPeriods.queryOptions(),
+		staleTime: Number.POSITIVE_INFINITY,
+		gcTime: Number.POSITIVE_INFINITY,
+		refetchOnWindowFocus: false,
+		refetchOnReconnect: false,
+		retry: false,
+		meta: { errorHandledLocally: true },
+	});
+
 	const allowedPositions =
 		references.data?.positions.filter((row) =>
 			row.departmentCodes.includes(values.departmentCode),
@@ -197,6 +208,7 @@ export default function AccountCreateForm() {
 										departmentCode: "",
 										positionCode: "",
 										buildingCode: "",
+										periodId: "",
 									});
 									void queryClient
 										.invalidateQueries({
@@ -239,6 +251,40 @@ export default function AccountCreateForm() {
 							}}
 						>
 							<div className="grid gap-5 sm:grid-cols-2">
+								<div className="space-y-2 sm:col-span-2">
+									<Label htmlFor="new-account-period">Periode menjabat</Label>
+									<Select
+										id="new-account-period"
+										required
+										disabled={pending || !periods.data}
+										value={values.periodId}
+										onChange={(event) =>
+											setValues({ ...values, periodId: event.target.value })
+										}
+									>
+										<option value="">Pilih periode</option>
+										{periods.data?.map((period) => (
+											<option key={period.id} value={period.id}>
+												{period.name} · {period.startsOn} – {period.endsOn}
+											</option>
+										))}
+									</Select>
+									<p className="text-muted-foreground text-sm">
+										Buat periode melalui Kelola akun jika belum tersedia.
+									</p>
+									{periods.error && (
+										<p role="alert">
+											{queryErrorMessage(periods.error)}{" "}
+											<button
+												type="button"
+												className="underline"
+												onClick={() => void periods.refetch()}
+											>
+												Coba kembali
+											</button>
+										</p>
+									)}
+								</div>
 								<div className="space-y-2 sm:col-span-2">
 									<Label htmlFor="new-account-name">Nama lengkap</Label>
 									<Input

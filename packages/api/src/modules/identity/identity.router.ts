@@ -25,6 +25,17 @@ import {
 	resetAccountPasswordSchema,
 } from "./account-admin.schema";
 import {
+	assignPeriod,
+	createPeriod,
+	extendPeriod,
+	listPeriods,
+} from "./account-period";
+import {
+	assignPeriodSchema,
+	createPeriodSchema,
+	extendPeriodSchema,
+} from "./account-period.schema";
+import {
 	canManageInternalAttendanceManually,
 	canManageInternalEvent,
 	canOperateGeneralActivity,
@@ -32,6 +43,18 @@ import {
 } from "./identity-policy";
 
 export const identityRouter = router({
+	listPeriods: protectedProcedure.query(({ ctx }) =>
+		listPeriods(ctx.db, ctx.identity),
+	),
+	createPeriod: protectedProcedure
+		.input(createPeriodSchema)
+		.mutation(({ ctx, input }) => createPeriod(ctx.db, ctx.identity, input)),
+	extendPeriod: protectedProcedure
+		.input(extendPeriodSchema)
+		.mutation(({ ctx, input }) => extendPeriod(ctx.db, ctx.identity, input)),
+	assignPeriod: protectedProcedure
+		.input(assignPeriodSchema)
+		.mutation(({ ctx, input }) => assignPeriod(ctx.db, ctx.identity, input)),
 	resetAccountPassword: protectedProcedure
 		.input(resetAccountPasswordSchema)
 		.mutation(({ ctx, input }) =>

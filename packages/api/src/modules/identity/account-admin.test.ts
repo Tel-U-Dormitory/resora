@@ -552,6 +552,7 @@ test("input rejects blank names, malformed usernames/email and forged privileges
 		"actor_user_id",
 		"target_user_id",
 		"action",
+		"details",
 		"created_at",
 	]);
 	const migration = readFileSync(

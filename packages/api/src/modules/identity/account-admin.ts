@@ -9,10 +9,13 @@ import {
 	buildings,
 	departments,
 	positions,
+	srPeriodMemberships,
+	srPeriods,
 	srProfiles,
 	systemPrivileges,
 	userProfiles,
 } from "@resora/db/schema/identity";
+import { srTenurePeriods, srTenureStatus } from "@resora/db/sr-tenure";
 import { TRPCError } from "@trpc/server";
 import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
 import type { z } from "zod";
@@ -96,6 +99,8 @@ export async function listAccounts(
 			const query = tx
 				.select({
 					userId: user.id,
+					tenureStatus: srTenureStatus(user.id),
+					periods: srTenurePeriods(user.id),
 					nim: user.username,
 					name: user.name,
 					email: user.email,
@@ -202,6 +207,28 @@ export async function createAccount(
 				{ ...data, buildingId: building.id, isActive: true },
 				passwordHash,
 			);
+			if (data.periodId) {
+				const [period] = await tx
+					.select({ id: srPeriods.id })
+					.from(srPeriods)
+					.where(eq(srPeriods.id, data.periodId))
+					.for("share");
+				if (!period)
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: "PERIOD_NOT_FOUND",
+					});
+				await tx
+					.insert(srPeriodMemberships)
+					.values({ userId, periodId: period.id });
+				await tx.insert(accountAuditLogs).values({
+					actorUserId: identity.userId,
+					targetUserId: userId,
+					action: "PERIOD_ASSIGNED",
+					details: { periodId: period.id },
+				});
+			}
+
 			await tx.insert(accountAuditLogs).values({
 				actorUserId: identity.userId,
 				targetUserId: userId,
@@ -282,13 +309,11 @@ export async function resetAccountPassword(
 			.set({ mustChangePassword: true, passwordResetRequired: true })
 			.where(eq(userProfiles.userId, data.userId));
 		await tx.delete(session).where(eq(session.userId, data.userId));
-		await tx
-			.insert(accountAuditLogs)
-			.values({
-				actorUserId: identity.userId,
-				targetUserId: data.userId,
-				action: "PASSWORD_RESET",
-			});
+		await tx.insert(accountAuditLogs).values({
+			actorUserId: identity.userId,
+			targetUserId: data.userId,
+			action: "PASSWORD_RESET",
+		});
 		return { temporaryPassword };
 	});
 }

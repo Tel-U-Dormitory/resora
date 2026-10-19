@@ -2,7 +2,9 @@ import { defineRelationsPart, sql } from "drizzle-orm";
 import {
 	boolean,
 	check,
+	date,
 	index,
+	jsonb,
 	pgEnum,
 	pgTable,
 	primaryKey,
@@ -117,6 +119,46 @@ export const srProfiles = pgTable(
 	],
 );
 
+export const srPeriods = pgTable(
+	"sr_periods",
+	{
+		id: uuid("id").defaultRandom().primaryKey(),
+		name: text("name").notNull().unique(),
+		startsOn: date("starts_on").notNull(),
+		endsOn: date("ends_on").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.defaultNow()
+			.notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true })
+			.defaultNow()
+			.$onUpdate(() => new Date())
+			.notNull(),
+	},
+	(table) => [
+		check("sr_periods_name_nonblank", sql`length(btrim(${table.name})) > 0`),
+		check("sr_periods_date_order", sql`${table.endsOn} >= ${table.startsOn}`),
+	],
+);
+
+export const srPeriodMemberships = pgTable(
+	"sr_period_memberships",
+	{
+		userId: text("user_id")
+			.notNull()
+			.references(() => srProfiles.userId),
+		periodId: uuid("period_id")
+			.notNull()
+			.references(() => srPeriods.id),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.defaultNow()
+			.notNull(),
+	},
+	(table) => [
+		primaryKey({ columns: [table.userId, table.periodId] }),
+		index("sr_period_memberships_period_idx").on(table.periodId),
+	],
+);
+
 export const systemPrivileges = pgTable(
 	"system_privileges",
 	{
@@ -144,6 +186,7 @@ export const accountAuditLogs = pgTable(
 			.notNull()
 			.references(() => user.id),
 		action: text("action").notNull(),
+		details: jsonb("details").$type<Record<string, unknown>>(),
 		createdAt: timestamp("created_at", { withTimezone: true })
 			.defaultNow()
 			.notNull(),
@@ -151,7 +194,7 @@ export const accountAuditLogs = pgTable(
 	(table) => [
 		check(
 			"account_audit_logs_action_check",
-			sql`(${table.action} IN ('ACCOUNT_CREATED', 'PASSWORD_RESET') AND ${table.actorUserId} IS NOT NULL) OR (${table.action} = 'SYSTEM_ADMIN_BOOTSTRAPPED' AND ${table.actorUserId} IS NULL)`,
+			sql`(${table.action} IN ('ACCOUNT_CREATED', 'PASSWORD_RESET', 'PERIOD_CREATED', 'PERIOD_EXTENDED', 'PERIOD_ASSIGNED') AND ${table.actorUserId} IS NOT NULL) OR (${table.action} = 'SYSTEM_ADMIN_BOOTSTRAPPED' AND ${table.actorUserId} IS NULL)`,
 		),
 		index("account_audit_logs_actor_created_idx").on(
 			table.actorUserId,
