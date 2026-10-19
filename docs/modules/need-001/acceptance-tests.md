@@ -235,3 +235,18 @@ Implemented UI changes, pending manual desktop/mobile UAT:
 - Manual UAT must verify keyboard focus, Escape/backdrop dismissal, drawer entrance/exit animation, reduced motion, saved themes, small screens, radial-menu Escape/outside dismissal, fixed Scan QR, optional-link selection limits, per-account preference restoration and unavailable browser storage, camera permissions, GPS failures, and successful/duplicate scans on real devices.
 
 CLI geometry coverage verifies all one-to-five navigation shortcut counts plus settings: no overlapping 52px buttons, bounds within a 320px viewport, and tighter grouping for fewer shortcuts. This is mathematical layout coverage, not rendered-device UAT.
+
+### Administrator management UI acceptance (2026-10-19)
+
+Automated evidence: isolated lifecycle integration suite has 16 passing cases / 111 assertions; offline suite has 272 passing cases; navigation capability/highlight tests have 3 passing cases. These establish API authorization, validation, atomic audit/session changes, preserved period/participant snapshots, stale-write rejection, conflict serialization and rollback. They do not establish browser usability.
+
+Manual UAT pending:
+
+1. SYSTEM_ADMIN sees separate Kelola akun and Periode menjabat links; ordinary SR cannot open either protected administration page. Moving between pages reuses account data; typing/search/filtering never requires Enter.
+2. Create a named period with valid WIB dates; select it, search/paginate/select up to 200 members, review their names/dates, cancel without mutation, then confirm. Already assigned members are identified and not duplicated. Continue an SR into a new period while preserving prior membership. Extending a shared period explicitly confirms that every member is affected.
+3. Edit SR name/email/department/valid position/building/manual active flag. Invalid organization/email fails safely. Saving refreshes directory data and revokes old sessions. Two stale administrator forms cannot overwrite each other. NIM remains the same; historical participant details remain unchanged.
+4. Hapus opens an archive explanation and confirmation. Cancel leaves the account untouched; confirm marks manual archival, rejects login and revokes sessions, preserving credentials/audit/presensi/period history. The account remains searchable and can be reactivated through Edit, subject to a current SR period. SYSTEM_ADMIN is not a target in the SR directory.
+5. Reset opens a confirmation dialog; cancel makes no change. Confirm shows a one-time temporary password and copy feedback/fallback; closing clears it. Login requires a new password and old sessions are invalidated. No plaintext is written into query cache, persistent storage or logs.
+6. Check Tab/Shift+Tab containment, Escape/backdrop dismissal when idle, disabled dismissal while submitting, focus return, accessible action names/tooltips, 44px targets, narrow mobile screens, 200% zoom, dark theme and reduced-motion preference. Verify clipboard behavior in the target HTTPS/browser context.
+
+Staging UAT for edit/archive depends on separately authorizing/applying the new audit constraint migration. No remote application or release is claimed by these automated results.

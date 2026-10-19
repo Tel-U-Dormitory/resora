@@ -493,3 +493,20 @@ Read-only postchecks confirmed the reset flag, audit details, both tenure tables
 The user subsequently explicitly authorized creation of a dedicated staging administrator and supplied its identity and initial credential. The previous administrator-readiness blocker is resolved. A one-off in-memory administrative operation reused the existing remote target/TLS/migration-history guard, bootstrap advisory lock, identity validation, Better Auth user/credential adapter, and the same atomic SYSTEM_ADMIN/profile/SUPERADMIN/bootstrap-audit invariants. The user-selected initial secret was hashed in memory, never printed, exported or added to source/documentation; no general bootstrap CLI/password-policy change was introduced. The temporary script was removed.
 
 Creation committed successfully. Native login returned HTTP 200; a verified session resolved to SYSTEM_ADMIN with an explicit SUPERADMIN grant, no SR profile and no tenure requirement. The protected account endpoint correctly denied access with PASSWORD_CHANGE_REQUIRED until the required first rotation. The immutable SYSTEM_ADMIN_BOOTSTRAPPED audit was present. Only the verification session was removed afterwards; no other sessions, existing SR identities, manual-active flags or period memberships were changed. Browser/manual first-password rotation and assignment of approved periods to the existing roster remain pending. No Production target was accessed and no commit was pushed.
+
+### Administrator account/period UI update (2026-10-19)
+
+The account directory remains `/admin/users`; period configuration/assignment is now `/admin/periods`, also linked in the administrator sidebar. Both pages share the cached account snapshot. Search/filter/navigation are local; writes invalidate the cache and the account directory has explicit refresh. Edit, archive and password reset use themed accessible dialogs; reset credentials are displayed only in memory and cleared when the dialog closes. Account archival uses the existing manual `is_active` flag, keeps the account in the directory and preserves all history. Component sources/license: [UI attribution](ui-attribution.md).
+
+**New migration:** `20261019033819_admin_account_maintenance` expands only the audit action CHECK with `ACCOUNT_UPDATED` and `ACCOUNT_ARCHIVED`. No new table, user-data rewrite, environment variable or dependency is introduced. Apply this migration before exercising edit/archive on a configured environment; without it, the audited transaction rolls back. It was applied only to a fresh, dedicated local PostgreSQL 17 scratch database for tests. **It has not been applied to staging/production in this update.** Remote migration requires explicit authorization under AGENTS.md; existing credentials are not an approval.
+
+Verification for this update:
+
+- `bun run test:offline`: **272 passed / 5,074 assertions**. The first sandboxed run could not bind the loopback HTTP listener; the permitted local rerun passed.
+- `bun test apps/web/src/config/navigation.test.ts`: **3 passed / 65 assertions**.
+- `RESORA_ADMIN_LIFECYCLE_TEST_DB_URL=<fresh loopback scratch URL> bun --no-env-file test packages/api/src/modules/identity/account-lifecycle.integration.test.ts`: **16 passed / 111 assertions**, including audited edit/archival, session revocation, login denial/restoration, stale and concurrent writes, immutable participant snapshots and audit-failure rollback. The scratch guard refuses remote/nonempty databases. An initial connection check ran before container readiness and was rerun after `pg_isready` succeeded.
+- `tsc --noEmit` in `apps/web` and `packages/api`: passed.
+- `next build` in `apps/web`, `tsdown` in `apps/server`: passed. No deployment was performed.
+- `biome check .` and `git diff --check`: passed.
+
+The test-only Docker container was removed after verification. No remote data/account mutation was performed. Browser/visual testing was not run; keyboard focus/return, tooltip hover, clipboard permissions, mobile sizing, dark theme and the complete administrator workflow still require manual UAT. Local commits remain on `feat/admin-account-lifecycle`, without push.
