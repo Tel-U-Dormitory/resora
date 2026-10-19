@@ -512,7 +512,10 @@ function qrFixture(
 		cookies: Record<string, string[]>;
 	}[] = [];
 	const execution = { idInTest: 1 };
-	const jars = new Map<number, Record<string, string[]>>();
+	const jars = new Map<string, Record<string, string[]>>();
+	const cookieLookups: string[] = [];
+	const cookieKey = (url: string) =>
+		`${execution.idInTest}:${new URL(url).origin}`;
 	class Metric {
 		constructor(readonly name: string) {
 			metrics.set(name, []);
@@ -558,19 +561,22 @@ function qrFixture(
 			},
 			http: {
 				cookieJar: () => ({
-					cookiesForURL: () => jars.get(execution.idInTest) || {},
+					cookiesForURL: (url: string) => {
+						cookieLookups.push(url);
+						return jars.get(cookieKey(url)) || {};
+					},
 				}),
 				post: (url: string, body: string, options: Record<string, unknown>) => {
 					requests.push({
 						url,
 						body,
 						options,
-						cookies: { ...jars.get(execution.idInTest) },
+						cookies: { ...jars.get(cookieKey(url)) },
 					});
 					if (url.endsWith("/api/auth/sign-in/username")) {
 						now += state.loginDelay;
 						if (state.login === 200 && state.cookie)
-							jars.set(execution.idInTest, {
+							jars.set(cookieKey(url), {
 								"__Secure-better-auth.session_token": [
 									`private-cookie-${execution.idInTest}`,
 								],
@@ -595,7 +601,7 @@ function qrFixture(
 			},
 		},
 	) as {
-		setup: () => { web: string };
+		setup: () => { web: string; requestOrigin: string };
 		journey: (cfg: unknown) => void;
 		fixture: typeof data;
 		users: typeof accounts;
@@ -615,6 +621,7 @@ function qrFixture(
 		metrics,
 		tags,
 		execution,
+		cookieLookups,
 		sum: (name: string) =>
 			metrics.get(`resora_qr_${name}`)?.reduce((a, b) => a + b, 0),
 	};
@@ -650,14 +657,112 @@ test("QR target gate requires both approvals, exact Preview pair and never accep
 		{ ACCOUNT_OFFSET: "-1" },
 		{ ACCOUNT_OFFSET: "49" },
 	];
-	for (const env of invalid) {
-		const f = qrFixture(env);
-		expect(() => f.runtime.setup()).toThrow();
-		expect(f.requests).toHaveLength(0);
-	}
+	for (const transport of ["web", "api-direct"])
+		for (const env of invalid) {
+			const f = qrFixture({
+				QR_TRANSPORT: transport,
+				VERCEL_API_BYPASS_SECRET: "offline-api-bypass",
+				...env,
+			});
+			expect(() => f.runtime.setup()).toThrow();
+			expect(f.requests).toHaveLength(0);
+		}
 	expect(qrFixture().runtime.setup().web).toContain(
 		"resora-git-test-stress-test-vps",
 	);
+});
+
+test("QR transport defaults to Web, rejects unknown modes and requires an explicit API bypass for api-direct", () => {
+	for (const mode of [undefined, "web"]) {
+		const f = qrFixture({
+			...(mode ? { QR_TRANSPORT: mode } : {}),
+			VERCEL_API_BYPASS_SECRET: "never-send-api-secret",
+		});
+		const cfg = f.runtime.setup();
+		expect(cfg.requestOrigin).toBe(cfg.web);
+		f.runtime.journey(cfg);
+		expect(f.requests.map((r) => r.url)).toEqual([
+			`${cfg.web}/api/auth/sign-in/username`,
+			`${cfg.web}/trpc/attendance.checkIn?batch=1`,
+		]);
+		expect(f.cookieLookups).toEqual([`${cfg.web}/trpc/attendance.checkIn`]);
+		expect(JSON.stringify(f.requests)).not.toContain("never-send-api-secret");
+	}
+	for (const mode of ["", "api", "API-DIRECT"])
+		expect(() => qrFixture({ QR_TRANSPORT: mode }).runtime.setup()).toThrow(
+			"QR_TRANSPORT must be web or api-direct",
+		);
+	for (const secret of [undefined, "", "   "]) {
+		const f = qrFixture({
+			QR_TRANSPORT: "api-direct",
+			VERCEL_WEB_BYPASS_SECRET: "not-an-api-secret",
+			VERCEL_BYPASS_SECRET: "not-an-api-fallback",
+			...(secret === undefined ? {} : { VERCEL_API_BYPASS_SECRET: secret }),
+		});
+		expect(() => f.runtime.setup()).toThrow(
+			"api-direct requires VERCEL_API_BYPASS_SECRET",
+		);
+		expect(f.requests).toHaveLength(0);
+	}
+});
+
+test("QR api-direct sends both requests and per-VU cookies to API, keeps Web Origin and isolates bypass secrets", () => {
+	for (const count of [2, 5, 10, 25, 50]) {
+		const f = qrFixture({
+			VUS: String(count),
+			QR_TRANSPORT: "api-direct",
+			VERCEL_API_BYPASS_SECRET: "private-api-bypass",
+			VERCEL_WEB_BYPASS_SECRET: "never-send-web-bypass",
+			VERCEL_BYPASS_SECRET: "never-send-fallback-bypass",
+		});
+		const cfg = f.runtime.setup();
+		expect(cfg.requestOrigin).toBe(
+			"https://resora-api-git-test-stress-test-vps-solc1us-projects.vercel.app",
+		);
+		for (let i = 1; i <= count; i++) {
+			f.execution.idInTest = i;
+			f.runtime.journey(cfg);
+		}
+		expect(f.requests).toHaveLength(count * 2);
+		for (let i = 0; i < count; i++) {
+			const login = f.requests[i * 2];
+			const submission = f.requests[i * 2 + 1];
+			expect(login?.url).toBe(`${cfg.requestOrigin}/api/auth/sign-in/username`);
+			expect(login?.cookies).toEqual({});
+			expect(submission?.url).toBe(
+				`${cfg.requestOrigin}/trpc/attendance.checkIn?batch=1`,
+			);
+			expect(submission?.cookies).toEqual({
+				"__Secure-better-auth.session_token": [`private-cookie-${i + 1}`],
+			});
+		}
+		for (const r of f.requests) {
+			expect(r.options.headers).toEqual({
+				"Content-Type": "application/json",
+				Origin: cfg.web,
+				"x-vercel-protection-bypass": "private-api-bypass",
+			});
+			expect(r.options.redirects).toBe(0);
+		}
+		expect(f.cookieLookups).toEqual(
+			Array(count).fill(`${cfg.requestOrigin}/trpc/attendance.checkIn`),
+		);
+		expect(f.sum("checked_in")).toBe(count);
+		expect(f.sum("journey_failed")).toBe(0);
+		expect(JSON.stringify(f.requests)).not.toMatch(
+			/never-send-web-bypass|never-send-fallback-bypass/,
+		);
+		expect(f.logs).toHaveLength(0);
+	}
+	const missingCookie = qrFixture({
+		QR_TRANSPORT: "api-direct",
+		VERCEL_API_BYPASS_SECRET: "private-api-bypass",
+	});
+	missingCookie.state.cookie = false;
+	missingCookie.runtime.journey(missingCookie.runtime.setup());
+	expect(missingCookie.requests).toHaveLength(1);
+	expect(missingCookie.sum("login_failed")).toBe(1);
+	expect(missingCookie.sum("checked_in")).toBe(0);
 });
 
 test("QR fixtures reject malformed tokens, mismatched sessions, expiry, future activation and invalid GPS before HTTP", () => {

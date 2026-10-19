@@ -24,6 +24,7 @@ const users = new SharedArray("approved QR synthetic accounts", () => {
 const fixture = readPrivate(__ENV.QR_FIXTURE_FILE || "./qr-fixture.local.json");
 const vus = Number(__ENV.VUS || "2");
 const offset = Number(__ENV.ACCOUNT_OFFSET || "0");
+const transport = __ENV.QR_TRANSPORT ?? "web";
 const counters = {};
 for (const name of [
 	"login_success",
@@ -92,6 +93,10 @@ export function setup() {
 		throw new Error(
 			"STOP: use only the approved Web/API Preview pair with TARGET_ORIGIN equal to WEB_ORIGIN",
 		);
+	if (!["web", "api-direct"].includes(transport))
+		throw new Error("STOP: QR_TRANSPORT must be web or api-direct");
+	if (transport === "api-direct" && !__ENV.VERCEL_API_BYPASS_SECRET?.trim())
+		throw new Error("STOP: api-direct requires VERCEL_API_BYPASS_SECRET");
 	if (
 		![2, 5, 10, 25, 50].includes(vus) ||
 		!Number.isInteger(offset) ||
@@ -158,7 +163,7 @@ export function setup() {
 		throw new Error(
 			"STOP: QR fixture must be activated and have more than 120 seconds remaining",
 		);
-	return { web };
+	return { web, requestOrigin: transport === "api-direct" ? api : web };
 }
 
 function recordHttp(response, phase) {
@@ -235,11 +240,14 @@ export default function (cfg) {
 	for (const metric of Object.values(counters)) metric.add(0);
 	const account = users[offset + vu.idInTest - 1];
 	const headers = { "Content-Type": "application/json", Origin: cfg.web };
-	const bypass = __ENV.VERCEL_WEB_BYPASS_SECRET || __ENV.VERCEL_BYPASS_SECRET;
+	const bypass =
+		transport === "api-direct"
+			? __ENV.VERCEL_API_BYPASS_SECRET
+			: __ENV.VERCEL_WEB_BYPASS_SECRET || __ENV.VERCEL_BYPASS_SECRET;
 	if (bypass) headers["x-vercel-protection-bypass"] = bypass;
 	const started = Date.now();
 	const login = http.post(
-		`${cfg.web}/api/auth/sign-in/username`,
+		`${cfg.requestOrigin}/api/auth/sign-in/username`,
 		JSON.stringify({ username: account.username, password: account.password }),
 		{
 			headers,
@@ -250,10 +258,10 @@ export default function (cfg) {
 	);
 	loginMs.add(login.timings.duration);
 	recordHttp(login, "login");
-	// Same-origin k6 per-VU cookie jar, matching the browser; no copied Cookie/Authorization headers.
+	// Login and check-in share the selected origin's per-VU jar; never copy cookies across hosts.
 	const cookies = http
 		.cookieJar()
-		.cookiesForURL(`${cfg.web}/trpc/attendance.checkIn`);
+		.cookiesForURL(`${cfg.requestOrigin}/trpc/attendance.checkIn`);
 	const authenticated =
 		login.status === 200 &&
 		Object.keys(cookies).some((name) =>
@@ -283,7 +291,7 @@ export default function (cfg) {
 		return;
 	}
 	const response = http.post(
-		`${cfg.web}/trpc/attendance.checkIn?batch=1`,
+		`${cfg.requestOrigin}/trpc/attendance.checkIn?batch=1`,
 		JSON.stringify({
 			0: {
 				qrToken: fixture.qrToken,

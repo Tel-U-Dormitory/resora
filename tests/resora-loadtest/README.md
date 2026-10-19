@@ -85,7 +85,8 @@ share the existing per-IP limits; do not treat a 429 as a network failure or byp
 
 Protected Preview requires an existing, approved automation bypass. Load its value
 privately into `VERCEL_WEB_BYPASS_SECRET` (`VERCEL_BYPASS_SECRET` remains a fallback); never put the value in commands/reports/Git.
-`VERCEL_API_BYPASS_SECRET` is reserved for read-only API preflight, not sent to Web.
+`loadtest.js` never sends `VERCEL_API_BYPASS_SECRET` to Web. The separate QR entry
+point may use it only in explicit `api-direct` mode, described below.
 Web/API are different projects: verify bypass forwarding works for both; do not
 create bypasses or disable deployment protection merely to run this test. A 302 to
 vercel.com or an authentication-protection page is a blocker, not an application result.
@@ -192,8 +193,9 @@ approval flag, PM/operator must independently verify and record privately:
    accuracy is positive and <=40 m, with valid latitude/longitude ranges.
 7. `AUTH_RATE_LIMIT_ENABLED=true` and existing pool/security settings are unchanged.
 8. PM separately approves the attendance writes for the exact wave/event and the
-   necessary manual fixture preparation. Deployment Protection must already allow
-   Web -> API forwarding; a redirect/protection page is a blocker.
+   necessary manual fixture preparation. Web mode requires Deployment Protection
+   to allow Web -> API forwarding. If that hop redirects to SSO, stop Web testing;
+   explicit `api-direct` mode can test the verified isolated backend separately.
 
 If any item is unknown, **STOP**, including before the first 2-VU run. This task did
 not verify remote settings, accounts, QR state, GPS or DB identity.
@@ -204,7 +206,9 @@ Derived from `check-in-scanner.tsx`, `utils/trpc.ts`, `attendance.router.ts`,
 `attendance.schema.ts`, `check-in.ts` and `qr.ts`, plus installed tRPC 11.19.0:
 
 - Login POST `/api/auth/sign-in/username`, then POST
-  `/trpc/attendance.checkIn?batch=1`, both through Web Preview with redirects disabled.
+  `/trpc/attendance.checkIn?batch=1`, both through Web Preview by default, or both
+  directly to the approved API Preview with `QR_TRANSPORT=api-direct`. Redirects
+  remain disabled. Both transports retain `Origin: WEB_ORIGIN`.
 - tRPC uses `httpBatchLink` with the default JSON transformer: body is
   `{"0":{"qrToken":"<private token>","location":{"latitude":0,"longitude":0,"accuracyMeters":1}}}`.
   The numbers here describe encoding only, **not an approved test location**.
@@ -274,6 +278,7 @@ $env:API_ORIGIN = 'https://resora-api-git-test-stress-test-vps-solc1us-projects.
 $env:ACCOUNTS_FILE = './accounts.local.json'
 $env:ACCOUNT_OFFSET = '0'
 $env:VUS = '2'
+$env:QR_TRANSPORT = 'web' # Default when absent.
 $env:QR_FIXTURE_FILE = './qr-fixture-2.local.json'
 # Only after independent preflight AND separate PM approval for this wave:
 $env:APPROVE_ISOLATED_TARGET = 'yes'
@@ -285,6 +290,39 @@ $run = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')
 k6 run --summary-export "./reports/qr-$run-$($env:VUS)vu.json" ./qr-checkin.js
 Remove-Item Env:APPROVE_QR_CHECKIN_TEST, Env:APPROVE_ISOLATED_TARGET
 ```
+
+For **backend-only** testing when Web -> API rewrite is blocked by Vercel SSO,
+use the same verified origins, account/QR fixture and wave settings above, without
+running the Web test first. Keep `TARGET_ORIGIN = WEB_ORIGIN`; do not change Origin
+to the API host. After the same isolation checks and separate wave approval:
+
+```powershell
+$env:QR_TRANSPORT = 'api-direct'
+$qrApiBypass = Read-Host 'Existing approved API Preview automation bypass' -AsSecureString
+$env:VERCEL_API_BYPASS_SECRET = [System.Net.NetworkCredential]::new('', $qrApiBypass).Password
+Remove-Variable qrApiBypass
+$env:APPROVE_ISOLATED_TARGET = 'yes'
+$env:APPROVE_QR_CHECKIN_TEST = 'yes'
+$run = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')
+try {
+    k6 run --summary-export "./reports/qr-api-direct-$run-$($env:VUS)vu.json" ./qr-checkin.js
+} finally {
+    Remove-Item Env:VERCEL_API_BYPASS_SECRET, Env:QR_TRANSPORT, Env:APPROVE_QR_CHECKIN_TEST, Env:APPROVE_ISOLATED_TARGET
+}
+```
+
+Direct mode requires a nonblank `VERCEL_API_BYPASS_SECRET`; there is no Web/generic
+bypass fallback. Web mode never sends the API bypass; direct mode never sends the
+Web/generic bypass. Each VU keeps its API-scoped login cookie for the API mutation.
+Unknown transport values fail before HTTP. All existing target, fixture, VU, rate-limit
+and no-retry gates remain in force. Label direct-mode reports as backend-only: they
+do not validate the broken Web rewrite or end-to-end browser capacity.
+
+The API must still accept the verified Web Origin and issue a session cookie usable
+on the API host. If either fails, stop. In particular, an API configured to require
+`AUTH_PROXY_SECRET` can return `UNTRUSTED_AUTH_PROXY` for direct login; report that
+as BLOCKED for PM review, without adding proxy tokens, spoofing IPs, weakening guards
+or changing deployment configuration. No live compatibility has been verified here.
 
 Do not execute this block until the missing gate evidence and approval exist. For
 each subsequent wave, manually change VUS and the matching **fresh** fixture path,
