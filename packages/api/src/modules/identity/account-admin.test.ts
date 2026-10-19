@@ -164,7 +164,9 @@ function fixture() {
 							rows = users
 								.slice(
 									record.offset ?? 0,
-									(record.offset ?? 0) + (record.limit ?? 20),
+									record.limit === undefined
+										? undefined
+										: (record.offset ?? 0) + record.limit,
 								)
 								.map((row) => ({
 									userId: row.id,
@@ -512,4 +514,25 @@ test("input rejects blank names, malformed usernames/email and forged privileges
 	expect(migration).toContain("BEFORE UPDATE OR DELETE");
 	expect(migration).toContain("BEFORE TRUNCATE");
 	expect(migration).not.toContain("DROP ");
+});
+
+test("admin snapshot returns the complete safe roster without pagination and denies non-admins", async () => {
+	const f = fixture();
+	f.state.tables.user = Array.from({ length: 65 }, (_, index) => ({
+		id: `snapshot-${index}`,
+		username: `000${index}`,
+		name: `SR ${index}`,
+		email: `sr${index}@example.invalid`,
+		password: "never-return",
+	}));
+	const result = await f.caller.identity.accountSnapshot();
+	expect(result.accounts).toHaveLength(65);
+	const query = f.state.queries.find((row) => row.fields.includes("building"));
+	expect(query?.limit).toBeUndefined();
+	expect(query?.offset).toBeUndefined();
+	expect(result.accounts[0]).not.toHaveProperty("password");
+	f.state.granted = false;
+	await expect(f.caller.identity.accountSnapshot()).rejects.toMatchObject({
+		code: "FORBIDDEN",
+	});
 });

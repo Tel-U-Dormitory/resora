@@ -67,6 +67,7 @@ export async function listAccounts(
 	db: Database,
 	identity: ActiveIdentity,
 	input: z.input<typeof listAccountsSchema>,
+	snapshot = false,
 ) {
 	requireAdmin(identity);
 	const data = listAccountsSchema.parse(input);
@@ -91,7 +92,7 @@ export async function listAccounts(
 				.innerJoin(userProfiles, eq(userProfiles.userId, user.id))
 				.innerJoin(srProfiles, eq(srProfiles.userId, user.id))
 				.where(filter);
-			const accounts = await tx
+			const query = tx
 				.select({
 					userId: user.id,
 					nim: user.username,
@@ -120,9 +121,12 @@ export async function listAccounts(
 					),
 				)
 				.where(filter)
-				.orderBy(asc(user.username), asc(user.id))
-				.limit(data.pageSize)
-				.offset((data.page - 1) * data.pageSize);
+				.orderBy(asc(user.username), asc(user.id));
+			const accounts = snapshot
+				? await query
+				: await query
+						.limit(data.pageSize)
+						.offset((data.page - 1) * data.pageSize);
 			return {
 				accounts,
 				total: count?.total ?? 0,

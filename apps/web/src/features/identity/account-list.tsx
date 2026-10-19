@@ -13,27 +13,41 @@ import { queryErrorMessage } from "@/utils/request-error";
 import { trpc } from "@/utils/trpc";
 
 export default function AccountList() {
-	const [searchInput, setSearchInput] = useState("");
 	const [search, setSearch] = useState("");
 	const [departmentCode, setDepartmentCode] = useState("");
 	const [status, setStatus] = useState("");
 	const [page, setPage] = useState(1);
 	const references = useQuery({
 		...trpc.identity.accountReferences.queryOptions(),
+		staleTime: Number.POSITIVE_INFINITY,
+		gcTime: Number.POSITIVE_INFINITY,
+		refetchOnWindowFocus: false,
+		refetchOnReconnect: false,
 		retry: false,
 		meta: { errorHandledLocally: true },
 	});
 	const accounts = useQuery({
-		...trpc.identity.listAccounts.queryOptions({
-			search,
-			page,
-			pageSize: 20,
-			departmentCode: departmentCode || undefined,
-			isActive: status ? status === "active" : undefined,
-		}),
+		...trpc.identity.accountSnapshot.queryOptions(),
+		staleTime: Number.POSITIVE_INFINITY,
+		gcTime: Number.POSITIVE_INFINITY,
+		refetchOnWindowFocus: false,
+		refetchOnReconnect: false,
 		retry: false,
 		meta: { errorHandledLocally: true },
 	});
+	const filtered = (accounts.data?.accounts ?? []).filter(
+		(account) =>
+			(!search.trim() ||
+				`${account.name} ${account.nim ?? ""}`
+					.toLowerCase()
+					.includes(search.trim().toLowerCase())) &&
+			(!departmentCode || account.departmentCode === departmentCode) &&
+			(!status || account.isActive === (status === "active")),
+	);
+	const total = filtered.length;
+	const currentPage = Math.min(page, Math.max(1, Math.ceil(total / 20)));
+	const visible = filtered.slice((currentPage - 1) * 20, currentPage * 20);
+
 	return (
 		<section className="resora-page space-y-6">
 			<div className="flex flex-wrap items-start justify-between gap-4">
@@ -58,16 +72,18 @@ export default function AccountList() {
 						onSubmit={(event) => {
 							event.preventDefault();
 							setPage(1);
-							setSearch(searchInput.trim());
 						}}
 					>
 						<div className="space-y-2">
 							<Label htmlFor="account-search">Nama atau NIM</Label>
 							<Input
 								id="account-search"
-								value={searchInput}
+								value={search}
 								maxLength={100}
-								onChange={(event) => setSearchInput(event.target.value)}
+								onChange={(event) => {
+									setSearch(event.target.value);
+									setPage(1);
+								}}
 								placeholder="Cari akun SR"
 							/>
 						</div>
@@ -106,11 +122,15 @@ export default function AccountList() {
 							</Select>
 						</div>
 						<Button
-							type="submit"
+							type="button"
+							onClick={() => {
+								void accounts.refetch();
+								void references.refetch();
+							}}
 							disabled={accounts.isFetching}
 							loading={accounts.isFetching}
 						>
-							Cari
+							Perbarui data
 						</Button>
 					</form>
 					{references.error && (
@@ -153,7 +173,7 @@ export default function AccountList() {
 				<>
 					<Card>
 						<CardContent className="overflow-x-auto">
-							{accounts.data.accounts.length === 0 ? (
+							{total === 0 ? (
 								<p className="py-8 text-center text-muted-foreground text-sm">
 									Tidak ada akun yang sesuai pencarian.
 								</p>
@@ -183,7 +203,7 @@ export default function AccountList() {
 										</tr>
 									</thead>
 									<tbody>
-										{accounts.data.accounts.map((account) => (
+										{visible.map((account) => (
 											<tr
 												key={account.userId}
 												className="border-border border-b last:border-0"
@@ -266,22 +286,20 @@ export default function AccountList() {
 					</Card>
 					<div className="flex flex-wrap items-center justify-between gap-3">
 						<p className="text-muted-foreground text-sm">
-							{accounts.data.total} akun · Halaman {page}
+							{total} akun · Halaman {currentPage}
 						</p>
 						<div className="flex gap-2">
 							<Button
 								variant="outline"
-								disabled={page === 1 || accounts.isFetching}
-								onClick={() => setPage(page - 1)}
+								disabled={currentPage === 1}
+								onClick={() => setPage(currentPage - 1)}
 							>
 								Sebelumnya
 							</Button>
 							<Button
 								variant="outline"
-								disabled={
-									page * 20 >= accounts.data.total || accounts.isFetching
-								}
-								onClick={() => setPage(page + 1)}
+								disabled={currentPage * 20 >= total}
+								onClick={() => setPage(currentPage + 1)}
 							>
 								Berikutnya
 							</Button>

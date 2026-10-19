@@ -30,6 +30,9 @@ import {
 } from "./identity-policy";
 
 export const identityRouter = router({
+	accountSnapshot: protectedProcedure.query(({ ctx }) =>
+		listAccounts(ctx.db, ctx.identity, {}, true),
+	),
 	listAccounts: protectedProcedure
 		.input(listAccountsSchema)
 		.query(({ ctx, input }) => listAccounts(ctx.db, ctx.identity, input)),

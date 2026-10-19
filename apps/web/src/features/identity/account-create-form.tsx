@@ -200,7 +200,7 @@ export default function AccountCreateForm() {
 									});
 									void queryClient
 										.invalidateQueries({
-											queryKey: trpc.identity.listAccounts.pathKey(),
+											queryKey: trpc.identity.pathKey(),
 										})
 										.catch(() => {});
 								} catch (failure) {
