@@ -337,6 +337,7 @@ function fixture() {
 							rows = [
 								{
 									...identity,
+									tenureStatus: "ACTIVE",
 									userId: operator ? identity.userId : "synthetic-target",
 									name: "Synthetic",
 									positionCode: operator ? state.operatorPosition : "ANGGOTA",
@@ -948,6 +949,7 @@ test("protected Phase 6 routes reject anonymous, inactive and password-change ga
 			where: async () => [
 				{
 					...f.identity,
+					tenureStatus: "ACTIVE",
 					isSuperadmin: true,
 					isActive: gate !== "inactive",
 					mustChangePassword: gate === "password",

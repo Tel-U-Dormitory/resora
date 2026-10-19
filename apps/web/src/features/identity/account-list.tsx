@@ -6,13 +6,18 @@ import { Select } from "@resora/ui/components/select";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { queryErrorMessage } from "@/utils/request-error";
 import { queryClient, trpc } from "@/utils/trpc";
 import AccountPasswordReset from "./account-password-reset";
 import AccountPeriodManager from "./account-period-manager";
+import {
+	accountStatus,
+	accountStatusLabels,
+	jakartaToday,
+} from "./account-status";
 
 export default function AccountList() {
 	const [search, setSearch] = useState("");
@@ -20,6 +25,11 @@ export default function AccountList() {
 	const [status, setStatus] = useState("");
 	const [page, setPage] = useState(1);
 	const [selected, setSelected] = useState<string[]>([]);
+	const [today, setToday] = useState(jakartaToday);
+	useEffect(() => {
+		const timer = setInterval(() => setToday(jakartaToday()), 60_000);
+		return () => clearInterval(timer);
+	}, []);
 	const references = useQuery({
 		...trpc.identity.accountReferences.queryOptions(),
 		staleTime: Number.POSITIVE_INFINITY,
@@ -45,7 +55,7 @@ export default function AccountList() {
 					.toLowerCase()
 					.includes(search.trim().toLowerCase())) &&
 			(!departmentCode || account.departmentCode === departmentCode) &&
-			(!status || account.isActive === (status === "active")),
+			(!status || accountStatus(account, today) === status),
 	);
 	const total = filtered.length;
 	const currentPage = Math.min(page, Math.max(1, Math.ceil(total / 20)));
@@ -125,7 +135,10 @@ export default function AccountList() {
 							>
 								<option value="">Semua status</option>
 								<option value="active">Aktif</option>
-								<option value="inactive">Nonaktif</option>
+								<option value="inactive">Nonaktif manual</option>
+								<option value="archived">Diarsipkan / Purna</option>
+								<option value="scheduled">Belum mulai</option>
+								<option value="unassigned">Belum ada periode</option>
 							</Select>
 						</div>
 						<Button
@@ -181,6 +194,28 @@ export default function AccountList() {
 			)}
 			{accounts.data && (
 				<>
+					<div className="flex flex-wrap gap-2">
+						<Button
+							variant="outline"
+							onClick={() =>
+								setSelected((current) => [
+									...new Set([
+										...current,
+										...visible.map((account) => account.userId),
+									]),
+								])
+							}
+						>
+							Pilih halaman ini
+						</Button>
+						<Button
+							variant="outline"
+							disabled={!selected.length}
+							onClick={() => setSelected([])}
+						>
+							Hapus pilihan ({selected.length})
+						</Button>
+					</div>
 					<Card>
 						<CardContent className="overflow-x-auto">
 							{total === 0 ? (
@@ -313,9 +348,9 @@ export default function AccountList() {
 												</td>
 												<td data-label="Status" className="px-3 py-4">
 													<span
-														className={`whitespace-nowrap rounded-full px-2.5 py-1 font-semibold text-xs ${account.isActive ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}
+														className={`whitespace-nowrap rounded-full px-2.5 py-1 font-semibold text-xs ${accountStatus(account, today) === "active" ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}
 													>
-														{account.isActive ? "Aktif" : "Nonaktif"}
+														{accountStatusLabels[accountStatus(account, today)]}
 													</span>
 												</td>
 												<td

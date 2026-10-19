@@ -5,6 +5,7 @@ import { createAuth } from "@resora/auth";
 import { getActiveIdentity } from "@resora/auth/sr-access";
 import { createDb, type Database } from "@resora/db";
 import { seedOrganization } from "@resora/db/organization";
+import { eventParticipants } from "@resora/db/schema/attendance";
 import { account, session, user } from "@resora/db/schema/auth";
 import {
 	accountAuditLogs,
@@ -18,6 +19,11 @@ import { eq, sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { appRouter } from "../../routers";
 import { createPeriodSchema } from "./account-period.schema";
+import {
+	getActiveSrCandidate,
+	getActiveSrDirectory,
+	getCheckInSr,
+} from "./identity.public";
 
 const url = process.env.RESORA_ADMIN_LIFECYCLE_TEST_DB_URL;
 export function guardLifecycleTestUrl(value: string) {
@@ -62,6 +68,7 @@ test("lifecycle scratch guard and calendar-date validation", () => {
 		let caller: ReturnType<typeof appRouter.createCaller>;
 		let sr: Awaited<ReturnType<typeof caller.identity.createAccount>>;
 		let activePeriodId: string;
+		let currentPassword: string;
 		const adminId = randomUUID();
 		const config = {
 			BETTER_AUTH_URL: "http://localhost:3000",
@@ -234,6 +241,7 @@ test("lifecycle scratch guard and calendar-date validation", () => {
 			const reset = await caller.identity.resetAccountPassword({
 				userId: sr.userId,
 			});
+			currentPassword = reset.temporaryPassword;
 			const [credential] = await db
 				.select()
 				.from(account)
@@ -262,6 +270,206 @@ test("lifecycle scratch guard and calendar-date validation", () => {
 			expect(
 				JSON.stringify(await db.select().from(accountAuditLogs)),
 			).not.toContain(reset.temporaryPassword);
+		});
+		function request(path: string, body?: unknown, cookie = "") {
+			return auth.handler(
+				new Request(`${config.BETTER_AUTH_URL}/api/auth/${path}`, {
+					method: body ? "POST" : "GET",
+					headers: {
+						origin: config.CORS_ORIGIN,
+						"content-type": "application/json",
+						cookie,
+					},
+					...(body ? { body: JSON.stringify(body) } : {}),
+				}),
+			);
+		}
+		test("expiry blocks correct-password login and existing sessions, preserves snapshots, renewal restores only eligible SR", async () => {
+			const login = await request("sign-in/username", {
+				username: sr.nim,
+				password: currentPassword,
+			});
+			expect(login.status).toBe(200);
+			const cookie = login.headers.get("set-cookie")?.split(";")[0] ?? "";
+			const newPassword = "SyntheticRotatedPassword42";
+			const rotation = await request(
+				"change-password",
+				{ currentPassword, newPassword },
+				cookie,
+			);
+			expect(rotation.status).toBe(200);
+			currentPassword = newPassword;
+			const activeLogin = await request("sign-in/username", {
+				username: sr.nim,
+				password: currentPassword,
+			});
+			const activeCookie =
+				activeLogin.headers.get("set-cookie")?.split(";")[0] ?? "";
+			const resident = appRouter.createCaller({
+				db,
+				authConfig: config,
+				session: { user: { id: sr.userId } } as never,
+			});
+			expect(await resident.identity.profile()).toMatchObject({ nim: sr.nim });
+			const event = await caller.attendance.create({
+				title: "Synthetic tenure history",
+				startsAt: "2026-01-01T00:00:00Z",
+				endsAt: "2090-01-01T00:00:00Z",
+				rosterCriteria: { allSr: true },
+				session: { centerLat: 0, centerLng: 0 },
+			});
+			await caller.attendance.publish({ eventId: event.eventId });
+			const snapshots = await db
+				.select()
+				.from(eventParticipants)
+				.where(eq(eventParticipants.eventId, event.eventId));
+			expect(snapshots.some((row) => row.userId === sr.userId)).toBe(true);
+			await db
+				.update(srPeriods)
+				.set({ startsOn: "2000-01-01", endsOn: "2001-12-31" })
+				.where(eq(srPeriods.id, activePeriodId));
+			const expired = await request("sign-in/username", {
+				username: sr.nim,
+				password: currentPassword,
+			});
+			expect(expired.status).toBe(401);
+			expect(await expired.json()).toMatchObject({
+				code: "SR_TENURE_EXPIRED",
+				message: "maaf periode jabatan anda telah purna",
+			});
+			expect(expired.headers.get("set-cookie")).toBeNull();
+			const wrong = await request("sign-in/username", {
+				username: sr.nim,
+				password: "SyntheticWrongPassword42",
+			});
+			expect(await wrong.json()).toMatchObject({
+				code: "INVALID_USERNAME_OR_PASSWORD",
+			});
+			expect(
+				(await request("get-session", undefined, activeCookie)).status,
+			).toBe(401);
+			await expect(resident.identity.profile()).rejects.toMatchObject({
+				code: "UNAUTHORIZED",
+			});
+			expect(await getActiveIdentity(db, sr.userId)).toBeNull();
+			expect(
+				(await getActiveSrDirectory(db)).candidates.some(
+					(row) => row.userId === sr.userId,
+				),
+			).toBe(false);
+			await db.transaction(async (tx) => {
+				expect(await getActiveSrCandidate(tx, sr.userId)).toBeNull();
+				expect(await getCheckInSr(tx, sr.userId)).toBeNull();
+			});
+			expect(
+				await db
+					.select()
+					.from(eventParticipants)
+					.where(eq(eventParticipants.eventId, event.eventId)),
+			).toEqual(snapshots);
+			await db
+				.insert(systemPrivileges)
+				.values({ userId: sr.userId, privilegeCode: "SUPERADMIN" });
+			expect(await getActiveIdentity(db, sr.userId)).toBeNull();
+			expect(await getActiveIdentity(db, adminId)).toMatchObject({
+				actor: "SYSTEM_ADMIN",
+			});
+			const renewal = await caller.identity.createPeriod({
+				name: "Renewal",
+				startsOn: "2000-01-01",
+				endsOn: "2099-12-31",
+			});
+			await db
+				.update(userProfiles)
+				.set({ isActive: false })
+				.where(eq(userProfiles.userId, sr.userId));
+			await caller.identity.assignPeriod({
+				periodId: renewal.id,
+				userIds: [sr.userId],
+			});
+			expect(await getActiveIdentity(db, sr.userId)).toBeNull();
+			await db
+				.update(userProfiles)
+				.set({ isActive: true })
+				.where(eq(userProfiles.userId, sr.userId));
+			expect(await getActiveIdentity(db, sr.userId)).toMatchObject({
+				actor: "SR",
+			});
+			expect(
+				(
+					await request("sign-in/username", {
+						username: sr.nim,
+						password: currentPassword,
+					})
+				).status,
+			).toBe(200);
+			expect(
+				await db
+					.select()
+					.from(srPeriodMemberships)
+					.where(eq(srPeriodMemberships.userId, sr.userId)),
+			).toHaveLength(3);
+		});
+		test("unassigned/future SR cannot login, ordinary SR cannot manage periods and concurrent assignment is idempotent", async () => {
+			const unassigned = await caller.identity.createAccount({
+				name: "Unassigned",
+				nim: "0000000010",
+				email: "unassigned@example.invalid",
+				departmentCode: "HCO",
+				positionCode: "ANGGOTA",
+				buildingCode: "A",
+			});
+			const denied = await request("sign-in/username", {
+				username: unassigned.nim,
+				password: unassigned.temporaryPassword,
+			});
+			expect(denied.status).toBe(401);
+			expect(await denied.json()).toMatchObject({
+				code: "SR_TENURE_NOT_ACTIVE",
+			});
+			const future = await caller.identity.createPeriod({
+				name: "Future",
+				startsOn: "2200-01-01",
+				endsOn: "2200-12-31",
+			});
+			const results = await Promise.all([
+				caller.identity.assignPeriod({
+					periodId: future.id,
+					userIds: [unassigned.userId],
+				}),
+				caller.identity.assignPeriod({
+					periodId: future.id,
+					userIds: [unassigned.userId],
+				}),
+			]);
+			expect(results.reduce((count, row) => count + row.assigned, 0)).toBe(1);
+			expect(await getActiveIdentity(db, unassigned.userId)).toBeNull();
+			const scheduled = await request("sign-in/username", {
+				username: unassigned.nim,
+				password: unassigned.temporaryPassword,
+			});
+			expect(await scheduled.json()).toMatchObject({
+				code: "SR_TENURE_NOT_ACTIVE",
+			});
+			await caller.identity.assignPeriod({
+				periodId:
+					(await caller.identity.listPeriods()).find(
+						(period) => period.name === "Renewal",
+					)?.id ?? "",
+				userIds: [unassigned.userId],
+			});
+			const ordinary = appRouter.createCaller({
+				db,
+				authConfig: config,
+				session: { user: { id: unassigned.userId } } as never,
+			});
+			await expect(
+				ordinary.identity.createPeriod({
+					name: "Forbidden",
+					startsOn: "2026-01-01",
+					endsOn: "2026-12-31",
+				}),
+			).rejects.toMatchObject({ code: "FORBIDDEN" });
 		});
 	},
 );

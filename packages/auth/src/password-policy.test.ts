@@ -15,6 +15,7 @@ for (const kind of [
 		const profile = {
 			userId: "synthetic-password-policy",
 			actor: kind === "SYSTEM_ADMIN" ? "SYSTEM_ADMIN" : "SR",
+			tenureStatus: "ACTIVE",
 			isActive: true,
 			mustChangePassword: true,
 			isSuperadmin: kind !== "SR" && kind !== "RESET_SR",

@@ -25,7 +25,7 @@ const query = {
 	leftJoin: () => query,
 	where: async () => {
 		if (failQuery) throw new Error("synthetic-private-query");
-		return identity ? [identity] : [];
+		return identity ? [{ tenureStatus: "ACTIVE", ...identity }] : [];
 	},
 };
 const db = {
@@ -780,5 +780,12 @@ test("backup download is private, rechecks revoked privileges and cleans up on s
 	} finally {
 		await new Promise<void>((resolve) => listener.close(() => resolve()));
 		await rm(directory, { recursive: true, force: true });
+	}
+});
+
+test("expired, future and unassigned SR cannot use protected HTTP even with SUPERADMIN", async () => {
+	for (const tenureStatus of ["EXPIRED", "SCHEDULED", "UNASSIGNED"]) {
+		identity = { ...identity, tenureStatus, isSuperadmin: true };
+		expect((await fetch(`${base}/trpc/privateData`)).status).toBe(401);
 	}
 });

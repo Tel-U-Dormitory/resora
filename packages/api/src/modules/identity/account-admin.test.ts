@@ -126,6 +126,7 @@ function fixture() {
 							? [
 									{
 										...admin,
+										tenureStatus: "ACTIVE",
 										isSuperadmin: state.granted,
 										name: "Synthetic admin",
 										buildingCode: "B",

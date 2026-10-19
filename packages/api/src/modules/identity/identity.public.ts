@@ -14,6 +14,7 @@ import {
 	systemPrivileges,
 	userProfiles,
 } from "@resora/db/schema/identity";
+import { srTenureStatus } from "@resora/db/sr-tenure";
 import { and, eq } from "drizzle-orm";
 
 export { isValidSrAssignment } from "@resora/db/organization";
@@ -54,13 +55,18 @@ async function readActiveSrDirectory(
 				userId ? eq(userProfiles.userId, userId) : undefined,
 				eq(userProfiles.actor, "SR"),
 				eq(userProfiles.isActive, true),
+				eq(srTenureStatus(userProfiles.userId), "ACTIVE"),
 				eq(departments.isActive, true),
 				eq(positions.isActive, true),
 				eq(buildings.isActive, true),
 			),
 		);
 	// FOR SHARE prevents concurrent assignment/deactivation from invalidating publication's view.
-	const rows = await (lock ? query.for("share") : query);
+	let rows = await (lock ? query.for("share") : query);
+	if (lock) {
+		// Re-evaluate statement time after potentially waiting for profile/reference locks.
+		rows = await query;
+	}
 	const candidates: (SrCandidate & {
 		mustChangePassword: boolean;
 		passwordResetRequired?: boolean;

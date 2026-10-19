@@ -11,6 +11,7 @@ for (const rateLimitEnabled of [undefined, "true", "false"] as const) {
 		const profile = {
 			userId: "synthetic-sr",
 			actor: "SR",
+			tenureStatus: "ACTIVE",
 			isActive: true,
 			mustChangePassword: false,
 			nim: "0000000001",

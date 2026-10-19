@@ -284,11 +284,15 @@ export default function LoginForm({ expired = false }: { expired?: boolean }) {
 									});
 									if (result.error) {
 										setError(
-											result.error.status === 429
-												? "Terlalu banyak percobaan. Tunggu satu menit sebelum mencoba kembali."
-												: result.error.status >= 500
-													? "Layanan masuk sedang tidak tersedia. Silakan coba kembali."
-													: "NIM / username atau password tidak valid.",
+											result.error.code === "SR_TENURE_EXPIRED"
+												? "maaf periode jabatan anda telah purna"
+												: result.error.code === "SR_TENURE_NOT_ACTIVE"
+													? "Periode jabatan Anda belum aktif. Hubungi administrator."
+													: result.error.status === 429
+														? "Terlalu banyak percobaan. Tunggu satu menit sebelum mencoba kembali."
+														: result.error.status >= 500
+															? "Layanan masuk sedang tidak tersedia. Silakan coba kembali."
+															: "NIM / username atau password tidak valid.",
 										);
 										return;
 									}
