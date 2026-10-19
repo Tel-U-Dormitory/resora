@@ -147,7 +147,8 @@ export default function AccountPeriodManager({
 				<p className="text-muted-foreground text-sm">
 					Pilih anggota pada daftar akun, lalu tetapkan periode ini. Anggota
 					yang lanjut memakai akun yang sama; riwayat periode sebelumnya tetap
-					tersimpan. Akun nonaktif manual tetap nonaktif.
+					tersimpan. Akun nonaktif manual tetap nonaktif. Maksimal 200 anggota
+					per penetapan.
 				</p>
 				<Button
 					disabled={

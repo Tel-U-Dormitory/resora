@@ -55,14 +55,12 @@ export async function createPeriod(
 			throw new TRPCError({ code: "CONFLICT", message: "PERIOD_NAME_EXISTS" });
 		const [period] = await tx.insert(srPeriods).values(data).returning();
 		if (!period) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-		await tx
-			.insert(accountAuditLogs)
-			.values({
-				actorUserId: identity.userId,
-				targetUserId: identity.userId,
-				action: "PERIOD_CREATED",
-				details: { period },
-			});
+		await tx.insert(accountAuditLogs).values({
+			actorUserId: identity.userId,
+			targetUserId: identity.userId,
+			action: "PERIOD_CREATED",
+			details: { period },
+		});
 		return period;
 	});
 }
@@ -91,18 +89,16 @@ export async function extendPeriod(
 			.update(srPeriods)
 			.set({ endsOn: data.endsOn })
 			.where(eq(srPeriods.id, period.id));
-		await tx
-			.insert(accountAuditLogs)
-			.values({
-				actorUserId: identity.userId,
-				targetUserId: identity.userId,
-				action: "PERIOD_EXTENDED",
-				details: {
-					periodId: period.id,
-					before: period.endsOn,
-					after: data.endsOn,
-				},
-			});
+		await tx.insert(accountAuditLogs).values({
+			actorUserId: identity.userId,
+			targetUserId: identity.userId,
+			action: "PERIOD_EXTENDED",
+			details: {
+				periodId: period.id,
+				before: period.endsOn,
+				after: data.endsOn,
+			},
+		});
 		return { periodId: period.id };
 	});
 }
@@ -143,14 +139,12 @@ export async function assignPeriod(
 				.returning();
 			if (!inserted.length) continue;
 			assigned++;
-			await tx
-				.insert(accountAuditLogs)
-				.values({
-					actorUserId: identity.userId,
-					targetUserId: userId,
-					action: "PERIOD_ASSIGNED",
-					details: { periodId: period.id },
-				});
+			await tx.insert(accountAuditLogs).values({
+				actorUserId: identity.userId,
+				targetUserId: userId,
+				action: "PERIOD_ASSIGNED",
+				details: { periodId: period.id },
+			});
 		}
 		return { assigned };
 	});

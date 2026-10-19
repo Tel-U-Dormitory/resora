@@ -2,6 +2,7 @@ import { isIP } from "node:net";
 import { hasSuperadminPrivilege } from "@resora/api/modules/identity/identity.public";
 import { appRouter } from "@resora/api/routers/index";
 import type { Auth, AuthConfig } from "@resora/auth";
+import { handlePasswordChangeRequest } from "@resora/auth/password-change-request";
 import { getActiveIdentity } from "@resora/auth/sr-access";
 import type { Database } from "@resora/db";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
@@ -40,7 +41,25 @@ export function createApp(
 	const isVercel = process.env.VERCEL === "1";
 	const trustedOrigin = new URL(origin).origin;
 	const authHandler = toNodeHandler(async (request) => {
-		const response = await services.auth.handler(request);
+		const passwordChange =
+			request.method === "POST" &&
+			new URL(request.url).pathname === "/api/auth/change-password";
+		if (passwordChange && !services.authConfig)
+			return Response.json(
+				{
+					code: "AUTH_UNAVAILABLE",
+					message: "Authentication service unavailable",
+				},
+				{ status: 503 },
+			);
+		const response =
+			passwordChange && services.authConfig
+				? await handlePasswordChangeRequest(
+						services.authConfig,
+						services.db,
+						request,
+					)
+				: await services.auth.handler(request);
 		// Better Auth can return an internal-error response instead of throwing.
 		return response.status >= 500
 			? Response.json(

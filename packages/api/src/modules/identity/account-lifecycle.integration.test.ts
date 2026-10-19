@@ -2,11 +2,12 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { createAuth } from "@resora/auth";
+import { handlePasswordChangeRequest } from "@resora/auth/password-change-request";
 import { getActiveIdentity } from "@resora/auth/sr-access";
 import { createDb, type Database } from "@resora/db";
 import { seedOrganization } from "@resora/db/organization";
 import { eventParticipants } from "@resora/db/schema/attendance";
-import { account, session, user } from "@resora/db/schema/auth";
+import { account, rateLimit, session, user } from "@resora/db/schema/auth";
 import {
 	accountAuditLogs,
 	srPeriodMemberships,
@@ -272,18 +273,20 @@ test("lifecycle scratch guard and calendar-date validation", () => {
 			).not.toContain(reset.temporaryPassword);
 		});
 		function request(path: string, body?: unknown, cookie = "") {
-			return auth.handler(
-				new Request(`${config.BETTER_AUTH_URL}/api/auth/${path}`, {
-					method: body ? "POST" : "GET",
-					headers: {
-						origin: config.CORS_ORIGIN,
-						"content-type": "application/json",
-						cookie,
-					},
-					...(body ? { body: JSON.stringify(body) } : {}),
-				}),
-			);
+			const input = new Request(`${config.BETTER_AUTH_URL}/api/auth/${path}`, {
+				method: body ? "POST" : "GET",
+				headers: {
+					origin: config.CORS_ORIGIN,
+					"content-type": "application/json",
+					cookie,
+				},
+				...(body ? { body: JSON.stringify(body) } : {}),
+			});
+			return path === "change-password"
+				? handlePasswordChangeRequest(config, db, input)
+				: auth.handler(input);
 		}
+
 		test("expiry blocks correct-password login and existing sessions, preserves snapshots, renewal restores only eligible SR", async () => {
 			const login = await request("sign-in/username", {
 				username: sr.nim,
@@ -470,6 +473,129 @@ test("lifecycle scratch guard and calendar-date validation", () => {
 					endsOn: "2026-12-31",
 				}),
 			).rejects.toMatchObject({ code: "FORBIDDEN" });
+		});
+		test("concurrent administrator reset cannot be overwritten by a stale public password change", async () => {
+			for (let attempt = 0; attempt < 3; attempt++) {
+				const login = await request("sign-in/username", {
+					username: sr.nim,
+					password: currentPassword,
+				});
+				expect(login.status).toBe(200);
+				const cookie = login.headers.get("set-cookie")?.split(";")[0] ?? "";
+				const [rotation, reset] = await Promise.all([
+					request(
+						"change-password",
+						{
+							currentPassword,
+							newPassword: `SyntheticConcurrentReplacement${attempt}`,
+						},
+						cookie,
+					),
+					caller.identity.resetAccountPassword({ userId: sr.userId }),
+				]);
+				expect([200, 401]).toContain(rotation.status);
+				const [credential] = await db
+					.select()
+					.from(account)
+					.where(eq(account.userId, sr.userId));
+				expect(
+					await (await auth.$context).password.verify({
+						hash: credential?.password ?? "",
+						password: reset.temporaryPassword,
+					}),
+				).toBe(true);
+				expect(
+					(
+						await db
+							.select()
+							.from(userProfiles)
+							.where(eq(userProfiles.userId, sr.userId))
+					)[0]?.passwordResetRequired,
+				).toBe(true);
+				expect(
+					await db.select().from(session).where(eq(session.userId, sr.userId)),
+				).toHaveLength(0);
+				currentPassword = reset.temporaryPassword;
+			}
+		});
+		test("failed native password validation retains production database limiter counters", async () => {
+			const login = await request("sign-in/username", {
+				username: sr.nim,
+				password: currentPassword,
+			});
+			const cookie = login.headers.get("set-cookie")?.split(";")[0] ?? "";
+			for (let attempt = 0; attempt < 2; attempt++) {
+				const response = await handlePasswordChangeRequest(
+					{
+						...config,
+						NODE_ENV: "production",
+						AUTH_RATE_LIMIT_ENABLED: "true",
+					},
+					db,
+					new Request(`${config.BETTER_AUTH_URL}/api/auth/change-password`, {
+						method: "POST",
+						headers: {
+							origin: config.CORS_ORIGIN,
+							"content-type": "application/json",
+							cookie,
+							"x-resora-client-ip": "192.0.2.120",
+						},
+						body: JSON.stringify({ currentPassword, newPassword: "short" }),
+					}),
+				);
+				expect(response.status).toBe(400);
+			}
+			expect(
+				(await db.select().from(rateLimit)).some((row) => row.count >= 2),
+			).toBe(true);
+		});
+		test("native session-write failure rolls back password, gate and session deletion", async () => {
+			const login = await request("sign-in/username", {
+				username: sr.nim,
+				password: currentPassword,
+			});
+			const cookie = login.headers.get("set-cookie")?.split(";")[0] ?? "";
+			const before = await db
+				.select()
+				.from(account)
+				.where(eq(account.userId, sr.userId));
+			const sessionsBefore = await db
+				.select()
+				.from(session)
+				.where(eq(session.userId, sr.userId));
+			await db.execute(
+				sql`CREATE FUNCTION public.reject_lifecycle_session() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic session failure'; END; $$`,
+			);
+			await db.execute(
+				sql`CREATE TRIGGER lifecycle_session_failure BEFORE INSERT ON public.session FOR EACH ROW EXECUTE FUNCTION public.reject_lifecycle_session()`,
+			);
+			try {
+				const response = await request(
+					"change-password",
+					{ currentPassword, newPassword: "SyntheticRollbackPassword42" },
+					cookie,
+				);
+				expect(response.status).toBeGreaterThanOrEqual(500);
+				expect(
+					await db.select().from(account).where(eq(account.userId, sr.userId)),
+				).toEqual(before);
+				expect(
+					await db.select().from(session).where(eq(session.userId, sr.userId)),
+				).toEqual(sessionsBefore);
+				expect(
+					(
+						await db
+							.select()
+							.from(userProfiles)
+							.where(eq(userProfiles.userId, sr.userId))
+					)[0]?.passwordResetRequired,
+				).toBe(true);
+			} finally {
+				await db.execute(
+					sql`DROP TRIGGER lifecycle_session_failure ON public.session`,
+				);
+				await db.execute(sql`DROP FUNCTION public.reject_lifecycle_session()`);
+			}
 		});
 	},
 );
