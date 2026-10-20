@@ -13,10 +13,12 @@ import { account, user } from "@resora/db/schema/auth";
 import {
 	buildings,
 	positions,
+	srPeriodMemberships,
 	srProfiles,
 	systemPrivileges,
 	userProfiles,
 } from "@resora/db/schema/identity";
+import { assignSyntheticSrTenure } from "@resora/db/sr-tenure.fixture";
 import { eq, inArray, like } from "drizzle-orm";
 import { createApp } from "../../../../../apps/server/src/app";
 import { prepareCredentials } from "./provisioning-credentials";
@@ -140,12 +142,12 @@ async function rejected(operation: Promise<unknown>, code: string) {
 		];
 		const csv = (...rows: string[][]) =>
 			encodeCsv([Array.from(csvColumns), ...rows]);
-		const run = (
+		const run = async (
 			input: string,
 			mode: "dry-run" | "apply" = "apply",
 			prepareOutput?: ProvisioningOptions["prepareOutput"],
-		) =>
-			provisionSrAccounts({
+		) => {
+			const result = await provisionSrAccounts({
 				db,
 				authConfig: config,
 				projectRoot,
@@ -153,6 +155,18 @@ async function rejected(operation: Promise<unknown>, code: string) {
 				mode,
 				prepareOutput,
 			});
+			if (mode === "apply") {
+				const created = await db
+					.select({ id: user.id })
+					.from(user)
+					.where(inArray(user.username, nims));
+				await assignSyntheticSrTenure(
+					db,
+					created.map((row) => row.id),
+				);
+			}
+			return result;
+		};
 		const count = async (index: number) =>
 			(
 				await db
@@ -214,10 +228,10 @@ async function rejected(operation: Promise<unknown>, code: string) {
 			if (!building) throw new Error("Missing official building A");
 			buildingId = building.id;
 			auth = createAuth(config, db);
-			server = createApp({ db, auth }, config.CORS_ORIGIN).listen(
-				0,
-				"127.0.0.1",
-			);
+			server = createApp(
+				{ db, auth, authConfig: config },
+				config.CORS_ORIGIN,
+			).listen(0, "127.0.0.1");
 			await new Promise<void>((done) => server.once("listening", done));
 			const address = server.address();
 			if (!address || typeof address === "string")
@@ -245,6 +259,9 @@ async function rejected(operation: Promise<unknown>, code: string) {
 						.where(like(user.email, `${prefix}%`));
 					if (created.length) {
 						const ids = created.map((row) => row.id);
+						await tx
+							.delete(srPeriodMemberships)
+							.where(inArray(srPeriodMemberships.userId, ids));
 						await tx.delete(srProfiles).where(inArray(srProfiles.userId, ids));
 						await tx.delete(user).where(inArray(user.id, ids));
 					}
@@ -541,6 +558,15 @@ async function rejected(operation: Promise<unknown>, code: string) {
 				"IMPORT_OUTCOME_UNCONFIRMED_CHECK_PRIVATE_EXPORT",
 			);
 			expect(await count(8)).toBe(1);
+			// Commit acknowledgement failed before the wrapper could assign fixture tenure.
+			const committed = await db
+				.select({ id: user.id })
+				.from(user)
+				.where(eq(user.username, nims[8] ?? ""));
+			await assignSyntheticSrTenure(
+				db,
+				committed.map((row) => row.id),
+			);
 			expect((await state(path)).state).toBe("UNCONFIRMED");
 			const password = (await exported(path))[0]?.[3];
 			expect(

@@ -19,7 +19,11 @@ import {
 	resetRequestSchema,
 } from "./password-recovery";
 import type { SmtpConfig } from "./password-reset-mail";
-import { getActiveIdentity, requiresPasswordChange } from "./sr-access";
+import {
+	getActiveIdentity,
+	getSrTenureStatus,
+	requiresPasswordChange,
+} from "./sr-access";
 
 export type AuthConfig = SmtpConfig & {
 	BETTER_AUTH_URL: string;
@@ -172,6 +176,19 @@ export function createAuth(
 				create: {
 					before: async (session) => {
 						if (!(await getActiveIdentity(database, session.userId))) {
+							const tenure = await getSrTenureStatus(database, session.userId);
+							if (tenure === "EXPIRED")
+								throw new APIError("UNAUTHORIZED", {
+									code: "SR_TENURE_EXPIRED",
+									message: "maaf periode jabatan anda telah purna",
+								});
+							if (tenure === "UNASSIGNED" || tenure === "SCHEDULED")
+								throw new APIError("UNAUTHORIZED", {
+									code: "SR_TENURE_NOT_ACTIVE",
+									message:
+										"Periode jabatan Anda belum aktif. Hubungi administrator.",
+								});
+
 							throw new APIError("UNAUTHORIZED", {
 								code: "INVALID_USERNAME_OR_PASSWORD",
 								message: "Invalid username or password",
@@ -338,7 +355,7 @@ export function createAuth(
 				// Failure leaves the gate closed; never mark completion before credential success.
 				const [updated] = await database
 					.update(userProfiles)
-					.set({ mustChangePassword: false })
+					.set({ mustChangePassword: false, passwordResetRequired: false })
 					.where(
 						and(
 							eq(userProfiles.userId, userId),

@@ -3,6 +3,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { createDb, type Database } from "@resora/db";
 import { seedOrganization } from "@resora/db/organization";
+import { assignSyntheticSrTenure } from "@resora/db/sr-tenure.fixture";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import { createSrAccount } from "../../api/src/modules/identity/sr-account";
 import { localProvisioningTarget } from "../../api/src/modules/identity/sr-provisioning";
@@ -80,6 +81,7 @@ let sequence = 0;
 					await context.password.hash(initial),
 				);
 			});
+			await assignSyntheticSrTenure(db, [id]);
 			const app = createAuth(config, db);
 			await app.api.signInUsername({ body: { username, password: initial } });
 			return { id, email, app };

@@ -163,13 +163,13 @@ export default function PasswordChangeForm({
 										: undefined
 								}
 								disabled={pending}
-								className="pr-10"
+								className="pr-12"
 							/>
 							<Button
 								type="button"
 								variant="ghost"
 								size="icon"
-								className="absolute inset-y-0 right-0 h-8 w-9 rounded-none text-muted-foreground hover:text-foreground"
+								className="resora-password-toggle text-muted-foreground hover:bg-transparent hover:text-foreground"
 								aria-label={
 									showCurrentPassword
 										? "Sembunyikan password saat ini"
@@ -217,13 +217,13 @@ export default function PasswordChangeForm({
 									error?.field === "new" ? "new-password-error" : undefined
 								}
 								disabled={pending}
-								className="pr-10"
+								className="pr-12"
 							/>
 							<Button
 								type="button"
 								variant="ghost"
 								size="icon"
-								className="absolute inset-y-0 right-0 h-8 w-9 rounded-none text-muted-foreground hover:text-foreground"
+								className="resora-password-toggle text-muted-foreground hover:bg-transparent hover:text-foreground"
 								aria-label={
 									showNewPassword
 										? "Sembunyikan password baru"
@@ -271,13 +271,13 @@ export default function PasswordChangeForm({
 										: undefined
 								}
 								disabled={pending}
-								className="pr-10"
+								className="pr-12"
 							/>
 							<Button
 								type="button"
 								variant="ghost"
 								size="icon"
-								className="absolute inset-y-0 right-0 h-8 w-9 rounded-none text-muted-foreground hover:text-foreground"
+								className="resora-password-toggle text-muted-foreground hover:bg-transparent hover:text-foreground"
 								aria-label={
 									showConfirmation
 										? "Sembunyikan konfirmasi password baru"

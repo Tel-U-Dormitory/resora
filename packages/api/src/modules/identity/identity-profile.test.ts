@@ -8,6 +8,7 @@ function fixture(overrides: Record<string, unknown> = {}) {
 	const identity = {
 		userId: "own-user",
 		actor: "SR",
+		tenureStatus: "ACTIVE",
 		isActive: true,
 		mustChangePassword: false,
 		departmentCode: "HCO",

@@ -1,7 +1,7 @@
 "use client";
 
 import { ActionDialog } from "@resora/ui/components/action-dialog";
-import { Button } from "@resora/ui/components/button";
+import { Button, buttonVariants } from "@resora/ui/components/button";
 import { useMutation } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import {
@@ -15,6 +15,7 @@ import Link from "next/link";
 import type QrScanner from "qr-scanner";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { attendanceQueryKeys, queryClient, trpc } from "@/utils/trpc";
 import { refreshAttendanceQueries } from "./attendance-queries";
 import { releaseCamera, scannerErrorMessage } from "./check-in-ui";
@@ -183,16 +184,17 @@ export default function CheckInScanner() {
 				/>
 				<div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/90" />
 				<div className="relative flex items-center justify-between p-4">
-					<Button
-						render={<Link href="/dashboard" />}
+					<Link
+						href="/dashboard"
 						onClick={stop}
-						variant="ghost"
-						size="icon"
-						className="size-10 rounded-full bg-black/40 text-white hover:bg-black/60"
+						className={cn(
+							buttonVariants({ variant: "ghost", size: "icon" }),
+							"size-11 rounded-full bg-black/40 text-white hover:bg-black/60",
+						)}
 						aria-label="Kembali ke dashboard"
 					>
 						<ArrowLeft />
-					</Button>
+					</Link>
 					<h1 className="flex items-center gap-2 rounded-full bg-black/40 px-4 py-2 font-semibold text-xs">
 						<span
 							className={`size-2 rounded-full ${phase === "camera" ? "bg-emerald-400" : "bg-white/50"}`}

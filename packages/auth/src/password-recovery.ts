@@ -237,7 +237,7 @@ export function createPasswordRecovery(
 			try {
 				await db
 					.update(userProfiles)
-					.set({ mustChangePassword: false })
+					.set({ mustChangePassword: false, passwordResetRequired: false })
 					.where(
 						and(
 							eq(userProfiles.userId, target.id),

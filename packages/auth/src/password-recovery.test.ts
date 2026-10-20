@@ -11,6 +11,7 @@ import {
 	resetRequestIp,
 } from "./password-recovery";
 import { ResetMailError } from "./password-reset-mail";
+import { requiresPasswordChange } from "./sr-access";
 
 // Native Better Auth endpoints, hashing and hooks; isolated storage doubles, no network/SQL.
 async function fixture(
@@ -30,7 +31,9 @@ async function fixture(
 		userId: target.id,
 		actor: "SR",
 		isActive: true,
+		tenureStatus: "ACTIVE",
 		mustChangePassword: true,
+		passwordResetRequired: false,
 		isSuperadmin: false,
 		nim: "0000000001",
 		srUserId: target.id as string | null,
@@ -64,9 +67,14 @@ async function fixture(
 			},
 		}),
 		update: () => ({
-			set: (values: { mustChangePassword: boolean }) => ({
+			set: (values: {
+				mustChangePassword: boolean;
+				passwordResetRequired?: boolean;
+			}) => ({
 				where: async () => {
 					profile.mustChangePassword = values.mustChangePassword;
+					if (values.passwordResetRequired !== undefined)
+						profile.passwordResetRequired = values.passwordResetRequired;
 				},
 			}),
 		}),
@@ -302,6 +310,59 @@ test("native reset hashes password, revokes sessions, clears flag once; reuse, e
 			})
 		).status,
 	).toBe(400);
+});
+
+test("SMTP recovery releases an administrator-reset gate only after successful native rotation", async () => {
+	const f = await fixture();
+	f.profile.passwordResetRequired = true;
+	await f.post("request-password-reset", { email: f.target.email });
+	expect(
+		(await f.post("reset-password", { token: f.token(), newPassword: "short" }))
+			.status,
+	).toBe(400);
+	expect(f.profile.passwordResetRequired).toBe(true);
+	expect(
+		(
+			await f.post("reset-password", {
+				token: f.token(),
+				newPassword: "SyntheticReplacement42",
+			})
+		).status,
+	).toBe(200);
+	expect(f.profile.passwordResetRequired).toBe(false);
+	expect(f.profile.mustChangePassword).toBe(false);
+	expect(requiresPasswordChange({ ...f.profile, actor: "SR" })).toBe(false);
+	expect(f.result().revoked).toBe(1);
+	expect(
+		f.audits.filter((row) => row.eventType === "RESET_COMPLETED"),
+	).toHaveLength(1);
+});
+
+test("recovery requests and redemption enforce live SR tenure without account disclosure", async () => {
+	for (const tenureStatus of ["EXPIRED", "SCHEDULED", "UNASSIGNED"]) {
+		const f = await fixture();
+		await f.post("request-password-reset", { email: f.target.email });
+		const token = f.token();
+		f.profile.tenureStatus = tenureStatus;
+		const result = await f.post("request-password-reset", {
+			email: f.target.email,
+		});
+		expect(result.status).toBe(200);
+		expect(await result.json()).toEqual(genericResetResponse);
+		expect(f.links).toHaveLength(1);
+		expect(
+			(
+				await f.post("reset-password", {
+					token,
+					newPassword: "SyntheticReplacement42",
+				})
+			).status,
+		).toBe(400);
+		expect(f.result()).toEqual({ storedHash: "", revoked: 0 });
+		expect(f.audits.some((row) => row.eventType === "RESET_COMPLETED")).toBe(
+			false,
+		);
+	}
 });
 
 test("post-reset audit failure cannot falsely fail completed password change or prevent revocation", async () => {

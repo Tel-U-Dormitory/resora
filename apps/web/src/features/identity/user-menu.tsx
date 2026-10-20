@@ -1,5 +1,6 @@
 "use client";
 
+import { Avatar, AvatarFallback } from "@resora/ui/components/avatar";
 import { Button } from "@resora/ui/components/button";
 import {
 	DropdownMenu,
@@ -7,23 +8,24 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@resora/ui/components/dropdown-menu";
+import { Skeleton } from "@resora/ui/components/skeleton";
 import { ChevronDown, ChevronUp, LogOut, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Avatar } from "@/components/ui/avatar";
-import { Skeleton } from "@/components/ui/skeleton";
 import { authClient } from "@/lib/auth-client";
 import { queryClient } from "@/utils/trpc";
 
 export default function UserMenu({
 	name,
+	compact = false,
 	accountLabel = "Pengguna RESORA",
 	onNavigate,
 	container,
 }: {
 	name?: string;
+	compact?: boolean;
 	accountLabel?: string;
 	onNavigate?: () => void;
 	container?: RefObject<HTMLDialogElement | null>;
@@ -76,7 +78,12 @@ export default function UserMenu({
 			setPending(false);
 		}
 	};
-	if (isPending) return <Skeleton className="h-9 w-24" />;
+	if (isPending)
+		return (
+			<Skeleton
+				className={compact ? "size-11 rounded-xl" : "h-11 w-full rounded-xl"}
+			/>
+		);
 	if (!session)
 		return (
 			<Link
@@ -86,10 +93,20 @@ export default function UserMenu({
 				Masuk sebagai SR
 			</Link>
 		);
+	const initials = displayName
+		.split(/\s+/)
+		.filter(Boolean)
+		.slice(0, 2)
+		.map((part) => part[0]?.toUpperCase())
+		.join("");
 	const triggerContents = (
 		<>
-			<Avatar name={displayName} shape="squircle" size="sm" />
-			<span className="min-w-0 flex-1 text-left">
+			<Avatar aria-label={displayName}>
+				<AvatarFallback className="bg-primary-soft font-semibold text-primary-soft-foreground">
+					{initials}
+				</AvatarFallback>
+			</Avatar>
+			<span className={compact ? "sr-only" : "min-w-0 flex-1 text-left"}>
 				<span className="block truncate font-semibold text-sm">
 					{displayName}
 				</span>
@@ -97,30 +114,28 @@ export default function UserMenu({
 					{accountLabel}
 				</span>
 			</span>
-			{open ? (
-				<ChevronUp className="size-4 shrink-0" aria-hidden="true" />
-			) : (
-				<ChevronDown className="size-4 shrink-0" aria-hidden="true" />
-			)}
+			{!compact &&
+				(open ? (
+					<ChevronUp className="size-4 shrink-0" aria-hidden="true" />
+				) : (
+					<ChevronDown className="size-4 shrink-0" aria-hidden="true" />
+				))}
 		</>
 	);
-	const triggerClass = `h-auto min-h-11 ${name ? "w-full" : "w-auto max-w-56"} justify-start gap-2.5 rounded-xl p-2 text-left`;
+	const triggerClass = compact
+		? "size-11 justify-center rounded-xl p-1.5"
+		: `h-auto min-h-11 ${name ? "w-full" : "w-auto max-w-56"} justify-start gap-2.5 rounded-xl p-2 text-left`;
 	const profileItem = (
-		<Button
-			render={
-				<Link
-					href="/profile"
-					onClick={() => {
-						setOpen(false);
-						onNavigate?.();
-					}}
-				/>
-			}
-			variant="ghost"
-			className="min-h-11 w-full justify-start gap-2.5 rounded-lg px-3 text-sm"
+		<Link
+			href="/profile"
+			onClick={() => {
+				setOpen(false);
+				onNavigate?.();
+			}}
+			className="focus-ring flex min-h-11 w-full items-center justify-start gap-2.5 rounded-xl px-3 text-sm transition-colors hover:bg-muted"
 		>
-			<UserRound aria-hidden="true" /> Profil Saya
-		</Button>
+			<UserRound className="size-4" aria-hidden="true" /> Profil Saya
+		</Link>
 	);
 	const logoutItem = (
 		<Button
@@ -134,7 +149,9 @@ export default function UserMenu({
 	);
 	const accountHeader = (
 		<div className="flex min-w-0 items-center gap-3 border-border border-b px-3 py-3">
-			<Avatar name={displayName} shape="squircle" size="md" />
+			<Avatar size="lg" aria-label={displayName}>
+				<AvatarFallback>{initials}</AvatarFallback>
+			</Avatar>
 			<div className="min-w-0 flex-1">
 				<p className="truncate font-semibold text-sm" title={displayName}>
 					{displayName}
@@ -180,7 +197,7 @@ export default function UserMenu({
 			</DropdownMenuTrigger>
 			<DropdownMenuContent
 				container={container}
-				side="top"
+				side={compact ? "right" : "top"}
 				sideOffset={6}
 				align="start"
 				className="!w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-popover p-2 shadow-xl"

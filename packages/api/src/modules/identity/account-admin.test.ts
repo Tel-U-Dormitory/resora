@@ -9,8 +9,10 @@ import { getTableName, type SQL } from "drizzle-orm";
 import { getTableConfig, PgDialect } from "drizzle-orm/pg-core";
 import { appRouter } from "../../routers";
 import {
+	archiveAccountSchema,
 	createAccountSchema,
 	listAccountsSchema,
+	updateAccountSchema,
 } from "./account-admin.schema";
 import { provisionSrAccounts } from "./sr-provisioning";
 
@@ -126,6 +128,7 @@ function fixture() {
 							? [
 									{
 										...admin,
+										tenureStatus: "ACTIVE",
 										isSuperadmin: state.granted,
 										name: "Synthetic admin",
 										buildingCode: "B",
@@ -133,6 +136,14 @@ function fixture() {
 									},
 								]
 							: [];
+					if (
+						record.table === "user_profiles" &&
+						!record.params.includes(admin.userId)
+					)
+						rows = (state.tables.user_profiles ?? []).filter((row) =>
+							record.params.includes(row.userId),
+						);
+
 					if (record.table === "system_privileges")
 						rows = state.granted ? [{ userId: admin.userId }] : [];
 					if (
@@ -164,7 +175,9 @@ function fixture() {
 							rows = users
 								.slice(
 									record.offset ?? 0,
-									(record.offset ?? 0) + (record.limit ?? 20),
+									record.limit === undefined
+										? undefined
+										: (record.offset ?? 0) + record.limit,
 								)
 								.map((row) => ({
 									userId: row.id,
@@ -194,6 +207,45 @@ function fixture() {
 			};
 			return query;
 		},
+		update: (table: Parameters<typeof getTableName>[0]) => ({
+			set: (values: Record<string, unknown>) => ({
+				where: (condition: SQL) => {
+					const run = async () => {
+						const name = getTableName(table);
+						if (state.failTable === name)
+							throw new Error("synthetic write failure");
+						const params = new PgDialect().sqlToQuery(condition).params;
+						const rows = (state.tables[name] ?? []).filter(
+							(row) =>
+								params.includes(row.userId) &&
+								(name !== "account" || params.includes(row.providerId)),
+						);
+						for (const row of rows) Object.assign(row, values);
+						return rows;
+					};
+					return {
+						returning: run,
+						// biome-ignore lint/suspicious/noThenProperty: Drizzle write double.
+						then: (
+							resolve: (rows: unknown[]) => unknown,
+							reject: (error: unknown) => unknown,
+						) => run().then(resolve, reject),
+					};
+				},
+			}),
+		}),
+		delete: (table: Parameters<typeof getTableName>[0]) => ({
+			where: async (condition: SQL) => {
+				const name = getTableName(table);
+				if (state.failTable === name)
+					throw new Error("synthetic write failure");
+				const params = new PgDialect().sqlToQuery(condition).params;
+				state.tables[name] = (state.tables[name] ?? []).filter(
+					(row) => !params.includes(row.userId),
+				);
+			},
+		}),
+
 		insert: (table: Parameters<typeof getTableName>[0]) => ({
 			values: (data: Record<string, unknown>) => {
 				const name = getTableName(table);
@@ -503,6 +555,7 @@ test("input rejects blank names, malformed usernames/email and forged privileges
 		"actor_user_id",
 		"target_user_id",
 		"action",
+		"details",
 		"created_at",
 	]);
 	const migration = readFileSync(
@@ -512,4 +565,97 @@ test("input rejects blank names, malformed usernames/email and forged privileges
 	expect(migration).toContain("BEFORE UPDATE OR DELETE");
 	expect(migration).toContain("BEFORE TRUNCATE");
 	expect(migration).not.toContain("DROP ");
+});
+
+test("admin snapshot returns the complete safe roster without pagination and denies non-admins", async () => {
+	const f = fixture();
+	f.state.tables.user = Array.from({ length: 65 }, (_, index) => ({
+		id: `snapshot-${index}`,
+		username: `000${index}`,
+		name: `SR ${index}`,
+		email: `sr${index}@example.invalid`,
+		password: "never-return",
+	}));
+	const result = await f.caller.identity.accountSnapshot();
+	expect(result.accounts).toHaveLength(65);
+	const query = f.state.queries.find((row) => row.fields.includes("building"));
+	expect(query?.limit).toBeUndefined();
+	expect(query?.offset).toBeUndefined();
+	expect(result.accounts[0]).not.toHaveProperty("password");
+	f.state.granted = false;
+	await expect(f.caller.identity.accountSnapshot()).rejects.toMatchObject({
+		code: "FORBIDDEN",
+	});
+});
+
+test("password reset hashes a fresh credential, revokes only target sessions, gates SR and audits atomically", async () => {
+	const f = fixture();
+	const created = await f.caller.identity.createAccount(input);
+	f.state.tables.session = [{ userId: created.userId }, { userId: "other" }];
+	const result = await f.caller.identity.resetAccountPassword({
+		userId: created.userId,
+	});
+	const hash = f.state.tables.account?.[0]?.password as string;
+	const context = await createAuth(authConfig, f.db).$context;
+	expect(
+		await context.password.verify({ hash, password: result.temporaryPassword }),
+	).toBe(true);
+	expect(
+		await context.password.verify({
+			hash,
+			password: created.temporaryPassword,
+		}),
+	).toBe(false);
+	expect(f.state.tables.user_profiles?.[0]?.passwordResetRequired).toBe(true);
+	expect(f.state.tables.session).toEqual([{ userId: "other" }]);
+	expect(f.state.tables.account_audit_logs?.at(-1)?.action).toBe(
+		"PASSWORD_RESET",
+	);
+	expect(JSON.stringify(f.state.tables)).not.toContain(
+		result.temporaryPassword,
+	);
+	const saved = structuredClone(f.state.tables);
+	f.state.failTable = "account_audit_logs";
+	await expect(
+		f.caller.identity.resetAccountPassword({ userId: created.userId }),
+	).rejects.toThrow();
+	expect(f.state.tables).toEqual(saved);
+	f.state.granted = false;
+	await expect(
+		f.caller.identity.resetAccountPassword({ userId: created.userId }),
+	).rejects.toMatchObject({ code: "FORBIDDEN" });
+});
+
+test("account maintenance validates version and rejects username/privilege forgery", () => {
+	const valid = {
+		...input,
+		userId: "synthetic-id",
+		isActive: true,
+		expectedUpdatedAt: "2026-10-19T00:00:00.001Z",
+	};
+	const { nim, ...editable } = valid;
+	expect(updateAccountSchema.safeParse(editable).success).toBe(true);
+	expect(updateAccountSchema.safeParse(valid).success).toBe(false);
+	expect(
+		updateAccountSchema.safeParse({ ...editable, isSuperadmin: true }).success,
+	).toBe(false);
+	expect(
+		updateAccountSchema.safeParse({
+			...editable,
+			expectedUpdatedAt: "yesterday",
+		}).success,
+	).toBe(false);
+	expect(
+		archiveAccountSchema.safeParse({
+			userId: valid.userId,
+			expectedUpdatedAt: valid.expectedUpdatedAt,
+		}).success,
+	).toBe(true);
+	expect(
+		archiveAccountSchema.safeParse({
+			userId: valid.userId,
+			expectedUpdatedAt: valid.expectedUpdatedAt,
+			isActive: true,
+		}).success,
+	).toBe(false);
 });

@@ -214,6 +214,7 @@ function fixture() {
 					if (table === "user_profiles") {
 						const identity = {
 							...state.identity,
+							tenureStatus: "ACTIVE",
 							nim:
 								state.identity.actor === "SR"
 									? state.identity.nim
@@ -228,6 +229,7 @@ function fixture() {
 							rows = [
 								{
 									...identity,
+									tenureStatus: "ACTIVE",
 									name: "Operator",
 									buildingCode: "A",
 									buildingName: "Gedung A",

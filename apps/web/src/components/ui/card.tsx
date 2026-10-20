@@ -1,3 +1,4 @@
+import { Card as ShadcnCard } from "@resora/ui/components/card";
 import type * as React from "react";
 import { cn } from "@/lib/utils";
 
@@ -17,11 +18,12 @@ export function Card({
 	...props
 }: React.HTMLAttributes<HTMLDivElement> & { interactive?: boolean }) {
 	return (
-		<div
+		<ShadcnCard
+			data-resora-card=""
 			className={cn(
-				"rounded-xl border border-border bg-surface shadow-xs",
+				"gap-0 overflow-visible rounded-xl border border-border bg-surface py-0 text-base shadow-xs ring-0",
 				interactive &&
-					"transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md",
+					"transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md",
 				className,
 			)}
 			{...props}
@@ -54,19 +56,20 @@ export function CardHeader({
 	}
 	return (
 		<div
+			data-resora-card-header=""
 			className={cn(
-				"flex items-start justify-between gap-4 p-5 pb-0",
+				"flex flex-col items-start justify-between gap-4 p-5 sm:flex-row",
 				className,
 			)}
 			{...props}
 		>
-			<div className="flex items-start gap-3">
+			<div className="flex min-w-0 items-start gap-3">
 				{icon && (
 					<span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary">
 						{icon}
 					</span>
 				)}
-				<div>
+				<div className="min-w-0">
 					{title && (
 						<h3 className="font-bold text-base text-foreground tracking-tight">
 							{title}
@@ -88,7 +91,13 @@ export function CardContent({
 	className,
 	...props
 }: React.HTMLAttributes<HTMLDivElement>) {
-	return <div className={cn("p-5", className)} {...props} />;
+	return (
+		<div
+			data-resora-card-content=""
+			className={cn("min-w-0 p-5", className)}
+			{...props}
+		/>
+	);
 }
 
 export function CardFooter({

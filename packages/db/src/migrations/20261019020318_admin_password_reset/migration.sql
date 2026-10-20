@@ -1,0 +1,2 @@
+ALTER TABLE "user_profiles" ADD COLUMN "password_reset_required" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "account_audit_logs" DROP CONSTRAINT "account_audit_logs_action_check", ADD CONSTRAINT "account_audit_logs_action_check" CHECK (("action" IN ('ACCOUNT_CREATED', 'PASSWORD_RESET') AND "actor_user_id" IS NOT NULL) OR ("action" = 'SYSTEM_ADMIN_BOOTSTRAPPED' AND "actor_user_id" IS NULL));

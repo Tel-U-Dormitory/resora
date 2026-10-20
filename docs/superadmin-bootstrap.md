@@ -40,3 +40,7 @@ Login at `/login` using NIM / Username. The new account must go to `/change-pass
 - Missing credentials or unresolved commit/export state: stop for PM-approved recovery. SA-03 has no password-reset UI or automated recovery procedure; any privileged recovery requires separate approval and audit.
 
 Local integration fixtures/exports are synthetic and never a source of Production credentials. Keep retained immutable audits in their disposable DB; do not disable guards for cleanup.
+
+## Approved staging operation (2026-10-19)
+
+After explicit user approval of staging migrations and a separately supplied administrator identity/initial credential, the configured staging database now contains a dedicated SYSTEM_ADMIN with an explicit SUPERADMIN grant and immutable bootstrap audit. Native login/session verification passed, and mandatory first-password rotation remains enforced. The initial secret was hashed only in memory and was not exported or recorded in this repository. This was a one-off user-authorized staging exception to generated credential handoff; the standard CLI continues generating random temporary credentials. No Production bootstrap is authorized by this record. See [staging verification](setup.md#staging-administrator-bootstrap-result-2026-10-19).

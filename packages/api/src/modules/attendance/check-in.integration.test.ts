@@ -14,9 +14,11 @@ import {
 import { user } from "@resora/db/schema/auth";
 import {
 	buildings,
+	srPeriodMemberships,
 	srProfiles,
 	userProfiles,
 } from "@resora/db/schema/identity";
+import { assignSyntheticSrTenure } from "@resora/db/sr-tenure.fixture";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import {
@@ -99,6 +101,7 @@ const target = process.env.RESORA_IDENTITY_TEST_DB_URL;
 					});
 				}
 			});
+			await assignSyntheticSrTenure(db, ids);
 			const result = await Promise.all(ids.map((id) => getActiveSr(db, id)));
 			if (result.some((entry) => !entry))
 				throw Error("SYNTHETIC_IDENTITIES_REQUIRED");
@@ -136,6 +139,9 @@ const target = process.env.RESORA_IDENTITY_TEST_DB_URL;
 							.where(inArray(attendanceSessions.internalEventId, eventIds));
 						await tx.delete(events).where(inArray(events.id, eventIds));
 					}
+					await tx
+						.delete(srPeriodMemberships)
+						.where(inArray(srPeriodMemberships.userId, ids));
 					await tx.delete(srProfiles).where(inArray(srProfiles.userId, ids));
 					await tx
 						.delete(userProfiles)
