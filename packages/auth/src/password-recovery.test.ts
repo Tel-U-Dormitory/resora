@@ -195,6 +195,7 @@ test("public request is generic, audited once, native token expires in 15 minute
 		"REQUESTED",
 		"SMTP_ACCEPTED",
 	]);
+	expect(f.audits[1]?.requestId === f.audits[0]?.id).toBe(true);
 	expect(f.audits[0]?.requestIp).toBe("192.0.2.50");
 	expect(f.target.emailVerified).toBe(false);
 	expect(JSON.stringify(f.audits)).not.toContain(f.token());
@@ -482,4 +483,28 @@ test("SMTP background lifetime does not delay generic response or change unrelat
 	await Promise.all(tasks);
 	expect(f.audits[1]?.eventType).toBe("SMTP_ACCEPTED");
 	expect(f.auth.options.advanced).not.toHaveProperty("backgroundTasks");
+});
+
+test("overlapping requests for the same email have distinct server-generated audit correlation", async () => {
+	const f = await fixture({
+		send: async () => {
+			throw new ResetMailError("SMTP_CONNECT");
+		},
+	});
+	await Promise.all(
+		[1, 2].map(() =>
+			f.post("request-password-reset", { email: f.target.email }),
+		),
+	);
+	const requests = f.audits.filter((row) => row.eventType === "REQUESTED");
+	const failures = f.audits.filter((row) => row.eventType === "SMTP_FAILED");
+	expect(requests).toHaveLength(2);
+	expect(failures).toHaveLength(2);
+	expect(new Set(requests.map((row) => row.requestId)).size).toBe(2);
+	for (const row of requests) {
+		expect(row.requestId === row.id).toBe(true);
+		expect(
+			failures.filter((failure) => failure.requestId === row.id),
+		).toHaveLength(1);
+	}
 });

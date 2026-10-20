@@ -880,9 +880,46 @@ disabled recovery and SMTP delivery failure. SMTP runs outside response latency:
 persistent Node/Bun keeps its pending I/O; Vercel uses `waitUntil`. Delivery is
 bounded by SMTP timeouts and the Function lifetime. `SMTP_ACCEPTED` means Gmail
 accepted the message, not inbox delivery. There is no retry queue. Fixed
-`PASSWORD_RESET_*_FAILED` logs contain no account/token details. A post-reset
-audit/flag-update failure is logged without falsely failing a completed password
-change; investigate immediately (a privileged account may retain its password gate).
+`PASSWORD_RESET_*_FAILED` logs contain no account/token details. SMTP audit failure
+does not change the generic public response. Reset SQL failures are handled by
+the atomic transaction described below, rather than claiming partial completion.
+
+Recovery review: Better Auth 1.7.7's adapter transaction option alone only protects
+the native token-consume unit; the reset endpoint does not transact all its steps.
+RESORA enables adapter transactions and wraps **only** the native reset endpoint
+in a Drizzle transaction, binding native password/token/session operations and the
+completion callback to that same connection. Password, session-delete, or audit SQL
+failure rolls back the whole reset, including the stored password flag and
+`RESET_COMPLETED`; no successful completion is returned before commit. Existing
+`createAuth(env, tx)` provisioning remains inside its caller's transaction/savepoints.
+Loss of the COMMIT acknowledgement can still make the client outcome ambiguous;
+do not automatically retry or infer unchanged credentials from a failed response.
+The rollback tests inject definite SQL failures, not network loss during COMMIT.
+
+Migration `20261020115840_password_reset_correlation` adds nullable `request_id`
+and its index without modifying the original audit migration/history. A public
+request's server-generated UUID links `REQUESTED` exactly to `SMTP_ACCEPTED` or
+`SMTP_FAILED`, including concurrent requests for the same address. Legacy rows
+have no correlation. `RESET_COMPLETED` remains an independent user/time audit:
+it is not linked to issuance by storing or hashing native tokens. Manual issuance
+needs no shared auth secret: native reset tokens are random database verification
+records, not secret-signed links. A separate normal application instance redeems
+the CLI-issued link using the same database.
+
+Focused real-PostgreSQL review test (explicit migrated disposable loopback database,
+no remote fallback): `bun --no-env-file test packages/auth/src/password-recovery.integration.test.ts`.
+Set `RESORA_IDENTITY_TEST_DB_URL` to a fresh `resora_identity_test_*` database owned
+by its non-superuser, non-BYPASSRLS runtime role. For RLS negative tests, a local
+cluster administrator must create NOLOGIN/NOSUPERUSER/NOBYPASSRLS role
+`recovery_unauthorized` and grant membership to that runtime role. The suite verifies
+the connected host/port/database/role and every migration hash before fixtures.
+It does not apply migrations or delete immutable audit fixtures. Use only synthetic
+data; dispose of the entire dedicated test database/cluster afterward. Runtime
+audit INSERT currently relies on the migration/table-owner model. Before rollout,
+verify the actual deployed DB role is the table owner or has reviewed RLS-bypass
+access and INSERT permission. A separate nonowner/non-BYPASSRLS runtime role is
+intentionally rejected by default-deny RLS and requires an explicitly reviewed
+role-specific INSERT policy/grant; no arbitrary runtime role is granted access here.
 
 Manual issuance runs only in a private interactive operator terminal, after
 verifying the person's identity. No public endpoint or dashboard flag selects it.

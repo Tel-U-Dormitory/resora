@@ -14,6 +14,7 @@ export const passwordResetAudit = pgTable.withRLS(
 	"password_reset_audit",
 	{
 		id: uuid("id").defaultRandom().primaryKey(),
+		requestId: uuid("request_id"),
 		userId: text("user_id").references(() => user.id),
 		targetEmail: text("target_email").notNull(),
 		eventType: text("event_type")
@@ -34,6 +35,7 @@ export const passwordResetAudit = pgTable.withRLS(
 	},
 	(t) => [
 		index("password_reset_audit_user_created_idx").on(t.userId, t.createdAt),
+		index("password_reset_audit_request_idx").on(t.requestId),
 		check(
 			"password_reset_audit_event",
 			sql`${t.eventType} IN ('REQUESTED','SMTP_ACCEPTED','SMTP_FAILED','MANUAL_LINK_ISSUED','RESET_COMPLETED')`,

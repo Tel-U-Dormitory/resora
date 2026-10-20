@@ -5,8 +5,10 @@ import { userProfiles } from "@resora/db/schema/identity";
 import { betterAuth } from "better-auth";
 import {
 	APIError,
+	createAuthEndpoint,
 	createAuthMiddleware,
 	getSessionFromCtx,
+	resetPassword,
 } from "better-auth/api";
 import { username } from "better-auth/plugins";
 import { and, eq, inArray } from "drizzle-orm";
@@ -27,6 +29,58 @@ export type AuthConfig = SmtpConfig & {
 	AUTH_RATE_LIMIT_ENABLED?: "true" | "false";
 	PASSWORD_RESET_EMAIL_ENABLED?: "true" | "false";
 };
+
+// 1.7.7 consumes the token in its own transaction, but does not transact the
+// entire reset endpoint. Keep its native implementation and bind all writes
+// (including our completion callback) to one Drizzle transaction.
+function transactionalReset(
+	database: Database | DatabaseTransaction,
+	env: AuthConfig,
+	desktopOrigins: readonly string[],
+	recoveryOptions: RecoveryOptions,
+): typeof resetPassword {
+	return createAuthEndpoint(
+		"/reset-password",
+		resetPassword.options,
+		async (ctx) => {
+			// createAuth(env, tx) already participates in its caller's transaction.
+			if (!("$client" in database))
+				return resetPassword({
+					...ctx,
+					asResponse: false,
+					returnHeaders: false,
+					returnStatus: false,
+				});
+			return database.transaction(async (tx) => {
+				const context = await createAuth(
+					env,
+					tx,
+					desktopOrigins,
+					recoveryOptions,
+				).$context;
+				const verification =
+					await context.internalAdapter.findVerificationValue(
+						`reset-password:${ctx.body.token}`,
+					);
+				if (!verification)
+					throw new APIError("BAD_REQUEST", {
+						code: "INVALID_TOKEN",
+						message: "Invalid token",
+					});
+				await createPasswordRecovery(tx, env, recoveryOptions).assertReset(
+					verification.value,
+				);
+				return resetPassword({
+					...ctx,
+					asResponse: false,
+					returnHeaders: false,
+					returnStatus: false,
+					context: { ...ctx.context, ...context },
+				});
+			});
+		},
+	);
+}
 
 export function createAuth(
 	env: AuthConfig,
@@ -68,6 +122,7 @@ export function createAuth(
 		database: drizzleAdapter(database, {
 			provider: "pg",
 			schema,
+			transaction: true,
 		}),
 		trustedOrigins,
 		emailAndPassword: {
@@ -304,6 +359,17 @@ export function createAuth(
 				usernameNormalization: false,
 				immutableUsername: true,
 			}),
+			{
+				id: "transactional-password-reset",
+				endpoints: {
+					resetPassword: transactionalReset(
+						database,
+						env,
+						desktopOrigins,
+						recoveryOptions,
+					),
+				},
+			},
 		],
 	});
 }

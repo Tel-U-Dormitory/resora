@@ -119,13 +119,21 @@ export function createPasswordRecovery(
 	// Evaluate lazily: legacy local CLI/test origins remain untouched until recovery is used.
 	const page = () => resetPage(env.CORS_ORIGIN);
 	const source = options.manualLink ? ("MANUAL" as const) : ("PUBLIC" as const);
+	// Server-generated, request-scoped correlation; never derived from a reset token.
+	const requests = new WeakMap<Request, string>();
 	async function audit(
-		event: Pick<Audit, "eventType" | "targetEmail" | "userId" | "errorCode">,
+		event: Pick<
+			Audit,
+			"id" | "eventType" | "targetEmail" | "userId" | "errorCode"
+		>,
 		request?: Request,
 	) {
-		await db
-			.insert(passwordResetAudit)
-			.values({ ...event, source, requestIp: resetRequestIp(request) });
+		await db.insert(passwordResetAudit).values({
+			...event,
+			source,
+			requestIp: resetRequestIp(request),
+			requestId: request ? requests.get(request) : undefined,
+		});
 	}
 	async function bestEffortAudit(
 		event: Parameters<typeof audit>[0],
@@ -151,9 +159,12 @@ export function createPasswordRecovery(
 					message: "Invalid reset redirect",
 				});
 			const found = await recoveryUser(db, { email: input.email });
+			const id = randomUUID();
+			if (request) requests.set(request, id);
 			if (!options.manualLink)
 				await audit(
 					{
+						id,
 						eventType: "REQUESTED",
 						userId: found?.id,
 						targetEmail: input.email,
@@ -236,7 +247,8 @@ export function createPasswordRecovery(
 			} catch {
 				console.error("PASSWORD_RESET_FLAG_UPDATE_FAILED");
 			}
-			// Native password update is already complete. Never throw and suppress session revocation.
+			// Never throw a post-update callback error. Real SQL failures still abort
+			// the enclosing reset transaction, so its credential/token writes roll back.
 			await bestEffortAudit(
 				{
 					eventType: "RESET_COMPLETED",
@@ -248,3 +260,5 @@ export function createPasswordRecovery(
 		},
 	};
 }
+
+import { randomUUID } from "node:crypto";
