@@ -7,3 +7,4 @@ reports/
 credentials.csv
 credentials-*.csv
 *.crt
+*.local.json

@@ -1,16 +1,19 @@
-export function DashboardHeader({ isSystem = false }: { isSystem?: boolean }) {
+export function DashboardHeader({
+	name,
+	isSystem = false,
+}: {
+	name: string;
+	isSystem?: boolean;
+}) {
 	return (
 		<div className="space-y-2">
-			<p className="font-semibold text-primary text-xs uppercase tracking-wider">
-				RESORA / Dashboard
-			</p>
 			<h1 className="font-bold text-2xl tracking-tight">
-				{isSystem ? "Dashboard SUPERADMIN" : "Dashboard SR"}
+				Selamat datang, {name}.
 			</h1>
 			<p className="text-muted-foreground text-sm">
 				{isSystem
-					? "Administrasi akun dan operasional RESORA."
-					: "Selamat datang di area Senior Resident."}
+					? "Kelola kegiatan dan akun Senior Resident."
+					: "Akses kegiatan dan kehadiran Anda."}
 			</p>
 		</div>
 	);

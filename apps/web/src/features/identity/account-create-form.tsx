@@ -62,7 +62,7 @@ export default function AccountCreateForm() {
 	);
 	if (credentials)
 		return (
-			<section className="max-w-3xl space-y-6">
+			<section className="mx-auto w-full max-w-3xl space-y-6">
 				{breadcrumb}
 				<Card>
 					<CardHeader>
@@ -138,7 +138,7 @@ export default function AccountCreateForm() {
 			</section>
 		);
 	return (
-		<section className="max-w-3xl space-y-6">
+		<section className="mx-auto w-full max-w-3xl space-y-6">
 			{breadcrumb}
 			<div className="space-y-2">
 				<h1 className="font-bold text-2xl tracking-tight">Tambah akun SR</h1>
