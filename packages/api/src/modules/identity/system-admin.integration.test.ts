@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomBytes } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createAuth } from "@resora/auth";
 import { getActiveIdentity } from "@resora/auth/sr-access";
@@ -19,11 +19,13 @@ import {
 	systemPrivileges,
 	userProfiles,
 } from "@resora/db/schema/identity";
+import { assignSyntheticSrTenure } from "@resora/db/sr-tenure.fixture";
 import { eq, sql } from "drizzle-orm";
 import { appRouter } from "../../routers";
 import { eventDraftSchema } from "../attendance/attendance.schema";
 import { signChallenge } from "../attendance/qr";
 import { getActiveSrDirectory } from "./identity.public";
+import { prepareCredentials } from "./provisioning-credentials";
 import { readCsv } from "./provisioning-csv";
 import {
 	localProvisioningTarget,
@@ -45,6 +47,7 @@ const root = resolve(import.meta.dir, "../../../../..");
 		let target: BootstrapTarget;
 		let adminId: string;
 		let credentialPath: string;
+		let credentialRoot: string;
 		let cookie: string;
 		let srId: string;
 		let secondSrId: string;
@@ -72,6 +75,7 @@ const root = resolve(import.meta.dir, "../../../../..");
 				projectRoot: root,
 				input: adminInput,
 				mode,
+				prepareOutput: (records) => prepareCredentials(credentialRoot, records),
 			});
 		async function authRequest(
 			path: string,
@@ -148,10 +152,15 @@ const root = resolve(import.meta.dir, "../../../../..");
 				throw new Error(
 					"SA03 fixture database must be empty; never reuse real or previous data",
 				);
+			credentialRoot = await mkdtemp(
+				resolve(root, "tmp/sa03-credential-fixture-"),
+			);
 			auth = createAuth(config, db);
 		}, 15000);
 		afterAll(async () => {
 			await db?.$client.end();
+			if (credentialRoot)
+				await rm(credentialRoot, { recursive: true, force: true });
 		});
 
 		test("dry-run/preflight makes no account/export writes; failed export cannot leave an account", async () => {
@@ -307,6 +316,7 @@ const root = resolve(import.meta.dir, "../../../../..");
 				buildingCode: "A",
 			});
 			srId = created.userId;
+			await assignSyntheticSrTenure(db, [srId]);
 			const srLogin = await authRequest(
 				"sign-in/username",
 				{ username: created.nim, password: created.temporaryPassword },
@@ -349,6 +359,7 @@ const root = resolve(import.meta.dir, "../../../../..");
 				buildingCode: "B",
 			});
 			secondSrId = second.userId;
+			await assignSyntheticSrTenure(db, [secondSrId]);
 		});
 
 		test("system operator manages event/QR/manual/correction/recap without entering SR roster/check-in/history", async () => {

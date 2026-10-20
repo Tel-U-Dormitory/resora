@@ -17,6 +17,7 @@ import {
 	systemPrivileges,
 	userProfiles,
 } from "@resora/db/schema/identity";
+import { assignSyntheticSrTenure } from "@resora/db/sr-tenure.fixture";
 import { eq, sql } from "drizzle-orm";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import { getTableConfig } from "drizzle-orm/pg-core";
@@ -113,6 +114,7 @@ const target = process.env.RESORA_EVENT_ADMIN_TEST_DB_URL;
 					.insert(systemPrivileges)
 					.values({ userId: adminId, privilegeCode: "SUPERADMIN" });
 			});
+			await assignSyntheticSrTenure(db, [srId, hcoId]);
 			const identities = await Promise.all([
 				getActiveIdentity(db, adminId),
 				getActiveIdentity(db, srId),

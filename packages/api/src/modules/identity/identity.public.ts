@@ -14,6 +14,7 @@ import {
 	systemPrivileges,
 	userProfiles,
 } from "@resora/db/schema/identity";
+import { srTenureStatus } from "@resora/db/sr-tenure";
 import { and, eq } from "drizzle-orm";
 
 export { isValidSrAssignment } from "@resora/db/organization";
@@ -41,6 +42,7 @@ async function readActiveSrDirectory(
 			buildingCode: buildings.code,
 			buildingName: buildings.name,
 			mustChangePassword: userProfiles.mustChangePassword,
+			passwordResetRequired: userProfiles.passwordResetRequired,
 		})
 		.from(userProfiles)
 		.innerJoin(user, eq(user.id, userProfiles.userId))
@@ -53,14 +55,22 @@ async function readActiveSrDirectory(
 				userId ? eq(userProfiles.userId, userId) : undefined,
 				eq(userProfiles.actor, "SR"),
 				eq(userProfiles.isActive, true),
+				eq(srTenureStatus(userProfiles.userId), "ACTIVE"),
 				eq(departments.isActive, true),
 				eq(positions.isActive, true),
 				eq(buildings.isActive, true),
 			),
 		);
 	// FOR SHARE prevents concurrent assignment/deactivation from invalidating publication's view.
-	const rows = await (lock ? query.for("share") : query);
-	const candidates: (SrCandidate & { mustChangePassword: boolean })[] = [];
+	let rows = await (lock ? query.for("share") : query);
+	if (lock) {
+		// Re-evaluate statement time after potentially waiting for profile/reference locks.
+		rows = await query;
+	}
+	const candidates: (SrCandidate & {
+		mustChangePassword: boolean;
+		passwordResetRequired?: boolean;
+	})[] = [];
 	let invalidAssignmentCount = 0;
 	for (const row of rows) {
 		if (
@@ -85,7 +95,11 @@ export async function getActiveSrDirectory(
 	);
 	return {
 		candidates: candidates.map(
-			({ mustChangePassword: _gate, ...candidate }) => candidate,
+			({
+				mustChangePassword: _gate,
+				passwordResetRequired: _reset,
+				...candidate
+			}) => candidate,
 		),
 		invalidAssignmentCount,
 	};
@@ -113,6 +127,7 @@ export async function getCheckInSr(
 	return requiresPasswordChange({
 		actor: "SR",
 		mustChangePassword: candidate.mustChangePassword,
+		passwordResetRequired: candidate.passwordResetRequired,
 		isSuperadmin: grants.length > 0,
 	})
 		? null

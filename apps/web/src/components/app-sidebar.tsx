@@ -15,6 +15,7 @@ import {
 } from "@resora/ui/components/sidebar";
 import {
 	CalendarDays,
+	CalendarRange,
 	History,
 	LayoutDashboard,
 	ListChecks,
@@ -31,10 +32,12 @@ import UserMenu from "@/features/identity/user-menu";
 const icons = {
 	dashboard: LayoutDashboard,
 	events: CalendarDays,
+	CalendarRange,
 	scan: ScanLine,
 	history: History,
 	manage: ListChecks,
 	accounts: Users,
+	periods: CalendarRange,
 };
 
 export function AppSidebar({

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomBytes, randomUUID } from "node:crypto";
 import type { Server } from "node:http";
+import { resolve } from "node:path";
 import { createAuth } from "@resora/auth";
 import { getActiveSr } from "@resora/auth/sr-access";
 import { createDb, type Database } from "@resora/db";
@@ -14,11 +15,14 @@ import {
 import { account, user } from "@resora/db/schema/auth";
 import {
 	buildings,
+	srPeriodMemberships,
 	srProfiles,
 	systemPrivileges,
 	userProfiles,
 } from "@resora/db/schema/identity";
+import { assignSyntheticSrTenure } from "@resora/db/sr-tenure.fixture";
 import { and, eq, inArray } from "drizzle-orm";
+import { readMigrationFiles } from "drizzle-orm/migrator";
 import { createApp } from "../../../../../apps/server/src/app";
 import { getActiveSrDirectory } from "../identity/identity.public";
 import {
@@ -195,6 +199,7 @@ const target = process.env.RESORA_IDENTITY_TEST_DB_URL;
 					.insert(systemPrivileges)
 					.values({ userId: id(3), privilegeCode: "SUPERADMIN" });
 			});
+			await assignSyntheticSrTenure(db, ids);
 			server = createApp({ db, auth }, origin).listen(0, "127.0.0.1");
 			server.keepAliveTimeout = 1;
 			await new Promise<void>((done) => server.once("listening", done));
@@ -230,6 +235,9 @@ const target = process.env.RESORA_IDENTITY_TEST_DB_URL;
 					await tx
 						.delete(systemPrivileges)
 						.where(inArray(systemPrivileges.userId, ids));
+					await tx
+						.delete(srPeriodMemberships)
+						.where(inArray(srPeriodMemberships.userId, ids));
 					await tx.delete(srProfiles).where(inArray(srProfiles.userId, ids));
 					await tx.delete(user).where(inArray(user.id, ids));
 				});
@@ -243,7 +251,14 @@ const target = process.env.RESORA_IDENTITY_TEST_DB_URL;
 						"SELECT count(*)::int AS n FROM drizzle.__drizzle_migrations",
 					)
 				).rows[0]?.n,
-			).toBe(4);
+			).toBe(
+				readMigrationFiles({
+					migrationsFolder: resolve(
+						import.meta.dir,
+						"../../../../db/src/migrations",
+					),
+				}).length,
+			);
 			const triggers = await db.$client.query(
 				"SELECT tgdeferrable, tginitdeferred, tgenabled FROM pg_trigger WHERE tgname IN ('events_require_session','attendance_sessions_event_consistency')",
 			);

@@ -242,3 +242,22 @@ Official reference for SR attendance: **FR-086 and FR-119–FR-130**. Core depen
 **Handover rule:** The PRD, detailed NEED PRD, Architecture, FR Master and acceptance tests must agree before beginning attendance-domain migrations or event feature implementation. A document update does not change source code or authorize deployment.
 
 **Phase 4 PM FINAL (2026-10-11):** roster/schedule and center/radius/late-grace/QR TTL are immutable after publication; only title/description may change. HCO manages internal events regardless of creator; non-HCO can view only published events inviting them. INTI and explicit SUPERADMIN grant no HCO operational bypass. No cancel/reopen/republish, scanner, attendance record or export is delivered in this phase.
+
+### Approved administrator account lifecycle update (2026-10-19)
+
+The administrator panel must search the complete SR account list immediately while typing and reuse a memory cache across navigation, with explicit refresh and invalidation on account changes. Logout/account changes clear cached personal data. Administrators may reset an SR password to a securely generated one-time-displayed temporary credential; all target sessions are revoked, reset actions are audited, and rotation after administrator reset is mandatory for all SR. This is an exception to the 2026-10-14 voluntary *initial* SR password policy. No plaintext password is persisted or audited.
+
+Periods have a category/name, start date and inclusive end date in Asia/Jakarta (WIB). Administrators assign SR to one or more historical periods and can continue selected SR into a subsequent period using the same account/NIM. Extending a shared period's end date affects every member and requires a separate explicit action; shortening/removing periods or memberships is outside this update. Membership assignment is idempotent and audited. Manual account deactivation remains authoritative even after renewal.
+
+SR without an assigned current period cannot use the application once tenure enforcement is released. Existing identities are preserved without guessed dates or automatic bulk assignment: an administrator must map the roster to approved periods before rollout. Future membership alone does not grant access before its start date. Expired accounts remain archived with their histories; assigning a current period restores tenure eligibility while preserving any manual deactivation. Dedicated SYSTEM_ADMIN has no SR period; SR with SUPERADMIN still follows SR tenure. Period administration and enforcement must be released together after roster mapping is planned.
+
+After verifying correct credentials, expired SR login must show exactly **maaf periode jabatan anda telah purna**. Wrong credentials must keep the generic login denial. Sessions established before tenure expiry cannot continue using protected features after expiry; expired SR are excluded from new operational rosters and check-in/manual-insert targets. Historical event snapshots and attendance remain intact. Archive state follows period dates without deleting identity or changing the separate manual-active flag.
+
+
+### Approved administrator management UX and archival (2026-10-19)
+
+Period settings live in a separate **Periode menjabat** sidebar page. The workflow is: choose/create a destination period, select SR, review names and dates, then confirm. Extending an entire period uses its own modal with explicit scope. Historical memberships are retained.
+
+The account directory exposes three icon actions with tooltip labels: **Edit**, **Hapus dan arsipkan**, and **Reset password**. Edit supports name, email, organization assignment and manual active status; NIM remains the login identity. Password reset uses a confirmation modal and a one-time credential display/copy step. All components follow the existing shadcn/ui theme, with Uiverse action styling adapted consistently.
+
+The owner explicitly selected **deactivate and archive; preserve all history** for Hapus. No physical account deletion is performed. Archived accounts remain visible/filterable, cannot log in, and lose all existing sessions. Administrators may restore manual active status through Edit; SR access still requires a current period. Editing account data also ends the target's sessions and is audited with before/after metadata. Historical attendance snapshots, period history, credentials and existing audit records are retained. Dedicated SYSTEM_ADMIN is outside SR account edit/archive actions.

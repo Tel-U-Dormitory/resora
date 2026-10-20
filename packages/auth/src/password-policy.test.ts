@@ -4,15 +4,22 @@ import { createAuth } from "./index";
 
 // Real Better Auth endpoints/hooks and password hashing with isolated storage doubles.
 // No PostgreSQL connection or real account is used.
-for (const kind of ["SR", "SR_SUPERADMIN", "SYSTEM_ADMIN"] as const) {
+for (const kind of [
+	"SR",
+	"RESET_SR",
+	"SR_SUPERADMIN",
+	"SYSTEM_ADMIN",
+] as const) {
 	test(`${kind}: initial login, password gate and voluntary/required rotation retain live checks`, async () => {
 		const now = new Date();
 		const profile = {
 			userId: "synthetic-password-policy",
 			actor: kind === "SYSTEM_ADMIN" ? "SYSTEM_ADMIN" : "SR",
+			tenureStatus: "ACTIVE",
 			isActive: true,
 			mustChangePassword: true,
-			isSuperadmin: kind !== "SR",
+			isSuperadmin: kind !== "SR" && kind !== "RESET_SR",
+			passwordResetRequired: kind === "RESET_SR",
 			nim: kind === "SYSTEM_ADMIN" ? "synthetic.admin" : "0000000001",
 			srUserId: kind === "SYSTEM_ADMIN" ? null : "synthetic-password-policy",
 			departmentCode: kind === "SYSTEM_ADMIN" ? null : "HCO",
@@ -33,6 +40,7 @@ for (const kind of ["SR", "SR_SUPERADMIN", "SYSTEM_ADMIN"] as const) {
 						returning: async () => {
 							flagWrites++;
 							profile.mustChangePassword = values.mustChangePassword;
+							profile.passwordResetRequired = false;
 							return [{ userId: profile.userId }];
 						},
 					}),

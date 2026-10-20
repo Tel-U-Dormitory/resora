@@ -25,7 +25,7 @@ const query = {
 	leftJoin: () => query,
 	where: async () => {
 		if (failQuery) throw new Error("synthetic-private-query");
-		return identity ? [identity] : [];
+		return identity ? [{ tenureStatus: "ACTIVE", ...identity }] : [];
 	},
 };
 const db = {
@@ -781,6 +781,25 @@ test("backup download is private, rechecks revoked privileges and cleans up on s
 		await new Promise<void>((resolve) => listener.close(() => resolve()));
 		await rm(directory, { recursive: true, force: true });
 	}
+});
+
+test("expired, future and unassigned SR cannot use protected HTTP even with SUPERADMIN", async () => {
+	for (const tenureStatus of ["EXPIRED", "SCHEDULED", "UNASSIGNED"]) {
+		identity = { ...identity, tenureStatus, isSuperadmin: true };
+		expect((await fetch(`${base}/trpc/privateData`)).status).toBe(401);
+	}
+});
+
+test("public password change fails closed without transaction-bound auth configuration", async () => {
+	const response = await fetch(`${base}/api/auth/change-password`, {
+		method: "POST",
+		headers: { origin, "content-type": "application/json" },
+		body: JSON.stringify({
+			currentPassword: "synthetic-current",
+			newPassword: "synthetic-new",
+		}),
+	});
+	expect(response.status).toBe(503);
 });
 
 test("authenticated proxy selects its IP and removes the ingress secret before auth", async () => {

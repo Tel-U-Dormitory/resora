@@ -6,41 +6,67 @@ import { Select } from "@resora/ui/components/select";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { queryErrorMessage } from "@/utils/request-error";
-import { trpc } from "@/utils/trpc";
+import { queryClient, trpc } from "@/utils/trpc";
+import AccountActions from "./account-actions";
+
+import {
+	accountStatus,
+	accountStatusLabels,
+	jakartaToday,
+} from "./account-status";
 
 export default function AccountList() {
-	const [searchInput, setSearchInput] = useState("");
 	const [search, setSearch] = useState("");
 	const [departmentCode, setDepartmentCode] = useState("");
 	const [status, setStatus] = useState("");
 	const [page, setPage] = useState(1);
+	const [today, setToday] = useState(jakartaToday);
+	useEffect(() => {
+		const timer = setInterval(() => setToday(jakartaToday()), 60_000);
+		return () => clearInterval(timer);
+	}, []);
 	const references = useQuery({
 		...trpc.identity.accountReferences.queryOptions(),
+		staleTime: Number.POSITIVE_INFINITY,
+		gcTime: Number.POSITIVE_INFINITY,
+		refetchOnWindowFocus: false,
+		refetchOnReconnect: false,
 		retry: false,
 		meta: { errorHandledLocally: true },
 	});
 	const accounts = useQuery({
-		...trpc.identity.listAccounts.queryOptions({
-			search,
-			page,
-			pageSize: 20,
-			departmentCode: departmentCode || undefined,
-			isActive: status ? status === "active" : undefined,
-		}),
+		...trpc.identity.accountSnapshot.queryOptions(),
+		staleTime: Number.POSITIVE_INFINITY,
+		gcTime: Number.POSITIVE_INFINITY,
+		refetchOnWindowFocus: false,
+		refetchOnReconnect: false,
 		retry: false,
 		meta: { errorHandledLocally: true },
 	});
+	const filtered = (accounts.data?.accounts ?? []).filter(
+		(account) =>
+			(!search.trim() ||
+				`${account.name} ${account.nim ?? ""}`
+					.toLowerCase()
+					.includes(search.trim().toLowerCase())) &&
+			(!departmentCode || account.departmentCode === departmentCode) &&
+			(!status || accountStatus(account, today) === status),
+	);
+	const total = filtered.length;
+	const currentPage = Math.min(page, Math.max(1, Math.ceil(total / 20)));
+	const visible = filtered.slice((currentPage - 1) * 20, currentPage * 20);
+
 	return (
 		<section className="resora-page space-y-6">
 			<div className="flex flex-wrap items-start justify-between gap-4">
 				<div className="space-y-2">
 					<h1 className="font-bold text-2xl tracking-tight">Kelola akun SR</h1>
 					<p className="text-muted-foreground text-sm">
-						Cari dan lihat identitas serta status akun Senior Resident.
+						Kelola identitas, akses, dan keamanan akun Senior Resident.
 					</p>
 				</div>
 				<Link
@@ -50,6 +76,7 @@ export default function AccountList() {
 					<Plus size={17} aria-hidden="true" /> Tambah akun
 				</Link>
 			</div>
+
 			<Card>
 				<CardContent>
 					<form
@@ -58,16 +85,18 @@ export default function AccountList() {
 						onSubmit={(event) => {
 							event.preventDefault();
 							setPage(1);
-							setSearch(searchInput.trim());
 						}}
 					>
 						<div className="space-y-2">
 							<Label htmlFor="account-search">Nama atau NIM</Label>
 							<Input
 								id="account-search"
-								value={searchInput}
+								value={search}
 								maxLength={100}
-								onChange={(event) => setSearchInput(event.target.value)}
+								onChange={(event) => {
+									setSearch(event.target.value);
+									setPage(1);
+								}}
 								placeholder="Cari akun SR"
 							/>
 						</div>
@@ -102,15 +131,26 @@ export default function AccountList() {
 							>
 								<option value="">Semua status</option>
 								<option value="active">Aktif</option>
-								<option value="inactive">Nonaktif</option>
+								<option value="inactive">Diarsipkan manual</option>
+								<option value="archived">Diarsipkan / Purna</option>
+								<option value="scheduled">Belum mulai</option>
+								<option value="unassigned">Belum ada periode</option>
 							</Select>
 						</div>
 						<Button
-							type="submit"
+							type="button"
+							variant="outline"
+							onClick={() => {
+								void accounts.refetch();
+								void references.refetch();
+								void queryClient.invalidateQueries({
+									queryKey: trpc.identity.listPeriods.pathKey(),
+								});
+							}}
 							disabled={accounts.isFetching}
 							loading={accounts.isFetching}
 						>
-							Cari
+							Perbarui data
 						</Button>
 					</form>
 					{references.error && (
@@ -153,7 +193,7 @@ export default function AccountList() {
 				<>
 					<Card>
 						<CardContent className="overflow-x-auto">
-							{accounts.data.accounts.length === 0 ? (
+							{total === 0 ? (
 								<p className="py-8 text-center text-muted-foreground text-sm">
 									Tidak ada akun yang sesuai pencarian.
 								</p>
@@ -170,7 +210,9 @@ export default function AccountList() {
 												"Departemen",
 												"Jabatan",
 												"Gedung",
+												"Periode",
 												"Status",
+												"Tindakan",
 											].map((heading) => (
 												<th
 													key={heading}
@@ -183,7 +225,7 @@ export default function AccountList() {
 										</tr>
 									</thead>
 									<tbody>
-										{accounts.data.accounts.map((account) => (
+										{visible.map((account) => (
 											<tr
 												key={account.userId}
 												className="border-border border-b last:border-0"
@@ -250,12 +292,27 @@ export default function AccountList() {
 												>
 													{account.building ?? account.buildingCode ?? "—"}
 												</td>
+												<td data-label="Periode" className="px-3 py-4">
+													{account.periods?.length
+														? account.periods.map((period) => (
+																<p key={period.id}>
+																	{period.name}
+																	<span className="block text-muted-foreground text-xs">
+																		{period.startsOn} – {period.endsOn}
+																	</span>
+																</p>
+															))
+														: "Belum ditetapkan"}
+												</td>
 												<td data-label="Status" className="px-3 py-4">
 													<span
-														className={`whitespace-nowrap rounded-full px-2.5 py-1 font-semibold text-xs ${account.isActive ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}
+														className={`whitespace-nowrap rounded-full px-2.5 py-1 font-semibold text-xs ${accountStatus(account, today) === "active" ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}
 													>
-														{account.isActive ? "Aktif" : "Nonaktif"}
+														{accountStatusLabels[accountStatus(account, today)]}
 													</span>
+												</td>
+												<td data-label="Tindakan" className="px-3 py-4">
+													<AccountActions account={account} />
 												</td>
 											</tr>
 										))}
@@ -266,22 +323,20 @@ export default function AccountList() {
 					</Card>
 					<div className="flex flex-wrap items-center justify-between gap-3">
 						<p className="text-muted-foreground text-sm">
-							{accounts.data.total} akun · Halaman {page}
+							{total} akun · Halaman {currentPage}
 						</p>
 						<div className="flex gap-2">
 							<Button
 								variant="outline"
-								disabled={page === 1 || accounts.isFetching}
-								onClick={() => setPage(page - 1)}
+								disabled={currentPage === 1}
+								onClick={() => setPage(currentPage - 1)}
 							>
 								Sebelumnya
 							</Button>
 							<Button
 								variant="outline"
-								disabled={
-									page * 20 >= accounts.data.total || accounts.isFetching
-								}
-								onClick={() => setPage(page + 1)}
+								disabled={currentPage * 20 >= total}
+								onClick={() => setPage(currentPage + 1)}
 							>
 								Berikutnya
 							</Button>

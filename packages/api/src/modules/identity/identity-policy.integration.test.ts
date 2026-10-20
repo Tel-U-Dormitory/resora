@@ -8,10 +8,12 @@ import { seedOrganization } from "@resora/db/organization";
 import { account, user } from "@resora/db/schema/auth";
 import {
 	buildings,
+	srPeriodMemberships,
 	srProfiles,
 	systemPrivileges,
 	userProfiles,
 } from "@resora/db/schema/identity";
+import { assignSyntheticSrTenure } from "@resora/db/sr-tenure.fixture";
 import { eq, inArray } from "drizzle-orm";
 import { createApp } from "../../../../../apps/server/src/app";
 import {
@@ -120,6 +122,7 @@ const target = process.env.RESORA_IDENTITY_TEST_DB_URL;
 					});
 				}
 			});
+			await assignSyntheticSrTenure(db, ids);
 			server = createApp({ db, auth }, origin).listen(0, "127.0.0.1");
 			await new Promise<void>((done) => server.once("listening", done));
 			const address = server.address();
@@ -137,6 +140,9 @@ const target = process.env.RESORA_IDENTITY_TEST_DB_URL;
 					await tx
 						.delete(systemPrivileges)
 						.where(inArray(systemPrivileges.userId, ids));
+					await tx
+						.delete(srPeriodMemberships)
+						.where(inArray(srPeriodMemberships.userId, ids));
 					await tx.delete(srProfiles).where(inArray(srProfiles.userId, ids));
 					await tx.delete(user).where(inArray(user.id, ids));
 				});

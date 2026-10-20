@@ -12,6 +12,7 @@ export const HCO_NAVIGATION = [
 
 export const ADMIN_NAVIGATION = [
 	{ title: "Kelola akun", href: "/admin/users", icon: "accounts" },
+	{ title: "Periode menjabat", href: "/admin/periods", icon: "periods" },
 ] as const;
 
 export function getSidebarGroups({
