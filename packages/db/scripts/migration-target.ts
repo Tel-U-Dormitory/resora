@@ -236,20 +236,46 @@ export function localMigrations(root: string) {
 	}
 }
 export type LocalMigrations = ReturnType<typeof localMigrations>;
+export class MigrationHistoryError extends MigrationError {
+	constructor(
+		readonly reason:
+			| "APPLIED_MIGRATION_MISSING_LOCALLY"
+			| "SQL_HASH_MISMATCH"
+			| "MIGRATION_NAME_MISMATCH"
+			| "DATABASE_HISTORY_LONGER_THAN_LOCAL",
+		readonly position: number,
+		readonly localName: string | undefined,
+		readonly databaseName: string | null | undefined,
+	) {
+		super("MIGRATION_HISTORY_DIVERGED");
+	}
+}
 export function pendingMigrations(
 	local: LocalMigrations,
 	applied: { hash: string; name?: string | null }[],
 	namedHistory: boolean,
 ) {
-	if (
-		applied.length > local.length ||
-		applied.some(
-			(row, index) =>
-				row.hash !== local[index]?.hash ||
-				(namedHistory && row.name !== local[index]?.name),
-		)
-	)
-		throw new MigrationError("MIGRATION_HISTORY_DIVERGED");
+	for (const [index, row] of applied.entries()) {
+		const expected = local[index];
+		let reason: MigrationHistoryError["reason"] | undefined;
+		if (!expected) reason = "DATABASE_HISTORY_LONGER_THAN_LOCAL";
+		else if (namedHistory && row.name && row.name !== expected.name) {
+			reason =
+				row.hash !== expected.hash &&
+				!local.some((migration) => migration.name === row.name)
+					? "APPLIED_MIGRATION_MISSING_LOCALLY"
+					: "MIGRATION_NAME_MISMATCH";
+		} else if (row.hash !== expected.hash) reason = "SQL_HASH_MISMATCH";
+		else if (namedHistory && row.name !== expected.name)
+			reason = "MIGRATION_NAME_MISMATCH";
+		if (reason)
+			throw new MigrationHistoryError(
+				reason,
+				index + 1,
+				expected?.name,
+				namedHistory ? row.name : undefined,
+			);
+	}
 	return local.slice(applied.length);
 }
 export function migrationFingerprint(

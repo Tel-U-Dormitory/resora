@@ -9,6 +9,7 @@ import {
 	loadMigrationTarget,
 	localMigrations,
 	MigrationError,
+	MigrationHistoryError,
 	type MigrationTarget,
 	migrationFingerprint,
 	parseMigrationArgs,
@@ -224,6 +225,19 @@ export async function runMigrations(
 }
 
 export function migrationFailure(error: unknown): string {
+	if (error instanceof MigrationHistoryError) {
+		// History metadata is untrusted: only migration identifiers may reach logs.
+		const safeName = (name: string | null | undefined) =>
+			name && /^\d{14}_[a-z0-9_]{1,200}$/.test(name) ? name : "unavailable";
+		return [
+			error.code,
+			`Position: ${error.position} (1-based)`,
+			`Reason: ${error.reason}`,
+			`Database migration: ${safeName(error.databaseName)}`,
+			`Local migration: ${error.localName === undefined ? "missing" : safeName(error.localName)}`,
+			"Action: Synchronize the reviewed migration files in the repository and investigate database history before applying. Do not edit applied SQL or rewrite migration history.",
+		].join("\n");
+	}
 	if (error instanceof MigrationError) return error.code;
 	const current = error as { code?: unknown; cause?: unknown } | null;
 	const code = current?.code;

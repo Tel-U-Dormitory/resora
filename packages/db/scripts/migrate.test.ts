@@ -287,6 +287,161 @@ test("applied history must be the exact hash/name prefix; pending files and lega
 	).toThrow();
 });
 
+const [firstMigration, secondMigration] = local;
+if (!firstMigration || !secondMigration) throw Error("Missing test migrations");
+const historyCases = [
+	{
+		label: "applied migration missing in the middle of the local chain",
+		applied: [firstMigration, { name: "20261001500000_missing", hash: "c" }],
+		named: true,
+		reason: "APPLIED_MIGRATION_MISSING_LOCALLY",
+		position: 2,
+		localName: local[1]?.name,
+		databaseName: "20261001500000_missing",
+	},
+	{
+		label: "changed SQL for a matching migration name",
+		applied: [firstMigration, { ...secondMigration, hash: "changed-sql-hash" }],
+		named: true,
+		reason: "SQL_HASH_MISMATCH",
+		position: 2,
+		localName: local[1]?.name,
+		databaseName: local[1]?.name,
+	},
+	{
+		label: "different name with the same hash",
+		applied: [
+			firstMigration,
+			{ ...secondMigration, name: "20261002000000_renamed" },
+		],
+		named: true,
+		reason: "MIGRATION_NAME_MISMATCH",
+		position: 2,
+		localName: local[1]?.name,
+		databaseName: "20261002000000_renamed",
+	},
+	{
+		label: "reordered named migrations",
+		applied: [secondMigration, firstMigration],
+		named: true,
+		reason: "MIGRATION_NAME_MISMATCH",
+		position: 1,
+		localName: local[0]?.name,
+		databaseName: local[1]?.name,
+	},
+	{
+		label: "database history extends an otherwise valid prefix",
+		applied: [...local, { name: "20261003000000_extra", hash: "c" }],
+		named: true,
+		reason: "DATABASE_HISTORY_LONGER_THAN_LOCAL",
+		position: 3,
+		localName: "missing",
+		databaseName: "20261003000000_extra",
+	},
+	{
+		label: "legacy hash mismatch without an invented database name",
+		applied: [{ hash: "legacy-mismatched-hash" }],
+		named: false,
+		reason: "SQL_HASH_MISMATCH",
+		position: 1,
+		localName: local[0]?.name,
+		databaseName: "unavailable",
+	},
+	{
+		label: "legacy excess history without an invented database name",
+		applied: [...local.map(({ hash }) => ({ hash })), { hash: "c" }],
+		named: false,
+		reason: "DATABASE_HISTORY_LONGER_THAN_LOCAL",
+		position: 3,
+		localName: "missing",
+		databaseName: "unavailable",
+	},
+	{
+		label: "null name in named history still fails validation",
+		applied: [{ ...firstMigration, name: null }],
+		named: true,
+		reason: "MIGRATION_NAME_MISMATCH",
+		position: 1,
+		localName: local[0]?.name,
+		databaseName: "unavailable",
+	},
+	{
+		label: "earlier mismatch takes precedence over excess history",
+		applied: [{ ...firstMigration, hash: "bad" }, ...local],
+		named: true,
+		reason: "SQL_HASH_MISMATCH",
+		position: 1,
+		localName: local[0]?.name,
+		databaseName: local[0]?.name,
+	},
+];
+for (const scenario of historyCases) {
+	test(`history diagnostics identify ${scenario.label}`, () => {
+		let output = "";
+		try {
+			pendingMigrations(local, scenario.applied, scenario.named);
+		} catch (error) {
+			output = migrationFailure(error);
+		}
+		expect(output).toBe(
+			[
+				"MIGRATION_HISTORY_DIVERGED",
+				`Position: ${scenario.position} (1-based)`,
+				`Reason: ${scenario.reason}`,
+				`Database migration: ${scenario.databaseName}`,
+				`Local migration: ${scenario.localName}`,
+				"Action: Synchronize the reviewed migration files in the repository and investigate database history before applying. Do not edit applied SQL or rewrite migration history.",
+			].join("\n"),
+		);
+	});
+}
+
+test("history diagnostics never expose arbitrary database names, hashes or SQL", () => {
+	const unsafe = `postgresql://private:${secret}@host/postgres\nSELECT private_data`;
+	let output = "";
+	try {
+		pendingMigrations(local, [{ name: unsafe, hash: unsafe }], true);
+	} catch (error) {
+		output = migrationFailure({ cause: error });
+	}
+	expect(output).toContain("MIGRATION_HISTORY_DIVERGED");
+	expect(output).toContain("Database migration: unavailable");
+	expect(output).not.toContain(secret);
+	expect(output).not.toContain("postgresql:");
+	expect(output).not.toContain("SELECT");
+	expect(output).not.toContain(local[0]?.hash ?? "missing-hash");
+});
+
+test("divergent history stops apply before Kit and still closes the read-only connection", async () => {
+	const f = await fixture();
+	const target = loadMigrationTarget(f.root, "dev");
+	const c = clientFixture(target);
+	c.state.applied = [{ hash: "unexpected", name: firstMigration.name }];
+	let closed = false;
+	let executed = false;
+	await expect(
+		runMigrations(["dev"], f.root, {
+			load: () => target,
+			local: () => local,
+			connect: async () => ({
+				client: c.client,
+				close: async () => {
+					closed = true;
+				},
+			}),
+			preflight: migrationPreflight,
+			execute: async () => {
+				executed = true;
+				return 0;
+			},
+			log: () => {},
+		}),
+	).rejects.toThrow("MIGRATION_HISTORY_DIVERGED");
+	expect(executed).toBe(false);
+	expect(closed).toBe(true);
+	expect(c.state.queries.at(-1)).toBe("ROLLBACK");
+});
+
 test("read-only preflight accepts an empty application schema but rejects missing/empty history over existing objects", async () => {
 	const f = await fixture();
 	const target = loadMigrationTarget(f.root, "dev");
