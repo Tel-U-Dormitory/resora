@@ -31,7 +31,7 @@ Keep all credentials in ignored env files. Do not print, paste into issue logs, 
 | Key | Purpose |
 | --- | --- |
 | `DATABASE_URL` | Session Pooler connection, normally port 5432; Express runtime and runtime connectivity check |
-| `DIRECT_DB_URL` | Direct Connection, normally port 5432; preferred by Drizzle Kit and migration preflight |
+| `DIRECT_DB_URL` | Legacy direct connectivity and generate/studio configuration; the target-aware migration CLI uses private `DB_MIGRATION_URL` instead |
 | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `CORS_ORIGIN` | Existing scaffold settings; retain current development values |
 | `NODE_ENV` | `development` on the workstation |
 
@@ -53,7 +53,7 @@ Supabase Direct Connection normally requires IPv6 unless an IPv4 add-on is enabl
 
 ## 4. Version-controlled migrations
 
-`packages/db/drizzle.config.ts` selects **`DIRECT_DB_URL` when nonempty**, otherwise explicitly reports `DATABASE_URL` (for local setup). A configured but unreachable direct URL never triggers a retry with another connection. Drizzle Kit is restricted to the application `public` schema; do not manage Supabase's internal auth/storage schemas.
+`db:generate` and `db:studio` retain the Varlock-based `packages/db/drizzle.config.ts` (`DIRECT_DB_URL` preferred over `DATABASE_URL`). Supabase migration execution uses the explicit private-target workflow below, independently of application env files. Drizzle Kit remains authoritative; do not manage Supabase's internal auth/storage schemas or use `db:push` on Supabase.
 
 Generate files only, without applying SQL:
 
@@ -63,22 +63,58 @@ pnpm run db:generate --name=phase1_scaffold
 
 Commit the complete generated migration directory under `packages/db/src/migrations` (SQL and snapshot/metadata). The installed Drizzle Kit 1.0.0-rc.4 determines the directory format; do not invent a journal layout from older versions. The Phase 1 baseline contains only the four existing scaffold Better Auth tables, not new authentication behavior or NEED-001 tables. Review every SQL file before application. [Drizzle migration workflow](https://orm.drizzle.team/docs/migrations).
 
-**Later, with explicit approval to write to the Development project**, verify that the target is Development, check for existing tables or an existing migration history, review SQL and arrange recovery, then run `pnpm run db:migrate`. Its read-only preflight uses the same selected connection before invoking Drizzle Kit. The `db:migrate:deploy` package alias uses the same preflight. Applying the baseline over tables previously created with `db:push` may fail; do not drop tables or invent migration history to resolve that. No migration runs during dev, builds, Docker startup or Phase 1 verification. Do not use `db:push` on Supabase.
+### Current supported Supabase migration workflow
 
-### Explicit IPv4-only migration alternative
+First-time setup (manual, private): create `.private/db-migration/`, save files as UTF-8, and restrict access to authorized operators (Linux: directory `0700`, env files `0600`; Windows: private NTFS ACL). The existing `/.private/` Git ignore covers both env files and certificates. Never force-add these files or paste their values into logs/issues.
 
-If Direct Connection fails with `ENETUNREACH`/`EHOSTUNREACH`, DNS errors or timeout, first check IPv6 routing, firewall/VPN restrictions and project status. Prefer running migration tooling on an IPv6-capable host. Do not silently replace the direct URL.
+Example `.private/db-migration/dev.env` — replace every placeholder privately with the **Development** Dashboard → Connect values:
 
-If the team deliberately chooses Session Pooler for a reviewed Development migration, use **Session mode on port 5432**, not Transaction mode on port 6543. The explicit command below leaves the env files unchanged and does not print either URL. It loads the runtime Session Pooler URL via Varlock, passes it to the child as `DIRECT_DB_URL`, and waits for that child:
-
-```powershell
-# Read-only verification of the explicitly selected Session Pooler path:
-pnpm --dir packages/db exec bun run scripts/session-pooler.ts --check
-# Only after separate approval for the reviewed migration:
-pnpm --dir packages/db exec bun run scripts/session-pooler.ts --migrate
+```dotenv
+DB_MIGRATION_URL='postgresql://postgres.<dev-project-ref>:<percent-encoded-password>@aws-0-<region>.pooler.supabase.com:5432/postgres'
+DB_PROJECT_REF=<dev-project-ref>
+DB_CONNECTION_MODE=session
+DB_CA_FILE=supabase-ca.pem
 ```
 
-Both commands explicitly announce the Session Pooler selection. Errors stop the command; neither changes env files or retries another connection. Production migration approval and recovery planning remain outside Phase 1.
+Create `prod.env` with the same four keys and the independently verified **Production** reference/credentials. Direct Connection example:
+
+```dotenv
+DB_MIGRATION_URL='postgresql://postgres:<percent-encoded-password>@db.<prod-project-ref>.supabase.co:5432/postgres'
+DB_PROJECT_REF=<prod-project-ref>
+DB_CONNECTION_MODE=direct
+DB_CA_FILE=supabase-ca.pem
+```
+
+All four fields are required. Choose `direct` or `session` deliberately; both require port **5432**, database `postgres`, and no URL query/fragment/TLS options. Session usernames must be `<role>.<project-ref>`; direct usernames are the database role. Copy the exact pooler hostname from Dashboard, not an inferred region. Percent-encode password characters, including `@`, `:`, `/`, `?`, `#`, `%`, spaces and quotes; the CLI decodes credentials once. No multiline values, duplicate/unknown keys, shell expansion, or environment interpolation are supported. Relative CA paths resolve beside the selected env file; absolute paths are also accepted.
+
+Download the project's CA from Dashboard → Database settings → SSL Configuration ([Supabase instructions](https://supabase.com/docs/guides/platform/ssl-enforcement)). Verify its trusted source, issuer/fingerprint and validity through the approved operator procedure, then save it as `.private/db-migration/supabase-ca.pem`. Use separate CA paths if projects require different certificates. Never substitute a private key or disable verification. No certificate is downloaded automatically.
+
+From the repository root, identical commands on PowerShell/Linux:
+
+```bash
+pnpm db:migrate dev --check
+# After reviewing pending SQL and authorizing Development writes:
+pnpm db:migrate dev
+pnpm db:migrate prod --check
+# Only with PM-approved Production changes and reviewed backup/recovery plan:
+pnpm db:migrate prod --apply --confirm <prod-project-ref>
+```
+
+`prod` alone fails; `--check` never runs Kit or writes database objects. Production apply requires confirmation equal to the selected private file's project reference. The operator must verify which project is DEV versus PROD when creating the files: the CLI pins the configured reference, not a Dashboard project display name. No application `DATABASE_URL`/`DIRECT_DB_URL` fallback, automatic mode switching, migration-on-startup, or retries exist. Package `db:migrate:deploy` forwards the same target arguments. Legacy `session-pooler.ts --migrate` is rejected; its `--check` and existing runtime connectivity checks remain available.
+
+Preflight checks the actual verified TLS socket (certificate chain **and hostname**), connected database/role and migration history in a read-only transaction. Session Pooler verification concerns client → pooler TLS, not `pg_stat_ssl` on the separate pooler → PostgreSQL hop. Applied hashes must equal the ordered prefix of local migrations; recorded names must match where present. Pending migrations are allowed. Missing/empty history is accepted only when application schemas `public`/`drizzle` contain no nonextension application objects. Managed Supabase schemas are left alone. Divergence or partially initialized untracked schemas stops execution; never fabricate history, reset or drop tables to get past this gate.
+
+The CLI prints the environment, reference, connection mode, pending names/counts and results. It invokes the installed **Drizzle Kit migrate** command with structured verified TLS credentials shared with preflight. A fingerprint rejects config/CA/migration changes between preflight and child startup. Inherited PG/application/Node override variables are removed from the child; no machine/profile environment changes are made. No manual `PGSSLMODE` or `NODE_EXTRA_CA_CERTS` exports are needed. Kit's raw output is suppressed because database errors can contain SQL/data/secrets; failures return a fixed diagnostic, and safe driver codes are reported for preflight errors. Inspect failures privately through approved database tooling; do not blindly retry. After successful execution, history is checked again. Drizzle may perform its own supported legacy history-format upgrade after prefix validation; the wrapper never repairs hashes or invents applied entries. Do not edit migration/config files or run simultaneous migration operators.
+
+Troubleshooting:
+
+- **DNS/IPv6/network:** inspect connectivity, VPN/firewall and project state. For IPv4-only hosts, explicitly update the selected file to the Dashboard Session Pooler URL and `session` mode; never use Transaction Pooler **6543**.
+- **TLS/CA:** verify readable CA path, correct issuer/validity, exact hostname and certificate chain. Replace a rotated CA through the trusted operator process; insecure process TLS settings are refused.
+- **Project/identity mismatch:** check mode, hostname, role, port and project reference together; no automatic fallback is attempted.
+- **History/local-chain mismatch:** diagnostics identify the first mismatch using a 1-based position and reason (missing local migration, SQL hash mismatch, name mismatch, or database history longer than local files). Names are shown only when available and valid; legacy unnamed history is compared by hash. A longer history is reported at its first extra entry only if the preceding prefix matches. Restore the matching reviewed versioned files or investigate divergent history. Do not edit previously applied SQL or manually rewrite the history table.
+- **Role/permission failure (`28P01`/`42501`):** verify credentials and reviewed migration privileges, including existing schema/history access and DDL ownership. The CLI never grants privileges.
+
+Local disposable database preparation remains a deliberate low-level Drizzle operation (`pnpm --dir packages/db exec drizzle-kit migrate`) using the existing local Varlock config, after separately verifying that target. The Supabase wrapper rejects loopback/non-Supabase targets. Tests use mocks or explicitly isolated local fixtures; this implementation applies no remote migration.
 
 ### Phase 2A.6 Development migration status and verified TLS
 
@@ -86,18 +122,7 @@ Both commands explicitly announce the Session Pooler selection. Errors stop the 
 
 The configured URL has no TLS mode. Verification deliberately supplied `PGSSLMODE=verify-full`; the initial untrusted-chain error was resolved with Supabase's public Root 2021 CA via `NODE_EXTRA_CA_CERTS`, without disabling certificate verification or changing env files. Download the project CA through Dashboard → Database settings → SSL Configuration ([official instructions](https://supabase.com/docs/guides/platform/ssl-enforcement)). This phase used the public [Supabase CA download](https://supabase-downloads.s3.ap-southeast-1.amazonaws.com/prod/ssl/prod-ca-2021.crt), inspected as `Supabase Root 2021 CA`, valid until 2031, certificate thumbprint `A4518A0933AF6949482CCA3014C007C369DF9F6F`. The downloaded public certificate remains ignored at `tmp/phase2a6-prod-ca-2021.crt` on the validation workstation; acquire/verify it separately on another workstation.
 
-To repeat **read-only** checks in a fresh PowerShell process, preserve/restore any existing values if using a shared session:
-
-```powershell
-$env:VARLOCK_TELEMETRY_DISABLED = '1'
-$env:PGSSLMODE = 'verify-full'
-$env:NODE_EXTRA_CA_CERTS = (Resolve-Path -LiteralPath tmp/phase2a6-prod-ca-2021.crt).Path
-pnpm.cmd --dir packages/db exec bun run scripts/session-pooler.ts --check
-pnpm.cmd run db:check
-# Close this dedicated process afterward, or restore the three previous values.
-```
-
-Use the same verified TLS settings for deliberate future database connections; settings here apply only to the launched process and do not establish persistent runtime/container TLS configuration. Never set `NODE_TLS_REJECT_UNAUTHORIZED=0` or `rejectUnauthorized=false`. Do not run identity integration tests against Supabase; keep RESORA_IDENTITY_TEST_DB_URL unset or pointed only at the guarded local scratch database.
+The env exports above describe historical validation, not the current procedure. Use `pnpm db:migrate dev --check` with the selected private CA for current read-only migration verification. Historical pending counts are not claims about today's branch. Never disable TLS verification. Keep `RESORA_IDENTITY_TEST_DB_URL` unset or pointed only at a guarded local scratch database; do not run identity integration tests against Supabase.
 
 ### Windows Varlock verification workaround
 
@@ -119,7 +144,7 @@ For the isolated Docker database:
 1. Store a strong generated password in ignored `.private/postgres-password` (mode 0600), or set Compose `POSTGRES_PASSWORD_FILE` to another private absolute password-file path. There is no development credential fallback. The secret is mounted only in PostgreSQL; backend credentials use the existing private server environment.
 2. Run `docker compose --profile local-db up -d --wait postgres` only on the approved local development host. The existing service uses PostgreSQL 18, its own `resora_postgres_data` persistent volume, an internal network shared only with the backend, and loopback-only port `127.0.0.1:5432`. Container recreation preserves this volume; `down -v` destroys it. Never attach an existing PostgreSQL 18 data directory to PostgreSQL 17.
 3. Configure the backend privately with `DATABASE_URL=postgresql://<role>:<encoded-password>@postgres:5432/resora`. Clear remote `DB_SSL_CA`/SSL URL options and clear or deliberately realign `DIRECT_DB_URL`. Provision a reviewed runtime role with application access and SELECT on all application tables/sequences for exports; bootstrap `postgres` is not the intended production runtime role. Password-file changes do not rotate credentials of an initialized database.
-4. Review/apply the existing migrations only to the explicitly approved new database; no real-data transfer is included here. Run tooling inside the backend network, for example `docker compose run --rm --no-deps server bun run --cwd /app/packages/db db:migrate` with the correct private environment. Host development tools may use `localhost:5432`; containers use `postgres:5432`. Do not run `db:push` or overwrite existing data.
+4. Review/apply the existing migrations only to the explicitly approved new local database; no real-data transfer is included here. Use the low-level Drizzle Kit command with the verified local Varlock configuration (`pnpm --dir packages/db exec drizzle-kit migrate`), rather than the Supabase-only `db:migrate dev|prod` wrapper. Host development tools may use `localhost:5432`; containers use `postgres:5432`. Do not run `db:push` or overwrite existing data.
 5. Build/start the local stack with `docker compose --profile local-db up -d --build` after schema preparation. Existing web/server env files are required as BuildKit secrets. Browser API remains `http://localhost:3000`, SSR uses `SERVER_URL=http://server:3000`. Server `/` is process liveness, not schema/database readiness; verify backend connectivity/login separately before directing users here.
 
 ### Download a backup
@@ -889,3 +914,124 @@ Configure strict/up-to-date checks if that is the team's integration requirement
 No repository settings/rulesets were changed by this implementation. Required
 checks/review settings are necessary because `push: staging` cannot distinguish a
 reviewed merge from a direct push. UAT approval remains a manual release gate.
+
+### Password recovery (SMTP and manual fallback)
+
+Apply reviewed migration `20261020113005_password_reset_audit` through the normal
+migration workflow before enabling recovery. No migration is run on API startup.
+The append-only, RLS-protected audit table records `REQUESTED`, `SMTP_ACCEPTED`,
+`SMTP_FAILED`, `MANUAL_LINK_ISSUED`, and `RESET_COMPLETED`. There is no audit HTTP
+read endpoint. Target emails and trusted request IPs are personal data: restrict
+database access; retention remains an operational policy decision.
+
+Server-only runtime configuration:
+
+| Variable | Purpose |
+| --- | --- |
+| `PASSWORD_RESET_EMAIL_ENABLED` | Default `false`; set `true` only after email ownership and SMTP have been checked. API restart/redeployment required. |
+| `SMTP_USER` | Gmail sender/login email; sender name is always `RnD SR XIV`. |
+| `SMTP_PASS` | Gmail App Password (not the normal account password); requires Google account two-step verification/App Password availability. |
+| `SMTP_PORT` | Default `465` (implicit TLS), or `587` (mandatory STARTTLS). Certificate verification stays enabled. |
+| `CORS_ORIGIN` | Exact public web origin used for the trusted `/reset-password` link. Ensure it matches the deployed domain, including Compose overrides. |
+
+SMTP host is fixed to `smtp.gmail.com`; legacy `SMTP_HOST`/`SMTP_FROM_*` do not
+override it or the sender. Keep all credentials in the private runtime secret
+store, never `NEXT_PUBLIC_*`, image build arguments, Git, or logs. Missing SMTP
+does not prevent login, provisioning or application initialization. Production
+continues to use the existing shared Better Auth limiter; reset requests are
+limited to 5/minute/IP, reset submissions to 10/minute/IP. Keep the existing
+`AUTH_RATE_LIMIT_ENABLED` enabled.
+
+Imported SR email addresses currently have `emailVerified=false`. Recovery does
+not change that flag or create an email-verification workflow. Before public
+activation, PM must confirm the imported addresses belong to the intended users:
+possession of a mailbox permits password reset. Until then leave email recovery
+disabled and use operator-assisted recovery after independent identity checks.
+
+Links contain a native Better Auth token in the **URL fragment**, not the query
+or API path. The reset page removes the fragment and submits the token in a POST
+body. Native verification storage supplies the 15-minute, one-time token;
+successful resets clear `mustChangePassword` and revoke all sessions. A reload
+after fragment removal requires reopening the original email link. Do not add
+analytics/session recording on recovery pages or log request bodies. The native
+GET token callback remains outside the endpoint allowlist.
+
+Public requests return the same generic response for unknown/inactive accounts,
+disabled recovery and SMTP delivery failure. SMTP runs outside response latency:
+persistent Node/Bun keeps its pending I/O; Vercel uses `waitUntil`. Delivery is
+bounded by SMTP timeouts and the Function lifetime. `SMTP_ACCEPTED` means Gmail
+accepted the message, not inbox delivery. There is no retry queue. Fixed
+`PASSWORD_RESET_*_FAILED` logs contain no account/token details. SMTP audit failure
+does not change the generic public response. Reset SQL failures are handled by
+the atomic transaction described below, rather than claiming partial completion.
+
+Recovery review: Better Auth 1.7.7's adapter transaction option alone only protects
+the native token-consume unit; the reset endpoint does not transact all its steps.
+RESORA enables adapter transactions and wraps **only** the native reset endpoint
+in a Drizzle transaction, binding native password/token/session operations and the
+completion callback to that same connection. Password, session-delete, or audit SQL
+failure rolls back the whole reset, including the stored password flag and
+`RESET_COMPLETED`; no successful completion is returned before commit. Existing
+`createAuth(env, tx)` provisioning remains inside its caller's transaction/savepoints.
+Loss of the COMMIT acknowledgement can still make the client outcome ambiguous;
+do not automatically retry or infer unchanged credentials from a failed response.
+The rollback tests inject definite SQL failures, not network loss during COMMIT.
+
+Migration `20261020115840_password_reset_correlation` adds nullable `request_id`
+and its index without modifying the original audit migration/history. A public
+request's server-generated UUID links `REQUESTED` exactly to `SMTP_ACCEPTED` or
+`SMTP_FAILED`, including concurrent requests for the same address. Legacy rows
+have no correlation. `RESET_COMPLETED` remains an independent user/time audit:
+it is not linked to issuance by storing or hashing native tokens. Manual issuance
+needs no shared auth secret: native reset tokens are random database verification
+records, not secret-signed links. A separate normal application instance redeems
+the CLI-issued link using the same database.
+
+Focused real-PostgreSQL review test (explicit migrated disposable loopback database,
+no remote fallback): `bun --no-env-file test packages/auth/src/password-recovery.integration.test.ts`.
+Set `RESORA_IDENTITY_TEST_DB_URL` to a fresh `resora_identity_test_*` database owned
+by its non-superuser, non-BYPASSRLS runtime role. For RLS negative tests, a local
+cluster administrator must create NOLOGIN/NOSUPERUSER/NOBYPASSRLS role
+`recovery_unauthorized` and grant membership to that runtime role. The suite verifies
+the connected host/port/database/role and every migration hash before fixtures.
+It does not apply migrations or delete immutable audit fixtures. Use only synthetic
+data; dispose of the entire dedicated test database/cluster afterward. Runtime
+audit INSERT currently relies on the migration/table-owner model. Before rollout,
+verify the actual deployed DB role is the table owner or has reviewed RLS-bypass
+access and INSERT permission. A separate nonowner/non-BYPASSRLS runtime role is
+intentionally rejected by default-deny RLS and requires an explicitly reviewed
+role-specific INSERT policy/grant; no arbitrary runtime role is granted access here.
+
+Manual issuance runs only in a private interactive operator terminal, after
+verifying the person's identity. No public endpoint or dashboard flag selects it.
+Use explicit private environment variables `RESORA_PASSWORD_RESET_DB_URL` and
+`RESORA_PASSWORD_RESET_APP_ORIGIN`. No application DB URL fallback is used.
+For a Supabase Production direct/session connection, also set
+`RESORA_PASSWORD_RESET_SSL_CA` to the verified PEM CA. Use port 5432, no URL TLS
+parameters, and provide the exact project reference; Transaction Pooler is refused.
+Local tests accept only verified loopback `resora_identity_test_*` databases.
+
+```powershell
+# Set the three private variables using your approved secret manager/secure prompt.
+# Do not put secrets into command history. APP_ORIGIN is the public HTTPS web origin.
+$ref = Read-Host 'Verified Production project reference (non-secret)'
+$email = Read-Host 'Registered email after independent identity verification'
+pnpm auth:reset-link -- --target production --database postgres --project-reference $ref --confirm-production $ref --email $email
+# Only after the read-only preflight passes, in a private non-recorded terminal:
+pnpm auth:reset-link -- --target production --database postgres --project-reference $ref --confirm-production $ref --email $email --apply --confirm-issue ISSUE
+# --nim <registered NIM> may replace --email. Never pipe/redirect issuance output.
+Remove-Item Env:RESORA_PASSWORD_RESET_DB_URL, Env:RESORA_PASSWORD_RESET_SSL_CA -ErrorAction SilentlyContinue
+```
+
+Issuance creates a **fresh** native token, records `MANUAL_LINK_ISSUED`, and prints
+the link once. It does not retrieve old links or change the password itself.
+If issuance/terminal delivery is ambiguous, do not claim success; check the private
+audit, let unseen tokens expire and explicitly issue a fresh link if needed.
+Never forward links before verifying identity or store them in audit/tickets/logs.
+
+Before deployment: test with a synthetic staging account and controlled mailbox;
+check generic unknown/inactive responses, Gmail acceptance/failure, invalid/expired
+and reused tokens, session revocation, privileged first-password gate completion,
+manual issuance, and audit access protections. Check the actual public HTTPS
+origin and Vercel SMTP completion if used. Offline tests mock SMTP/storage;
+live SMTP, PostgreSQL migration execution and browser UAT require separate approval.

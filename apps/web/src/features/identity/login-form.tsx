@@ -390,6 +390,12 @@ export default function LoginForm({ expired = false }: { expired?: boolean }) {
 							)}
 
 							{/* Submit Button */}
+							<Link
+								href="/forgot-password"
+								className="block text-right text-primary text-sm hover:underline focus-visible:outline-2"
+							>
+								Lupa Password?
+							</Link>
 							<Button
 								type="submit"
 								className="mt-2 h-11 w-full rounded-xl bg-primary font-bold text-primary-foreground text-sm shadow-brand transition-all hover:bg-primary-hover active:scale-[0.99]"
