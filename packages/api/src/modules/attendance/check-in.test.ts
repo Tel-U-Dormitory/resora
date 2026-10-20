@@ -318,8 +318,8 @@ test("valid synthetic QR saves server time/GPS, ignores scheduled end and return
 		gpsAccuracyM: 40,
 	});
 	expect(f.state.locks).toEqual([
-		"events:update",
-		"attendance_sessions:update",
+		"events:share",
+		"attendance_sessions:share",
 		"user_profiles:share",
 		"system_privileges:share",
 	]);
