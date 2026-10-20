@@ -112,14 +112,14 @@ Turbo passes this optional flag to child tasks. It is not forced in the project 
 
 ## 5. Docker PostgreSQL and manual downloadable backups
 
-The current scope is a dedicated Docker PostgreSQL primary and a file downloaded by an authenticated active SUPERADMIN. Scheduled backups and automatic restoration to Supabase are cancelled. No database is switched, migrated or restored during application startup. Existing environments still use their explicitly configured `DATABASE_URL` until an operator deliberately changes it.
+Docker PostgreSQL is an optional development database, with file downloads by an authenticated active SUPERADMIN. Production uses external Supabase for now; local PostgreSQL is absent from production Compose. Scheduled backups and automatic restoration to Supabase are cancelled. No database is switched, migrated or restored during application startup. Existing environments still use their explicitly configured `DATABASE_URL` until an operator deliberately changes it.
 
 For the isolated Docker database:
 
 1. Store a strong generated password in ignored `.private/postgres-password` (mode 0600), or set Compose `POSTGRES_PASSWORD_FILE` to another private absolute password-file path. There is no development credential fallback. The secret is mounted only in PostgreSQL; backend credentials use the existing private server environment.
-2. Run `docker compose --profile local-db up -d --wait postgres` only on the approved local/deployment host. The service uses PostgreSQL 17, its own `resora_postgres17_data` persistent volume, an internal network shared only with the backend, and no published database port. Container recreation preserves this volume; `down -v` destroys it. Never attach an existing PostgreSQL 18 data directory to PostgreSQL 17.
+2. Run `docker compose --profile local-db up -d --wait postgres` only on the approved local development host. The existing service uses PostgreSQL 18, its own `resora_postgres_data` persistent volume, an internal network shared only with the backend, and loopback-only port `127.0.0.1:5432`. Container recreation preserves this volume; `down -v` destroys it. Never attach an existing PostgreSQL 18 data directory to PostgreSQL 17.
 3. Configure the backend privately with `DATABASE_URL=postgresql://<role>:<encoded-password>@postgres:5432/resora`. Clear remote `DB_SSL_CA`/SSL URL options and clear or deliberately realign `DIRECT_DB_URL`. Provision a reviewed runtime role with application access and SELECT on all application tables/sequences for exports; bootstrap `postgres` is not the intended production runtime role. Password-file changes do not rotate credentials of an initialized database.
-4. Review/apply the existing migrations only to the explicitly approved new database; no real-data transfer is included here. Run tooling inside the backend network, for example `docker compose run --rm --no-deps server bun run --cwd /app/packages/db db:migrate` with the correct private environment. Host tools cannot use `localhost:5432` because the database is not published. Do not run `db:push` or overwrite existing data.
+4. Review/apply the existing migrations only to the explicitly approved new database; no real-data transfer is included here. Run tooling inside the backend network, for example `docker compose run --rm --no-deps server bun run --cwd /app/packages/db db:migrate` with the correct private environment. Host development tools may use `localhost:5432`; containers use `postgres:5432`. Do not run `db:push` or overwrite existing data.
 5. Build/start the local stack with `docker compose --profile local-db up -d --build` after schema preparation. Existing web/server env files are required as BuildKit secrets. Browser API remains `http://localhost:3000`, SSR uses `SERVER_URL=http://server:3000`. Server `/` is process liveness, not schema/database readiness; verify backend connectivity/login separately before directing users here.
 
 ### Download a backup
@@ -332,6 +332,9 @@ Remove-Item Env:RESORA_PROVISION_WEB_SMOKE
 
 ## 8. Vercel deployment preparation (Phase 8A; not deployed)
 
+Historical/optional preparation. The current production target is the Rumahweb VPS
+configuration in section 9; the Vercel-specific settings below do not apply to VPS Compose.
+
 Current target: two Vercel Projects from this repository, `resora-web` (Root Directory `apps/web`, Next.js) and `resora-api` (Root Directory `apps/server`, Express). Enable **Include source files outside of the Root Directory in the Build Step** for both projects so pnpm workspace packages are available. Select Node.js **24.x**; each app pins that major in `engines`. Repository `vercel.json` files select the framework, `pnpm install --frozen-lockfile` and `pnpm run build`. Leave Output Directory at the framework default; do not set API output to `dist`. The native Express builder discovers `apps/server/app.mjs`, which imports generated `./dist/app.mjs` with an explicit ESM path and exports `createApp()` without opening a listener. `src/vercel-app.ts` is the bundle source; root bridge is not a tsdown input. Function packaging explicitly includes `dist/**` and `.env.schema`; the bridge sets the API working directory before Varlock loads. The existing Bun `src/index.ts`/`dist/index.mjs` listener and Dockerfiles remain available. No adapter or Vercel SDK is added to domain code. See [native Express](https://vercel.com/docs/frameworks/backend/express), [monorepos](https://vercel.com/docs/monorepos) and [Node.js versions](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions).
 
 ### Environment mapping (PM supplies values privately)
@@ -510,3 +513,379 @@ Verification for this update:
 - `biome check .` and `git diff --check`: passed.
 
 The test-only Docker container was removed after verification. No remote data/account mutation was performed. Browser/visual testing was not run; keyboard focus/return, tooltip hover, clipboard permissions, mobile sizing, dark theme and the complete administrator workflow still require manual UAT. Local commits remain on `feat/admin-account-lifecycle`, without push.
+
+## 9. Rumahweb VPS Compose production (Phase 2; not deployed)
+
+`docker-compose.yml` preserves the local built-container workflow (web localhost:3001,
+API localhost:3000; optional `--profile local-db`). This phase adds no hot reload.
+Web now listens on unprivileged container port 3001 to run as user `node`.
+`docker-compose.prod.yml` is standalone: **do not merge it with development Compose**.
+Production has only web/server, no host application ports or local database. The
+project-scoped default bridge permits backend egress to Supabase. Only web also
+joins the existing external `resora-proxy` network with alias `resora-prod-web`.
+There is no NPM service/dashboard configuration change in this repository.
+
+### Private production environment
+
+Create `.private/production/` (directory 0700) and its `web.env` and `server.env`
+files (0600), outside Git. Use `apps/web/.env.example` and
+`apps/server/.env.example` as templates. **Replace the synthetic backend key and
+connection before runtime**. The production build mounts these tracked synthetic
+templates, never the private production files. Dev builds retain existing env
+secret mounts. The frontend and backend runtime users are non-root (`node`).
+
+- Web: `NODE_ENV=production`, `NEXT_PUBLIC_SERVER_URL=/`,
+  `SERVER_URL=http://server:3000`, `API_UPSTREAM_URL=http://server:3000`.
+  Compose pins these public/internal routing settings consistently at build and runtime.
+  `getServerUrl()` resolves `/` to the browser origin and uses `SERVER_URL` for SSR;
+  auth, tRPC and the existing backup endpoint use existing Next rewrites. Rewrites
+  and public URL changes require rebuilding the web image.
+- Server: set a strong unique `BETTER_AUTH_SECRET` (at least 32 characters), the
+  production Supabase `DATABASE_URL`, and `DB_SSL_CA` containing the project's
+  trusted PEM CA. Use quoted multiline dotenv syntax for the certificate. With
+  `DB_SSL_CA`, remove all SSL query parameters from `DATABASE_URL`; existing code
+  requires certificate/hostname verification. Do not disable verification.
+- Get the actual host/role from the project's Supabase Connect dashboard; percent
+  encode password characters. Session Pooler on 5432 supports IPv4-only persistent
+  backends; direct connection requires working IPv6 or the applicable IPv4 option.
+  No automatic fallback. Do not copy workstation Development credentials to production.
+- Compose pins `BETTER_AUTH_URL=https://telkomdormitory.com`,
+  `CORS_ORIGIN=https://telkomdormitory.com`, `NODE_ENV=production`, and
+  `DATABASE_BACKUP_ENABLED=false`. Wildcard DNS grants no wildcard auth/CORS support.
+- Phase 3: set `AUTH_PROXY_SECRET` privately in server.env and the matching NPM
+  location header (section 10). It is required by persistent production startup,
+  absent from build/web env, and separate from `BETTER_AUTH_SECRET`.
+- Keep `AUTH_RATE_LIMIT_ENABLED=true`, `AUTH_PERF_DIAGNOSTICS_ENABLED=false`;
+  `DB_POOL_MAX=3` is a conservative starting value, subject to measured load and
+  Supabase limits. Keep `DIRECT_DB_URL` absent from runtime unless separately needed.
+  No migration, seed or provisioning runs at container startup.
+
+Builds retain existing workspace dependencies; broad image pruning is deferred.
+On a separate build-only machine, the Compose-required runtime env file paths may
+contain copies of the synthetic templates; no production credentials are needed
+there. Provision real runtime files only on the deployment host.
+
+Logs rotate at 10 MB × 3 per service. Do not build both images concurrently on
+this 1 GB VPS. Prefer building on a compatible, sufficiently provisioned machine
+and transferring reviewed images; build resource needs on the VPS are unverified.
+
+### Nginx Proxy Manager (operator setup; not executed)
+
+Use a Proxy Host for `telkomdormitory.com`, scheme `http`, forward hostname
+`resora-prod-web`, forward port `3001`. Enable WebSocket support if needed and
+configure a valid TLS certificate and Force SSL. The existing NPM container must
+already join `resora-proxy`. Do not proxy directly to the backend or publish app
+ports. Preserve NPM's localhost-only dashboard and existing host 80/443 ownership.
+Do not add wildcard Proxy Hosts/CORS/cookie domains without approved requirements.
+
+### Review gates and recommended deployment commands
+
+**Go-live gate:** Phase 3 implements authenticated NPM client-IP metadata without
+changing `trust proxy` or the limiter. The operator must apply and verify the
+location-scoped NPM headers and private runtime secret described in section 10.
+Phase 2 alone did not solve client-IP attribution.
+Also verify production schema/migration compatibility, TLS connectivity, auth
+cookies/origin behavior, UAT, resource usage and recovery before directing users.
+The HTTP healthchecks show liveness only, not database/auth readiness.
+
+After PM review and separate deployment authorization, the operator may run:
+
+```sh
+# Set the full 40-character SHA from a successful, reviewed GHCR workflow run.
+export RESORA_IMAGE_TAG='<full-40-character-commit-sha>'
+# Parse without private runtime files (safe repository check):
+docker compose -f docker-compose.prod.yml config --no-env-resolution --quiet
+# On the approved VPS, after private runtime files are provisioned:
+docker compose -f docker-compose.prod.yml config --quiet
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d --no-build --pull never --wait
+docker compose -f docker-compose.prod.yml ps
+```
+
+These are instructions, not an executed deployment. `up` does not create the
+external NPM network. Use only the production file; adding the development file
+can reintroduce published ports and local env. Do not run migrations as part of
+these commands, or use `down -v` to resolve startup problems. No production
+connectivity, NPM routing, or release sign-off is implied by Compose validation.
+
+
+### Phase 2 local verification (2026-10-18)
+
+Development Compose (with/without `local-db`) and standalone production Compose
+validated; production runtime resolution was checked with synthetic env overrides.
+Both production images built from the existing lockfile. Final images run as
+`node`, contain no `.env*` value files (schema/example files allowed), and are
+approximately 1.80 GB web / 1.98 GB server uncompressed; dependency pruning remains
+deferred. Budget image storage plus Docker cache and NPM/OS usage separately.
+Backend typecheck, focused Biome check and 257 offline tests passed (HTTP fixture
+tests needed permission to bind loopback outside the sandbox).
+
+Two synthetic containers on a temporary internal network passed HTTP liveness and
+same-origin auth rewrite checks with no published ports. Only the test container
+had rate limiting disabled to avoid database access. The 53 browser static assets
+contained neither the synthetic backend credential markers nor development/internal
+API URL markers; the built rewrite manifest targets `http://server:3000`. Temporary
+containers/network were removed. Image builds/cache remain local. No production
+database connection, NPM/VPS configuration, login/UAT, migration or deployment was
+performed. These checks do not clear the client-IP/rate-limiter go-live blocker.
+
+
+## 10. Client IP and auth limiter (Phase 3; operator verification pending)
+
+### Investigated request paths
+
+| Path | Selected limiter IP |
+| --- | --- |
+| Direct development → Express, no proxy secret | Socket peer; all client forwarding headers are ignored/overwritten. |
+| Development browser → Next rewrite → Express, no proxy secret | Next socket peer; development direct API workflow is unchanged. |
+| Production NPM → Next rewrite → Express before Phase 3 | Next container IP, shared by clients. |
+| Production with `AUTH_PROXY_SECRET` | NPM's single validated `X-Resora-Client-IP`, authenticated by its token. Invalid/missing metadata is 403 before Better Auth. |
+| Existing separate Vercel entrypoint | Existing validated single `x-vercel-forwarded-for` policy; unchanged. |
+| Next SSR → tRPC | Existing cookie/session query; not an HTTP auth login limiter entrypoint. SSR does not forward the proxy credential. |
+
+Express `trust proxy` remains false. Application auth never selects `req.ip` or
+`req.ips`. Better Auth reads only the server-selected `x-resora-client-ip` and
+retains its 75 requests / 60 seconds per login/password-change path. Production
+uses the existing database storage; development uses memory. IPv6/NAT grouping
+remains Better Auth's existing policy, not a new per-user/account limit.
+
+The inspected installed Next.js implementation fills missing `x-forwarded-for`
+from its socket and preserves an existing value. Its external rewrite proxy
+forwards custom headers and changes the upstream Host. Thus XFF alone does not
+prove origin and must not be trusted merely because the peer is Next. NPM's
+standard proxy include appends XFF, whereas its custom-location template sets it
+to `$remote_addr`; the installed NPM version/configuration still needs operator
+inspection. Neither format is used for this auth decision.
+
+### Operator NPM configuration (not applied)
+
+1. Generate a separate random secret privately (for example `openssl rand -hex 32`)
+   and store it as `AUTH_PROXY_SECRET` in `.private/production/server.env`.
+   Do not reuse the auth signing secret, put it in web/build env, commit it, paste
+   it into tickets, or enable request-header logging. Protect NPM config/database
+   backups because its configuration contains this credential.
+2. In the `telkomdormitory.com` Proxy Host, create/configure Custom Location `/api/auth/`,
+   scheme `http`, hostname `resora-prod-web`, port `3001`. In **that location's**
+   Advanced configuration, set the following, substituting the private secret:
+
+   ```nginx
+   proxy_set_header X-Resora-Client-IP $remote_addr;
+   proxy_set_header X-Resora-Proxy-Token "<same-private-AUTH_PROXY_SECRET>";
+   ```
+
+   These directives overwrite incoming client values. Do not use
+   `$http_x_resora_client_ip`, `$http_x_resora_proxy_token`, or XFF as the source.
+   Do not add an extra `location` block or `proxy_pass` to this field; NPM owns them.
+   Keep the HTTPS certificate, Force SSL and existing access settings. The existing
+   default `/` location stays in place for other routes. Any more specific auth
+   location must have the same overwrites.
+3. Inspect the rendered config locally on the VPS (for example `nginx -t` and a
+   private inspection of `nginx -T` inside NPM). Do not paste its secret-bearing
+   output into this repository/chat/logs. Confirm the two directives are in the
+   **effective location**, not only the Proxy Host's server-level Advanced field:
+   location-level `proxy_set_header` directives can prevent inheritance.
+4. Confirm `$remote_addr` is the actual TCP client address. Audit `real_ip_header`,
+   `set_real_ip_from`, and `real_ip_recursive`; do not trust arbitrary internet
+   sources. This design assumes NPM is the public edge. A CDN/load balancer before
+   NPM requires a separate exact-source real-IP audit; do not guess trusted ranges.
+5. Recreate the backend with the matching private secret after approved deployment.
+   Rebuild the backend for this code change; no frontend rebuild or database
+   migration is required. Persistent production startup fails without the secret.
+   Development leaves it unset; Vercel's separate entrypoint is unchanged.
+
+References: official NPM [custom-location template](https://github.com/NginxProxyManager/nginx-proxy-manager/blob/develop/backend/templates/_location.conf),
+[standard proxy include](https://github.com/NginxProxyManager/nginx-proxy-manager/blob/develop/docker/rootfs/etc/nginx/conf.d/include/proxy.conf),
+and Nginx [proxy header inheritance](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_set_header).
+Templates describe upstream source, not evidence of the installed VPS version.
+
+### Trust and limitations
+
+The token authenticates the ingress metadata across the existing HTTP Docker
+chain. Backend verification uses a constant-time comparison for equal-length
+credentials and validates a single IPv4/IPv6 address; arrays, comma chains, ports,
+invalid addresses and zone suffixes are rejected. The token is stripped before
+Better Auth receives the request. XFF, X-Real-IP, Vercel headers and forwarded chains
+cannot override an authenticated IP. With proxy mode enabled, bad metadata is
+rejected rather than falling back to the frontend IP or an attacker-chosen bucket.
+
+Only NPM and the backend need the secret. Next forwards the per-request header but
+has no configured copy. NPM must overwrite both headers even when the public client
+supplies them. A compromised NPM/frontend/backend/Docker host, leaked token, or
+unsafe NPM real-IP configuration is outside that guarantee. Maintain the existing
+network boundaries/no published application ports. Rotate this ingress credential
+manually in NPM and backend together if compromised; no automatic rotation was run.
+
+CLI tests use the actual Better Auth limiter with synthetic invalid credentials
+(400 before account/session DB operations), exercise separate IP buckets and the
+76th-request 429, change spoofed forwarding headers between attempts, reject bad
+proxy credentials/IPs, and retain normal session reads. Existing adapter-double
+tests cover production database-backed shared counters separately; no PostgreSQL
+concurrency or real login against production is claimed. Complete live NPM
+header/source checks and synthetic two-client UAT after PM-approved deployment
+before clearing the go-live gate. No VPS/NPM settings have been changed here.
+
+
+### Phase 3 local verification (2026-10-18)
+
+- 260 offline tests across 34 files passed; focused ingress/limiter/session suite
+  passed 32 tests. Backend typecheck, focused Biome, Compose parsing and diff checks
+  passed. The existing production database-adapter algorithm tests passed without
+  connecting to a database; production PostgreSQL concurrency remains unverified.
+- The backend production image built successfully. Missing ingress secret caused
+  startup failure as required. Through the unchanged Next standalone image on a
+  temporary internal Docker network, valid metadata from two synthetic IPs reached
+  auth successfully; missing/forged tokens and chained IPs returned 403. No token
+  was reflected. Limiter was disabled only for this production-image smoke test to
+  avoid database access; actual limiter behavior was covered by the CLI tests.
+- The updated image also started in development without a proxy secret; its normal
+  session endpoint returned 200/null with the actual memory limiter active, even
+  with spoofed forwarding headers. No database was accessed.
+- Temporary test containers/network were cleaned up. No real production secret,
+  database connection, schema/session persistence change, NPM/VPS configuration,
+  migration or deployment was involved. Live edge overwrite/source verification
+  remains pending PM review and approved operator execution.
+
+
+## 11. Permanent CI/CD and artifact promotion (configured; remote runs unverified)
+
+Branch flow is `feature/fix → dev → staging → main`. Integration checks are
+automatic, publication is automatic on staging pushes, and all deployment remains
+manual. No workflow has `workflow_dispatch` or a deployment step.
+
+| Workflow | Trigger | Token permissions |
+| --- | --- | --- |
+| `CI — Code Quality` (`ci.yml`) | PR targeting `dev`, `staging`, `main` | `contents: read` |
+| `CI — Docker Build` (`docker-verify.yml`) | PR targeting `staging` only | `contents: read` |
+| `CD — Publish Images` (`docker-publish.yml`) | Push to `staging` only | `contents: read`, `packages: write` |
+
+Code Quality retains pinned pnpm, Node 24/Bun 1.3.13, frozen dependency install,
+Varlock codegen, Next type generation, Biome, typecheck, offline tests and application
+build with synthetic env. Application builds on PRs to main are quality checks,
+not new container images. Docker PR verification uses default PR integration merge
+checkout, Buildx and `push: false` for both existing Dockerfiles; it never logs in
+to a registry. The PR event is `pull_request`, not `pull_request_target`.
+
+After required PR checks and review, merging `dev → staging` triggers publication.
+Any direct push to staging also triggers it, so branch protection must restrict
+those pushes. The Ubuntu GitHub-hosted runner builds both `linux/amd64` images,
+logs in with built-in `GITHUB_TOKEN`, and tags each with that staging push's full
+`github.sha` (no latest tag):
+
+- `ghcr.io/tel-u-dormitory/resora-web:<full-staging-commit-sha>`
+- `ghcr.io/tel-u-dormitory/resora-server:<full-staging-commit-sha>`
+
+Both carry OCI source/revision labels. Any failed build/push fails the workflow;
+there is no ignored build failure. A fixed staging publication concurrency group
+serializes runs with `cancel-in-progress: false`, so a newer push does not cancel
+an in-flight image pair. GitHub can replace an older pending run with a newer one;
+not every intermediate commit is guaranteed a publication. Always check the
+successful run's exact SHA instead of assuming the latest branch head is ready.
+
+Buildx uses separate `gha` cache scopes for server and web. Only staging publication
+exports cache; PRs only import it, subject to GitHub's branch access restrictions.
+No cache is exported to GHCR. This is build acceleration, not artifact promotion;
+publication still builds the actual staging commit. See [Docker GHA cache docs](https://docs.docker.com/build/cache/backends/gha/).
+
+BuildKit secret-files mount only `apps/web/.env.example` and
+`apps/server/.env.example` at the existing secret IDs. Their synthetic validation
+values are not production credentials. `.dockerignore` excludes these templates
+from COPY alongside all other env value files; schema files remain included.
+Only the three non-secret production web routing values are build args. No
+production Supabase, Better Auth or proxy credential is required at build time.
+The production runtime secret remains required only when starting the backend.
+
+Production Compose requires `RESORA_IMAGE_TAG` with no default/latest fallback.
+Both services share that tag, use their explicit GHCR names, and have
+`pull_policy: always`; deploy using the pull/no-build commands in section 9.
+Existing build stanzas remain for explicitly requested validation on a sufficiently
+provisioned development/build host, never the 1 GB VPS. For an unpushed local
+validation tag, provide synthetic runtime env files on that build-only host and run:
+
+```sh
+export RESORA_IMAGE_TAG=local-validation
+docker compose -f docker-compose.prod.yml build server
+docker compose -f docker-compose.prod.yml build web
+```
+
+Do not publish such tags as production commit images. Development Compose is unchanged.
+
+For private GHCR packages, the VPS operator must first authenticate privately to
+`ghcr.io` using an account/token permitted to read those packages (and required
+organization SSO authorization, if applicable). Do not copy the workflow's
+short-lived GITHUB_TOKEN to the VPS, put a PAT in Compose, or put credentials on a
+command line. Public packages may be pulled anonymously; package visibility and
+organization publishing/access policy must be verified by PM. OCI source labels
+help associate packages with this repository; existing packages may still require
+explicit Actions repository access.
+
+Use only a successful run where **both** images exist for the same SHA. Publishing
+two packages is not transactional: failure of the later build/push can leave just
+one package updated. Rerun/review publication before deployment rather than mixing
+SHA tags. Commit tags are immutable-style names, not registry-enforced immutability;
+a rerun can replace a tag, and floating base images can yield different digests.
+Record the published digests when approving a release. Preserve the prior approved
+SHA for an operator-reviewed rollback. No automatic deployment or rollback exists.
+
+Actual GitHub-hosted execution, registry publication/pull, organization permissions,
+package visibility and host rollout remain unverified locally. This task did not
+trigger a remote run. After merge, staging pushes trigger publication automatically;
+host deployment still needs separate authorization.
+Phase 3 NPM client-IP/TLS/UAT gates still apply. Image sizes and runtime memory
+remain production capacity considerations; this workflow moves build work off VPS.
+
+
+### Manual staging and production promotion
+
+1. Feature/fix PRs target `dev` and pass Code Quality/review. The `dev → staging`
+   PR must pass both Code Quality and Docker Build before merge.
+2. In GitHub Actions, open the successful **CD — Publish Images** run for the
+   staging push. Read the full commit SHA from that run's associated commit (the
+   build steps' tags use exactly `github.sha`) and record both image digests from
+   the build summaries. Confirm both packages have that SHA before using either.
+3. An authorized operator pulls that pair and deploys manually to the developer's
+   home staging server, using separate staging runtime secrets/origins. The staging
+   hostname, TLS/ingress and host configuration remain PM/operator setup; this task
+   does not create a staging deployment or assume the production hostname is safe
+   there. Production Compose pins production origins, so it must not be used
+   unchanged as staging runtime configuration. The images themselves remain unchanged.
+4. Run staging UAT and record approval together with the tested image SHA **and both
+   digests**, staging source commit, successful publication run, and tested scope.
+   Only after UAT approval open the `staging → main` PR and require Code Quality
+   plus review. Confirm that the approved staging source/content is what the PR
+   promotes; additional changes/conflicts require another staged verification.
+5. After main review/merge and separate production approval, use the **recorded
+   staging image SHA**, not `git rev-parse HEAD` on main. Merge/squash/rebase can give
+   main a different SHA. No Docker verification or publication workflow runs for
+   PRs/pushes to main. Pull the existing pair on VPS; do not rebuild:
+
+   ```sh
+   export RESORA_IMAGE_TAG='<approved-full-staging-image-sha>'
+   docker compose -f docker-compose.prod.yml config --quiet
+   docker compose -f docker-compose.prod.yml pull
+   # Compare both pulled repo digests with the approved staging record.
+   docker compose -f docker-compose.prod.yml up -d --no-build --pull never --wait
+   docker compose -f docker-compose.prod.yml ps
+   ```
+
+   The same SHA/digests must be used at staging and production. A rerun can replace
+   a SHA tag: if its digests differ from the approved record, stop instead of
+   silently deploying changed artifacts. Retain the prior approved pair for a
+   separately authorized rollback. No automatic promotion/deployment is configured.
+
+### Branch protection (PM applies manually)
+
+| Target PR | Required status checks |
+| --- | --- |
+| `dev` | `CI — Code Quality` |
+| `staging` | `CI — Code Quality`, `CI — Docker Build` |
+| `main` | `CI — Code Quality` |
+
+The quality and Docker jobs have explicit names matching this table. After the
+first actual workflow runs, choose the corresponding **job status checks** in
+GitHub Branch Protection/Rulesets; workflow display names alone are not settings.
+Require a PR and reviewer approval before merge, restrict direct pushes to these
+branches, and disallow force pushes/deletion as appropriate to repository policy.
+Configure strict/up-to-date checks if that is the team's integration requirement.
+No repository settings/rulesets were changed by this implementation. Required
+checks/review settings are necessary because `push: staging` cannot distinguish a
+reviewed merge from a direct push. UAT approval remains a manual release gate.

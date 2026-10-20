@@ -1,14 +1,15 @@
-name: NEED-001 quality
+name: CI — Code Quality
 
 on:
   pull_request:
-    branches: [main]
+    branches: [dev, staging, main]
 
 permissions:
   contents: read
 
 jobs:
   quality:
+    name: CI — Code Quality
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:

@@ -60,3 +60,7 @@ temp
 # Local account imports and plaintext credential exports (never commit).
 /.private/
 .env*
+
+# Safe configuration templates remain versioned.
+!**/.env.example
+!**/.env.schema
