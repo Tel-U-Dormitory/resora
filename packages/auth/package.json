@@ -14,10 +14,12 @@
 		"@resora/db": "workspace:*",
 		"better-auth": "catalog:",
 		"drizzle-orm": "catalog:",
+		"nodemailer": "10.1.7",
 		"zod": "catalog:"
 	},
 	"devDependencies": {
 		"@resora/config": "workspace:*",
+		"@types/nodemailer": "8.0.2",
 		"typescript": "catalog:"
 	}
 }

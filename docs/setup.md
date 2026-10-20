@@ -833,3 +833,87 @@ Configure strict/up-to-date checks if that is the team's integration requirement
 No repository settings/rulesets were changed by this implementation. Required
 checks/review settings are necessary because `push: staging` cannot distinguish a
 reviewed merge from a direct push. UAT approval remains a manual release gate.
+
+### Password recovery (SMTP and manual fallback)
+
+Apply reviewed migration `20261020113005_password_reset_audit` through the normal
+migration workflow before enabling recovery. No migration is run on API startup.
+The append-only, RLS-protected audit table records `REQUESTED`, `SMTP_ACCEPTED`,
+`SMTP_FAILED`, `MANUAL_LINK_ISSUED`, and `RESET_COMPLETED`. There is no audit HTTP
+read endpoint. Target emails and trusted request IPs are personal data: restrict
+database access; retention remains an operational policy decision.
+
+Server-only runtime configuration:
+
+| Variable | Purpose |
+| --- | --- |
+| `PASSWORD_RESET_EMAIL_ENABLED` | Default `false`; set `true` only after email ownership and SMTP have been checked. API restart/redeployment required. |
+| `SMTP_USER` | Gmail sender/login email; sender name is always `RnD SR XIV`. |
+| `SMTP_PASS` | Gmail App Password (not the normal account password); requires Google account two-step verification/App Password availability. |
+| `SMTP_PORT` | Default `465` (implicit TLS), or `587` (mandatory STARTTLS). Certificate verification stays enabled. |
+| `CORS_ORIGIN` | Exact public web origin used for the trusted `/reset-password` link. Ensure it matches the deployed domain, including Compose overrides. |
+
+SMTP host is fixed to `smtp.gmail.com`; legacy `SMTP_HOST`/`SMTP_FROM_*` do not
+override it or the sender. Keep all credentials in the private runtime secret
+store, never `NEXT_PUBLIC_*`, image build arguments, Git, or logs. Missing SMTP
+does not prevent login, provisioning or application initialization. Production
+continues to use the existing shared Better Auth limiter; reset requests are
+limited to 5/minute/IP, reset submissions to 10/minute/IP. Keep the existing
+`AUTH_RATE_LIMIT_ENABLED` enabled.
+
+Imported SR email addresses currently have `emailVerified=false`. Recovery does
+not change that flag or create an email-verification workflow. Before public
+activation, PM must confirm the imported addresses belong to the intended users:
+possession of a mailbox permits password reset. Until then leave email recovery
+disabled and use operator-assisted recovery after independent identity checks.
+
+Links contain a native Better Auth token in the **URL fragment**, not the query
+or API path. The reset page removes the fragment and submits the token in a POST
+body. Native verification storage supplies the 15-minute, one-time token;
+successful resets clear `mustChangePassword` and revoke all sessions. A reload
+after fragment removal requires reopening the original email link. Do not add
+analytics/session recording on recovery pages or log request bodies. The native
+GET token callback remains outside the endpoint allowlist.
+
+Public requests return the same generic response for unknown/inactive accounts,
+disabled recovery and SMTP delivery failure. SMTP runs outside response latency:
+persistent Node/Bun keeps its pending I/O; Vercel uses `waitUntil`. Delivery is
+bounded by SMTP timeouts and the Function lifetime. `SMTP_ACCEPTED` means Gmail
+accepted the message, not inbox delivery. There is no retry queue. Fixed
+`PASSWORD_RESET_*_FAILED` logs contain no account/token details. A post-reset
+audit/flag-update failure is logged without falsely failing a completed password
+change; investigate immediately (a privileged account may retain its password gate).
+
+Manual issuance runs only in a private interactive operator terminal, after
+verifying the person's identity. No public endpoint or dashboard flag selects it.
+Use explicit private environment variables `RESORA_PASSWORD_RESET_DB_URL` and
+`RESORA_PASSWORD_RESET_APP_ORIGIN`. No application DB URL fallback is used.
+For a Supabase Production direct/session connection, also set
+`RESORA_PASSWORD_RESET_SSL_CA` to the verified PEM CA. Use port 5432, no URL TLS
+parameters, and provide the exact project reference; Transaction Pooler is refused.
+Local tests accept only verified loopback `resora_identity_test_*` databases.
+
+```powershell
+# Set the three private variables using your approved secret manager/secure prompt.
+# Do not put secrets into command history. APP_ORIGIN is the public HTTPS web origin.
+$ref = Read-Host 'Verified Production project reference (non-secret)'
+$email = Read-Host 'Registered email after independent identity verification'
+pnpm auth:reset-link -- --target production --database postgres --project-reference $ref --confirm-production $ref --email $email
+# Only after the read-only preflight passes, in a private non-recorded terminal:
+pnpm auth:reset-link -- --target production --database postgres --project-reference $ref --confirm-production $ref --email $email --apply --confirm-issue ISSUE
+# --nim <registered NIM> may replace --email. Never pipe/redirect issuance output.
+Remove-Item Env:RESORA_PASSWORD_RESET_DB_URL, Env:RESORA_PASSWORD_RESET_SSL_CA -ErrorAction SilentlyContinue
+```
+
+Issuance creates a **fresh** native token, records `MANUAL_LINK_ISSUED`, and prints
+the link once. It does not retrieve old links or change the password itself.
+If issuance/terminal delivery is ambiguous, do not claim success; check the private
+audit, let unseen tokens expire and explicitly issue a fresh link if needed.
+Never forward links before verifying identity or store them in audit/tickets/logs.
+
+Before deployment: test with a synthetic staging account and controlled mailbox;
+check generic unknown/inactive responses, Gmail acceptance/failure, invalid/expired
+and reused tokens, session revocation, privileged first-password gate completion,
+manual issuance, and audit access protections. Check the actual public HTTPS
+origin and Vercel SMTP completion if used. Offline tests mock SMTP/storage;
+live SMTP, PostgreSQL migration execution and browser UAT require separate approval.

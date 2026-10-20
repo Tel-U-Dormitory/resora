@@ -10,22 +10,31 @@ import {
 } from "better-auth/api";
 import { username } from "better-auth/plugins";
 import { and, eq, inArray } from "drizzle-orm";
-
+import {
+	createPasswordRecovery,
+	genericResetResponse,
+	type RecoveryOptions,
+	resetRequestSchema,
+} from "./password-recovery";
+import type { SmtpConfig } from "./password-reset-mail";
 import { getActiveIdentity, requiresPasswordChange } from "./sr-access";
 
-export type AuthConfig = {
+export type AuthConfig = SmtpConfig & {
 	BETTER_AUTH_URL: string;
 	BETTER_AUTH_SECRET: string;
 	CORS_ORIGIN: string;
 	NODE_ENV?: string;
 	AUTH_RATE_LIMIT_ENABLED?: "true" | "false";
+	PASSWORD_RESET_EMAIL_ENABLED?: "true" | "false";
 };
 
 export function createAuth(
 	env: AuthConfig,
 	database: Database | DatabaseTransaction,
 	desktopOrigins: readonly string[] = [],
+	recoveryOptions: RecoveryOptions = {},
 ) {
+	const recovery = createPasswordRecovery(database, env, recoveryOptions);
 	if (
 		env.AUTH_RATE_LIMIT_ENABLED !== undefined &&
 		env.AUTH_RATE_LIMIT_ENABLED !== "true" &&
@@ -47,6 +56,8 @@ export function createAuth(
 		"/list-sessions",
 		"/revoke-session",
 		"/revoke-other-sessions",
+		"/request-password-reset",
+		"/reset-password",
 	]);
 	const passwordGatePaths = new Set([
 		"/get-session",
@@ -59,7 +70,21 @@ export function createAuth(
 			schema,
 		}),
 		trustedOrigins,
-		emailAndPassword: { enabled: true, disableSignUp: true },
+		emailAndPassword: {
+			enabled: true,
+			disableSignUp: true,
+			resetPasswordTokenExpiresIn: 900,
+			revokeSessionsOnPasswordReset: true,
+			sendResetPassword: async (data, request) => {
+				if (!recoveryOptions.backgroundTask || recoveryOptions.manualLink) {
+					await recovery.send(data, request);
+					return;
+				}
+				// Background only SMTP, never unrelated session/auth operations.
+				recoveryOptions.backgroundTask(recovery.send(data, request));
+			},
+			onPasswordReset: recovery.completed,
+		},
 		session: { cookieCache: { enabled: false } },
 		logger: { disabled: true },
 		rateLimit: {
@@ -73,6 +98,8 @@ export function createAuth(
 			customRules: {
 				"/sign-in/username": { window: 60, max: 75 },
 				"/change-password": { window: 60, max: 75 },
+				"/request-password-reset": { window: 60, max: 5 },
+				"/reset-password": { window: 60, max: 10 },
 			},
 		},
 		secret: env.BETTER_AUTH_SECRET,
@@ -118,6 +145,42 @@ export function createAuth(
 						code: "PILOT_AUTH_ONLY",
 						message: "This authentication operation is unavailable",
 					});
+				}
+				if (ctx.path === "/request-password-reset") {
+					const parsed = resetRequestSchema.safeParse(ctx.body);
+					if (!parsed.success) return; // Native schema supplies malformed-input errors.
+					if (!(await recovery.request(parsed.data, ctx.request)))
+						return ctx.json(genericResetResponse);
+					return {
+						context: {
+							...ctx,
+							body: { ...parsed.data, redirectTo: recovery.page() },
+						},
+					};
+				}
+				if (ctx.path === "/reset-password") {
+					const token = ctx.body?.token;
+					if (
+						typeof token !== "string" ||
+						!token ||
+						token.length > 256 ||
+						ctx.query?.token
+					)
+						throw new APIError("BAD_REQUEST", {
+							code: "INVALID_TOKEN",
+							message: "Invalid token",
+						});
+					const verification =
+						await ctx.context.internalAdapter.findVerificationValue(
+							`reset-password:${token}`,
+						);
+					if (!verification || verification.expiresAt <= new Date())
+						throw new APIError("BAD_REQUEST", {
+							code: "INVALID_TOKEN",
+							message: "Invalid token",
+						});
+					await recovery.assertReset(verification.value);
+					return;
 				}
 				// get-session performs its own authoritative lookup; validate identity after it.
 				if (
@@ -178,6 +241,12 @@ export function createAuth(
 				}
 			}),
 			after: createAuthMiddleware(async (ctx) => {
+				if (
+					ctx.path === "/request-password-reset" &&
+					!(ctx.context.returned instanceof APIError)
+				) {
+					return ctx.json(genericResetResponse);
+				}
 				if (ctx.path === "/get-session") {
 					const result = ctx.context.returned;
 					if (

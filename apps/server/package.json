@@ -17,6 +17,7 @@
 		"sr:provision": "bun run --no-env-file src/scripts/provision-sr.ts",
 		"org:seed": "bun run --no-env-file src/scripts/seed-organization.ts",
 		"system-admin:bootstrap": "bun run --no-env-file src/scripts/bootstrap-system-admin.ts",
+		"auth:reset-link": "bun run --no-env-file src/scripts/reset-password-link.ts",
 		"auth:generate": "varlock run -- pnpm dlx auth@1.7.7 generate --config src/services.ts --output ../../packages/db/src/schema/auth.ts --yes"
 	},
 	"dependencies": {
@@ -25,6 +26,7 @@
 		"@resora/auth": "workspace:*",
 		"@resora/db": "workspace:*",
 		"@trpc/server": "catalog:",
+		"@vercel/functions": "^3.10.1",
 		"better-auth": "catalog:",
 		"cors": "^2.8.6",
 		"express": "^5.2.1",
