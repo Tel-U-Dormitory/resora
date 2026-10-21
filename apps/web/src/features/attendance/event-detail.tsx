@@ -195,7 +195,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 		NonNullable<typeof invited>[number]
 	>(invited ?? [], invitationSearch, invitationPage);
 	return (
-		<section className="min-w-0 space-y-6">
+		<section className="resora-page min-w-0 space-y-6">
 			<nav aria-label="Breadcrumb event" className="text-sm">
 				<ol className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
 					<li>
@@ -731,7 +731,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 							</CardContent>
 						</Card>
 					</div>
-					<Card className="border-danger/30">
+					<Card className="resora-danger-panel">
 						<CardContent className="flex flex-wrap items-center justify-between gap-4">
 							<div className="max-w-xl space-y-1">
 								<h2 className="font-semibold">Tutup event</h2>
@@ -742,6 +742,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 							</div>
 							<Button
 								variant="danger"
+								className="w-full sm:w-auto"
 								disabled={busy}
 								loading={activeAction === "close"}
 								onClick={() => {
@@ -777,7 +778,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 						icon={<Users size={20} aria-hidden="true" />}
 						className="flex-col sm:flex-row"
 						action={
-							<div className="flex flex-wrap items-center gap-2">
+							<div className="flex w-full flex-wrap items-center justify-between gap-2 sm:w-auto sm:justify-end">
 								<span className="whitespace-nowrap rounded-full bg-muted px-3 py-1 font-semibold text-sm">
 									{invited?.length ?? 0} peserta
 								</span>

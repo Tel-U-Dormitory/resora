@@ -65,7 +65,7 @@ for (const [file, ids] of [
 			if (!input || !button)
 				throw new Error(`Missing visibility control: ${id}`);
 			expect(attribute(button, "type")).toBe('"button"');
-			expect(attribute(input, "className")).toContain("pr-10");
+			expect(attribute(input, "className")).toContain("pr-12");
 			const state = attribute(button, "aria-pressed");
 			const declaration = states.get(state);
 			expect(declaration?.initializer?.getText(source)).toBe("useState(false)");

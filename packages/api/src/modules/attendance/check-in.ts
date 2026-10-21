@@ -44,17 +44,18 @@ export async function checkIn(
 			.from(attendanceSessions)
 			.where(eq(attendanceSessions.id, sessionId));
 		if (!binding) denied("INVALID_QR");
-		// Match Phase 4 close/revoke/reissue lock order. Rebinding is forbidden by its trigger.
+		// Shared locks allow independent check-ins, but block administrative state/QR
+		// changes through lockedEvent(). Keep event -> session order; never upgrade here.
 		const [event] = await tx
 			.select()
 			.from(events)
 			.where(eq(events.id, binding.eventId))
-			.for("update");
+			.for("share");
 		const [session] = await tx
 			.select()
 			.from(attendanceSessions)
 			.where(eq(attendanceSessions.id, sessionId))
-			.for("update");
+			.for("share");
 		if (!event || !session || session.internalEventId !== event.id)
 			denied("INVALID_QR");
 		if (event.status === "CLOSED" || session.status === "CLOSED")

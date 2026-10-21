@@ -1,11 +1,11 @@
 "use client";
 
+import { Avatar, AvatarFallback } from "@resora/ui/components/avatar";
 import { useQuery } from "@tanstack/react-query";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
-import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -79,7 +79,7 @@ export default function SrProfile() {
 					["Email", info.email],
 				] as const);
 	return (
-		<section className="min-w-0 space-y-6">
+		<section className="resora-page min-w-0 space-y-6">
 			<div>
 				<p className="font-semibold text-primary text-xs uppercase tracking-wider">
 					{info.actor === "SR" ? "Akun SR" : "Akun Sistem / SUPERADMIN"}
@@ -91,7 +91,19 @@ export default function SrProfile() {
 			</div>
 			<Card>
 				<CardContent className="flex items-center gap-4">
-					<Avatar name={info.name} size="lg" shape="squircle" />
+					<Avatar className="size-14">
+						<AvatarFallback
+							className="bg-primary-soft font-semibold text-lg text-primary-soft-foreground"
+							aria-label={info.name}
+						>
+							{info.name
+								.split(/\s+/)
+								.filter(Boolean)
+								.slice(0, 2)
+								.map((part) => part[0]?.toUpperCase())
+								.join("")}
+						</AvatarFallback>
+					</Avatar>
 					<div className="min-w-0">
 						<h2 className="break-words font-bold text-xl">{info.name}</h2>
 						<p className="mt-1 text-muted-foreground text-sm">

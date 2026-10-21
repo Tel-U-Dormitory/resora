@@ -13,6 +13,7 @@ export const listAccountsSchema = z
 export const createAccountSchema = z
 	.object({
 		name: z.string().trim().min(1).max(200),
+		periodId: z.uuid().optional(),
 		nim: z
 			.string()
 			.trim()
@@ -27,5 +28,26 @@ export const createAccountSchema = z
 		departmentCode: z.string().trim().min(1).max(30),
 		positionCode: z.string().trim().min(1).max(30),
 		buildingCode: z.string().trim().min(1).max(30),
+	})
+	.strict();
+
+export const resetAccountPasswordSchema = z
+	.object({
+		userId: z.string().min(1).max(200),
+	})
+	.strict();
+
+export const updateAccountSchema = createAccountSchema
+	.omit({ nim: true, periodId: true })
+	.extend({
+		userId: z.string().min(1).max(200),
+		isActive: z.boolean(),
+		expectedUpdatedAt: z.iso.datetime(),
+	})
+	.strict();
+export const archiveAccountSchema = z
+	.object({
+		userId: z.string().min(1).max(200),
+		expectedUpdatedAt: z.iso.datetime(),
 	})
 	.strict();

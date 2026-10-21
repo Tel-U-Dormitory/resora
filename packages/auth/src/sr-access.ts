@@ -5,6 +5,7 @@ import {
 	systemPrivileges,
 	userProfiles,
 } from "@resora/db/schema/identity";
+import { srTenureStatus } from "@resora/db/sr-tenure";
 import { and, eq, sql } from "drizzle-orm";
 
 // Read current identity on every request; a session is not an active-account claim.
@@ -16,8 +17,10 @@ export async function getActiveIdentity(
 		.select({
 			userId: userProfiles.userId,
 			actor: userProfiles.actor,
+			tenureStatus: srTenureStatus(userProfiles.userId),
 			isActive: userProfiles.isActive,
 			mustChangePassword: userProfiles.mustChangePassword,
+			passwordResetRequired: userProfiles.passwordResetRequired,
 			nim: user.username,
 			departmentCode: srProfiles.departmentCode,
 			positionCode: srProfiles.positionCode,
@@ -41,9 +44,13 @@ export async function getActiveIdentity(
 		userId: profile.userId,
 		isActive: profile.isActive as boolean,
 		mustChangePassword: profile.mustChangePassword,
+		...(profile.passwordResetRequired
+			? { passwordResetRequired: true as const }
+			: {}),
 	};
 	if (
 		profile.actor === "SR" &&
+		profile.tenureStatus === "ACTIVE" &&
 		profile.departmentCode &&
 		profile.positionCode &&
 		profile.buildingId
@@ -93,10 +100,23 @@ export function requiresPasswordChange(
 	identity: Pick<
 		ActiveIdentity,
 		"actor" | "mustChangePassword" | "isSuperadmin"
-	>,
+	> & { passwordResetRequired?: boolean },
 ) {
 	return (
-		identity.mustChangePassword &&
-		(identity.actor === "SYSTEM_ADMIN" || identity.isSuperadmin === true)
+		identity.passwordResetRequired === true ||
+		(identity.mustChangePassword &&
+			(identity.actor === "SYSTEM_ADMIN" || identity.isSuperadmin === true))
 	);
+}
+
+// Called only after credentials have been verified; never reveal tenure for an unknown/wrong password.
+export async function getSrTenureStatus(
+	database: Pick<Database, "select">,
+	userId: string,
+) {
+	const [row] = await database
+		.select({ status: srTenureStatus(userProfiles.userId) })
+		.from(userProfiles)
+		.where(and(eq(userProfiles.userId, userId), eq(userProfiles.actor, "SR")));
+	return row?.status ?? null;
 }

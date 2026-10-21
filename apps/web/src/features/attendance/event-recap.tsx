@@ -1,6 +1,7 @@
 "use client";
 
 import type { AppRouter } from "@resora/api/routers/index";
+import { DateTimePicker } from "@resora/ui/components/date-time-picker";
 import { Input } from "@resora/ui/components/input";
 import { Textarea } from "@resora/ui/components/textarea";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -261,15 +262,15 @@ function ManualForm({
 					>
 						Waktu efektif (WIB)
 					</label>
-					<Input
+					<DateTimePicker
 						id="manual-effective-time"
 						className={fieldClass}
-						type="datetime-local"
-						step="1"
+						label="Waktu efektif"
+						seconds
 						value={time}
 						required={closed || Boolean(participant.attendanceId)}
 						disabled={busy}
-						onChange={(event) => setTime(event.target.value)}
+						onChange={setTime}
 					/>
 					<p className="text-muted-foreground text-xs">
 						{closed

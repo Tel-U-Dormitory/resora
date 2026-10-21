@@ -62,18 +62,24 @@ export function EventAuditHistory({ eventId }: { eventId: string }) {
 			<CardHeader
 				title="Riwayat perubahan administratif"
 				description="Perubahan SUPERADMIN dan alasan administratif, terbaru terlebih dahulu."
+				action={
+					<Button
+						variant="outline"
+						aria-expanded={open}
+						aria-controls="event-administrative-history"
+						onClick={() => setOpen(!open)}
+					>
+						{open ? "Tutup riwayat" : "Lihat riwayat"}
+					</Button>
+				}
 			/>
-			<CardContent className="space-y-4">
-				<Button
-					variant="outline"
-					aria-expanded={open}
-					aria-controls="event-administrative-history"
-					onClick={() => setOpen(!open)}
-				>
-					{open ? "Tutup riwayat" : "Lihat riwayat"}
-				</Button>
+			<CardContent
+				id="event-administrative-history"
+				hidden={!open}
+				className="space-y-4"
+			>
 				{open && (
-					<div id="event-administrative-history" className="space-y-4">
+					<div className="space-y-4">
 						{query.isPending && <p role="status">Memuat riwayat…</p>}
 						{query.error && (
 							<div role="alert">
@@ -173,18 +179,24 @@ export function DeletedDraftHistory() {
 			<CardHeader
 				title="Riwayat draft dihapus"
 				description="Bukti audit permanen; draft ini bukan event aktif dan tidak dapat dipulihkan."
+				action={
+					<Button
+						variant="outline"
+						aria-expanded={open}
+						aria-controls="deleted-draft-history"
+						onClick={() => setOpen(!open)}
+					>
+						{open ? "Tutup riwayat" : "Lihat draft dihapus"}
+					</Button>
+				}
 			/>
-			<CardContent className="space-y-4">
-				<Button
-					variant="outline"
-					aria-expanded={open}
-					aria-controls="deleted-draft-history"
-					onClick={() => setOpen(!open)}
-				>
-					{open ? "Tutup riwayat" : "Lihat draft dihapus"}
-				</Button>
+			<CardContent
+				id="deleted-draft-history"
+				hidden={!open}
+				className="space-y-4"
+			>
 				{open && (
-					<div id="deleted-draft-history" className="space-y-4">
+					<div className="space-y-4">
 						{query.isPending && <p role="status">Memuat riwayat…</p>}
 						{query.error && (
 							<div role="alert">

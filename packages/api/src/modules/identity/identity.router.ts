@@ -17,11 +17,27 @@ import {
 	accountReferences,
 	createAccount,
 	listAccounts,
+	maintainAccount,
+	resetAccountPassword,
 } from "./account-admin";
 import {
+	archiveAccountSchema,
 	createAccountSchema,
 	listAccountsSchema,
+	resetAccountPasswordSchema,
+	updateAccountSchema,
 } from "./account-admin.schema";
+import {
+	assignPeriod,
+	createPeriod,
+	extendPeriod,
+	listPeriods,
+} from "./account-period";
+import {
+	assignPeriodSchema,
+	createPeriodSchema,
+	extendPeriodSchema,
+} from "./account-period.schema";
 import {
 	canManageInternalAttendanceManually,
 	canManageInternalEvent,
@@ -30,6 +46,34 @@ import {
 } from "./identity-policy";
 
 export const identityRouter = router({
+	updateAccount: protectedProcedure
+		.input(updateAccountSchema)
+		.mutation(({ ctx, input }) => maintainAccount(ctx.db, ctx.identity, input)),
+	archiveAccount: protectedProcedure
+		.input(archiveAccountSchema)
+		.mutation(({ ctx, input }) =>
+			maintainAccount(ctx.db, ctx.identity, input, true),
+		),
+	listPeriods: protectedProcedure.query(({ ctx }) =>
+		listPeriods(ctx.db, ctx.identity),
+	),
+	createPeriod: protectedProcedure
+		.input(createPeriodSchema)
+		.mutation(({ ctx, input }) => createPeriod(ctx.db, ctx.identity, input)),
+	extendPeriod: protectedProcedure
+		.input(extendPeriodSchema)
+		.mutation(({ ctx, input }) => extendPeriod(ctx.db, ctx.identity, input)),
+	assignPeriod: protectedProcedure
+		.input(assignPeriodSchema)
+		.mutation(({ ctx, input }) => assignPeriod(ctx.db, ctx.identity, input)),
+	resetAccountPassword: protectedProcedure
+		.input(resetAccountPasswordSchema)
+		.mutation(({ ctx, input }) =>
+			resetAccountPassword(ctx.db, ctx.identity, ctx.authConfig, input),
+		),
+	accountSnapshot: protectedProcedure.query(({ ctx }) =>
+		listAccounts(ctx.db, ctx.identity, {}, true),
+	),
 	listAccounts: protectedProcedure
 		.input(listAccountsSchema)
 		.query(({ ctx, input }) => listAccounts(ctx.db, ctx.identity, input)),
