@@ -185,6 +185,8 @@ test("rate limiter defaults on, accepts explicit true/false and rejects untyped 
 		expect(auth.options.rateLimit.customRules).toEqual({
 			"/sign-in/username": { window: 60, max: 75 },
 			"/change-password": { window: 60, max: 75 },
+			"/request-password-reset": { window: 60, max: 5 },
+			"/reset-password": { window: 60, max: 10 },
 		});
 	}
 	for (const enabled of ["off", "invalid", false, 0, null])

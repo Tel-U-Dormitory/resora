@@ -59,34 +59,38 @@ export default function DatabaseBackup() {
 	}
 	return (
 		<Card>
-			<CardContent className="space-y-3">
-				<h2 className="font-semibold text-lg">Backup database</h2>
-				<p className="text-muted-foreground text-sm">
-					Unduh seluruh data RESORA untuk pemulihan manual. File memuat data
-					pribadi dan informasi autentikasi; simpan dengan aman dan jangan
-					bagikan.
-				</p>
-				<Button
-					variant="outline"
-					onClick={download}
-					disabled={busy}
-					loading={busy}
-				>
-					{busy ? "Menyiapkan backup…" : "Unduh backup data"}
-				</Button>
-				{message && (
-					<p
-						role={failed ? "alert" : "status"}
-						className={
-							failed
-								? "text-destructive text-sm"
-								: "text-muted-foreground text-sm"
-						}
-					>
-						{message}
+			<details>
+				<summary className="focus-ring cursor-pointer rounded-xl p-5 font-medium text-sm">
+					Backup database
+				</summary>
+				<CardContent className="space-y-3">
+					<p className="text-muted-foreground text-sm">
+						Unduh seluruh data RESORA untuk pemulihan manual. File memuat data
+						pribadi dan informasi autentikasi; simpan dengan aman dan jangan
+						bagikan.
 					</p>
-				)}
-			</CardContent>
+					<Button
+						variant="outline"
+						onClick={download}
+						disabled={busy}
+						loading={busy}
+					>
+						{busy ? "Menyiapkan backup…" : "Unduh backup data"}
+					</Button>
+					{message && (
+						<p
+							role={failed ? "alert" : "status"}
+							className={
+								failed
+									? "text-destructive text-sm"
+									: "text-muted-foreground text-sm"
+							}
+						>
+							{message}
+						</p>
+					)}
+				</CardContent>
+			</details>
 		</Card>
 	);
 }

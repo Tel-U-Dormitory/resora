@@ -284,11 +284,15 @@ export default function LoginForm({ expired = false }: { expired?: boolean }) {
 									});
 									if (result.error) {
 										setError(
-											result.error.status === 429
-												? "Terlalu banyak percobaan. Tunggu satu menit sebelum mencoba kembali."
-												: result.error.status >= 500
-													? "Layanan masuk sedang tidak tersedia. Silakan coba kembali."
-													: "NIM / username atau password tidak valid.",
+											result.error.code === "SR_TENURE_EXPIRED"
+												? "maaf periode jabatan anda telah purna"
+												: result.error.code === "SR_TENURE_NOT_ACTIVE"
+													? "Periode jabatan Anda belum aktif. Hubungi administrator."
+													: result.error.status === 429
+														? "Terlalu banyak percobaan. Tunggu satu menit sebelum mencoba kembali."
+														: result.error.status >= 500
+															? "Layanan masuk sedang tidak tersedia. Silakan coba kembali."
+															: "NIM / username atau password tidak valid.",
 										);
 										return;
 									}
@@ -349,13 +353,13 @@ export default function LoginForm({ expired = false }: { expired?: boolean }) {
 										value={password}
 										onChange={(e) => setPassword(e.target.value)}
 										disabled={pending}
-										className="h-11 w-full rounded-xl border border-input bg-surface px-3 pr-10 text-sm transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+										className="h-11 w-full rounded-xl border border-input bg-surface px-3 pr-12 text-sm transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
 									/>
 									<Button
 										type="button"
 										variant="ghost"
 										size="icon"
-										className="absolute top-1/2 right-1 size-9 -translate-y-1/2 text-muted-foreground hover:bg-transparent hover:text-foreground"
+										className="resora-password-toggle text-muted-foreground hover:bg-transparent hover:text-foreground"
 										aria-label={
 											showPassword
 												? "Sembunyikan password"
@@ -386,6 +390,12 @@ export default function LoginForm({ expired = false }: { expired?: boolean }) {
 							)}
 
 							{/* Submit Button */}
+							<Link
+								href="/forgot-password"
+								className="block text-right text-primary text-sm hover:underline focus-visible:outline-2"
+							>
+								Lupa Password?
+							</Link>
 							<Button
 								type="submit"
 								className="mt-2 h-11 w-full rounded-xl bg-primary font-bold text-primary-foreground text-sm shadow-brand transition-all hover:bg-primary-hover active:scale-[0.99]"

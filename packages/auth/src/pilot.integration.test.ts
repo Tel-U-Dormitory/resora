@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import type { Server } from "node:http";
+import { resolve } from "node:path";
 import { type Auth, createAuth } from "@resora/auth";
 import { createDb, type Database } from "@resora/db";
 import { account, user } from "@resora/db/schema/auth";
@@ -8,10 +9,13 @@ import {
 	buildings,
 	departments,
 	positions,
+	srPeriodMemberships,
 	srProfiles,
 	userProfiles,
 } from "@resora/db/schema/identity";
+import { assignSyntheticSrTenure } from "@resora/db/sr-tenure.fixture";
 import { eq, inArray } from "drizzle-orm";
+import { readMigrationFiles } from "drizzle-orm/migrator";
 
 import { createApp } from "../../../apps/server/src/app";
 
@@ -129,7 +133,11 @@ test("auth integration guard rejects remote and ordinary application targets", (
 						)
 					).rows[0].count,
 				),
-			).toBe(4); // Complete reviewed chain, including Phase 4 additive domain migration.
+			).toBe(
+				readMigrationFiles({
+					migrationsFolder: resolve(import.meta.dir, "../../db/src/migrations"),
+				}).length,
+			);
 			auth = createAuth(
 				{
 					BETTER_AUTH_URL: "http://127.0.0.1:3000",
@@ -180,8 +188,20 @@ test("auth integration guard rejects remote and ordinary application targets", (
 						});
 				}
 			});
+			await assignSyntheticSrTenure(db, ids);
 			fixturesCreated = true;
-			server = createApp({ db, auth }, origin).listen(0, "127.0.0.1");
+			server = createApp(
+				{
+					db,
+					auth,
+					authConfig: {
+						BETTER_AUTH_URL: "http://127.0.0.1:3000",
+						CORS_ORIGIN: origin,
+						BETTER_AUTH_SECRET: auth.options.secret as string,
+					},
+				},
+				origin,
+			).listen(0, "127.0.0.1");
 			await new Promise<void>((resolve) => server.once("listening", resolve));
 			const address = server.address();
 			if (!address || typeof address === "string")
@@ -195,6 +215,9 @@ test("auth integration guard rejects remote and ordinary application targets", (
 			}
 			if (fixturesCreated)
 				await db.transaction(async (tx) => {
+					await tx
+						.delete(srPeriodMemberships)
+						.where(inArray(srPeriodMemberships.userId, ids));
 					await tx.delete(srProfiles).where(inArray(srProfiles.userId, ids));
 					await tx.delete(user).where(inArray(user.id, ids));
 					await tx.delete(buildings).where(eq(buildings.id, buildingId));
@@ -222,9 +245,15 @@ test("auth integration guard rejects remote and ordinary application targets", (
 			const status = await rpc(sessionCookie, "identity.session");
 			expect(status.body.result.data?.mustChangePassword).toBe(false);
 			expect(Object.keys(status.body.result.data ?? {}).sort()).toEqual([
+				"actor",
+				"canManageInternalAttendanceManually",
+				"canManageInternalEvents",
+				"canOperateGeneralActivity",
+				"isSuperadmin",
 				"mustChangePassword",
 				"name",
 				"nim",
+				"requiresPasswordChange",
 				"userId",
 			]);
 		});
@@ -328,6 +357,9 @@ test("auth integration guard rejects remote and ordinary application targets", (
 		test("an old session cannot retain SR access after actor reassignment", async () => {
 			const sessionCookie = await login(0);
 			await db.transaction(async (tx) => {
+				await tx
+					.delete(srPeriodMemberships)
+					.where(eq(srPeriodMemberships.userId, activeId));
 				await tx.delete(srProfiles).where(eq(srProfiles.userId, activeId));
 				await tx
 					.update(userProfiles)
@@ -349,6 +381,7 @@ test("auth integration guard rejects remote and ordinary application targets", (
 						buildingId,
 					});
 				});
+				await assignSyntheticSrTenure(db, [activeId]);
 			}
 		});
 		test("expired persisted session cannot authorize protected requests", async () => {

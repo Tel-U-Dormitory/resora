@@ -7,6 +7,7 @@ import { internal } from "varlock";
 for (const [key, defaultValue] of [
 	["AUTH_RATE_LIMIT_ENABLED", "true"],
 	["AUTH_PERF_DIAGNOSTICS_ENABLED", "false"],
+	["PASSWORD_RESET_EMAIL_ENABLED", "false"],
 ] as const) {
 	test(`Varlock ${key} defaults ${defaultValue}, accepts true/false and rejects invalid values`, async () => {
 		// Load only this public declaration; never load workstation .env values.

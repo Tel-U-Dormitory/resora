@@ -31,6 +31,16 @@ export function StatusBadge({ status }: { status: string }) {
 	);
 }
 
+const scheduleFormatter = new Intl.DateTimeFormat("id-ID", {
+	dateStyle: "medium",
+	timeStyle: "short",
+	timeZone: "Asia/Jakarta",
+});
+
+export function formatEventSchedule(startsAt: string, endsAt: string) {
+	return `${scheduleFormatter.formatRange(new Date(startsAt), new Date(endsAt))} WIB`;
+}
+
 export function formatEventTime(value: string) {
 	return `${new Date(value).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" })} WIB`;
 }
