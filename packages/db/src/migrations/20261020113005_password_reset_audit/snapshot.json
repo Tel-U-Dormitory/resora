@@ -3,7 +3,7 @@
   "dialect": "postgres",
   "id": "c6b20d74-2d18-48e0-b1bb-d6e54e19f757",
   "prevIds": [
-    "9a30a28c-9d82-4081-b0d9-94ee20d2bdd6"
+    "eb682173-df48-4c14-ad4e-20b1e4815d72"
   ],
   "ddl": [
     {
@@ -125,6 +125,18 @@
     {
       "isRlsEnabled": false,
       "name": "positions",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": true,
+      "name": "sr_period_memberships",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": true,
+      "name": "sr_periods",
       "entityType": "tables",
       "schema": "public"
     },
@@ -1726,6 +1738,19 @@
       "table": "account_audit_logs"
     },
     {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "details",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_audit_logs"
+    },
+    {
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": true,
@@ -1867,6 +1892,123 @@
       "entityType": "columns",
       "schema": "public",
       "table": "positions"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sr_period_memberships"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "period_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sr_period_memberships"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sr_period_memberships"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sr_periods"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sr_periods"
+    },
+    {
+      "type": "date",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "starts_on",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sr_periods"
+    },
+    {
+      "type": "date",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "ends_on",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sr_periods"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sr_periods"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sr_periods"
     },
     {
       "type": "text",
@@ -2046,6 +2188,19 @@
       "generated": null,
       "identity": null,
       "name": "must_change_password",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user_profiles"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "password_reset_required",
       "entityType": "columns",
       "schema": "public",
       "table": "user_profiles"
@@ -2508,6 +2663,27 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "account_audit_logs"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "period_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "sr_period_memberships_period_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "sr_period_memberships"
     },
     {
       "nameExplicit": true,
@@ -2995,6 +3171,40 @@
         "user_id"
       ],
       "schemaTo": "public",
+      "tableTo": "sr_profiles",
+      "columnsTo": [
+        "user_id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "sr_period_memberships_user_id_sr_profiles_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "sr_period_memberships"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "period_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "sr_periods",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "sr_period_memberships_period_id_sr_periods_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "sr_period_memberships"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "user_id"
+      ],
+      "schemaTo": "public",
       "tableTo": "user_profiles",
       "columnsTo": [
         "user_id"
@@ -3135,6 +3345,17 @@
       "entityType": "pks",
       "schema": "public",
       "table": "event_participants"
+    },
+    {
+      "columns": [
+        "user_id",
+        "period_id"
+      ],
+      "nameExplicit": false,
+      "name": "sr_period_memberships_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "sr_period_memberships"
     },
     {
       "columns": [
@@ -3309,6 +3530,16 @@
     },
     {
       "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "sr_periods_pkey",
+      "schema": "public",
+      "table": "sr_periods",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
         "user_id"
       ],
       "nameExplicit": false,
@@ -3424,6 +3655,17 @@
       "name": "buildings_code_key",
       "schema": "public",
       "table": "buildings",
+      "entityType": "uniques"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "name"
+      ],
+      "nullsNotDistinct": false,
+      "name": "sr_periods_name_key",
+      "schema": "public",
+      "table": "sr_periods",
       "entityType": "uniques"
     },
     {
@@ -3574,7 +3816,7 @@
       "table": "qr_challenges"
     },
     {
-      "value": "(\"action\" = 'ACCOUNT_CREATED' AND \"actor_user_id\" IS NOT NULL) OR (\"action\" = 'SYSTEM_ADMIN_BOOTSTRAPPED' AND \"actor_user_id\" IS NULL)",
+      "value": "(\"action\" IN ('ACCOUNT_CREATED', 'ACCOUNT_UPDATED', 'ACCOUNT_ARCHIVED', 'PASSWORD_RESET', 'PERIOD_CREATED', 'PERIOD_EXTENDED', 'PERIOD_ASSIGNED') AND \"actor_user_id\" IS NOT NULL) OR (\"action\" = 'SYSTEM_ADMIN_BOOTSTRAPPED' AND \"actor_user_id\" IS NULL)",
       "name": "account_audit_logs_action_check",
       "entityType": "checks",
       "schema": "public",
@@ -3649,6 +3891,20 @@
       "entityType": "checks",
       "schema": "public",
       "table": "password_reset_audit"
+    },
+    {
+      "value": "length(btrim(\"name\")) > 0",
+      "name": "sr_periods_name_nonblank",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "sr_periods"
+    },
+    {
+      "value": "\"ends_on\" >= \"starts_on\"",
+      "name": "sr_periods_date_order",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "sr_periods"
     }
   ],
   "renames": []
