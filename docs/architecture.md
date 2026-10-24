@@ -521,3 +521,28 @@ The tenure tables have RLS enabled and no direct client policies. The `sr_tenure
 Identity `updateAccount` / `archiveAccount` recheck live SUPERADMIN authorization inside the transaction, lock the SR profile, validate the expected profile timestamp and revoke target sessions atomically with the write/audit. Updates validate active organization references and allowed department/position pairs; NIM/privileges cannot be forged through these inputs. Email changes clear email verification. The existing `is_active=false` flag represents manual archival; no additional archive table/column or destructive delete is needed. Period-driven purna remains derived separately. SYSTEM_ADMIN cannot be targeted through SR maintenance.
 
 Migration `20261019033819_admin_account_maintenance` only expands the audit action constraint with ACCOUNT_UPDATED and ACCOUNT_ARCHIVED; it does not rewrite historical records or change user data. Existing audit append-only enforcement stays intact. The new migration must precede edit/archive use; it has been exercised on isolated local PostgreSQL, not applied remotely in this task.
+
+### Manajemen Kepanitiaan — fondasi Fase 1
+
+Satu kepanitiaan (misalnya Welcoming Day) direncanakan dapat dipakai oleh beberapa event absensi. Fase 1 hanya menyediakan schema dan policy backend, belum CRUD tRPC, UI, hubungan ke `events`, roster, snapshot peserta, rekap atau CSV. Integrasi event/snapshot dikerjakan pada fase selanjutnya; perubahan kepanitiaan nantinya tidak boleh menulis ulang bukti kehadiran historis.
+
+- `committees`: UUID, nama nonblank, deskripsi default kosong, pembuat FK ke `user.id`, serta waktu pembuatan/perubahan `timestamptz` sesuai konvensi Drizzle.
+- `committee_divisions`: divisi dinamis milik satu kepanitiaan. Nama nonblank dijaga unik per kepanitiaan melalui indeks `(committee_id, lower(btrim(name)))`; nama yang sama boleh digunakan oleh kepanitiaan berbeda.
+- `committee_members`: PK `(committee_id, user_id)` membatasi satu divisi/jabatan per SR per kepanitiaan. SR dapat mengikuti beberapa kepanitiaan. `user_id` mengacu ke `sr_profiles.user_id`, sehingga akun sistem tidak menjadi anggota SR. FK komposit `(committee_id, division_id)` mengacu ke unique `(committee_id, id)` milik divisi, mencegah divisi lintas kepanitiaan.
+- Jabatan kepanitiaan: `ANGGOTA` (Anggota), `SEKDEP` (Sekdep), `KADEP` (Kadep), `SEKRE` (Sekre), `BENDAHARA` (Bendahara), `PIC1` (PIC 1), `PIC2` (PIC 2), `PJ` (PJ). CHECK PostgreSQL membatasi nilai tersebut. Ini bukan jabatan struktural; `positions` dan `sr_profiles` tidak berubah.
+- Semua FK baru memakai NO ACTION, bukan cascade. Divisi yang masih dipakai anggota tidak dapat dihapus; keanggotaan harus ditangani secara eksplisit oleh service berikutnya. Indeks mendukung lookup pembuat, anggota per SR, dan anggota per divisi. Ketiga tabel memakai RLS tanpa policy client dan mencabut grants PUBLIC/`anon`/`authenticated`, mengikuti pola server-only yang ada.
+- `canManageCommittee` pada policy Identity hanya mengizinkan SUPERADMIN sah atau SR struktural HCO/KADEP, memakai identitas backend yang sudah diverifikasi live. Gate aktif, tenure, assignment dan rotasi password tetap berlaku. KADEP kepanitiaan tidak memperoleh permission struktural HCO. Permission event/manual attendance lain tidak berubah; belum ada session DTO/endpoint baru.
+
+FK tidak menjamin keaktifan atau tenure SR. Fase 2 wajib memvalidasi eligibility anggota dan memeriksa ulang operator memakai pola live identity/transaction yang ada; tidak ada trigger eligibility atau seed dummy pada Fase 1. `updated_at` mengikuti `$onUpdate` Drizzle, bukan trigger baru.
+
+Migration additive `20261024151434_committee_foundation` dihasilkan melalui `pnpm --filter @resora/db db:generate --name=committee_foundation`, dengan tambahan pencabutan grants server-only sebagaimana migration tenure. Tidak ada perubahan schema/data event atau absensi dan tidak ada migration historis yang diedit. Setelah review dan otorisasi target, gunakan workflow [migration CLI](setup.md#current-supported-supabase-migration-workflow): `pnpm db:migrate dev --check`, lalu `pnpm db:migrate dev`; Production tetap memerlukan persetujuan terpisah, recovery plan dan konfirmasi project. Tidak ada migration remote yang dijalankan pada implementasi ini.
+
+Targeted checks dari root:
+
+```sh
+bun --no-env-file test packages/db/src/schema/committee.test.ts packages/db/src/schema/committee.integration.test.ts packages/api/src/modules/identity/identity-policy.test.ts
+pnpm --filter @resora/db check-types
+pnpm --filter @resora/api check-types
+```
+
+Suite PostgreSQL hanya aktif melalui `RESORA_COMMITTEE_TEST_DB_URL`, tanpa fallback env aplikasi. Target harus database **kosong dan disposable**, bernama `resora_identity_test_committees` di `127.0.0.1`, dengan role/port eksplisit dan tanpa query/hash URL. Suite memverifikasi identitas koneksi, menerapkan chain lokal ke database kosong tersebut, dan memakai fixture sintetis dalam transaksi rollback. Tanpa opt-in, kasus database di-skip; skip bukan bukti integrasi PostgreSQL. Jangan arahkan variabel ini ke Supabase atau database operasional.

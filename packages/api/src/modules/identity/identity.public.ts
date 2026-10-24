@@ -20,6 +20,7 @@ import { and, eq } from "drizzle-orm";
 export { isValidSrAssignment } from "@resora/db/organization";
 export {
 	canAccessPersonalSr,
+	canManageCommittee,
 	canManageInternalAttendanceManually,
 	canManageInternalEvent,
 	hasSuperadminPrivilege,
