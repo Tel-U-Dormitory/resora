@@ -15,7 +15,7 @@ import {
 	userProfiles,
 } from "@resora/db/schema/identity";
 import { srTenureStatus } from "@resora/db/sr-tenure";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 export { isValidSrAssignment } from "@resora/db/organization";
 export {
@@ -187,3 +187,16 @@ export type SrCandidate = {
 	buildingCode: string;
 	buildingName: string;
 };
+
+// Membership management must still identify inactive/expired SR without exposing auth data.
+export async function getSrMemberIdentities(
+	db: Database | DatabaseTransaction,
+	userIds: string[],
+) {
+	if (!userIds.length) return [];
+	return db
+		.select({ userId: user.id, name: user.name, nim: user.username })
+		.from(user)
+		.innerJoin(srProfiles, eq(srProfiles.userId, user.id))
+		.where(inArray(user.id, userIds));
+}

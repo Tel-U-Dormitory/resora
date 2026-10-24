@@ -1,10 +1,12 @@
 import { protectedProcedure, publicProcedure, router } from "../index";
 import { attendanceRouter } from "../modules/attendance/attendance.router";
+import { committeeRouter } from "../modules/committee/committee.router";
 import { identityRouter } from "../modules/identity/identity.router";
 
 export const appRouter = router({
 	identity: identityRouter,
 	attendance: attendanceRouter,
+	committee: committeeRouter,
 	healthCheck: publicProcedure.query(() => {
 		return "OK";
 	}),
