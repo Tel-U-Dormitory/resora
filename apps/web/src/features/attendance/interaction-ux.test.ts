@@ -1,9 +1,14 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import {
+	filterRecapParticipants,
+	recapFilterOptions,
+} from "@resora/api/modules/attendance/reporting-context";
 import { cache } from "react";
 import ts from "typescript";
 import { getSidebarGroups, isSidebarLinkActive } from "../../config/navigation";
 import { parseWibDateTimeInput, toWibDateTimeInput } from "./event-ui";
+import { participantPage } from "./participant-list";
 import { resetEventOrganization } from "./roster-selection";
 
 // Execute the actual JSX callbacks with small UI/API doubles, without a browser or DB.
@@ -664,10 +669,10 @@ test("recap keeps global server counts/full CSV and gates manual/audit controls;
 	const exportAction = jsxCallback(
 		"event-recap.tsx",
 		"onClick",
-		"trpc.attendance.exportCsv",
+		"trpcClient.attendance.exportCsv",
 	);
-	expect(exportAction).toContain("queryOptions({ eventId })");
-	expect(exportAction).not.toMatch(/visible|search|page/);
+	expect(exportAction).toContain('exportScope === "FILTERED"');
+	expect(exportAction).not.toMatch(/visible|page/);
 	const source = ts.createSourceFile(
 		"event-recap.tsx",
 		recap,
@@ -706,6 +711,118 @@ test("recap keeps global server counts/full CSV and gates manual/audit controls;
 	expect(detail).toContain("hidden={!invitationsOpen}");
 	expect(detail).toContain('event.status === "DRAFT"');
 	expect(detail).toContain("visibleInvitations.rows.map");
+});
+
+test("Phase 4 recap filter controls reset pagination, filter before paging and preserve full-event counts", () => {
+	for (const [setter, key] of [
+		["setDivision", "division"],
+		["setPosition", "position"],
+		["setParticipantType", "participantType"],
+		["setSearch", "search"],
+	] as const) {
+		const state = { page: 4, value: "" };
+		const handler = compile<(event: { target: { value: string } }) => void>(
+			jsxCallback("event-recap.tsx", "onChange", `${setter}(`),
+			{
+				[setter]: (value: string) => {
+					state.value = value;
+				},
+				setPage: (value: number) => {
+					state.page = value;
+				},
+			},
+		);
+		handler({
+			target: { value: key === "participantType" ? "GUEST" : "query" },
+		});
+		expect(state.page).toBe(1);
+		expect(state.value).toBe(key === "participantType" ? "GUEST" : "query");
+	}
+	const source = readFileSync(
+		new URL("event-recap.tsx", import.meta.url),
+		"utf8",
+	);
+	const tree = ts.createSourceFile(
+		"recap.tsx",
+		source,
+		ts.ScriptTarget.Latest,
+		true,
+		ts.ScriptKind.TSX,
+	);
+	const expressions = new Map<string, string>();
+	function visit(node: ts.Node) {
+		if (
+			ts.isVariableDeclaration(node) &&
+			["filtered", "visible", "options"].includes(node.name.getText(tree))
+		)
+			expressions.set(
+				node.name.getText(tree),
+				node.initializer?.getText(tree) ?? "",
+			);
+		ts.forEachChild(node, visit);
+	}
+	visit(tree);
+	const participants = Array.from({ length: 32 }, (_, index) => ({
+		name: `Synthetic ${index}`,
+		nim: `000${index}`,
+		departmentCode: "HCO",
+		positionCode: "ANGGOTA",
+		committeeDivision: index < 20 ? "Acara" : "Konsumsi",
+		committeePosition: index % 2 ? "PIC1" : "PJ",
+	}));
+	const counts = { invited: 32, present: 5, pending: 27, absent: 0 };
+	const event = { organizationContext: "COMMITTEE" };
+	const filtered = compile<() => typeof participants>(
+		`() => (${expressions.get("filtered")})`,
+		{
+			filterRecapParticipants,
+			event,
+			participants,
+			filters: { division: "Acara", position: "PIC1" },
+		},
+	)();
+	const visible = compile<() => ReturnType<typeof participantPage>>(
+		`() => (${expressions.get("visible")})`,
+		{ participantPage, filtered, page: 3 },
+	)();
+	expect(filtered).toHaveLength(10);
+	expect(participantPage(participants, "", 2).rows).toHaveLength(15);
+	const options = compile<() => ReturnType<typeof recapFilterOptions>>(
+		`() => (${expressions.get("options")})`,
+		{ recapFilterOptions, event, participants },
+	)();
+	expect(options.divisions.map((row) => row.value)).toEqual([
+		"Acara",
+		"Konsumsi",
+	]);
+	expect(visible.matching).toBe(10);
+	expect(visible.page).toBe(1);
+	expect(participants).toHaveLength(32);
+	expect(counts).toEqual({ invited: 32, present: 5, pending: 27, absent: 0 });
+	for (const field of Object.keys(counts))
+		expect(source).toContain(`counts.${field}`);
+	expect(source).toContain("committeeMode &&");
+	expect(source).toContain("Kepengurusan Event");
+	expect(source).toContain("Struktural SR:");
+	expect(source).toContain("eventAssignment(event, row)");
+	expect(source).toContain("selected && canManual");
+	expect(source).toContain("audit && canManual");
+	expect(source).toContain("Hasil filter:");
+	expect(source).toContain("Coba kembali");
+	expect(source).toContain('role="status"');
+	expect(source).toContain('role="alert"');
+	expect(source).toContain("Tidak ada peserta yang sesuai.");
+	const reset = compile<() => void>(
+		jsxCallback("event-recap.tsx", "onClick", 'setParticipantType("ALL")'),
+		{
+			setSearch: (value: string) => expect(value).toBe(""),
+			setDivision: (value: string) => expect(value).toBe(""),
+			setPosition: (value: string) => expect(value).toBe(""),
+			setParticipantType: (value: string) => expect(value).toBe("ALL"),
+			setPage: (value: number) => expect(value).toBe(1),
+		},
+	);
+	reset();
 });
 
 test("manual success closes the dialog and refreshes data; refresh failure remains saved feedback", async () => {

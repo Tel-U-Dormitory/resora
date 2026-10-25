@@ -1,13 +1,5 @@
-export const committeePositionLabels: Record<string, string> = {
-	ANGGOTA: "Anggota",
-	SEKDEP: "Sekdep",
-	KADEP: "Kadep",
-	SEKRE: "Sekre",
-	BENDAHARA: "Bendahara",
-	PIC1: "PIC 1",
-	PIC2: "PIC 2",
-	PJ: "PJ",
-};
+import { committeePositionLabels as positionLabels } from "@resora/api/modules/committee/committee-positions";
+export const committeePositionLabels: Record<string, string> = positionLabels;
 
 export function committeeError(error: unknown) {
 	const message = error instanceof Error ? error.message : "";

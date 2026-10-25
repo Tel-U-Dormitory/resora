@@ -18,6 +18,12 @@ import {
 import { manualCorrect, manualInsert } from "./manual-attendance";
 import { auditHistory, exportCsv, ownHistory, recap } from "./reporting";
 import {
+	eventAssignment,
+	filterRecapParticipants,
+	nonCommitteeLabel,
+	recapFilterOptions,
+} from "./reporting-context";
+import {
 	attendanceCsv,
 	auditState,
 	classifyTiming,
@@ -172,7 +178,7 @@ test("CSV escapes quotes/newlines and formula injection; NIM text preserves lead
 			source: null,
 		},
 	]);
-	expect(missing).toContain('"ABSENT",,,,\r\n');
+	expect(missing).toContain('"ABSENT",,,,,"SR"');
 });
 test("safe report/audit projection excludes origin/GPS even on QR records", () => {
 	const record = {
@@ -213,6 +219,8 @@ function fixture() {
 		isSuperadmin: false,
 	};
 	const event = {
+		organizationContext: undefined as "SR" | "COMMITTEE" | undefined,
+		committeeName: null as string | null,
 		id: randomUUID(),
 		title: "Synthetic",
 		status: "PUBLISHED",
@@ -259,9 +267,14 @@ function fixture() {
 		filters: [] as { table: string; params: unknown[] }[],
 		writes: [] as { table: string; data: Record<string, unknown> }[],
 		reports: [] as unknown[],
+		transactionOptions: [] as unknown[],
 	};
 	const double = {
-		transaction: async (run: (tx: unknown) => Promise<unknown>) => {
+		transaction: async (
+			run: (tx: unknown) => Promise<unknown>,
+			options?: unknown,
+		) => {
+			state.transactionOptions.push(options);
 			const saved = structuredClone({
 				record: state.record,
 				audits: state.audits,
@@ -613,6 +626,246 @@ test("recap starts at historical snapshots including missing records; origin/GPS
 	expect(report.counts.absent).toBe(1);
 	expect(report.participants[1]?.lateMinutes).toBeNull();
 	expect(report.participants[0]).not.toHaveProperty("scanLat");
+});
+
+test("Phase 4 recap exposes historical committee snapshots, nullable guests and unchanged global lifecycle counts", async () => {
+	const f = fixture();
+	f.event.organizationContext = "COMMITTEE";
+	f.event.committeeName = "Historical Welday";
+	const participant = {
+		userId: "one",
+		nim: "0001",
+		name: "Historical name",
+		departmentCode: "RND",
+		positionCode: "KADEP",
+		buildingCode: "A",
+		buildingName: "Gedung A",
+		committeeDivision: "Acara lama",
+		committeePosition: "PIC1",
+	};
+	f.state.reports = [
+		{ participant, record: f.original },
+		{
+			participant: {
+				...participant,
+				userId: "guest",
+				nim: "0002",
+				committeeDivision: null,
+				committeePosition: null,
+			},
+			record: null,
+		},
+	];
+	const result = await recap(f.db, f.identity, f.event.id);
+	expect(result.event).toMatchObject({
+		organizationContext: "COMMITTEE",
+		committeeName: "Historical Welday",
+	});
+	expect(
+		eventAssignment(result.event, result.participants[0] ?? participant),
+	).toMatchObject({ divisionLabel: "Acara lama", positionLabel: "PIC 1" });
+	const filtered = filterRecapParticipants(result.event, result.participants, {
+		division: "Acara lama",
+		position: "PIC1",
+	});
+	expect(filtered).toHaveLength(1);
+	expect(result.counts).toEqual({
+		invited: 2,
+		present: 1,
+		pending: 1,
+		absent: 0,
+	});
+	expect(f.state.transactionOptions).toEqual([
+		{ isolationLevel: "repeatable read", accessMode: "read only" },
+	]);
+	f.event.visibility = "HIDDEN";
+	expect((await recap(f.db, f.identity, f.event.id)).event.committeeName).toBe(
+		"Historical Welday",
+	);
+	expect(
+		f.state.filters.every((row) => !row.table.startsWith("committee")),
+	).toBe(true);
+	expect(
+		f.state.filters.find((row) => row.table === "event_participants")?.params,
+	).toContain(f.event.id);
+	for (const row of result.participants)
+		for (const secret of [
+			"scanLat",
+			"gpsAccuracyM",
+			"recordedByUserId",
+			"password",
+		])
+			expect(row).not.toHaveProperty(secret);
+	f.event.status = "CLOSED";
+	f.event.visibility = "ARCHIVED";
+	expect((await recap(f.db, f.identity, f.event.id)).counts).toMatchObject({
+		invited: 2,
+		present: 1,
+		pending: 0,
+		absent: 1,
+	});
+});
+
+test("Phase 4 snapshot filters combine division, position, participant type and name/NIM without structural fallback", () => {
+	const event = {
+		organizationContext: "COMMITTEE" as const,
+		committeeName: "Frozen committee",
+	};
+	const base = {
+		departmentCode: "HCO",
+		positionCode: "KADEP",
+		name: "Synthetic Nabil",
+		nim: "0001",
+		committeeDivision: "Acara",
+		committeePosition: "PIC1",
+	};
+	const rows = [
+		base,
+		{
+			...base,
+			name: "Synthetic Syaira",
+			nim: "0002",
+			committeeDivision: "Konsumsi",
+			committeePosition: "SEKRE",
+		},
+		{
+			...base,
+			name: "Synthetic Guest",
+			nim: "0003",
+			committeeDivision: null,
+			committeePosition: null,
+		},
+	] as const;
+	expect(filterRecapParticipants(event, rows, { division: "Acara" })).toEqual([
+		rows[0],
+	]);
+	expect(filterRecapParticipants(event, rows, { position: "SEKRE" })).toEqual([
+		rows[1],
+	]);
+	expect(
+		filterRecapParticipants(event, rows, {
+			division: "Acara",
+			position: "PIC1",
+			participantType: "COMMITTEE",
+			search: "nabil",
+		}),
+	).toEqual([rows[0]]);
+	expect(
+		filterRecapParticipants(event, rows, { participantType: "COMMITTEE" }),
+	).toHaveLength(2);
+	expect(
+		filterRecapParticipants(event, rows, {
+			participantType: "GUEST",
+			search: "0003",
+		}),
+	).toEqual([rows[2]]);
+	expect(
+		filterRecapParticipants(event, rows, {
+			division: "Acara",
+			position: "SEKRE",
+		}),
+	).toEqual([]);
+	expect(
+		filterRecapParticipants(event, rows, {
+			participantType: "GUEST",
+			position: "KADEP",
+		}),
+	).toEqual([]);
+	expect(eventAssignment(event, rows[2])).toMatchObject({
+		divisionLabel: nonCommitteeLabel,
+		positionLabel: nonCommitteeLabel,
+		isCommitteeMember: false,
+		position: "",
+	});
+	expect(recapFilterOptions(event, rows)).toEqual({
+		divisions: [
+			{ value: "Acara", label: "Acara" },
+			{ value: "Konsumsi", label: "Konsumsi" },
+		],
+		positions: [
+			{ value: "PIC1", label: "PIC 1" },
+			{ value: "SEKRE", label: "Sekre" },
+		],
+	});
+	expect(filterRecapParticipants(event, rows)).toEqual([...rows]);
+	expect(rows).toHaveLength(3);
+});
+
+test("Phase 4 legacy SR mapping and filters use structural snapshots and never committee labels", () => {
+	const first = {
+		name: "SR",
+		nim: "0001",
+		departmentCode: "INTI",
+		positionCode: "KETUM",
+		committeeDivision: null,
+		committeePosition: null,
+	};
+	const rows = [
+		first,
+		{
+			name: "HCO SR",
+			nim: "0002",
+			departmentCode: "HCO",
+			positionCode: "ANGGOTA",
+			committeeDivision: null,
+			committeePosition: null,
+		},
+	] as const;
+	expect(eventAssignment({}, first)).toMatchObject({
+		division: "INTI",
+		position: "KETUM",
+		positionLabel: "KETUM",
+	});
+	expect(
+		filterRecapParticipants({}, rows, {
+			division: "HCO",
+			position: "ANGGOTA",
+			search: "0002",
+		}),
+	).toEqual([rows[1]]);
+	expect(
+		recapFilterOptions({}, rows).positions.map((row) => row.value),
+	).toEqual(["ANGGOTA", "KETUM"]);
+});
+
+test("Phase 4 recap authorization permits HCO and valid SUPERADMIN but never committee-only titles or ordinary SR", async () => {
+	const f = fixture();
+	await expect(
+		appRouter
+			.createCaller({ db: f.db, session: null })
+			.attendance.recap({ eventId: f.event.id }),
+	).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+	for (const positionCode of ["ANGGOTA", "SEKDEP", "KADEP"]) {
+		const identity = { ...f.identity, positionCode };
+		expect((await recap(f.db, identity, f.event.id)).canManual).toBe(
+			positionCode === "KADEP",
+		);
+	}
+	expect(
+		(
+			await recap(
+				f.db,
+				{ ...f.identity, departmentCode: "RND", isSuperadmin: true },
+				f.event.id,
+			)
+		).canManual,
+	).toBe(true);
+	for (const committeePosition of ["KADEP", "PIC1", "PJ"])
+		await expect(
+			recap(
+				f.db,
+				{
+					...f.identity,
+					departmentCode: "RND",
+					positionCode: "ANGGOTA",
+					committeePosition,
+				} as ActiveSrIdentity,
+				f.event.id,
+			),
+		).rejects.toMatchObject({ code: "FORBIDDEN" });
+	await expect(
+		recap(f.db, { ...f.identity, isActive: false }, f.event.id),
+	).rejects.toMatchObject({ code: "FORBIDDEN" });
 });
 
 test("hidden and archived historical evidence remains in own history, recap, CSV and attendance audit", async () => {

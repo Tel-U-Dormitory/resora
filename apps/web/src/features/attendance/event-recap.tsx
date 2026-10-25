@@ -1,8 +1,15 @@
 "use client";
 
+import {
+	eventAssignment,
+	filterRecapParticipants,
+	type RecapFilters,
+	recapFilterOptions,
+} from "@resora/api/modules/attendance/reporting-context";
 import type { AppRouter } from "@resora/api/routers/index";
 import { DateTimePicker } from "@resora/ui/components/date-time-picker";
 import { Input } from "@resora/ui/components/input";
+import { Select } from "@resora/ui/components/select";
 import { Textarea } from "@resora/ui/components/textarea";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
@@ -11,7 +18,12 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { attendanceQueryKeys, queryClient, trpc } from "@/utils/trpc";
+import {
+	attendanceQueryKeys,
+	queryClient,
+	trpc,
+	trpcClient,
+} from "@/utils/trpc";
 import { refreshAttendanceQueries } from "./attendance-queries";
 import {
 	eventErrorMessage,
@@ -321,6 +333,12 @@ export default function EventRecap({ eventId }: { eventId: string }) {
 		meta: { errorHandledLocally: true },
 	});
 	const [search, setSearch] = useState("");
+	const [division, setDivision] = useState("");
+	const [position, setPosition] = useState("");
+	const [participantType, setParticipantType] =
+		useState<RecapFilters["participantType"]>("ALL");
+	const [exportScope, setExportScope] = useState("ALL");
+	const exportLock = useRef(false);
 	const [page, setPage] = useState(1);
 	const [selected, setSelected] = useState<Participant | null>(null);
 	const [audit, setAudit] = useState<Participant | null>(null);
@@ -328,9 +346,25 @@ export default function EventRecap({ eventId }: { eventId: string }) {
 	const [error, setError] = useState("");
 	const [exporting, setExporting] = useState(false);
 	if (recap.isPending) return <p role="status">Memuat rekap kehadiran…</p>;
-	if (recap.error) return <p role="alert">{eventErrorMessage(recap.error)}</p>;
+	if (recap.error)
+		return (
+			<div role="alert" className="space-y-3">
+				<p>{eventErrorMessage(recap.error)}</p>
+				<Button
+					variant="outline"
+					disabled={recap.isFetching}
+					onClick={() => void recap.refetch()}
+				>
+					Coba kembali
+				</Button>
+			</div>
+		);
 	const { participants, counts, canManual, event } = recap.data;
-	const visible = participantPage(participants, search, page);
+	const filters: RecapFilters = { search, division, position, participantType };
+	const filtered = filterRecapParticipants(event, participants, filters);
+	const options = recapFilterOptions(event, participants);
+	const committeeMode = event.organizationContext === "COMMITTEE";
+	const visible = participantPage(filtered, "", page);
 	return (
 		<Card className="min-w-0">
 			<CardHeader
@@ -338,6 +372,19 @@ export default function EventRecap({ eventId }: { eventId: string }) {
 				description="Seluruh undangan, menggunakan identitas saat publikasi."
 			/>
 			<CardContent className="space-y-5">
+				<div className="space-y-1 text-sm">
+					<p>
+						Kepengurusan Event:{" "}
+						<strong>
+							{committeeMode ? "Kepanitiaan Kegiatan" : "Struktural SR"}
+						</strong>
+					</p>
+					{committeeMode && (
+						<p className="break-words">
+							Kepanitiaan: <strong>{event.committeeName}</strong>
+						</p>
+					)}
+				</div>
 				<p className="text-sm">
 					Undangan: {counts.invited} · Hadir: {counts.present} · Belum hadir:{" "}
 					{counts.pending} · Tidak hadir: {counts.absent}
@@ -349,6 +396,8 @@ export default function EventRecap({ eventId }: { eventId: string }) {
 						</label>
 						<Input
 							id="attendance-search"
+							maxLength={150}
+							disabled={exporting}
 							className={fieldClass}
 							value={search}
 							onChange={(e) => {
@@ -357,19 +406,122 @@ export default function EventRecap({ eventId }: { eventId: string }) {
 							}}
 						/>
 					</div>
+					<div className="min-w-0 flex-1 basis-full space-y-1 sm:basis-40">
+						<label htmlFor="recap-division" className="text-sm">
+							{committeeMode ? "Divisi" : "Departemen"}
+						</label>
+						<Select
+							id="recap-division"
+							value={division}
+							disabled={exporting}
+							onChange={(event) => {
+								setDivision(event.target.value);
+								setPage(1);
+							}}
+						>
+							<option value="">
+								{committeeMode ? "Semua divisi" : "Semua departemen"}
+							</option>
+							{options.divisions.map((option) => (
+								<option key={option.value} value={option.value}>
+									{option.label}
+								</option>
+							))}
+						</Select>
+					</div>
+					<div className="min-w-0 flex-1 basis-full space-y-1 sm:basis-40">
+						<label htmlFor="recap-position" className="text-sm">
+							Jabatan
+						</label>
+						<Select
+							id="recap-position"
+							value={position}
+							disabled={exporting}
+							onChange={(event) => {
+								setPosition(event.target.value);
+								setPage(1);
+							}}
+						>
+							<option value="">Semua jabatan</option>
+							{options.positions.map((option) => (
+								<option key={option.value} value={option.value}>
+									{option.label}
+								</option>
+							))}
+						</Select>
+					</div>
+					{committeeMode && (
+						<div className="min-w-0 flex-1 basis-full space-y-1 sm:basis-40">
+							<label htmlFor="recap-participant-type" className="text-sm">
+								Jenis Peserta
+							</label>
+							<Select
+								id="recap-participant-type"
+								value={participantType}
+								disabled={exporting}
+								onChange={(event) => {
+									setParticipantType(
+										event.target.value as RecapFilters["participantType"],
+									);
+									setPage(1);
+								}}
+							>
+								<option value="ALL">Semua peserta</option>
+								<option value="COMMITTEE">Panitia</option>
+								<option value="GUEST">Non-Panitia / Undangan</option>
+							</Select>
+						</div>
+					)}
+					<Button
+						variant="outline"
+						disabled={exporting}
+						onClick={() => {
+							setSearch("");
+							setDivision("");
+							setPosition("");
+							setParticipantType("ALL");
+							setPage(1);
+						}}
+					>
+						Reset filter
+					</Button>
+				</div>
+				<p role="status" className="text-muted-foreground text-sm">
+					Hasil filter: {filtered.length} dari {counts.invited} peserta.
+					Statistik di atas tetap mencakup seluruh event.
+				</p>
+				<div className="flex flex-wrap items-end gap-3">
+					<div className="min-w-0 space-y-1">
+						<label htmlFor="recap-export-scope" className="text-sm">
+							Pilihan Export CSV
+						</label>
+						<Select
+							id="recap-export-scope"
+							value={exportScope}
+							disabled={exporting}
+							onChange={(event) => setExportScope(event.target.value)}
+						>
+							<option value="ALL">Export Semua Peserta</option>
+							<option value="FILTERED">Export Sesuai Filter</option>
+						</Select>
+					</div>
+					<p className="self-center text-muted-foreground text-sm">
+						{exportScope === "FILTERED" ? filtered.length : participants.length}{" "}
+						peserta akan diekspor, berdasarkan rekap yang dimuat.
+					</p>
 					<Button
 						variant="outline"
 						loading={exporting}
 						disabled={exporting}
 						onClick={async () => {
-							if (exporting) return;
+							if (exportLock.current) return;
+							exportLock.current = true;
 							setExporting(true);
 							setError("");
 							try {
-								const csv = await queryClient.fetchQuery({
-									...trpc.attendance.exportCsv.queryOptions({ eventId }),
-									staleTime: 0,
-									meta: { errorHandledLocally: true },
+								const csv = await trpcClient.attendance.exportCsv.query({
+									eventId,
+									...(exportScope === "FILTERED" ? filters : {}),
 								});
 								const url = URL.createObjectURL(
 									new Blob([csv.content], { type: "text/csv;charset=utf-8" }),
@@ -379,9 +531,11 @@ export default function EventRecap({ eventId }: { eventId: string }) {
 								link.download = csv.filename;
 								link.click();
 								URL.revokeObjectURL(url);
+								setMessage("CSV disiapkan untuk diunduh.");
 							} catch (cause) {
 								setError(eventErrorMessage(cause));
 							} finally {
+								exportLock.current = false;
 								setExporting(false);
 							}
 						}}
@@ -434,7 +588,9 @@ export default function EventRecap({ eventId }: { eventId: string }) {
 							<tr className="border-border border-b bg-muted/50">
 								{[
 									"Peserta",
-									"Organisasi",
+									committeeMode
+										? "Divisi / Jabatan panitia"
+										: "Departemen / Jabatan struktural",
 									"Presence",
 									"Waktu (WIB)",
 									"Timing / Terlambat",
@@ -448,62 +604,79 @@ export default function EventRecap({ eventId }: { eventId: string }) {
 							</tr>
 						</thead>
 						<tbody>
-							{visible.rows.map((row) => (
-								<tr
-									key={row.userId}
-									className="border-border border-b last:border-0"
-								>
-									<td className="p-3">
-										<p className="font-medium">{row.name}</p>
-										<p>{row.nim}</p>
-									</td>
-									<td className="p-3">
-										{row.departmentCode} / {row.positionCode}
-										<br />
-										{row.buildingName}
-									</td>
-									<td className="p-3">
-										<StatusBadge status={row.presence} />
-									</td>
-									<td className="whitespace-nowrap p-3">
-										{row.attendanceAt ? formatEventTime(row.attendanceAt) : "—"}
-									</td>
-									<td className="p-3">
-										{row.timingClass ?? "—"}
-										{row.lateMinutes !== null && <p>{row.lateMinutes} menit</p>}
-									</td>
-									<td className="p-3">{row.source ?? "—"}</td>
-									{canManual && (
+							{visible.rows.map((row) => {
+								const assignment = eventAssignment(event, row);
+								return (
+									<tr
+										key={row.userId}
+										className="border-border border-b last:border-0"
+									>
 										<td className="p-3">
-											<div className="flex items-center gap-2">
-												<Button
-													size="sm"
-													variant="outline"
-													onClick={() => {
-														setSelected(row);
-														setAudit(null);
-														setMessage("");
-													}}
-												>
-													{row.attendanceId ? "Koreksi" : "Input manual"}
-												</Button>
-												{row.attendanceId && (
+											<p className="font-medium">{row.name}</p>
+											<p>{row.nim}</p>
+										</td>
+										<td className="p-3">
+											{assignment.divisionLabel}
+											{assignment.position
+												? ` / ${assignment.positionLabel}`
+												: ""}
+											{committeeMode && (
+												<p className="mt-1 text-muted-foreground text-xs">
+													Struktural SR: {row.departmentCode} /{" "}
+													{row.positionCode}
+												</p>
+											)}
+											<p className="text-muted-foreground text-xs">
+												{row.buildingName}
+											</p>
+										</td>
+										<td className="p-3">
+											<StatusBadge status={row.presence} />
+										</td>
+										<td className="whitespace-nowrap p-3">
+											{row.attendanceAt
+												? formatEventTime(row.attendanceAt)
+												: "—"}
+										</td>
+										<td className="p-3">
+											{row.timingClass ?? "—"}
+											{row.lateMinutes !== null && (
+												<p>{row.lateMinutes} menit</p>
+											)}
+										</td>
+										<td className="p-3">{row.source ?? "—"}</td>
+										{canManual && (
+											<td className="p-3">
+												<div className="flex items-center gap-2">
 													<Button
 														size="sm"
 														variant="outline"
 														onClick={() => {
-															setSelected(null);
-															setAudit(row);
+															setSelected(row);
+															setAudit(null);
+															setMessage("");
 														}}
 													>
-														Audit
+														{row.attendanceId ? "Koreksi" : "Input manual"}
 													</Button>
-												)}
-											</div>
-										</td>
-									)}
-								</tr>
-							))}
+													{row.attendanceId && (
+														<Button
+															size="sm"
+															variant="outline"
+															onClick={() => {
+																setSelected(null);
+																setAudit(row);
+															}}
+														>
+															Audit
+														</Button>
+													)}
+												</div>
+											</td>
+										)}
+									</tr>
+								);
+							})}
 						</tbody>
 					</table>
 				</div>

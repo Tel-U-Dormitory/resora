@@ -950,7 +950,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 			)}
 			{administration && <EventAuditHistory eventId={eventId} />}
 			{canManage && event.status !== "DRAFT" && (
-				<EventRecap eventId={eventId} />
+				<EventRecap key={eventId} eventId={eventId} />
 			)}
 		</section>
 	);

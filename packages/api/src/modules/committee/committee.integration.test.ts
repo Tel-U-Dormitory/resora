@@ -9,6 +9,10 @@ import { sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { appRouter } from "../../routers";
 import { signChallenge } from "../attendance/qr";
+import {
+	eventAssignment,
+	filterRecapParticipants,
+} from "../attendance/reporting-context";
 import { createCommittee } from "./committee.service";
 
 function scratchTarget(value: string) {
@@ -962,6 +966,86 @@ async function expectFailure(
 					(row) => row.event.id === event.eventId,
 				),
 			).toBe(true);
+		});
+		test("Phase 4 recap retains committee history across later membership changes and independent events", async () => {
+			const f = await fixture("Synthetic original committee");
+			await caller().committee.addMember({ ...f, positionCode: "PIC1" });
+			const first = await caller("hco").attendance.create({
+				...eventInput(f.committeeId),
+				rosterCriteria: { include: [ids.hco ?? ""] },
+			});
+			await caller("hco").attendance.publish(first);
+			await caller().attendance.manualInsert({
+				...first,
+				userId: f.userId,
+				reason: "Synthetic recap attendance",
+			});
+			await caller().committee.update({
+				committeeId: f.committeeId,
+				name: "Synthetic renamed committee",
+			});
+			await caller().committee.updateDivision({
+				committeeId: f.committeeId,
+				divisionId: f.divisionId,
+				name: "Divisi terbaru",
+			});
+			await caller().committee.updateMember({ ...f, positionCode: "PJ" });
+			const second = await caller("hco").attendance.create(
+				eventInput(f.committeeId),
+			);
+			await caller("hco").attendance.publish(second);
+			const historical = await caller("hco").attendance.recap(first);
+			expect(historical.event).toMatchObject({
+				organizationContext: "COMMITTEE",
+				committeeName: "Synthetic original committee",
+			});
+			const oldMember = historical.participants.find(
+				(row) => row.userId === f.userId,
+			);
+			if (!oldMember) throw Error("Missing snapshot participant");
+			expect(oldMember).toMatchObject({
+				committeeDivision: "Acara",
+				committeePosition: "PIC1",
+				presence: "PRESENT",
+				source: "MANUAL",
+			});
+			const guest = historical.participants.find(
+				(row) => row.userId === ids.hco,
+			);
+			if (!guest) throw Error("Missing invited guest");
+			expect(eventAssignment(historical.event, guest)).toMatchObject({
+				isCommitteeMember: false,
+				divisionLabel: "Non-Panitia / Undangan",
+				positionLabel: "Non-Panitia / Undangan",
+			});
+			expect(
+				filterRecapParticipants(historical.event, historical.participants, {
+					division: "Acara",
+					position: "PIC1",
+				}),
+			).toEqual([oldMember]);
+			expect(historical.counts).toEqual({
+				invited: 2,
+				present: 1,
+				pending: 1,
+				absent: 0,
+			});
+			const latest = await caller("hco").attendance.recap(second);
+			expect(latest.event.committeeName).toBe("Synthetic renamed committee");
+			expect(latest.participants[0]).toMatchObject({
+				committeeDivision: "Divisi terbaru",
+				committeePosition: "PJ",
+			});
+			await caller("hco").attendance.close(first);
+			expect((await caller("hco").attendance.recap(first)).counts).toEqual({
+				invited: 2,
+				present: 1,
+				pending: 0,
+				absent: 1,
+			});
+			await expectFailure(caller("sr").attendance.recap(first), {
+				code: "FORBIDDEN",
+			});
 		});
 	},
 );
