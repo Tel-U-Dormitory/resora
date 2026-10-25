@@ -4,6 +4,7 @@ import { cache } from "react";
 import ts from "typescript";
 import { getSidebarGroups, isSidebarLinkActive } from "../../config/navigation";
 import { parseWibDateTimeInput, toWibDateTimeInput } from "./event-ui";
+import { resetEventOrganization } from "./roster-selection";
 
 // Execute the actual JSX callbacks with small UI/API doubles, without a browser or DB.
 function jsxCallback(file: string, attribute: string, contains = "") {
@@ -188,6 +189,7 @@ test("event editor submits only permitted advanced fields, requires a reason and
 			});
 			const scope = {
 				advancedMode,
+				committeeMode: false,
 				initial,
 				eventId: "synthetic-event",
 				submitLock: { current: false },
@@ -293,6 +295,87 @@ test("event editor submits only permitted advanced fields, requires a reason and
 	);
 	expect(detail).toContain("detail.data.advancedEditMode");
 	expect(detail).toContain("metadata.mutateAsync");
+});
+
+test("event context/committee callbacks reset stale selection; published preview uses historical identity and permissions stay read-only", () => {
+	let draft = {
+		title: "Synthetic",
+		rosterCriteria: { allSr: true, include: ["old"], exclude: ["other"] },
+	};
+	const context = compile<(event: { target: { value: string } }) => void>(
+		jsxCallback("event-form.tsx", "onChange", "event.target.value as"),
+		{
+			draft,
+			setDraft: (value: typeof draft) => {
+				draft = value;
+			},
+			resetEventOrganization,
+			setPage: () => {},
+		},
+	);
+	context({ target: { value: "COMMITTEE" } });
+	expect(draft).toMatchObject({
+		organizationContext: "COMMITTEE",
+		committeeId: null,
+		rosterCriteria: { allSr: false, include: [], exclude: [] },
+	});
+	const choose = compile<(event: { target: { value: string } }) => void>(
+		jsxCallback("event-form.tsx", "onChange", "event.target.value || null"),
+		{
+			draft,
+			setDraft: (value: typeof draft) => {
+				draft = value;
+			},
+			resetEventOrganization,
+			setPage: () => {},
+		},
+	);
+	choose({ target: { value: "committee-2" } });
+	expect(draft).toMatchObject({ committeeId: "committee-2" });
+	const source = readFileSync(
+		new URL("event-form.tsx", import.meta.url),
+		"utf8",
+	);
+	const tree = ts.createSourceFile(
+		"form.tsx",
+		source,
+		ts.ScriptTarget.Latest,
+		true,
+		ts.ScriptKind.TSX,
+	);
+	let available = "";
+	function visit(node: ts.Node) {
+		if (
+			ts.isVariableDeclaration(node) &&
+			node.name.getText(tree) === "available"
+		)
+			available = node.initializer?.getText(tree) ?? "";
+		ts.forEachChild(node, visit);
+	}
+	visit(tree);
+	const current = {
+		userId: "retained",
+		name: "Current name",
+		committeeDivision: "New division",
+	};
+	const historical = {
+		...current,
+		name: "Historical name",
+		committeeDivision: "Historical division",
+	};
+	expect(
+		compile<() => unknown>(`() => (${available})`, {
+			frozenCommittee: true,
+			candidates: [current, { userId: "new-member" }],
+			frozenParticipants: [historical],
+		})(),
+	).toEqual([historical, { userId: "new-member" }]);
+	expect(source).toContain("committeeMode && !frozenCommittee");
+	expect(source).toContain("disabled={Boolean(advancedMode)}");
+	expect(source).toContain("Anggota kepanitiaan gagal dimuat");
+	expect(source).toContain("Memuat anggota kepanitiaan");
+	expect(source).toContain("Non-Panitia / Undangan");
+	expect(source).not.toContain("trpc.committee.create");
 });
 
 test("visibility/deletion UI requires reason and confirmation, respects pending state and selects the existing mutation", async () => {

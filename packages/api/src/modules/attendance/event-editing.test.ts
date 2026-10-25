@@ -53,6 +53,9 @@ function fixture() {
 			isSuperadmin: true,
 		} as ActiveIdentity,
 		event: {
+			organizationContext: "SR",
+			committeeId: null,
+			snapshotCommitteeName: null,
 			id: eventId,
 			...draft,
 			startsAt: new Date(draft.startsAt),

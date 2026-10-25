@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { getActiveIdentity } from "@resora/auth/sr-access";
 import { createDb, type Database } from "@resora/db";
@@ -7,6 +8,7 @@ import { seedOrganization } from "@resora/db/organization";
 import { sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { appRouter } from "../../routers";
+import { signChallenge } from "../attendance/qr";
 import { createCommittee } from "./committee.service";
 
 function scratchTarget(value: string) {
@@ -51,6 +53,7 @@ async function expectFailure(
 	() => {
 		let db: Database;
 		let periodId: string;
+		let legacyEventId: string;
 		const ids = Object.fromEntries(
 			[
 				"admin",
@@ -66,9 +69,10 @@ async function expectFailure(
 				"future",
 			].map((key) => [key, randomUUID()]),
 		);
-		function caller(key = "admin") {
+		function caller(key = "admin", qrSigningSecret?: string) {
 			return appRouter.createCaller({
 				db,
+				qrSigningSecret,
 				session: {
 					user: { id: ids[key], name: "Synthetic operator" },
 				} as never,
@@ -102,12 +106,38 @@ async function expectFailure(
 				port: Number(url.port),
 				tables: 0,
 			});
-			await migrate(db, {
-				migrationsFolder: resolve(
-					import.meta.dir,
-					"../../../../db/src/migrations",
-				),
-			});
+			const migrationsFolder = resolve(
+				import.meta.dir,
+				"../../../../db/src/migrations",
+			);
+			const temporaryBase = resolve(import.meta.dir, "../../../../../tmp");
+			mkdirSync(temporaryBase, { recursive: true });
+			const prior = mkdtempSync(
+				resolve(temporaryBase, "committee-migrations-"),
+			);
+			if (
+				!prior.startsWith(
+					`${temporaryBase}${process.platform === "win32" ? "\\" : "/"}committee-migrations-`,
+				)
+			)
+				throw Error("UNSAFE_TEST_MIGRATION_DIRECTORY");
+			try {
+				for (const entry of readdirSync(migrationsFolder, {
+					withFileTypes: true,
+				}))
+					if (
+						entry.isDirectory() &&
+						entry.name !== "20261025050126_committee_event_snapshots"
+					)
+						cpSync(
+							resolve(migrationsFolder, entry.name),
+							resolve(prior, entry.name),
+							{ recursive: true },
+						);
+				await migrate(db, { migrationsFolder: prior });
+			} finally {
+				rmSync(prior, { recursive: true });
+			}
 			await seedOrganization(db);
 			const periods = await db.$client.query(
 				`INSERT INTO sr_periods(name,starts_on,ends_on) VALUES ('Synthetic active',CURRENT_DATE-2,CURRENT_DATE+2),('Synthetic expired',CURRENT_DATE-20,CURRENT_DATE-10),('Synthetic future',CURRENT_DATE+10,CURRENT_DATE+20) RETURNING id,name`,
@@ -146,6 +176,16 @@ async function expectFailure(
 					}
 				});
 			}
+			legacyEventId = randomUUID();
+			await db.transaction(async (tx) => {
+				await tx.execute(
+					sql`INSERT INTO events(id,title,created_by_user_id,starts_at,ends_at,roster_criteria) VALUES (${legacyEventId},'Synthetic pre-migration SR event',${ids.admin},now(),now()+interval '1 hour','{"allSr":true,"inti":false,"kadep":false,"departments":[],"individuals":[],"include":[],"exclude":[]}'::jsonb)`,
+				);
+				await tx.execute(
+					sql`INSERT INTO attendance_sessions(internal_event_id,center_lat,center_lng) VALUES (${legacyEventId},0,0)`,
+				);
+			});
+			await migrate(db, { migrationsFolder });
 		}, 30000);
 		afterAll(async () => {
 			await db?.$client.end();
@@ -513,6 +553,414 @@ async function expectFailure(
 				);
 			expect(
 				(await caller("hco").identity.session())?.canManageInternalEvents,
+			).toBe(true);
+		});
+
+		const eventInput = (committeeId?: string) => ({
+			title: "Synthetic committee event",
+			startsAt: new Date(Date.now() - 60_000).toISOString(),
+			endsAt: new Date(Date.now() + 3600000).toISOString(),
+			organizationContext: committeeId
+				? ("COMMITTEE" as const)
+				: ("SR" as const),
+			committeeId: committeeId ?? null,
+			rosterCriteria: { include: [] as string[], exclude: [] as string[] },
+			session: { centerLat: 0, centerLng: 0, qrTtlMinutes: 60 },
+		});
+		test("additive event migration preserves legacy SR events and enforces context, FK and snapshot constraints", async () => {
+			const legacy = await caller().attendance.detail({
+				eventId: legacyEventId,
+			});
+			expect(legacy.event).toMatchObject({
+				organizationContext: "SR",
+				committeeId: null,
+				snapshotCommitteeName: null,
+			});
+			const f = await fixture();
+			for (const statement of [
+				sql`UPDATE events SET committee_id=${f.committeeId} WHERE id=${legacyEventId}`,
+				sql`UPDATE events SET organization_context='COMMITTEE' WHERE id=${legacyEventId}`,
+				sql`UPDATE events SET organization_context='UNKNOWN' WHERE id=${legacyEventId}`,
+				sql`UPDATE events SET organization_context='COMMITTEE',committee_id=${randomUUID()} WHERE id=${legacyEventId}`,
+			]) {
+				let rejected = false;
+				try {
+					await db.execute(statement);
+				} catch {
+					rejected = true;
+				}
+				expect(rejected).toBe(true);
+			}
+			const fk = await db.$client.query(
+				"SELECT confdeltype FROM pg_constraint WHERE conname='events_committee_id_committees_id_fkey'",
+			);
+			expect(fk.rows[0].confdeltype).toBe("a");
+			const created = await caller("hco").attendance.create(
+				eventInput(f.committeeId),
+			);
+			await expectFailure(
+				caller()
+					.committee.deleteDivision({
+						committeeId: f.committeeId,
+						divisionId: f.divisionId,
+					})
+					.then(() =>
+						caller().committee.delete({ committeeId: f.committeeId }),
+					),
+				{ code: "CONFLICT" },
+			);
+			expect(
+				(await caller("hco").attendance.detail(created)).event.committeeId,
+			).toBe(f.committeeId);
+		});
+		test("DRAFT context switching, committee selection, eligibility, extra invitations and exclusion work through the API", async () => {
+			const f = await fixture();
+			await caller().committee.addMember(f);
+			await caller().committee.addMember({
+				...f,
+				userId: ids.rnd ?? "",
+				positionCode: "SEKRE",
+			});
+			await db.$client.query(
+				"UPDATE user_profiles SET is_active=false WHERE user_id=$1",
+				[ids.rnd],
+			);
+			try {
+				const event = await caller("hco").attendance.create(eventInput());
+				const draft = {
+					...eventInput(f.committeeId),
+					rosterCriteria: {
+						include: [f.userId, ids.kadep ?? "", ids.kadep ?? ""],
+						exclude: [f.userId],
+					},
+				};
+				await caller("hco").attendance.editDraft({ ...event, draft });
+				const preview = await caller("hco").attendance.preview(event);
+				expect(preview.participants.map((row) => row.userId)).toEqual([
+					ids.kadep ?? "",
+				]);
+				expect(preview.participants[0]).toMatchObject({
+					committeeDivision: null,
+					committeePosition: null,
+				});
+				await caller("hco").attendance.editDraft({
+					...event,
+					draft: eventInput(f.committeeId),
+				});
+				expect(
+					(await caller("hco").attendance.preview(event)).participants,
+				).toHaveLength(1);
+				await caller("hco").attendance.publish(event);
+				const detail = await caller("hco").attendance.detail(event);
+				expect(detail.participants[0]).toMatchObject({
+					userId: f.userId,
+					committeeDivision: "Acara",
+					committeePosition: "ANGGOTA",
+				});
+				expect(
+					(await caller("sr").attendance.detail(event)).participants,
+				).toEqual([]);
+				await expectFailure(caller("sr").attendance.preview(event), {
+					code: "FORBIDDEN",
+				});
+				await expectFailure(
+					caller("sr").attendance.create(eventInput(f.committeeId)),
+					{ code: "FORBIDDEN" },
+				);
+				await expectFailure(
+					caller("hco").attendance.create(eventInput(randomUUID())),
+					{ code: "BAD_REQUEST" },
+				);
+				await expectFailure(
+					caller("hco").attendance.create({
+						...eventInput(f.committeeId),
+						rosterCriteria: { allSr: true },
+					}),
+					{ code: "BAD_REQUEST" },
+				);
+			} finally {
+				await db.$client.query(
+					"UPDATE user_profiles SET is_active=true WHERE user_id=$1",
+					[ids.rnd],
+				);
+			}
+		});
+		test("published committee snapshots survive rename/reassignment/removal and FULL edit only applies explicit deltas", async () => {
+			const f = await fixture();
+			await caller().committee.addMember({ ...f, positionCode: "PIC1" });
+			const first = await caller("hco").attendance.create(
+				eventInput(f.committeeId),
+			);
+			await caller("hco").attendance.publish(first);
+			const original = await caller().attendance.detail(first);
+			const nextDivision = await caller().committee.createDivision({
+				committeeId: f.committeeId,
+				name: "Divisi terbaru",
+			});
+			if (!nextDivision) throw Error("Missing division");
+			await caller().committee.updateMember({
+				...f,
+				divisionId: nextDivision.id,
+				positionCode: "PJ",
+			});
+			await caller().committee.updateDivision({
+				committeeId: f.committeeId,
+				divisionId: f.divisionId,
+				name: "Divisi lama diubah",
+			});
+			f.divisionId = nextDivision.id;
+			await caller().committee.update({
+				committeeId: f.committeeId,
+				name: "Kepanitiaan terbaru",
+			});
+			const second = await caller("hco").attendance.create(
+				eventInput(f.committeeId),
+			);
+			await caller("hco").attendance.publish(second);
+			expect(
+				(await caller().attendance.detail(second)).participants[0],
+			).toMatchObject({
+				committeePosition: "PJ",
+				committeeDivision: "Divisi terbaru",
+			});
+			expect((await caller().attendance.detail(second)).committeeName).toBe(
+				"Kepanitiaan terbaru",
+			);
+			await caller().committee.removeMember({
+				committeeId: f.committeeId,
+				userId: f.userId,
+			});
+			await caller().committee.addMember({
+				...f,
+				userId: ids.kadep ?? "",
+				positionCode: "SEKRE",
+			});
+			const full = {
+				...first,
+				mode: "FULL" as const,
+				reason: "Synthetic explicit correction",
+				draft: eventInput(f.committeeId),
+			};
+			await caller().attendance.advancedEdit(full);
+			expect((await caller().attendance.detail(first)).participants).toEqual(
+				original.participants,
+			);
+			full.draft.rosterCriteria.include = [ids.kadep ?? "", ids.hco ?? ""];
+			await caller().attendance.advancedEdit(full);
+			const changed = await caller().attendance.detail(first);
+			expect(
+				changed.participants.find((row) => row.userId === f.userId),
+			).toEqual(original.participants[0]);
+			expect(
+				changed.participants.find((row) => row.userId === ids.kadep),
+			).toMatchObject({
+				committeeDivision: "Divisi terbaru",
+				committeePosition: "SEKRE",
+			});
+			expect(
+				changed.participants.find((row) => row.userId === ids.hco),
+			).toMatchObject({ committeeDivision: null, committeePosition: null });
+			expect(changed.committeeName).toBe(original.committeeName);
+			full.draft.rosterCriteria.exclude = [f.userId];
+			await caller().attendance.advancedEdit(full);
+			expect(
+				(await caller().attendance.detail(first)).participants,
+			).toHaveLength(2);
+			await expectFailure(
+				caller().attendance.advancedEdit({ ...full, draft: eventInput() }),
+				{ code: "BAD_REQUEST" },
+			);
+			const other = await fixture();
+			await expectFailure(
+				caller().attendance.advancedEdit({
+					...full,
+					draft: eventInput(other.committeeId),
+				}),
+				{ code: "BAD_REQUEST" },
+			);
+			await expectFailure(caller("hco").attendance.advancedEdit(full), {
+				code: "FORBIDDEN",
+			});
+			const history = await caller().attendance.eventAuditHistory(first);
+			expect(
+				history.items.some((row) => row.participants?.addedCount === 2),
+			).toBe(true);
+			const third = await caller("hco").attendance.create(
+				eventInput(f.committeeId),
+			);
+			await caller("hco").attendance.publish(third);
+			expect(
+				(await caller().attendance.detail(third)).participants.map(
+					(row) => row.userId,
+				),
+			).toEqual([ids.kadep ?? ""]);
+		});
+		test("snapshot or audit write failures roll back publication and explicit invitation changes", async () => {
+			const f = await fixture();
+			await caller().committee.addMember(f);
+			const event = await caller().attendance.create(eventInput(f.committeeId));
+			await db.$client.query(
+				`CREATE FUNCTION committee_event_test_fail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic failure'; END $$; CREATE TRIGGER committee_event_test_fail BEFORE INSERT ON event_participants FOR EACH ROW EXECUTE FUNCTION committee_event_test_fail()`,
+			);
+			try {
+				await expectFailure(caller().attendance.publish(event), {
+					code: "INTERNAL_SERVER_ERROR",
+				});
+			} finally {
+				await db.$client.query(
+					"DROP TRIGGER committee_event_test_fail ON event_participants; DROP FUNCTION committee_event_test_fail()",
+				);
+			}
+			const draft = await caller().attendance.detail(event);
+			expect(draft.event.status).toBe("DRAFT");
+			expect(draft.event.snapshotCommitteeName).toBeNull();
+			expect(draft.participants).toEqual([]);
+			await caller().attendance.publish(event);
+			const before = await caller().attendance.detail(event);
+			await db.$client.query(
+				`CREATE FUNCTION committee_event_test_fail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic failure'; END $$; CREATE TRIGGER committee_event_test_fail BEFORE INSERT ON event_audit_logs FOR EACH ROW EXECUTE FUNCTION committee_event_test_fail()`,
+			);
+			try {
+				await expectFailure(
+					caller().attendance.advancedEdit({
+						...event,
+						mode: "FULL",
+						reason: "Synthetic rollback",
+						draft: {
+							...eventInput(f.committeeId),
+							rosterCriteria: { include: [ids.hco ?? ""] },
+						},
+					}),
+					{ code: "INTERNAL_SERVER_ERROR" },
+				);
+			} finally {
+				await db.$client.query(
+					"DROP TRIGGER committee_event_test_fail ON event_audit_logs; DROP FUNCTION committee_event_test_fail()",
+				);
+			}
+			const after = await caller().attendance.detail(event);
+			expect(after.participants).toEqual(before.participants);
+			expect(after.event).toEqual(before.event);
+			expect(after.session).toEqual(before.session);
+		});
+		test("publication waits for committee mutation and snapshots its committed assignment without deadlock", async () => {
+			const f = await fixture();
+			await caller().committee.addMember(f);
+			const event = await caller().attendance.create(eventInput(f.committeeId));
+			let ready = () => {};
+			let release = () => {};
+			let blockerPid = 0;
+			const readyPromise = new Promise<void>((resolve) => {
+				ready = resolve;
+			});
+			const releasePromise = new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			const editing = db.transaction(async (tx) => {
+				await tx.execute(sql`SET LOCAL statement_timeout = '3s'`);
+				blockerPid = Number(
+					(await tx.execute<{ pid: number }>(sql`SELECT pg_backend_pid() pid`))
+						.rows[0]?.pid,
+				);
+				await appRouter
+					.createCaller({
+						db: tx as unknown as Database,
+						session: { user: { id: ids.admin } } as never,
+					})
+					.committee.updateMember({ ...f, positionCode: "PJ" });
+				ready();
+				await releasePromise;
+			});
+			await Promise.race([
+				readyPromise,
+				editing.then(() => {
+					throw Error("Missing lock barrier");
+				}),
+			]);
+			const publishing = caller().attendance.publish(event);
+			try {
+				let blocked = false;
+				for (let attempt = 0; attempt < 100 && !blocked; attempt++) {
+					blocked = (
+						await db.$client.query(
+							"SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1::int = ANY(pg_blocking_pids(pid))) blocked",
+							[blockerPid],
+						)
+					).rows[0].blocked;
+				}
+				expect(blocked).toBe(true);
+			} finally {
+				release();
+				await editing;
+				await publishing;
+			}
+			expect(
+				(await caller().attendance.detail(event)).participants[0]
+					?.committeePosition,
+			).toBe("PJ");
+		});
+		test("committee invitations preserve manual attendance, QR duplicate/lifecycle gates and historical reporting", async () => {
+			const f = await fixture();
+			await caller().committee.addMember(f);
+			await caller().committee.addMember({
+				...f,
+				userId: ids.rnd ?? "",
+				positionCode: "PIC2",
+			});
+			const event = await caller("hco").attendance.create(
+				eventInput(f.committeeId),
+			);
+			await caller("hco").attendance.publish(event);
+			await caller().attendance.manualInsert({
+				...event,
+				userId: f.userId,
+				reason: "Synthetic manual attendance",
+			});
+			expect((await caller().attendance.detail(event)).advancedEditMode).toBe(
+				"LIMITED",
+			);
+			await expectFailure(
+				caller().attendance.advancedEdit({
+					...event,
+					mode: "FULL",
+					reason: "Disallowed full edit",
+					draft: eventInput(f.committeeId),
+				}),
+				{ code: "CONFLICT" },
+			);
+			await caller("hco").attendance.activate(event);
+			const challenge = (
+				await db.$client.query(
+					"SELECT q.id,q.session_id FROM qr_challenges q JOIN attendance_sessions s ON s.id=q.session_id WHERE s.internal_event_id=$1 AND q.is_current",
+					[event.eventId],
+				)
+			).rows[0];
+			const secret = randomBytes(32).toString("hex");
+			const checkIn = {
+				qrToken: signChallenge(secret, challenge.session_id, challenge.id),
+				location: { latitude: 0, longitude: 0, accuracyMeters: 5 },
+			};
+			expect(
+				(await caller("rnd", secret).attendance.checkIn(checkIn)).status,
+			).toBe("CHECKED_IN");
+			expect(
+				(await caller("rnd", secret).attendance.checkIn(checkIn)).status,
+			).toBe("ALREADY_CHECKED_IN");
+			expect(
+				(await caller("hco").attendance.recap(event)).counts,
+			).toMatchObject({ invited: 2, present: 2 });
+			await caller("hco").attendance.close(event);
+			await expectFailure(caller("rnd", secret).attendance.checkIn(checkIn), {
+				code: "FORBIDDEN",
+				message: "SESSION_CLOSED",
+			});
+			expect(
+				(await caller("hco").attendance.exportCsv(event)).content,
+			).toContain("Synthetic rnd");
+			expect(
+				(await caller("rnd").attendance.ownHistory({})).items.some(
+					(row) => row.event.id === event.eventId,
+				),
 			).toBe(true);
 		});
 	},
