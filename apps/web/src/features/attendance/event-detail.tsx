@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { attendanceQueryKeys, queryClient, trpc } from "@/utils/trpc";
+import { committeePositionLabels } from "../committee/committee-ui";
 import { refreshAttendanceQueries } from "./attendance-queries";
 import { EventAuditHistory } from "./event-admin-history";
 import EventRecap from "./event-recap";
@@ -232,6 +233,12 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 				</div>
 				<p className="whitespace-pre-wrap break-words text-muted-foreground">
 					{event.description || "Belum ada deskripsi event."}
+				</p>
+				<p className="text-muted-foreground text-sm">
+					Kepengurusan Event:{" "}
+					{event.organizationContext === "COMMITTEE"
+						? `Kepanitiaan Kegiatan · ${detail.data.committeeName ?? "Kepanitiaan"}`
+						: "Struktural SR"}
 				</p>
 			</div>
 			{error && (
@@ -888,6 +895,13 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 												</td>
 												<td className="whitespace-nowrap p-3">
 													{sr.departmentCode} / {sr.positionCode}
+													{event.organizationContext === "COMMITTEE" && (
+														<p className="text-muted-foreground text-xs">
+															{sr.committeeDivision
+																? `${sr.committeeDivision} / ${committeePositionLabels[sr.committeePosition ?? ""] ?? sr.committeePosition}`
+																: "Non-Panitia / Undangan"}
+														</p>
+													)}
 												</td>
 												<td className="whitespace-nowrap p-3">
 													{sr.buildingName}
@@ -936,7 +950,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 			)}
 			{administration && <EventAuditHistory eventId={eventId} />}
 			{canManage && event.status !== "DRAFT" && (
-				<EventRecap eventId={eventId} />
+				<EventRecap key={eventId} eventId={eventId} />
 			)}
 		</section>
 	);

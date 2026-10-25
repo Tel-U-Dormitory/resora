@@ -39,6 +39,7 @@ import {
 	extendPeriodSchema,
 } from "./account-period.schema";
 import {
+	canManageCommittee,
 	canManageInternalAttendanceManually,
 	canManageInternalEvent,
 	canOperateGeneralActivity,
@@ -138,6 +139,7 @@ export const identityRouter = router({
 			requiresPasswordChange: requiresPasswordChange(identity),
 			name: ctx.session.user.name,
 			canManageInternalEvents: canManageInternalEvent(identity),
+			canManageCommittee: canManageCommittee(identity),
 			canManageInternalAttendanceManually:
 				canManageInternalAttendanceManually(identity),
 			canOperateGeneralActivity: canOperateGeneralActivity(identity),

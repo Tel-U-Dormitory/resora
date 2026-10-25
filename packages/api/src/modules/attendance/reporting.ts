@@ -18,6 +18,10 @@ import {
 	isValidSrAssignment,
 } from "../identity/identity.public";
 import { auditHistorySchema, ownHistorySchema } from "./attendance.schema";
+import {
+	filterRecapParticipants,
+	type RecapFilters,
+} from "./reporting-context";
 import { attendanceCsv, reportAttendance } from "./reporting-policy";
 
 const recordFields = {
@@ -34,6 +38,8 @@ const snapshotFields = {
 	positionCode: eventParticipants.positionCode,
 	buildingCode: eventParticipants.buildingCode,
 	buildingName: eventParticipants.buildingName,
+	committeeDivision: eventParticipants.committeeDivision,
+	committeePosition: eventParticipants.committeePosition,
 };
 
 export async function recap(
@@ -54,6 +60,8 @@ export async function recap(
 						status: events.status,
 						startsAt: events.startsAt,
 						closedAt: events.closedAt,
+						organizationContext: events.organizationContext,
+						committeeName: events.snapshotCommitteeName,
 					},
 					session: {
 						id: attendanceSessions.id,
@@ -85,6 +93,8 @@ export async function recap(
 				.orderBy(asc(eventParticipants.nim), asc(eventParticipants.userId));
 			const participants = rows.map(({ participant, record }) => ({
 				...participant,
+				committeeDivision: participant.committeeDivision ?? null,
+				committeePosition: participant.committeePosition ?? null,
 				...reportAttendance(
 					record,
 					context.event.status,
@@ -93,7 +103,14 @@ export async function recap(
 				),
 			}));
 			return {
-				event: context.event,
+				event: {
+					...context.event,
+					organizationContext: context.event.organizationContext ?? "SR",
+					committeeName:
+						context.event.organizationContext === "COMMITTEE"
+							? context.event.committeeName
+							: null,
+				},
 				canManual: canManageInternalAttendanceManually(identity),
 				counts: {
 					invited: participants.length,
@@ -115,11 +132,24 @@ export async function exportCsv(
 	db: Database,
 	identity: ActiveIdentity,
 	eventId: string,
+	filters: RecapFilters = {},
 ) {
 	const report = await recap(db, identity, eventId);
+	if (
+		report.event.organizationContext !== "COMMITTEE" &&
+		filters.participantType &&
+		filters.participantType !== "ALL"
+	)
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "PARTICIPANT_TYPE_NOT_APPLICABLE",
+		});
 	return {
 		filename: `attendance-${report.event.id}-${new Date().toISOString().slice(0, 10)}.csv`,
-		content: attendanceCsv(report.participants),
+		content: attendanceCsv(
+			filterRecapParticipants(report.event, report.participants, filters),
+			report.event,
+		),
 	};
 }
 

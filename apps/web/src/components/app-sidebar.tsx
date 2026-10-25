@@ -37,17 +37,20 @@ const icons = {
 	history: History,
 	manage: ListChecks,
 	accounts: Users,
+	committees: Users,
 	periods: CalendarRange,
 };
 
 export function AppSidebar({
 	name,
 	canManageEvents,
+	canManageCommittee,
 	isSuperadmin,
 	isSr,
 }: {
 	name: string;
 	canManageEvents: boolean;
+	canManageCommittee?: boolean;
 	isSuperadmin: boolean;
 	isSr: boolean;
 }) {
@@ -55,7 +58,12 @@ export function AppSidebar({
 	const params = useSearchParams();
 	const { state, isMobile, setOpenMobile } = useSidebar();
 	const compact = state === "collapsed" && !isMobile;
-	const groups = getSidebarGroups({ isSr, canManageEvents, isSuperadmin });
+	const groups = getSidebarGroups({
+		isSr,
+		canManageEvents,
+		canManageCommittee,
+		isSuperadmin,
+	});
 	const routeKey = `${pathname}?${params.toString()}`;
 	useEffect(() => {
 		if (routeKey) setOpenMobile(false);

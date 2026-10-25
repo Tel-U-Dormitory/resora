@@ -12,6 +12,7 @@ import {
 	eventListSchema,
 	eventMetadataSchema,
 	eventVisibilitySchema,
+	exportCsvSchema,
 	manualCorrectSchema,
 	manualInsertSchema,
 	ownHistorySchema,
@@ -59,8 +60,10 @@ export const attendanceRouter = router({
 		.input(eventIdSchema)
 		.query(({ ctx, input }) => recap(ctx.db, ctx.identity, input.eventId)),
 	exportCsv: protectedProcedure
-		.input(eventIdSchema)
-		.query(({ ctx, input }) => exportCsv(ctx.db, ctx.identity, input.eventId)),
+		.input(exportCsvSchema)
+		.query(({ ctx, input: { eventId, ...filters } }) =>
+			exportCsv(ctx.db, ctx.identity, eventId, filters),
+		),
 	ownHistory: protectedProcedure
 		.input(ownHistorySchema)
 		.query(({ ctx, input }) => ownHistory(ctx.db, ctx.identity, input)),

@@ -1,6 +1,61 @@
 import { expect, test } from "bun:test";
 import { TRPCClientError } from "@trpc/client";
 import {
+	isInvited,
+	resetEventOrganization,
+	setParticipantInvitation,
+} from "./roster-selection";
+
+test("committee defaults and frozen invitees override structural groups without duplicating IDs", () => {
+	const member = {
+		userId: "member",
+		name: "Synthetic member",
+		nim: "001",
+		departmentCode: "HCO",
+		positionCode: "ANGGOTA",
+	};
+	const guest = { ...member, userId: "guest" };
+	let criteria = {
+		allSr: false,
+		inti: false,
+		kadep: false,
+		departments: [],
+		individuals: [],
+		include: [],
+		exclude: [],
+	} as Parameters<typeof isInvited>[1];
+	const defaults = new Set([member.userId]);
+	expect(isInvited(member, criteria, defaults)).toBe(true);
+	expect(isInvited(guest, criteria, defaults)).toBe(false);
+	criteria = setParticipantInvitation(criteria, member, false, defaults);
+	expect(criteria.exclude).toEqual([member.userId]);
+	criteria = setParticipantInvitation(criteria, member, true, defaults);
+	expect(criteria.include).toEqual([]);
+	expect(criteria.exclude).toEqual([]);
+	criteria = setParticipantInvitation(criteria, guest, true, defaults);
+	expect(criteria.include).toEqual([guest.userId]);
+	criteria = setParticipantInvitation(criteria, guest, false, defaults);
+	expect(isInvited(guest, criteria, defaults)).toBe(false);
+	// A published snapshot is the default set even when live membership has changed.
+	expect(isInvited(member, criteria, new Set())).toBe(false);
+	const reset = resetEventOrganization(
+		{
+			rosterCriteria: { ...criteria, allSr: true, include: [guest.userId] },
+			title: "Retained",
+		},
+		"COMMITTEE",
+		"synthetic-committee",
+	);
+	expect(reset).toMatchObject({
+		title: "Retained",
+		committeeId: "synthetic-committee",
+		organizationContext: "COMMITTEE",
+		rosterCriteria: { allSr: false, include: [], exclude: [] },
+	});
+	expect(resetEventOrganization(reset, "SR").committeeId).toBeNull();
+});
+
+import {
 	eventErrorMessage,
 	formatEventTime,
 	parseWibDateTimeInput,

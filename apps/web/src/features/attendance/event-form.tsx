@@ -3,6 +3,7 @@
 import type { AppRouter } from "@resora/api/routers/index";
 import { DateTimePicker } from "@resora/ui/components/date-time-picker";
 import { Input } from "@resora/ui/components/input";
+import { Select } from "@resora/ui/components/select";
 import { Skeleton } from "@resora/ui/components/skeleton";
 import { Textarea } from "@resora/ui/components/textarea";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -14,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { attendanceQueryKeys, queryClient, trpc } from "@/utils/trpc";
+import { committeePositionLabels } from "../committee/committee-ui";
 import { refreshAttendanceQueries } from "./attendance-queries";
 import {
 	DORM_HALL,
@@ -30,6 +32,7 @@ import { participantPage } from "./participant-list";
 import {
 	isInvited,
 	type RosterCandidate,
+	resetEventOrganization,
 	setParticipantInvitation,
 } from "./roster-selection";
 
@@ -147,6 +150,8 @@ export default function EventForm({ eventId }: { eventId?: string }) {
 				startsAt: data.event.startsAt,
 				endsAt: data.event.endsAt,
 				rosterCriteria: data.event.rosterCriteria,
+				organizationContext: data.event.organizationContext,
+				committeeId: data.event.committeeId,
 				session: {
 					centerLat: data.session.centerLat,
 					centerLng: data.session.centerLng,
@@ -160,6 +165,13 @@ export default function EventForm({ eventId }: { eventId?: string }) {
 		<DraftEditor
 			key={eventId ?? "new"}
 			initial={initial}
+			initialCommitteeName={data?.committeeName ?? ""}
+			frozenParticipants={
+				data?.event.organizationContext === "COMMITTEE" &&
+				data.event.status !== "DRAFT"
+					? data.participants
+					: undefined
+			}
 			advancedMode={advancedMode}
 			eventId={eventId}
 			candidates={directory.data?.candidates ?? []}
@@ -173,14 +185,38 @@ function DraftEditor({
 	eventId,
 	candidates,
 	invalidCount,
+	initialCommitteeName,
+	frozenParticipants,
 }: {
 	initial: Draft;
 	advancedMode?: "FULL" | "LIMITED" | "METADATA";
 	eventId?: string;
 	candidates: RosterCandidate[];
 	invalidCount: number;
+	initialCommitteeName: string;
+	frozenParticipants?: RosterCandidate[];
 }) {
 	const [draft, setDraft] = useState(initial);
+	const [committeeSearch, setCommitteeSearch] = useState("");
+	const [committeePage, setCommitteePage] = useState(0);
+	const committeeMode = draft.organizationContext === "COMMITTEE";
+	const frozenCommittee = committeeMode && Boolean(advancedMode);
+	const committees = useQuery({
+		...trpc.committee.list.queryOptions({
+			search: committeeSearch,
+			limit: 20,
+			offset: committeePage * 20,
+		}),
+		enabled: committeeMode && !frozenCommittee,
+		meta: { errorHandledLocally: true },
+	});
+	const committee = useQuery({
+		...trpc.committee.detail.queryOptions({
+			committeeId: draft.committeeId ?? "00000000-0000-4000-8000-000000000000",
+		}),
+		enabled: committeeMode && !frozenCommittee && Boolean(draft.committeeId),
+		meta: { errorHandledLocally: true },
+	});
 	const submitLock = useRef(false);
 	const setLocation = useCallback((point: LocationPoint) => {
 		if (submitLock.current) return;
@@ -220,9 +256,41 @@ function DraftEditor({
 	const criteria = draft.rosterCriteria ?? empty.rosterCriteria;
 	const session = draft.session;
 	if (!criteria) return null;
-	const candidatePage = participantPage(candidates, search, page);
+	const assignments = new Map(
+		committee.data?.members
+			.filter((member) => member.eligible)
+			.map((member) => [member.userId, member]),
+	);
+	const defaultIds = committeeMode
+		? new Set(
+				frozenCommittee
+					? frozenParticipants?.map((sr) => sr.userId)
+					: [...assignments.keys()],
+			)
+		: undefined;
+	const available = frozenCommittee
+		? [
+				...new Map(
+					[...candidates, ...(frozenParticipants ?? [])].map((sr) => [
+						sr.userId,
+						sr,
+					]),
+				).values(),
+			]
+		: candidates.map((sr) => ({
+				...sr,
+				committeeDivision:
+					committee.data?.divisions.find(
+						(division) =>
+							division.id === assignments.get(sr.userId)?.divisionId,
+					)?.name ?? null,
+				committeePosition: assignments.get(sr.userId)?.positionCode ?? null,
+			}));
+	const candidatePage = participantPage(available, search, page);
 	const invitedCount = new Set(
-		candidates.filter((sr) => isInvited(sr, criteria)).map((sr) => sr.userId),
+		available
+			.filter((sr) => isInvited(sr, criteria, defaultIds))
+			.map((sr) => sr.userId),
 	).size;
 	return (
 		<section className="resora-page min-w-0 space-y-6">
@@ -269,8 +337,8 @@ function DraftEditor({
 					event.preventDefault();
 					setEndError("");
 					const field = formRef.current?.querySelector<
-						HTMLInputElement | HTMLTextAreaElement
-					>("input:invalid, textarea:invalid");
+						HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+					>("input:invalid, textarea:invalid, select:invalid");
 					const details = field?.closest("details");
 					if (details) details.open = true;
 					setInvalidFieldId(field?.id ?? "");
@@ -283,6 +351,16 @@ function DraftEditor({
 					setEndError("");
 					if (advancedMode && !reason.trim()) {
 						setError("Alasan perubahan administratif wajib diisi.");
+						return;
+					}
+					if (
+						committeeMode &&
+						!frozenCommittee &&
+						(!draft.committeeId || !committee.data || committee.isError)
+					) {
+						setError(
+							"Pilih kepanitiaan dan tunggu daftar anggota berhasil dimuat.",
+						);
 						return;
 					}
 					const startDate =
@@ -657,7 +735,170 @@ function DraftEditor({
 									/>{" "}
 									Peserta
 								</h2>
-								{advancedMode && (
+								<div className="space-y-2">
+									<label
+										htmlFor="organization-context"
+										className="font-medium text-sm"
+									>
+										Kepengurusan Event
+									</label>
+									<Select
+										id="organization-context"
+										value={draft.organizationContext ?? "SR"}
+										disabled={Boolean(advancedMode)}
+										onChange={(event) => {
+											setDraft(
+												resetEventOrganization(
+													draft,
+													event.target.value as "SR" | "COMMITTEE",
+												),
+											);
+											setPage(1);
+										}}
+									>
+										<option value="SR">Struktural SR</option>
+										<option value="COMMITTEE">Kepanitiaan Kegiatan</option>
+									</Select>
+								</div>
+								{committeeMode && (
+									<div className="space-y-3">
+										{frozenCommittee ? (
+											<p className="text-sm">
+												Kepanitiaan: <strong>{initialCommitteeName}</strong>.
+												Konteks dan kepanitiaan tidak dapat diubah setelah
+												publikasi.
+											</p>
+										) : (
+											<>
+												<label
+													className="block space-y-2 text-sm"
+													htmlFor="committee-search"
+												>
+													Cari kepanitiaan
+													<Input
+														id="committee-search"
+														type="search"
+														maxLength={150}
+														value={committeeSearch}
+														onChange={(event) => {
+															setCommitteeSearch(event.target.value);
+															setCommitteePage(0);
+														}}
+													/>
+												</label>
+												{committees.isPending ? (
+													<p role="status">Memuat kepanitiaan…</p>
+												) : committees.isError ? (
+													<div role="alert">
+														<p>Daftar kepanitiaan gagal dimuat.</p>
+														<Button
+															type="button"
+															variant="outline"
+															onClick={() => void committees.refetch()}
+														>
+															Coba kembali
+														</Button>
+													</div>
+												) : (
+													!committees.data?.committees.length && (
+														<p>Belum ada kepanitiaan yang sesuai.</p>
+													)
+												)}
+												<label
+													htmlFor="event-committee"
+													className="block space-y-2 text-sm"
+												>
+													Pilih Kepanitiaan
+													<Select
+														id="event-committee"
+														required
+														value={draft.committeeId ?? ""}
+														onChange={(event) => {
+															setDraft(
+																resetEventOrganization(
+																	draft,
+																	"COMMITTEE",
+																	event.target.value || null,
+																),
+															);
+															setPage(1);
+														}}
+													>
+														<option value="">Pilih kepanitiaan</option>
+														{draft.committeeId &&
+															!committees.data?.committees.some(
+																(row) => row.id === draft.committeeId,
+															) && (
+																<option value={draft.committeeId}>
+																	{committee.data?.name ||
+																		initialCommitteeName ||
+																		"Kepanitiaan terpilih"}
+																</option>
+															)}
+														{committees.data?.committees.map((row) => (
+															<option key={row.id} value={row.id}>
+																{row.name}
+															</option>
+														))}
+													</Select>
+												</label>
+												<div className="flex flex-wrap gap-2">
+													<Button
+														type="button"
+														variant="outline"
+														disabled={
+															committeePage === 0 || committees.isFetching
+														}
+														onClick={() => setCommitteePage(committeePage - 1)}
+													>
+														Sebelumnya
+													</Button>
+													<span className="self-center text-sm">
+														Halaman {committeePage + 1}
+													</span>
+													<Button
+														type="button"
+														variant="outline"
+														disabled={
+															committees.isFetching ||
+															(committeePage + 1) * 20 >=
+																(committees.data?.total ?? 0)
+														}
+														onClick={() => setCommitteePage(committeePage + 1)}
+													>
+														Berikutnya
+													</Button>
+												</div>
+												{draft.committeeId &&
+													(committee.isPending ? (
+														<p role="status">Memuat anggota kepanitiaan…</p>
+													) : committee.isError ? (
+														<div role="alert">
+															<p>Anggota kepanitiaan gagal dimuat.</p>
+															<Button
+																type="button"
+																variant="outline"
+																onClick={() => void committee.refetch()}
+															>
+																Coba kembali
+															</Button>
+														</div>
+													) : (
+														<p className="text-sm">
+															{assignments.size} anggota memenuhi syarat. Daftar
+															final divalidasi kembali saat publikasi.
+														</p>
+													))}
+											</>
+										)}
+										<p className="text-muted-foreground text-sm">
+											{frozenCommittee
+												? "Checkbox memakai snapshot undangan yang dibekukan. Perubahan keanggotaan panitia terbaru tidak disinkronkan; centang/hapus centang untuk perubahan individu eksplisit."
+												: "Anggota panitia yang memenuhi syarat otomatis diundang. Tambahkan undangan individu atau hapus centang untuk mengecualikan."}
+										</p>
+									</div>
+								)}
+								{advancedMode && !committeeMode && (
 									<p className="text-muted-foreground text-sm">
 										Daftar ini menampilkan SR aktif terkini. Snapshot undangan
 										yang sudah ada tetap dipertahankan jika kriteria peserta
@@ -668,91 +909,93 @@ function DraftEditor({
 									Pilih kelompok, lalu tinjau peserta. Hapus centang untuk
 									mengecualikan seseorang dari undangan.
 								</p>
-								<fieldset className="space-y-3">
-									<legend className="mb-3 font-medium text-sm">
-										Kelompok undangan
-									</legend>
-									<div className="flex flex-wrap items-center gap-3">
-										{(
-											[
-												["allSr", "Semua SR aktif"],
-												["inti", "INTI"],
-												["kadep", "KADEP lintas departemen"],
-											] as const
-										).map(([key, label]) => (
-											<label
-												key={key}
-												className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm has-checked:border-primary has-checked:bg-primary-soft"
+								{!committeeMode && (
+									<fieldset className="space-y-3">
+										<legend className="mb-3 font-medium text-sm">
+											Kelompok undangan
+										</legend>
+										<div className="flex flex-wrap items-center gap-3">
+											{(
+												[
+													["allSr", "Semua SR aktif"],
+													["inti", "INTI"],
+													["kadep", "KADEP lintas departemen"],
+												] as const
+											).map(([key, label]) => (
+												<label
+													key={key}
+													className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm has-checked:border-primary has-checked:bg-primary-soft"
+												>
+													<input
+														type="checkbox"
+														checked={criteria[key] ?? false}
+														onChange={(e) =>
+															setDraft({
+																...draft,
+																rosterCriteria: {
+																	...criteria,
+																	[key]: e.target.checked,
+																},
+															})
+														}
+													/>
+													{label}
+												</label>
+											))}
+											<Button
+												type="button"
+												variant={
+													criteria.inti && criteria.kadep
+														? "secondary"
+														: "outline"
+												}
+												aria-pressed={Boolean(criteria.inti && criteria.kadep)}
+												onClick={() =>
+													setDraft({
+														...draft,
+														rosterCriteria: {
+															...criteria,
+															inti: !(criteria.inti && criteria.kadep),
+															kadep: !(criteria.inti && criteria.kadep),
+														},
+													})
+												}
 											>
-												<input
-													type="checkbox"
-													checked={criteria[key] ?? false}
-													onChange={(e) =>
-														setDraft({
-															...draft,
-															rosterCriteria: {
-																...criteria,
-																[key]: e.target.checked,
-															},
-														})
-													}
-												/>
-												{label}
-											</label>
-										))}
-										<Button
-											type="button"
-											variant={
-												criteria.inti && criteria.kadep
-													? "secondary"
-													: "outline"
-											}
-											aria-pressed={Boolean(criteria.inti && criteria.kadep)}
-											onClick={() =>
-												setDraft({
-													...draft,
-													rosterCriteria: {
-														...criteria,
-														inti: !(criteria.inti && criteria.kadep),
-														kadep: !(criteria.inti && criteria.kadep),
-													},
-												})
-											}
-										>
-											INTI + KADEP
-										</Button>
-									</div>
-									<p className="font-semibold text-sm">Departemen</p>
-									<div className="flex flex-wrap gap-3">
-										{departments.map((code) => (
-											<label
-												key={code}
-												className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm has-checked:border-primary has-checked:bg-primary-soft"
-											>
-												<input
-													type="checkbox"
-													checked={
-														criteria.departments?.includes(code) ?? false
-													}
-													onChange={(e) =>
-														setDraft({
-															...draft,
-															rosterCriteria: {
-																...criteria,
-																departments: e.target.checked
-																	? [...(criteria.departments ?? []), code]
-																	: criteria.departments?.filter(
-																			(value) => value !== code,
-																		),
-															},
-														})
-													}
-												/>
-												{code}
-											</label>
-										))}
-									</div>
-								</fieldset>
+												INTI + KADEP
+											</Button>
+										</div>
+										<p className="font-semibold text-sm">Departemen</p>
+										<div className="flex flex-wrap gap-3">
+											{departments.map((code) => (
+												<label
+													key={code}
+													className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm has-checked:border-primary has-checked:bg-primary-soft"
+												>
+													<input
+														type="checkbox"
+														checked={
+															criteria.departments?.includes(code) ?? false
+														}
+														onChange={(e) =>
+															setDraft({
+																...draft,
+																rosterCriteria: {
+																	...criteria,
+																	departments: e.target.checked
+																		? [...(criteria.departments ?? []), code]
+																		: criteria.departments?.filter(
+																				(value) => value !== code,
+																			),
+																},
+															})
+														}
+													/>
+													{code}
+												</label>
+											))}
+										</div>
+									</fieldset>
+								)}
 								<div className="border-border border-t pt-5">
 									<h3 className="font-semibold text-sm">Tinjau peserta</h3>
 									<p className="mt-1 text-muted-foreground text-xs">
@@ -784,10 +1027,10 @@ function DraftEditor({
 								</label>
 								<p className="text-muted-foreground text-sm" role="status">
 									{invitedCount}{" "}
-									{advancedMode
+									{advancedMode && !committeeMode
 										? "calon peserta berdasarkan kriteria"
 										: "peserta diundang"}{" "}
-									dari {candidates.length} SR aktif · {candidatePage.matching}{" "}
+									dari {available.length} kandidat · {candidatePage.matching}{" "}
 									hasil pencarian
 								</p>
 								<div className="overflow-x-auto rounded-lg border border-border">
@@ -828,6 +1071,13 @@ function DraftEditor({
 														<span className="mt-1 block text-muted-foreground text-xs">
 															{sr.nim} · {sr.departmentCode} / {sr.positionCode}
 														</span>
+														{committeeMode && (
+															<span className="mt-1 block text-muted-foreground text-xs">
+																{sr.committeeDivision
+																	? `${sr.committeeDivision} / ${committeePositionLabels[sr.committeePosition ?? ""] ?? sr.committeePosition}`
+																	: "Non-Panitia / Undangan"}
+															</span>
+														)}
 													</td>
 													<td className="p-3">
 														<label className="inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-lg focus-within:ring-2 focus-within:ring-ring">
@@ -835,7 +1085,7 @@ function DraftEditor({
 																type="checkbox"
 																className="focus-ring size-4 accent-primary"
 																aria-label={`Diundang: ${sr.name} ${sr.nim}`}
-																checked={isInvited(sr, criteria)}
+																checked={isInvited(sr, criteria, defaultIds)}
 																onChange={(e) =>
 																	setDraft({
 																		...draft,
@@ -843,6 +1093,7 @@ function DraftEditor({
 																			criteria,
 																			sr,
 																			e.target.checked,
+																			defaultIds,
 																		),
 																	})
 																}

@@ -521,3 +521,87 @@ The tenure tables have RLS enabled and no direct client policies. The `sr_tenure
 Identity `updateAccount` / `archiveAccount` recheck live SUPERADMIN authorization inside the transaction, lock the SR profile, validate the expected profile timestamp and revoke target sessions atomically with the write/audit. Updates validate active organization references and allowed department/position pairs; NIM/privileges cannot be forged through these inputs. Email changes clear email verification. The existing `is_active=false` flag represents manual archival; no additional archive table/column or destructive delete is needed. Period-driven purna remains derived separately. SYSTEM_ADMIN cannot be targeted through SR maintenance.
 
 Migration `20261019033819_admin_account_maintenance` only expands the audit action constraint with ACCOUNT_UPDATED and ACCOUNT_ARCHIVED; it does not rewrite historical records or change user data. Existing audit append-only enforcement stays intact. The new migration must precede edit/archive use; it has been exercised on isolated local PostgreSQL, not applied remotely in this task.
+
+### Manajemen Kepanitiaan — Fase 1–4
+
+Satu kepanitiaan (misalnya Welcoming Day) dapat dipakai oleh beberapa event absensi. Fase 1 menyediakan schema/policy; Fase 2 menyediakan CRUD tRPC dan UI; Fase 3 menyediakan event/snapshot independen; Fase 4 menyediakan rekap/filter per event dan implementasi CSV 14 kolom. Validasi fungsional CSV **PENDING UAT Fase 5**. Perubahan kepanitiaan tidak menulis ulang bukti kehadiran historis.
+
+- `committees`: UUID, nama nonblank, deskripsi default kosong, pembuat FK ke `user.id`, serta waktu pembuatan/perubahan `timestamptz` sesuai konvensi Drizzle.
+- `committee_divisions`: divisi dinamis milik satu kepanitiaan. Nama nonblank dijaga unik per kepanitiaan melalui indeks `(committee_id, lower(btrim(name)))`; nama yang sama boleh digunakan oleh kepanitiaan berbeda.
+- `committee_members`: PK `(committee_id, user_id)` membatasi satu divisi/jabatan per SR per kepanitiaan. SR dapat mengikuti beberapa kepanitiaan. `user_id` mengacu ke `sr_profiles.user_id`, sehingga akun sistem tidak menjadi anggota SR. FK komposit `(committee_id, division_id)` mengacu ke unique `(committee_id, id)` milik divisi, mencegah divisi lintas kepanitiaan.
+- Jabatan kepanitiaan: `ANGGOTA` (Anggota), `SEKDEP` (Sekdep), `KADEP` (Kadep), `SEKRE` (Sekre), `BENDAHARA` (Bendahara), `PIC1` (PIC 1), `PIC2` (PIC 2), `PJ` (PJ). CHECK PostgreSQL membatasi nilai tersebut. Ini bukan jabatan struktural; `positions` dan `sr_profiles` tidak berubah.
+- Semua FK baru memakai NO ACTION, bukan cascade. Divisi yang masih dipakai anggota tidak dapat dihapus; anggota harus dikeluarkan/dipindahkan secara eksplisit. Indeks mendukung lookup pembuat, anggota per SR, dan anggota per divisi. Ketiga tabel memakai RLS tanpa policy client dan mencabut grants PUBLIC/`anon`/`authenticated`, mengikuti pola server-only yang ada.
+- `canManageCommittee` pada policy Identity hanya mengizinkan SUPERADMIN sah atau SR struktural HCO/KADEP, memakai identitas backend yang sudah diverifikasi live. Gate aktif, tenure, assignment dan rotasi password tetap berlaku. KADEP kepanitiaan tidak memperoleh permission struktural HCO. Permission event/manual attendance lain tidak berubah. Session DTO menambahkan capability `canManageCommittee` dari policy backend untuk guard/navigasi, bukan sebagai sumber otorisasi write.
+
+FK tidak menjamin keaktifan atau tenure SR. Service Fase 2 memakai `getActiveSrCandidate` untuk penambahan/perubahan penugasan: SR aktif, referensi organisasi aktif, assignment struktural valid dan tenure ACTIVE. Setiap mutasi mengunci row kepanitiaan lalu memeriksa ulang operator melalui `getLiveOperationalIdentity` dalam transaksi. Perubahan divisi/anggota dan timestamp kepanitiaan atomik. Constraint unique/FK menjadi pengaman terakhir; konflik dipetakan ke error aman. Tidak ada cascade, perubahan profil SR, atau trigger eligibility baru. `updated_at` mengikuti mekanisme Drizzle dan disentuh pada mutasi anak.
+
+Modul feature-first `packages/api/src/modules/committee` menyediakan protected procedures berikut:
+
+| Procedures (`committee.*`) | Akses | Perilaku |
+| --- | --- | --- |
+| `list`, `detail` | `canManageCommittee` **atau** `canManageInternalEvent` | DTO eksplisit; list mencari nama, default 20/maksimal 50, urutan nama/UUID; jumlah divisi/anggota dihitung dalam query yang sama tanpa N+1. Detail mencakup identitas anggota termasuk yang tidak lagi eligible. |
+| `candidates` | `canManageCommittee` | Pencarian nama/NIM minimal 2 karakter, maksimal 20 SR eligible yang belum menjadi anggota. |
+| `create`, `update`, `delete` | `canManageCommittee` + live recheck | Nama trim 1–150 karakter, deskripsi maksimal 2000; pembuat dari sesi; delete hanya tanpa divisi/anggota/referensi FK. |
+| `createDivision`, `updateDivision`, `deleteDivision` | Sama | Nama trim 1–150 karakter; unik case-insensitive per pemilik; delete ditolak jika masih dipakai. |
+| `addMember`, `updateMember`, `removeMember` | Sama | Divisi wajib milik kepanitiaan yang sama; posisi dari konstanta Fase 1; update target harus eligible. Remove tetap diizinkan untuk anggota yang sudah inactive/expired/unassigned. |
+
+Pengelola event HCO selain KADEP dapat membaca data lewat API untuk memilih kepanitiaan pada form event; tidak dapat menulis atau membuka UI pengelolaan. `/committees` dan `/committees/[committeeId]` memakai authenticated layout, guard `canManageCommittee`, serta menu HCO yang sama pada desktop/mobile. Alur: cari/buat kepanitiaan → kelola identitas → tambah/ubah divisi → cari SR eligible → pilih divisi/jabatan → simpan. Pencarian kandidat dibatasi, daftar anggota dipaginasi 15 per halaman. Dialog menahan close/double-submit saat pending, mempertahankan isian jika gagal, dan menginvalidasi query setelah sukses. Hapus kepanitiaan/divisi atau keluarkan anggota memerlukan konfirmasi eksplisit. Keanggotaan tidak eligible tetap terlihat dan dapat dibersihkan, tetapi tidak bisa diberi penugasan baru.
+
+Migration additive `20261024151434_committee_foundation` dihasilkan pada Fase 1 melalui `pnpm --filter @resora/db db:generate --name=committee_foundation`, dengan tambahan pencabutan grants server-only sebagaimana migration tenure. Migration ini wajib tersedia sebelum memakai CRUD Fase 2; Fase 2 tidak menambah migration atau mengubah snapshot/SQL historis. Tidak ada perubahan schema/data event atau absensi. Setelah review dan otorisasi target, gunakan workflow [migration CLI](setup.md#current-supported-supabase-migration-workflow): `pnpm db:migrate dev --check`, lalu `pnpm db:migrate dev`; Production tetap memerlukan persetujuan terpisah, recovery plan dan konfirmasi project. Tidak ada migration remote yang dijalankan pada implementasi ini.
+
+#### Integrasi event kepanitiaan — Fase 3
+
+Form create/edit DRAFT menyediakan **Kepengurusan Event**: Struktural SR atau Kepanitiaan Kegiatan. Pilihan kepanitiaan memakai `committee.list/detail` (pencarian/pagination), tanpa memberi hak CRUD kepada HCO non-KADEP. Mengganti konteks atau kepanitiaan pada DRAFT mengosongkan kelompok/include/exclude sebelumnya. Loading/error/retry tersedia; snapshot PUBLISHED menjadi basis checkbox FULL edit, termasuk identitas historis yang sudah tidak aktif.
+
+Migration additive `20261025050126_committee_event_snapshots` dihasilkan melalui `pnpm --filter @resora/db db:generate --name=committee_event_snapshots`. `events.organization_context` adalah text NOT NULL default SR; CHECK mewajibkan SR tanpa `committee_id`/snapshot nama, atau COMMITTEE dengan FK valid ke `committees`. FK NO ACTION dan indeks `events_committee_idx` melindungi referensi tanpa cascade. `snapshot_committee_name` nullable saat DRAFT dan wajib nonblank setelah publikasi COMMITTEE. Event lama otomatis SR. `event_participants.snapshot_committee_division/position` nullable berpasangan; CHECK posisi menggunakan konstanta Fase 1. Snapshot identitas/jabatan struktural dan attendance records tidak berubah. SQL/snapshot historis tidak diedit; tidak ada migration remote pada implementasi ini.
+
+`attendance.create/editDraft` memvalidasi konteks dengan Zod; konteks yang dihilangkan klien lama diperlakukan SR. SR memakai union kelompok existing, deduplikasi dan exclusion yang sama. COMMITTEE melarang allSr/departemen/INTI/KADEP; roster adalah `(anggota panitia eligible ∪ individuals ∪ include) − exclude`, unik per userId. Eligibility tetap dari direktori Identity (aktif, assignment valid, referensi aktif, tenure ACTIVE), bukan FK membership. `preview` menggunakan resolver yang sama dengan `publish`. Undangan non-panitia menyimpan kedua snapshot panitia NULL.
+
+Publikasi atomik membekukan roster, identitas struktural, divisi/jabatan panitia dan nama kepanitiaan, tanpa mengaktifkan sesi. Pada jalur roster, committee SHARE diperoleh **sebelum event UPDATE → session UPDATE → live operator → directory SHARE**, selaras dengan committee CRUD yang mengunci committee UPDATE lebih dahulu. Pergantian DRAFT mengunci kedua committee ID secara berurutan; hint ID dibaca lalu diperiksa kembali setelah lock event. Bila ID berubah saat menunggu, operasi CONFLICT, tanpa mengambil lock committee baru setelah event. Ini juga menghindari siklus dengan pemeriksaan FK saat penghapusan kepanitiaan. Jalur QR/manual/close yang tidak membaca committee tetap memakai urutan existing event → session.
+
+Setelah publikasi, context/committeeId tidak dapat diganti. Rename/move/remove anggota tidak menyinkronkan event lama. FULL edit SUPERADMIN hanya berlaku PUBLISHED + INACTIVE tanpa attendance: basisnya **event_participants saat ini**, bukan membership live. Include/individuals menambahkan undangan eksplisit yang eligible; exclude menghapus undangan. Peserta yang bertahan tidak ditulis ulang, termasuk snapshot dan invitedAt. Peserta baru mengambil identitas/penugasan terkini; snapshot nama event tetap pada publikasi awal. Audit existing mencatat delta jumlah/ID, reason dan operator dalam transaksi yang sama. Kriteria tidak berubah berarti tidak ada sinkronisasi peserta. SR advanced edit dan batas LIMITED/CLOSED tetap kompatibel. Detail hanya mengembalikan roster kepada operator; SR biasa hanya melihat konteks/nama event sesuai akses undangan existing.
+
+Rekap/filter dan implementasi CSV Fase 4 dijelaskan di bawah. Rekap gabungan lintas event tetap di luar scope. Perubahan CSV, QR, geofence, auth dan permission kepanitiaan tidak termasuk Fase 3. UAT browser/mobile/keyboard tetap gate PM setelah migration diterapkan secara terpisah.
+
+#### Rekap berdasarkan kepengurusan — Fase 4
+
+Prasyarat tetap migration Fase 3 `20261025050126_committee_event_snapshots`; Fase 4 tidak menambah migration. `attendance.recap({ eventId })` mempertahankan MVCC read-only `repeatable read`, status PRESENT/PENDING/ABSENT, waktu, lateness, source dan izin manual/audit. `event` menambahkan `organizationContext` serta `committeeName` dari `events.snapshot_committee_name` (NULL untuk SR). Peserta menambahkan `committeeDivision/committeePosition` nullable dari `event_participants`. Tidak ada join ke committees/membership live. SR lama tetap memakai snapshot struktural; ordinary SR tidak memperoleh recap administratif.
+
+Helper murni `reporting-context.ts` dipakai UI/server. SR menggunakan departmentCode/positionCode; COMMITTEE menggunakan divisi/posisi snapshot panitia dan label jabatan Fase 1. Kedua snapshot panitia NULL berarti **Non-Panitia / Undangan**, tanpa fallback ke jabatan struktural. Label jabatan direuse dari `committee-positions.ts`; jabatan panitia tidak menjadi permission sistem.
+
+Rekap menampilkan konteks/nama historis, mengutamakan divisi/jabatan panitia dan mempertahankan info struktural sekunder. Opsi filter berasal hanya dari snapshot event: division (departemen SR atau nama divisi panitia), position (kode jabatan), participantType ALL/COMMITTEE/GUEST (hanya COMMITTEE), serta pencarian nama/NIM case-insensitive. Semua kondisi dikombinasikan AND sebelum pagination lokal 15 peserta. Perubahan/reset filter kembali ke halaman pertama; event berganti me-remount state. Statistik global tidak difilter, jumlah hasil ditampilkan terpisah. Loading/error/retry/empty state dan keyboard controls tetap tersedia.
+
+`attendance.exportCsv({ eventId, division?, position?, participantType?, search? })` memvalidasi input strict Zod (division/search maksimal 150 karakter; position 50). Tanpa filter: seluruh undangan; filter diterapkan server pada snapshot event yang telah diotorisasi, bukan pada ID dari frontend. participantType selain ALL untuk SR ditolak BAD_REQUEST. Izin recap/export tetap `canManageInternalEvent`, tanpa perubahan manual/audit. Filter tidak mengubah data historis.
+
+CSV mempertahankan urutan awal: **NIM, Name, Department, Position, Building, Presence, Attendance At (WIB), Timing Classification, Late Minutes, Source**. Ditambahkan **Organization Context, Committee, Event Division, Event Position** (total 14). Department/Position tetap snapshot struktural. SR: Committee kosong, dua field event memakai kode struktural. COMMITTEE: Committee nama historis; divisi snapshot dan label jabatan panitia; kedua field event memakai Non-Panitia / Undangan untuk tamu. BOM UTF-8, CRLF, escaping, mitigasi formula injection, marker NIM leading zero, WIB, NULL dan urutan NIM/userId tetap dipakai. Filename tetap dari backend.
+
+UI menyediakan Export Semua Peserta (mengabaikan filter aktif) dan Export Sesuai Filter (seluruh hasil, bukan halaman terlihat), beserta jumlah berdasarkan rekap dimuat. Request langsung melalui tRPC client menghindari cache export stale; ref/pending state mencegah double-submit. Mekanisme Blob/download existing dipertahankan.
+
+**CSV fungsional: PENDING UAT.** Tidak ada pemanggilan generator/export atau download untuk verifikasi Fase 4. Tes baru hanya recap/filter/authorization/UI non-CSV; ekspektasi lama yang terdampak penambahan kolom dipelihara secara statis, tidak dieksekusi. Suite campuran CSV/export dikecualikan. PM memverifikasi seluruh 14 kolom, escaping/Unicode/NIM/WIB/NULL, Semua vs Filter dan seluruh hasil lintas pagination pada UAT Fase 5; belum ada browser UAT pada implementasi ini.
+
+Perintah Fase 4 non-CSV dari root:
+
+```sh
+bun --no-env-file test packages/api/src/modules/attendance/reporting.test.ts apps/web/src/features/attendance/interaction-ux.test.ts packages/api/src/modules/attendance/event-editing.test.ts packages/api/src/modules/identity/identity-policy.test.ts --test-name-pattern '^(?!.*(?:CSV|csv|export|protected Phase 6 routes)).*$'
+bun --no-env-file test packages/api/src/modules/committee/committee.integration.test.ts --test-name-pattern 'Phase 4 recap'
+pnpm run check-types
+pnpm --filter web build
+pnpm --filter server build
+```
+
+Command integrasi hanya dijalankan dengan `RESORA_COMMITTEE_API_TEST_DB_URL` pada PostgreSQL disposable yang lolos guard di bawah. Kasus Fase 4 membandingkan rekap dua event setelah rename/pindah jabatan, tamu, filter, manual attendance, lifecycle serta penolakan SR biasa; tidak memanggil export. Jangan memakai test:offline/test:committee tanpa seleksi untuk verifikasi Fase 4 karena suite existing mencakup CSV. Hasil non-CSV dan static checks dilaporkan terpisah dari status UAT CSV.
+
+Targeted checks Fase 1–3 (historis; beberapa suite mencakup CSV):
+
+```sh
+bun --no-env-file test packages/db/src/schema/committee.test.ts packages/db/src/schema/committee.integration.test.ts packages/api/src/modules/identity/identity-policy.test.ts
+pnpm run test:committee
+bun --no-env-file test packages/api/src/modules/attendance/attendance.test.ts packages/api/src/modules/attendance/event-editing.test.ts packages/api/src/modules/attendance/check-in.test.ts packages/api/src/modules/attendance/reporting.test.ts apps/web/src/features/attendance/event-ui.test.ts apps/web/src/features/attendance/interaction-ux.test.ts
+pnpm --filter @resora/db check-types
+pnpm --filter @resora/api check-types
+pnpm --filter web check-types
+```
+
+Suite PostgreSQL hanya aktif melalui `RESORA_COMMITTEE_TEST_DB_URL`, tanpa fallback env aplikasi. Target harus database **kosong dan disposable**, bernama `resora_identity_test_committees` di `127.0.0.1`, dengan role/port eksplisit dan tanpa query/hash URL. Suite memverifikasi identitas koneksi, menerapkan chain lokal ke database kosong tersebut, dan memakai fixture sintetis dalam transaksi rollback. Tanpa opt-in, kasus database di-skip; skip bukan bukti integrasi PostgreSQL. Jangan arahkan variabel ini ke Supabase atau database operasional.
+
+Suite API Fase 2: `bun --no-env-file test packages/api/src/modules/committee/committee.integration.test.ts`, opt-in terpisah `RESORA_COMMITTEE_API_TEST_DB_URL`, aturan target sama tetapi nama database **`resora_identity_test_committee_api`**. Suite menerapkan chain ke database kosong yang terverifikasi dan memakai fixture sintetis; buang hanya database scratch milik pengujian setelah selesai. Cakupan: read/write matrix, privilege live/revocation, target eligibility, unique/FK, perpindahan anggota, penghapusan kosong, pagination/count DTO aman dan rollback write terakhir. Tes UI CLI mengeksekusi JSX/callback aktual dengan hook/API doubles untuk form, pilihan anggota, konfirmasi, pending/error/invalidation; ini bukan pengganti UAT browser. Fase 2 tidak mengubah event/QR/rekap; integrasi event Fase 3 dijelaskan berikut.

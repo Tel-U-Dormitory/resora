@@ -37,13 +37,33 @@ export const eventDraftSchema = z
 		startsAt: z.iso.datetime({ offset: true }),
 		endsAt: z.iso.datetime({ offset: true }),
 		rosterCriteria: rosterSchema,
+		organizationContext: z.enum(["SR", "COMMITTEE"]).optional(),
+		committeeId: z.uuid().nullable().optional(),
 		session: sessionConfigSchema,
 	})
 	.strict()
+	.refine(
+		(input) =>
+			(input.organizationContext ?? "SR") === "SR"
+				? input.committeeId == null
+				: Boolean(input.committeeId) &&
+					!input.rosterCriteria.allSr &&
+					!input.rosterCriteria.inti &&
+					!input.rosterCriteria.kadep &&
+					input.rosterCriteria.departments.length === 0,
+		{ message: "EVENT_ORGANIZATION_CRITERIA_INVALID" },
+	)
 	.refine((input) => new Date(input.endsAt) > new Date(input.startsAt), {
 		message: "Event end must follow start",
 	});
 export const eventIdSchema = z.object({ eventId: z.uuid() }).strict();
+export const exportCsvSchema = eventIdSchema.extend({
+	// Snapshot keys must match exactly, including historical spacing.
+	division: z.string().max(150).optional(),
+	position: z.string().max(50).optional(),
+	participantType: z.enum(["ALL", "COMMITTEE", "GUEST"]).optional(),
+	search: z.string().trim().max(150).optional(),
+});
 export const eventMetadataSchema = eventIdSchema.extend({
 	title: z.string().trim().min(1).max(200),
 	description: z.string().max(5000),

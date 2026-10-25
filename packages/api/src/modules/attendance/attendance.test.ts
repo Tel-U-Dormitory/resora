@@ -6,9 +6,87 @@ import {
 	officialPositions,
 } from "@resora/db/organization";
 import type { SrCandidate } from "../identity/identity.public";
-import { rosterSchema } from "./attendance.schema";
+import { eventDraftSchema, rosterSchema } from "./attendance.schema";
 import { parseChallenge, signChallenge } from "./qr";
-import { resolveRoster } from "./roster";
+import { resolveCommitteeRoster, resolveRoster } from "./roster";
+
+test("committee roster intersects eligibility, deduplicates explicit invitations and applies exclusion last", () => {
+	const members = [
+		{
+			userId: "hco",
+			committeeDivision: "Acara",
+			committeePosition: "PIC1" as const,
+		},
+		{
+			userId: "inactive",
+			committeeDivision: "Acara",
+			committeePosition: "PJ" as const,
+		},
+	];
+	const result = resolveCommitteeRoster(
+		directory,
+		rosterSchema.parse({
+			include: ["hco", "member", "member"],
+			exclude: ["hco"],
+		}),
+		members,
+	);
+	expect(result.map((sr) => sr.userId)).toEqual(["member"]);
+	expect(result[0]).toMatchObject({
+		committeeDivision: null,
+		committeePosition: null,
+	});
+	expect(
+		resolveCommitteeRoster(directory, rosterSchema.parse({}), members)[0],
+	).toMatchObject({
+		userId: "hco",
+		committeeDivision: "Acara",
+		committeePosition: "PIC1",
+	});
+	expect(
+		resolveCommitteeRoster(
+			directory,
+			rosterSchema.parse({}),
+			members,
+			new Set(),
+		),
+	).toEqual([]);
+});
+
+test("event context rejects missing committee, structural groups mixed into committee and SR committee IDs", () => {
+	const base = {
+		title: "Test",
+		startsAt: "2030-01-01T00:00:00Z",
+		endsAt: "2030-01-01T01:00:00Z",
+		rosterCriteria: {},
+		session: { centerLat: 0, centerLng: 0 },
+	};
+	expect(eventDraftSchema.safeParse(base).success).toBe(true);
+	expect(
+		eventDraftSchema.safeParse({
+			...base,
+			organizationContext: "COMMITTEE",
+			committeeId: randomUUID(),
+		}).success,
+	).toBe(true);
+	for (const patch of [
+		{ organizationContext: "COMMITTEE" },
+		{ organizationContext: "SR", committeeId: randomUUID() },
+		...[
+			{ allSr: true },
+			{ inti: true },
+			{ kadep: true },
+			{ departments: ["HCO"] },
+		].map((rosterCriteria) => ({
+			organizationContext: "COMMITTEE",
+			committeeId: randomUUID(),
+			rosterCriteria,
+		})),
+	])
+		expect(eventDraftSchema.safeParse({ ...base, ...patch }).success).toBe(
+			false,
+		);
+});
 
 test("all official organization combinations follow INTI/department position split", () => {
 	let accepted = 0;
