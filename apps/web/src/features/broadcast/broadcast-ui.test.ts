@@ -245,6 +245,10 @@ test("input validation, optional link/default expiry, WIB and original expiry pr
 			.expiresAt,
 	).toBe("2026-01-02T02:30:00.000Z");
 	expect(
+		broadcastUi.broadcastInput({ ...fields, expiry: "2026-01-02T09:30:45" })
+			.expiresAt,
+	).toBe("2026-01-02T02:30:45.000Z");
+	expect(
 		broadcastUi.broadcastInput(
 			{ ...fields, expiry: "2026-01-08T07:00:00" },
 			item.expiresAt,
@@ -369,6 +373,7 @@ test("full detail safely escapes plain text, wraps long words and omits unsafe l
 	);
 	const html = renderToStaticMarkup(tree as never);
 	expect(html).toContain("&lt;script&gt;");
+	expect(html).toContain("long".repeat(1000));
 	expect(html).not.toContain("<script>");
 	expect(html).not.toContain("href=");
 	expect(html).toContain("whitespace-pre-wrap");

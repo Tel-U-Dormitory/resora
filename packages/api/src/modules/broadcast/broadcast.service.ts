@@ -113,36 +113,42 @@ export async function listBroadcasts(
 	input: z.infer<typeof listBroadcastsSchema>,
 ) {
 	authorize(identity);
-	return db.transaction(async (tx) => {
-		const live = await getLiveOperationalIdentity(tx, identity.userId);
-		authorize(live);
-		if (!live) fail("BROADCAST_ACCESS_DENIED", "FORBIDDEN");
-		const now = await databaseTime(tx);
-		const filter =
-			input.view === "ACTIVE"
-				? and(
-						isNull(broadcasts.archivedAt),
-						lte(broadcasts.publishedAt, now),
-						gt(broadcasts.expiresAt, now),
-					)
-				: or(isNotNull(broadcasts.archivedAt), lte(broadcasts.expiresAt, now));
-		const rows = await tx
-			.select({ ...fields, createdByUserId: broadcasts.createdByUserId })
-			.from(broadcasts)
-			.innerJoin(user, eq(user.id, broadcasts.createdByUserId))
-			.where(filter)
-			.orderBy(desc(broadcasts.publishedAt), desc(broadcasts.id))
-			.limit(input.limit)
-			.offset(input.offset);
-		const [total] = await tx
-			.select({ count: count() })
-			.from(broadcasts)
-			.where(filter);
-		return {
-			items: rows.map((row) => dto(row, live, now)),
-			total: total?.count ?? 0,
-		};
-	});
+	return db.transaction(
+		async (tx) => {
+			const live = await getLiveOperationalIdentity(tx, identity.userId);
+			authorize(live);
+			if (!live) fail("BROADCAST_ACCESS_DENIED", "FORBIDDEN");
+			const now = await databaseTime(tx);
+			const filter =
+				input.view === "ACTIVE"
+					? and(
+							isNull(broadcasts.archivedAt),
+							lte(broadcasts.publishedAt, now),
+							gt(broadcasts.expiresAt, now),
+						)
+					: or(
+							isNotNull(broadcasts.archivedAt),
+							lte(broadcasts.expiresAt, now),
+						);
+			const rows = await tx
+				.select({ ...fields, createdByUserId: broadcasts.createdByUserId })
+				.from(broadcasts)
+				.innerJoin(user, eq(user.id, broadcasts.createdByUserId))
+				.where(filter)
+				.orderBy(desc(broadcasts.publishedAt), desc(broadcasts.id))
+				.limit(input.limit)
+				.offset(input.offset);
+			const [total] = await tx
+				.select({ count: count() })
+				.from(broadcasts)
+				.where(filter);
+			return {
+				items: rows.map((row) => dto(row, live, now)),
+				total: total?.count ?? 0,
+			};
+		},
+		{ isolationLevel: "repeatable read" },
+	);
 }
 export async function latestBroadcasts(db: Database, identity: ActiveIdentity) {
 	return (

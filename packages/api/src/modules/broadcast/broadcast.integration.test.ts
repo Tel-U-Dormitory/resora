@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { getActiveIdentity } from "@resora/auth/sr-access";
 import { createDb, type Database } from "@resora/db";
-import { seedOrganization } from "@resora/db/organization";
+import { officialDepartments, seedOrganization } from "@resora/db/organization";
 import { sql } from "drizzle-orm";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
@@ -11,6 +11,7 @@ import { appRouter } from "../../routers";
 import {
 	archiveBroadcast,
 	createBroadcast,
+	listBroadcasts,
 	updateBroadcast,
 } from "./broadcast.service";
 
@@ -58,6 +59,22 @@ async function expectFailure(
 	"broadcast on verified disposable PostgreSQL",
 	() => {
 		let db: Database;
+		const managers = [
+			...["KETUM", "WAKETUM", "SEKRETARIS", "BENDAHARA"].map(
+				(positionCode) => ({
+					key: `inti-${positionCode}`,
+					departmentCode: "INTI",
+					positionCode,
+				}),
+			),
+			...officialDepartments
+				.filter((row) => row.code !== "INTI")
+				.map((row) => ({
+					key: `kadep-${row.code}`,
+					departmentCode: row.code,
+					positionCode: "KADEP",
+				})),
+		];
 		const ids = Object.fromEntries(
 			[
 				"admin",
@@ -71,6 +88,8 @@ async function expectFailure(
 				"invalid",
 				"gated",
 				"privileged",
+				"sekdep",
+				...managers.map((row) => row.key),
 			].map((key) => [key, randomUUID()]),
 		);
 		function caller(key = "owner") {
@@ -118,6 +137,7 @@ async function expectFailure(
 			('Synthetic active',CURRENT_DATE-2,CURRENT_DATE+2), ('Synthetic expired',CURRENT_DATE-20,CURRENT_DATE-10),
 			('Synthetic future',CURRENT_DATE+10,CURRENT_DATE+20) RETURNING id,name`);
 			for (const [key, id] of Object.entries(ids)) {
+				const assignment = managers.find((row) => row.key === key);
 				await db.transaction(async (tx) => {
 					await tx.execute(
 						sql`INSERT INTO "user"(id,name,email,username) VALUES (${id},${`Synthetic ${key}`},${`${key}@broadcast.invalid`},${`synthetic.${key}`})`,
@@ -130,7 +150,7 @@ async function expectFailure(
 						);
 					if (key !== "admin") {
 						await tx.execute(sql`INSERT INTO sr_profiles(user_id,department_code,position_code,building_id)
-						SELECT ${id},'HCO',${key === "invalid" ? "KETUM" : ["owner", "other"].includes(key) ? "KADEP" : "ANGGOTA"},id FROM buildings WHERE code='A'`);
+						SELECT ${id},${assignment?.departmentCode ?? "HCO"},${assignment?.positionCode ?? (key === "invalid" ? "KETUM" : ["owner", "other"].includes(key) ? "KADEP" : key === "sekdep" ? "SEKDEP" : "ANGGOTA")},id FROM buildings WHERE code='A'`);
 						if (key !== "unassigned") {
 							const period = periods.rows.find(
 								(row) =>
@@ -550,6 +570,214 @@ async function expectFailure(
 				caller().broadcast.detail({ broadcastId: randomUUID() }),
 				{ code: "NOT_FOUND" },
 			);
+		});
+
+		test("all INTI and structural KADEP manage only their own; committee KADEP/PJ/PIC confer no authority", async () => {
+			for (const { key } of managers) {
+				const created = await caller(key).broadcast.create(input);
+				expect(
+					(await caller(key).broadcast.detail({ broadcastId: created.id }))
+						.canEdit,
+				).toBe(true);
+				await caller(key).broadcast.update({
+					...input,
+					broadcastId: created.id,
+					title: "Own change",
+				});
+				await expectFailure(
+					caller("other").broadcast.update({
+						...input,
+						broadcastId: created.id,
+					}),
+					{ code: "FORBIDDEN" },
+				);
+				await expectFailure(
+					caller("other").broadcast.archive({ broadcastId: created.id }),
+					{ code: "FORBIDDEN" },
+				);
+				await caller(key).broadcast.archive({ broadcastId: created.id });
+				expect(
+					(await caller(key).broadcast.detail({ broadcastId: created.id }))
+						.status,
+				).toBe("HISTORY");
+			}
+			const committee = await caller("admin").committee.create({
+				name: "Synthetic broadcast authority separation",
+			});
+			if (!committee) throw Error("Missing fixture committee");
+			const division = await caller("admin").committee.createDivision({
+				committeeId: committee.id,
+				name: "Synthetic division",
+			});
+			if (!division) throw Error("Missing fixture division");
+			for (const positionCode of ["KADEP", "PJ", "PIC1", "PIC2"] as const) {
+				await caller("admin").committee.addMember({
+					committeeId: committee.id,
+					divisionId: division.id,
+					userId: ids.sr ?? "",
+					positionCode,
+				});
+				expect(Array.isArray(await caller("sr").broadcast.latest())).toBe(true);
+				await expectFailure(caller("sr").broadcast.create(input), {
+					code: "FORBIDDEN",
+				});
+				await caller("admin").committee.removeMember({
+					committeeId: committee.id,
+					userId: ids.sr ?? "",
+				});
+			}
+			for (const key of ["sr", "sekdep"]) {
+				expect((await caller(key).broadcast.list({})).total).toBeGreaterThan(0);
+				await expectFailure(caller(key).broadcast.create(input), {
+					code: "FORBIDDEN",
+				});
+			}
+			for (const key of ["admin", "privileged"]) {
+				const created = await caller().broadcast.create(input);
+				await caller(key).broadcast.update({
+					...input,
+					broadcastId: created.id,
+				});
+				await caller(key).broadcast.archive({ broadcastId: created.id });
+			}
+		}, 15000);
+
+		test("two concurrent archives have one success and one lifecycle conflict", async () => {
+			const created = await caller().broadcast.create(input);
+			const results = await Promise.allSettled([
+				caller().broadcast.archive({ broadcastId: created.id }),
+				caller().broadcast.archive({ broadcastId: created.id }),
+			]);
+			expect(results.filter((row) => row.status === "fulfilled")).toHaveLength(
+				1,
+			);
+			const rejected = results.find((row) => row.status === "rejected");
+			if (rejected?.status !== "rejected")
+				throw Error("Missing rejected archive");
+			expect(rejected.reason).toMatchObject({
+				code: "CONFLICT",
+				message: "BROADCAST_ALREADY_ARCHIVED",
+			});
+			expect(
+				(await caller().broadcast.detail({ broadcastId: created.id })).status,
+			).toBe("HISTORY");
+		});
+
+		test("a demotion committed while mutation waits for its row lock prevents the stale write", async () => {
+			const created = await caller().broadcast.create(input);
+			const owner = await getActiveIdentity(db, ids.owner ?? "");
+			if (!owner) throw Error("Missing operator");
+			const blocker = await db.$client.connect();
+			let pending: Promise<unknown> | undefined;
+			try {
+				await blocker.query("BEGIN");
+				await blocker.query(
+					"SELECT id FROM broadcasts WHERE id=$1 FOR UPDATE",
+					[created.id],
+				);
+				const pid = (await blocker.query("SELECT pg_backend_pid() pid")).rows[0]
+					.pid;
+				pending = updateBroadcast(db, owner, created.id, {
+					...input,
+					title: "Unauthorized stale change",
+				});
+				let blocked = false;
+				for (let attempt = 0; attempt < 100 && !blocked; attempt++)
+					blocked = (
+						await db.$client.query(
+							"SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1::int=ANY(pg_blocking_pids(pid))) blocked",
+							[pid],
+						)
+					).rows[0].blocked;
+				expect(blocked).toBe(true);
+				await db.$client.query(
+					"UPDATE sr_profiles SET position_code='ANGGOTA' WHERE user_id=$1",
+					[ids.owner],
+				);
+			} finally {
+				await blocker.query("ROLLBACK");
+				blocker.release();
+			}
+			try {
+				if (!pending) throw Error("Missing pending mutation");
+				await expectFailure(pending, { code: "FORBIDDEN" });
+				expect(
+					(await caller("admin").broadcast.detail({ broadcastId: created.id }))
+						.title,
+				).toBe(input.title);
+			} finally {
+				await db.$client.query(
+					"UPDATE sr_profiles SET position_code='KADEP' WHERE user_id=$1",
+					[ids.owner],
+				);
+			}
+		});
+
+		test("list items and total share a snapshot when an announcement is archived between their queries", async () => {
+			const created = await caller().broadcast.create(input);
+			const identity = await getActiveIdentity(db, ids.owner ?? "");
+			if (!identity) throw Error("Missing reader");
+			let ready = () => {};
+			let release = () => {};
+			const reachedCount = new Promise<void>((resolve) => {
+				ready = resolve;
+			});
+			const proceed = new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			// Real PostgreSQL queries/transactions, with a barrier immediately before count.
+			const coordinated = {
+				transaction: (run: (tx: unknown) => Promise<unknown>, options: never) =>
+					db.transaction(
+						(tx) =>
+							run(
+								new Proxy(tx, {
+									get(target, key) {
+										if (key === "select")
+											return (fields: Parameters<typeof tx.select>[0]) =>
+												fields && "count" in fields
+													? {
+															from: (table: never) => ({
+																where: async (filter: never) => {
+																	ready();
+																	await proceed;
+																	return tx
+																		.select(fields)
+																		.from(table)
+																		.where(filter);
+																},
+															}),
+														}
+													: tx.select(fields);
+										const value = Reflect.get(target, key);
+										return typeof value === "function"
+											? value.bind(target)
+											: value;
+									},
+								}),
+							),
+						options,
+					),
+			} as unknown as Database;
+			const reading = listBroadcasts(coordinated, identity, {
+				view: "ACTIVE",
+				limit: 50,
+				offset: 0,
+			});
+			try {
+				await Promise.race([
+					reachedCount,
+					reading.then(() => {
+						throw Error("Missing count barrier");
+					}),
+				]);
+				await caller().broadcast.archive({ broadcastId: created.id });
+			} finally {
+				release();
+			}
+			const result = await reading;
+			expect(result.items.some((row) => row.id === created.id)).toBe(true);
+			expect(result.total).toBe(result.items.length);
 		});
 	},
 );

@@ -131,7 +131,7 @@ async function expectFailure(
 				}))
 					if (
 						entry.isDirectory() &&
-						entry.name !== "20261025050126_committee_event_snapshots"
+						entry.name < "20261025050126_committee_event_snapshots"
 					)
 						cpSync(
 							resolve(migrationsFolder, entry.name),
