@@ -9,7 +9,11 @@ import {
 	canManageInternalEvent,
 	hasSuperadminPrivilege,
 } from "./identity-policy";
-import { manualPermissionState, permissionCatalog } from "./permission-catalog";
+import {
+	applicablePermissions,
+	manualPermissionState,
+	permissionCatalog,
+} from "./permission-catalog";
 
 const identity: ActiveSrIdentity = {
 	userId: "synthetic",
@@ -22,12 +26,12 @@ const identity: ActiveSrIdentity = {
 	buildingId: "building",
 	isSuperadmin: false,
 };
-test("single typed Absensi catalog and strict management inputs reject arbitrary privileges/ownership", () => {
+test("single typed HCO catalog and strict management inputs reject arbitrary privileges/ownership", () => {
 	expect(permissionCatalog).toHaveLength(1);
 	expect(permissionCatalog[0]).toMatchObject({
 		code: "ATTENDANCE_MANUAL_MANAGE",
-		category: "ABSENSI",
-		categoryLabel: "Absensi",
+		category: "HCO",
+		categoryLabel: "HCO",
 		eligibleDepartment: "HCO",
 	});
 	for (const permissionCode of ["SUPERADMIN", "ABSENSI", "UNKNOWN"])
@@ -46,6 +50,22 @@ test("single typed Absensi catalog and strict management inputs reject arbitrary
 			grantedByUserId: "forged",
 		}).success,
 	).toBe(false);
+});
+test("applicable catalog follows structural department independently of operational eligibility", () => {
+	expect(applicablePermissions("HCO")).toEqual([...permissionCatalog]);
+	for (const department of [
+		"RND",
+		"MEDIA",
+		"ADAPTIF",
+		"SOSIAL",
+		"AKADEMIK",
+		"SPIRITUAL",
+		"INTI",
+		"UNKNOWN",
+		null,
+		undefined,
+	])
+		expect(applicablePermissions(department)).toEqual([]);
 });
 test("intrinsic/explicit/effective permissions retain structural role isolation and password gates", () => {
 	for (const positionCode of ["KADEP", "SEKDEP", "ANGGOTA"]) {
