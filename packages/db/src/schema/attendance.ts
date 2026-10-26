@@ -16,6 +16,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type { officialDepartments } from "../organization";
 import { user } from "./auth";
+import { committeePositionCodes, committees } from "./committee";
 
 export type RosterCriteria = {
 	allSr: boolean;
@@ -47,6 +48,12 @@ export const events = pgTable(
 		startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
 		endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
 		rosterCriteria: jsonb("roster_criteria").$type<RosterCriteria>().notNull(),
+		organizationContext: text("organization_context")
+			.$type<"SR" | "COMMITTEE">()
+			.notNull()
+			.default("SR"),
+		committeeId: uuid("committee_id").references(() => committees.id),
+		snapshotCommitteeName: text("snapshot_committee_name"),
 		publishedAt: timestamp("published_at", { withTimezone: true }),
 		closedAt: timestamp("closed_at", { withTimezone: true }),
 		createdAt: timestamp("created_at", { withTimezone: true })
@@ -58,6 +65,15 @@ export const events = pgTable(
 			.notNull(),
 	},
 	(t) => [
+		check(
+			"events_organization_context",
+			sql`(${t.organizationContext} = 'SR' AND ${t.committeeId} IS NULL AND ${t.snapshotCommitteeName} IS NULL) OR (${t.organizationContext} = 'COMMITTEE' AND ${t.committeeId} IS NOT NULL)`,
+		),
+		check(
+			"events_committee_snapshot",
+			sql`(${t.snapshotCommitteeName} IS NULL OR length(btrim(${t.snapshotCommitteeName})) > 0) AND (${t.organizationContext} <> 'COMMITTEE' OR ${t.status} = 'DRAFT' OR ${t.snapshotCommitteeName} IS NOT NULL)`,
+		),
+		index("events_committee_idx").on(t.committeeId),
 		check("events_title_nonblank", sql`length(btrim(${t.title})) > 0`),
 		check(
 			"events_visibility",
@@ -90,12 +106,20 @@ export const eventParticipants = pgTable(
 		positionCode: text("snapshot_position").notNull(),
 		buildingCode: text("snapshot_building_code").notNull(),
 		buildingName: text("snapshot_building_name").notNull(),
+		committeeDivision: text("snapshot_committee_division"),
+		committeePosition: text("snapshot_committee_position").$type<
+			(typeof committeePositionCodes)[number]
+		>(),
 		invitedAt: timestamp("invited_at", { withTimezone: true })
 			.defaultNow()
 			.notNull(),
 	},
 	(t) => [
 		primaryKey({ columns: [t.eventId, t.userId] }),
+		check(
+			"event_participants_committee_snapshot",
+			sql`(${t.committeeDivision} IS NULL AND ${t.committeePosition} IS NULL) OR (${t.committeeDivision} IS NOT NULL AND length(btrim(${t.committeeDivision})) > 0 AND ${t.committeePosition} IS NOT NULL AND ${t.committeePosition} IN (${sql.raw(committeePositionCodes.map((code) => `'${code}'`).join(", "))}))`,
+		),
 		index("event_participants_user_event_idx").on(t.userId, t.eventId),
 	],
 );
@@ -365,9 +389,14 @@ export const attendanceRelations = defineRelationsPart(
 		eventAuditLogs,
 		eventDeletionAudits,
 		user,
+		committees,
 	},
 	(r) => ({
 		events: {
+			committee: r.one.committees({
+				from: r.events.committeeId,
+				to: r.committees.id,
+			}),
 			audits: r.many.eventAuditLogs({
 				from: r.events.id,
 				to: r.eventAuditLogs.eventId,

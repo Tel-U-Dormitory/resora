@@ -1,7 +1,13 @@
 import { expect, test } from "bun:test";
-import type { ActiveIdentity, ActiveSrIdentity } from "@resora/auth/sr-access";
+import {
+	type ActiveIdentity,
+	type ActiveSrIdentity,
+	getActiveIdentity,
+} from "@resora/auth/sr-access";
+import type { Database } from "@resora/db";
 import {
 	canAccessPersonalSr,
+	canManageCommittee,
 	canManageInternalAttendanceManually,
 	canManageInternalEvent,
 	canOperateGeneralActivity,
@@ -24,6 +30,81 @@ test("regular SR initial-password flag preserves department permissions", () => 
 		expect(canManageInternalAttendanceManually(current)).toBe(manual);
 		expect(canOperateGeneralActivity(current)).toBe(general);
 		expect(hasSuperadminPrivilege(current)).toBe(false);
+	}
+});
+
+test("committee management is limited to structural KADEP HCO and valid SUPERADMIN", () => {
+	for (const [department, position, allowed] of [
+		["HCO", "KADEP", true],
+		["HCO", "SEKDEP", false],
+		["HCO", "ANGGOTA", false],
+		["RND", "KADEP", false],
+		["ADAPTIF", "KADEP", false],
+		["INTI", "KETUM", false],
+		["HCO", "KETUM", false],
+	] as const) {
+		expect(canManageCommittee(identity(department, position))).toBe(allowed);
+	}
+	for (const [department, position] of [
+		["RND", "ANGGOTA"],
+		["INTI", "KETUM"],
+	] as const)
+		expect(canManageCommittee(identity(department, position, true))).toBe(true);
+	const admin: ActiveIdentity = {
+		userId: "synthetic-system",
+		actor: "SYSTEM_ADMIN",
+		username: "resora.admin",
+		isActive: true,
+		mustChangePassword: false,
+		isSuperadmin: true,
+	};
+	expect(canManageCommittee(admin)).toBe(true);
+	for (const invalid of [
+		null,
+		undefined,
+		{ ...admin, isSuperadmin: false },
+		{ ...admin, mustChangePassword: true },
+		{ ...admin, isActive: false },
+		{ ...admin, passwordResetRequired: true },
+		{ ...identity("HCO", "KADEP"), isActive: false },
+		{ ...identity("HCO", "KADEP"), passwordResetRequired: true },
+		identity("HCO", "KETUM", true),
+		{ ...identity("RND", "ANGGOTA"), committeePositionCode: "KADEP" },
+	])
+		expect(
+			canManageCommittee(invalid as ActiveIdentity | null | undefined),
+		).toBe(false);
+	// Ordinary SR's initial-password flag remains optional; privileged rotation does not.
+	expect(
+		canManageCommittee({
+			...identity("HCO", "KADEP"),
+			mustChangePassword: true,
+		}),
+	).toBe(true);
+	expect(
+		canManageCommittee({
+			...identity("HCO", "KADEP", true),
+			mustChangePassword: true,
+		}),
+	).toBe(false);
+});
+
+test("committee policy consumes live tenure-verified identities rather than membership roles", async () => {
+	for (const status of ["ACTIVE", "EXPIRED", "SCHEDULED", "UNASSIGNED"]) {
+		const row = {
+			...identity("HCO", "KADEP"),
+			tenureStatus: status,
+			srUserId: "synthetic-policy",
+		};
+		const query = {
+			innerJoin: () => query,
+			leftJoin: () => query,
+			where: async () => [row],
+		};
+		const db = { select: () => ({ from: () => query }) } as unknown as Database;
+		expect(canManageCommittee(await getActiveIdentity(db, row.userId))).toBe(
+			status === "ACTIVE",
+		);
 	}
 });
 

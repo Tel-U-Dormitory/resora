@@ -57,6 +57,14 @@ export function parseWibDateTimeInput(value: string) {
 
 export function eventErrorMessage(error: unknown) {
 	if (error instanceof TRPCClientError) {
+		if (error.message === "EVENT_COMMITTEE_UNAVAILABLE")
+			return "Kepanitiaan tidak tersedia. Pilih kembali kepanitiaan yang valid.";
+		if (error.message === "EVENT_ORGANIZATION_FROZEN")
+			return "Konteks dan kepanitiaan tidak dapat diubah setelah publikasi.";
+		if (error.message === "EVENT_ORGANIZATION_CHANGED")
+			return "Kepanitiaan draft telah berubah. Muat ulang sebelum menyimpan kembali.";
+		if (error.message === "EVENT_INVITEE_INELIGIBLE")
+			return "Undangan tambahan tidak lagi memenuhi syarat SR aktif. Tinjau ulang pilihan peserta.";
 		if (error.message === "EVENT_VISIBILITY_CONFLICT")
 			return "Visibilitas atau status event telah berubah. Muat ulang sebelum memilih tindakan yang tersedia.";
 		if (error.message === "HIDDEN_EVENT_ACTIVATION_FORBIDDEN")

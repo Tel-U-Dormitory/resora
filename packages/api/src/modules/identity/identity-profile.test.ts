@@ -117,6 +117,7 @@ test("regular SR keeps its stored flag but can read profile and normal session p
 		mustChangePassword: true,
 		requiresPasswordChange: false,
 		canManageInternalEvents: true,
+		canManageBroadcast: true,
 		canManageInternalAttendanceManually: true,
 		isSuperadmin: false,
 	});
@@ -129,6 +130,7 @@ test("privileged session reports the required gate even before admin permissions
 			mustChangePassword: true,
 			requiresPasswordChange: true,
 			canManageInternalEvents: false,
+			canManageBroadcast: false,
 			canManageInternalAttendanceManually: false,
 			isSuperadmin: false,
 		});
@@ -162,3 +164,53 @@ for (const [departmentCode, positionCode, allowed] of [
 		const f = fixture({ departmentCode, positionCode });
 		expect((await f.caller.session())?.canManageInternalEvents).toBe(allowed);
 	});
+
+test("session broadcast capability comes from structural authority or explicit privilege, never committee roles", async () => {
+	for (const [departmentCode, positionCode, allowed] of [
+		["INTI", "KETUM", true],
+		["INTI", "WAKETUM", true],
+		["INTI", "SEKRETARIS", true],
+		["INTI", "BENDAHARA", true],
+		["HCO", "KADEP", true],
+		["ADAPTIF", "KADEP", true],
+		["SOSIAL", "KADEP", true],
+		["AKADEMIK", "KADEP", true],
+		["SPIRITUAL", "KADEP", true],
+		["MEDIA", "KADEP", true],
+		["RND", "KADEP", true],
+		["HCO", "SEKDEP", false],
+		["HCO", "ANGGOTA", false],
+		["HCO", "KETUM", false],
+	] as const) {
+		const f = fixture({
+			departmentCode,
+			positionCode,
+			isSuperadmin: false,
+			committeePositionCode: "KADEP",
+		});
+		expect((await f.caller.session())?.canManageBroadcast).toBe(allowed);
+	}
+	for (const actor of ["SYSTEM_ADMIN", "SR"]) {
+		expect(
+			(
+				await fixture({
+					actor,
+					isSuperadmin: true,
+					positionCode: "ANGGOTA",
+				}).caller.session()
+			)?.canManageBroadcast,
+		).toBe(true);
+		expect(
+			(
+				await fixture({
+					actor,
+					isSuperadmin: true,
+					passwordResetRequired: true,
+				}).caller.session()
+			)?.canManageBroadcast,
+		).toBe(false);
+	}
+	for (const tenureStatus of ["EXPIRED", "SCHEDULED", "UNASSIGNED"])
+		expect(await fixture({ tenureStatus }).caller.session()).toBeNull();
+	expect(await fixture({ isActive: false }).caller.session()).toBeNull();
+});
