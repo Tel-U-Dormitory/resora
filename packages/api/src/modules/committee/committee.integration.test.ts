@@ -13,7 +13,7 @@ import {
 	eventAssignment,
 	filterRecapParticipants,
 } from "../attendance/reporting-context";
-import { createCommittee } from "./committee.service";
+import { addMembers, createCommittee } from "./committee.service";
 
 function scratchTarget(value: string) {
 	const url = new URL(value);
@@ -977,16 +977,7 @@ async function expectFailure(
 			]);
 			const publishing = caller().attendance.publish(event);
 			try {
-				let blocked = false;
-				for (let attempt = 0; attempt < 100 && !blocked; attempt++) {
-					blocked = (
-						await db.$client.query(
-							"SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1::int = ANY(pg_blocking_pids(pid))) blocked",
-							[blockerPid],
-						)
-					).rows[0].blocked;
-				}
-				expect(blocked).toBe(true);
+				await waitBlocked(blockerPid);
 			} finally {
 				release();
 				await editing;
@@ -1140,6 +1131,394 @@ async function expectFailure(
 			await expectFailure(caller("sr").attendance.recap(first), {
 				code: "FORBIDDEN",
 			});
+		});
+
+		// Seed only the 30 synthetic candidates needed by the maximum-size batch case.
+		let bulkUserIds: string[] = [];
+		async function bulkFixture() {
+			if (!bulkUserIds.length) {
+				bulkUserIds = Array.from({ length: 30 }, () => randomUUID());
+				await db.transaction(async (tx) => {
+					const selected = sql.join(
+						bulkUserIds.map((id) => sql`${id}`),
+						sql`, `,
+					);
+					await tx.execute(
+						sql`INSERT INTO "user"(id,name,email,username) VALUES ${sql.join(
+							bulkUserIds.map(
+								(id, index) =>
+									sql`(${id},${`Synthetic bulk ${index}`},${`bulk.${index}@committee-api.invalid`},${`bulk.${index}`})`,
+							),
+							sql`, `,
+						)}`,
+					);
+					await tx.execute(
+						sql`INSERT INTO user_profiles(user_id,actor,must_change_password,is_active) SELECT id,'SR',false,true FROM "user" WHERE id IN (${selected})`,
+					);
+					await tx.execute(
+						sql`INSERT INTO sr_profiles(user_id,department_code,position_code,building_id) SELECT u.id,'RND','ANGGOTA',b.id FROM "user" u CROSS JOIN buildings b WHERE u.id IN (${selected}) AND b.code='A'`,
+					);
+					await tx.execute(
+						sql`INSERT INTO sr_period_memberships(user_id,period_id) SELECT id,${periodId} FROM "user" WHERE id IN (${selected})`,
+					);
+				});
+			}
+			const f = await fixture();
+			return {
+				committeeId: f.committeeId,
+				divisionId: f.divisionId,
+				positionCode: "PIC1" as const,
+				userIds: [...bulkUserIds],
+			};
+		}
+		async function waitBlocked(blockerPid: number) {
+			// A fixed query count can finish before a contending request is scheduled.
+			const deadline = Date.now() + 3000;
+			while (Date.now() < deadline) {
+				const { rows } = await db.$client.query(
+					"SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1::int = ANY(pg_blocking_pids(pid))) blocked",
+					[blockerPid],
+				);
+				if (rows[0].blocked) return;
+			}
+			throw Error("Expected transaction lock barrier");
+		}
+		function bulkDetail({ committeeId }: { committeeId: string }) {
+			return caller().committee.detail({ committeeId });
+		}
+		test("bulk adds 1, several and 30 members with one assignment for every eligible HCO role and SUPERADMIN", async () => {
+			const other = await bulkFixture();
+			await caller().committee.addMember({
+				committeeId: other.committeeId,
+				divisionId: other.divisionId,
+				userId: other.userIds[0] ?? "",
+				positionCode: "PJ",
+			});
+			const untouched = await bulkDetail(other);
+			for (const [operator, count] of [
+				["admin", 30],
+				["kadep", 1],
+				["sekdep", 3],
+				["hco", 2],
+			] as const) {
+				const full = await bulkFixture();
+				const input = { ...full, userIds: full.userIds.slice(0, count) };
+				const before = await bulkDetail(input);
+				expect(await caller(operator).committee.addMembers(input)).toEqual({
+					success: true,
+					addedCount: count,
+				});
+				const detail = await bulkDetail(input);
+				expect(detail.members).toHaveLength(count);
+				expect(
+					detail.members.every(
+						(row) =>
+							row.divisionId === input.divisionId &&
+							row.positionCode === input.positionCode,
+					),
+				).toBe(true);
+				expect(new Set(detail.members.map((row) => row.userId))).toEqual(
+					new Set(input.userIds),
+				);
+				expect(detail.updatedAt.getTime()).toBeGreaterThanOrEqual(
+					before.updatedAt.getTime(),
+				);
+			}
+			expect(await bulkDetail(other)).toEqual(untouched);
+		});
+		test("bulk validation and existing membership failures leave all rows and committee metadata unchanged", async () => {
+			const full = await bulkFixture();
+			const input = { ...full, userIds: full.userIds.slice(0, 2) };
+			const other = await fixture();
+			const before = await bulkDetail(input);
+			for (const invalid of [
+				ids.inactive,
+				ids.expired,
+				ids.future,
+				ids.unassigned,
+				ids.invalid,
+				randomUUID(),
+			]) {
+				await expectFailure(
+					caller().committee.addMembers({
+						...input,
+						userIds: [input.userIds[0] ?? "", invalid ?? ""],
+					}),
+					{ code: "BAD_REQUEST", message: "COMMITTEE_MEMBER_INELIGIBLE" },
+				);
+				expect(await bulkDetail(input)).toEqual(before);
+			}
+			for (const divisionId of [randomUUID(), other.divisionId]) {
+				await expectFailure(
+					caller().committee.addMembers({ ...input, divisionId }),
+					{ code: "BAD_REQUEST", message: "COMMITTEE_DIVISION_NOT_FOUND" },
+				);
+				expect(await bulkDetail(input)).toEqual(before);
+			}
+			for (const userIds of [[], [input.userIds[0], input.userIds[0]]])
+				await expectFailure(
+					caller().committee.addMembers({
+						...input,
+						userIds: userIds as string[],
+					}),
+					{ code: "BAD_REQUEST" },
+				);
+			await expectFailure(
+				caller().committee.addMembers({ ...input, committeeId: randomUUID() }),
+				{ code: "NOT_FOUND", message: "COMMITTEE_NOT_FOUND" },
+			);
+			await caller().committee.addMember({
+				committeeId: input.committeeId,
+				divisionId: input.divisionId,
+				positionCode: input.positionCode,
+				userId: input.userIds[1] ?? "",
+			});
+			const registered = await bulkDetail(input);
+			await expectFailure(caller().committee.addMembers(input), {
+				code: "CONFLICT",
+				message: "COMMITTEE_DUPLICATE",
+			});
+			expect(await bulkDetail(input)).toEqual(registered);
+		});
+		test("bulk insert and later metadata failures roll back the entire batch with safe errors", async () => {
+			const full = await bulkFixture();
+			const input = { ...full, userIds: full.userIds.slice(0, 3) };
+			const before = await bulkDetail(input);
+			await db.$client.query(
+				"CREATE FUNCTION reject_bulk_member() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.user_id=TG_ARGV[0] THEN RAISE EXCEPTION 'synthetic bulk failure'; END IF; RETURN NEW; END $$",
+			);
+			await db.$client.query(
+				`CREATE TRIGGER reject_bulk_member BEFORE INSERT ON committee_members FOR EACH ROW EXECUTE FUNCTION reject_bulk_member('${input.userIds[1]}')`,
+			);
+			try {
+				await expectFailure(caller().committee.addMembers(input), {
+					code: "INTERNAL_SERVER_ERROR",
+					message: "COMMITTEE_REQUEST_FAILED",
+				});
+			} finally {
+				await db.$client.query(
+					"DROP TRIGGER reject_bulk_member ON committee_members; DROP FUNCTION reject_bulk_member()",
+				);
+			}
+			expect(await bulkDetail(input)).toEqual(before);
+			await db.$client.query(
+				"CREATE FUNCTION reject_bulk_metadata() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic metadata failure'; END $$; CREATE TRIGGER reject_bulk_metadata BEFORE UPDATE ON committees FOR EACH ROW EXECUTE FUNCTION reject_bulk_metadata()",
+			);
+			try {
+				await expectFailure(caller().committee.addMembers(input), {
+					code: "INTERNAL_SERVER_ERROR",
+					message: "COMMITTEE_REQUEST_FAILED",
+				});
+			} finally {
+				await db.$client.query(
+					"DROP TRIGGER reject_bulk_metadata ON committees; DROP FUNCTION reject_bulk_metadata()",
+				);
+			}
+			expect(await bulkDetail(input)).toEqual(before);
+		});
+		test("bulk endpoint rejects unauthorized, inactive and expired operators and rechecks stale Identity in its transaction", async () => {
+			const input = {
+				...(await bulkFixture()),
+				userIds: bulkUserIds.slice(0, 2),
+			};
+			const before = await bulkDetail(input);
+			for (const operator of ["rnd", "sr", "invalid"])
+				await expectFailure(caller(operator).committee.addMembers(input), {
+					code: "FORBIDDEN",
+				});
+			for (const operator of ["inactive", "expired", "future", "unassigned"])
+				await expectFailure(caller(operator).committee.addMembers(input), {
+					code: "UNAUTHORIZED",
+				});
+			const identity = await getActiveIdentity(db, ids.hco ?? "");
+			if (!identity) throw Error("Missing HCO identity");
+			await db.$client.query(
+				"UPDATE user_profiles SET is_active=false WHERE user_id=$1",
+				[ids.hco],
+			);
+			try {
+				await expectFailure(addMembers(db, identity, input), {
+					code: "FORBIDDEN",
+					message: "COMMITTEE_ACCESS_DENIED",
+				});
+			} finally {
+				await db.$client.query(
+					"UPDATE user_profiles SET is_active=true WHERE user_id=$1",
+					[ids.hco],
+				);
+			}
+			expect(await bulkDetail(input)).toEqual(before);
+		});
+		test("overlapping bulk/bulk and single/bulk requests preserve uniqueness and never partially insert the losing batch", async () => {
+			for (const single of [false, true]) {
+				const full = await bulkFixture();
+				const first = { ...full, userIds: full.userIds.slice(0, 2) };
+				const second = { ...full, userIds: full.userIds.slice(1, 3) };
+				const sharedUserId = first.userIds[1];
+				if (!sharedUserId) throw Error("Missing shared synthetic user");
+				const result = await Promise.allSettled([
+					caller("hco").committee.addMembers(first),
+					single
+						? caller("sekdep").committee.addMember({
+								committeeId: full.committeeId,
+								divisionId: full.divisionId,
+								positionCode: full.positionCode,
+								userId: sharedUserId,
+							})
+						: caller("sekdep").committee.addMembers(second),
+				]);
+				expect(result.filter((row) => row.status === "fulfilled")).toHaveLength(
+					1,
+				);
+				const rejected = result.find((row) => row.status === "rejected");
+				if (rejected?.status !== "rejected")
+					throw Error("Expected concurrent duplicate");
+				expect(rejected.reason).toMatchObject({
+					code: "CONFLICT",
+					message: "COMMITTEE_DUPLICATE",
+				});
+				const expected =
+					result[0]?.status === "fulfilled"
+						? first.userIds
+						: single
+							? [sharedUserId]
+							: second.userIds;
+				expect(
+					new Set((await bulkDetail(full)).members.map((row) => row.userId)),
+				).toEqual(new Set(expected));
+			}
+		});
+		test("a member deactivated while eligibility SHARE locking waits invalidates the whole batch", async () => {
+			const full = await bulkFixture();
+			const input = { ...full, userIds: full.userIds.slice(0, 2).sort() };
+			const before = await bulkDetail(input);
+			const blocker = await db.$client.connect();
+			let request: Promise<unknown> | undefined;
+			try {
+				await blocker.query("BEGIN");
+				const { rows } = await blocker.query("SELECT pg_backend_pid() pid");
+				await blocker.query(
+					"UPDATE user_profiles SET is_active=false WHERE user_id=$1",
+					[input.userIds[1]],
+				);
+				request = caller().committee.addMembers(input);
+				const outcome = Promise.allSettled([request]);
+				try {
+					await waitBlocked(rows[0].pid);
+				} finally {
+					await blocker.query("COMMIT");
+				}
+				await outcome;
+				await expectFailure(request, {
+					code: "BAD_REQUEST",
+					message: "COMMITTEE_MEMBER_INELIGIBLE",
+				});
+			} finally {
+				await blocker.query("ROLLBACK");
+				blocker.release();
+				await Promise.allSettled(request ? [request] : []);
+				await db.$client.query(
+					"UPDATE user_profiles SET is_active=true WHERE user_id=$1",
+					[input.userIds[1]],
+				);
+			}
+			expect(await bulkDetail(input)).toEqual(before);
+		});
+		test("division deletion and bulk insertion respect both committee-lock orders without partial writes", async () => {
+			for (const bulkFirst of [false, true]) {
+				const full = await bulkFixture();
+				const input = { ...full, userIds: full.userIds.slice(0, 2) };
+				let ready = () => {};
+				let release = () => {};
+				let blockerPid = 0;
+				const readyPromise = new Promise<void>((resolve) => {
+					ready = resolve;
+				});
+				const releasePromise = new Promise<void>((resolve) => {
+					release = resolve;
+				});
+				const first = db.transaction(async (tx) => {
+					blockerPid = Number(
+						(
+							await tx.execute<{ pid: number }>(
+								sql`SELECT pg_backend_pid() pid`,
+							)
+						).rows[0]?.pid,
+					);
+					const api = appRouter.createCaller({
+						db: tx as unknown as Database,
+						session: { user: { id: ids.admin } } as never,
+					}).committee;
+					if (bulkFirst) await api.addMembers(input);
+					else
+						await api.deleteDivision({
+							committeeId: input.committeeId,
+							divisionId: input.divisionId,
+						});
+					ready();
+					await releasePromise;
+				});
+				await Promise.race([
+					readyPromise,
+					first.then(() => {
+						throw Error("Missing lock barrier");
+					}),
+				]);
+				const second = bulkFirst
+					? caller("hco").committee.deleteDivision({
+							committeeId: input.committeeId,
+							divisionId: input.divisionId,
+						})
+					: caller("hco").committee.addMembers(input);
+				const outcomes = Promise.allSettled([first, second]);
+				try {
+					await waitBlocked(blockerPid);
+				} finally {
+					release();
+					await outcomes;
+				}
+				await expectFailure(
+					second,
+					bulkFirst
+						? { code: "CONFLICT", message: "COMMITTEE_REFERENCE_IN_USE" }
+						: { code: "BAD_REQUEST", message: "COMMITTEE_DIVISION_NOT_FOUND" },
+				);
+				const detail = await bulkDetail(input);
+				expect(detail.members).toHaveLength(bulkFirst ? 2 : 0);
+				expect(detail.divisions).toHaveLength(bulkFirst ? 1 : 0);
+			}
+		});
+		test("bulk insertion leaves published participants frozen while a new draft resolves the expanded committee", async () => {
+			const full = await bulkFixture();
+			await caller().committee.addMember({
+				committeeId: full.committeeId,
+				divisionId: full.divisionId,
+				positionCode: full.positionCode,
+				userId: full.userIds[0] ?? "",
+			});
+			const published = await caller("hco").attendance.create(
+				eventInput(full.committeeId),
+			);
+			await caller("hco").attendance.publish(published);
+			const before = await caller().attendance.detail(published);
+			await caller("sekdep").committee.addMembers({
+				...full,
+				userIds: full.userIds.slice(1, 3),
+			});
+			const after = await caller().attendance.detail(published);
+			expect(after.participants).toEqual(before.participants);
+			expect(after.event).toEqual(before.event);
+			expect(after.session).toEqual(before.session);
+			const draft = await caller("hco").attendance.create(
+				eventInput(full.committeeId),
+			);
+			expect(
+				new Set(
+					(await caller("hco").attendance.preview(draft)).participants.map(
+						(row) => row.userId,
+					),
+				),
+			).toEqual(new Set(full.userIds.slice(0, 3)));
 		});
 	},
 );
