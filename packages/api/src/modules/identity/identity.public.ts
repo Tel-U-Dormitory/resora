@@ -12,10 +12,13 @@ import {
 	positions,
 	srProfiles,
 	systemPrivileges,
+	userPermissionGrants,
 	userProfiles,
 } from "@resora/db/schema/identity";
 import { srTenureStatus } from "@resora/db/sr-tenure";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
+import { canManageInternalAttendanceManually } from "./identity-policy";
+import { eligibleForManualGrant } from "./permission-catalog";
 
 export { isValidSrAssignment } from "@resora/db/organization";
 export {
@@ -169,6 +172,29 @@ export async function getLiveOperationalIdentity(
 	if (identity.actor === "SR" && !(await getActiveSrCandidate(tx, userId)))
 		return null;
 	return identity;
+}
+
+// The caller supplies a fresh backend identity. Writes call this after live
+// identity/event/session locks, with a row SHARE lock held until commit.
+export async function canManageManualAttendance(
+	db: Database | DatabaseTransaction,
+	identity: ActiveIdentity | null | undefined,
+	lock = false,
+) {
+	if (canManageInternalAttendanceManually(identity)) return true;
+	if (!identity || !eligibleForManualGrant(identity)) return false;
+	const query = db
+		.select({ userId: userPermissionGrants.userId })
+		.from(userPermissionGrants)
+		.where(
+			and(
+				eq(userPermissionGrants.userId, identity.userId),
+				eq(userPermissionGrants.permissionCode, "ATTENDANCE_MANUAL_MANAGE"),
+				isNull(userPermissionGrants.revokedAt),
+			),
+		);
+	const rows = await (lock ? query.for("share") : query);
+	return rows.length > 0;
 }
 
 // Manual insertion needs an active eligible target, not completion of their first login.

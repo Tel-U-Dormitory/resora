@@ -27,6 +27,21 @@ import {
 } from "./identity.public";
 
 const url = process.env.RESORA_ADMIN_LIFECYCLE_TEST_DB_URL;
+
+// Bun's promise matchers can hang on pg-backed rejections. Await the rejection
+// explicitly, preserving every original error-code assertion.
+async function expectRejected(
+	request: Promise<unknown>,
+	expected: { code: string },
+) {
+	let failure: unknown;
+	try {
+		await request;
+	} catch (error) {
+		failure = error;
+	}
+	expect(failure).toMatchObject(expected);
+}
 export function guardLifecycleTestUrl(value: string) {
 	const parsed = new URL(value);
 	if (
@@ -183,25 +198,29 @@ test("lifecycle scratch guard and calendar-date validation", () => {
 				periodId: activePeriodId,
 				endsOn: "2091-12-31",
 			});
-			await expect(
-				caller.identity.extendPeriod({
+			// Explicit async catches keep pg-backed failures independent of Bun's promise matchers.
+			const shortening = await caller.identity
+				.extendPeriod({
 					periodId: activePeriodId,
 					endsOn: "2080-01-01",
-				}),
-			).rejects.toMatchObject({ code: "BAD_REQUEST" });
-			await expect(
-				caller.identity.assignPeriod({
+				})
+				.catch((error: unknown) => error);
+			expect(shortening).toMatchObject({ code: "BAD_REQUEST" });
+			const invalidTargets = await caller.identity
+				.assignPeriod({
 					periodId: activePeriodId,
 					userIds: [sr.userId, adminId],
-				}),
-			).rejects.toMatchObject({ code: "BAD_REQUEST" });
-			await expect(
-				caller.identity.createPeriod({
+				})
+				.catch((error: unknown) => error);
+			expect(invalidTargets).toMatchObject({ code: "BAD_REQUEST" });
+			const duplicate = await caller.identity
+				.createPeriod({
 					name: "Current",
 					startsOn: "2000-01-01",
 					endsOn: "2090-12-31",
-				}),
-			).rejects.toMatchObject({ code: "CONFLICT" });
+				})
+				.catch((error: unknown) => error);
+			expect(duplicate).toMatchObject({ code: "CONFLICT" });
 			const [audit] = await db
 				.select()
 				.from(accountAuditLogs)
@@ -210,13 +229,18 @@ test("lifecycle scratch guard and calendar-date validation", () => {
 				before: "2090-12-31",
 				after: "2091-12-31",
 			});
-			await expect(
-				db
+			// Preserve the immutable-audit rejection assertion with an explicit await.
+			let auditMutationError: unknown;
+			try {
+				await db
 					.update(accountAuditLogs)
 					.set({ action: "PERIOD_CREATED" })
 					.where(eq(accountAuditLogs.action, "PERIOD_EXTENDED"))
-					.execute(),
-			).rejects.toThrow();
+					.execute();
+			} catch (error) {
+				auditMutationError = error;
+			}
+			expect(auditMutationError).toBeInstanceOf(Error);
 		});
 		test("tenure date boundaries include the entire final Jakarta day and distinguish all states", async () => {
 			const [today] = (
@@ -280,7 +304,7 @@ test("lifecycle scratch guard and calendar-date validation", () => {
 				authConfig: config,
 				session: { user: { id: sr.userId } } as never,
 			});
-			await expect(ordinary.identity.listPeriods()).rejects.toMatchObject({
+			await expectRejected(ordinary.identity.listPeriods(), {
 				code: "FORBIDDEN",
 			});
 			expect(
@@ -366,7 +390,7 @@ test("lifecycle scratch guard and calendar-date validation", () => {
 			expect(
 				(await request("get-session", undefined, activeCookie)).status,
 			).toBe(401);
-			await expect(resident.identity.profile()).rejects.toMatchObject({
+			await expectRejected(resident.identity.profile(), {
 				code: "UNAUTHORIZED",
 			});
 			expect(await getActiveIdentity(db, sr.userId)).toBeNull();
@@ -481,13 +505,14 @@ test("lifecycle scratch guard and calendar-date validation", () => {
 				authConfig: config,
 				session: { user: { id: unassigned.userId } } as never,
 			});
-			await expect(
+			await expectRejected(
 				ordinary.identity.createPeriod({
 					name: "Forbidden",
 					startsOn: "2026-01-01",
 					endsOn: "2026-12-31",
 				}),
-			).rejects.toMatchObject({ code: "FORBIDDEN" });
+				{ code: "FORBIDDEN" },
+			);
 		});
 		test("concurrent administrator reset cannot be overwritten by a stale public password change", async () => {
 			for (let attempt = 0; attempt < 3; attempt++) {
@@ -715,9 +740,10 @@ test("lifecycle scratch guard and calendar-date validation", () => {
 				before: { name: input.name, email: input.email },
 				after: { name: "Updated synthetic resident", buildingCode: "B" },
 			});
-			await expect(
+			await expectRejected(
 				caller.identity.updateAccount({ ...input, name: "Stale overwrite" }),
-			).rejects.toMatchObject({ code: "CONFLICT" });
+				{ code: "CONFLICT" },
+			);
 		});
 		test("invalid organization, duplicate email and non-admin edits are denied without changing account", async () => {
 			const resident = await maintenanceResident();
@@ -732,15 +758,17 @@ test("lifecycle scratch guard and calendar-date validation", () => {
 					.from(accountAuditLogs)
 					.where(eq(accountAuditLogs.targetUserId, resident.userId))
 			).length;
-			await expect(
+			await expectRejected(
 				caller.identity.updateAccount({ ...input, positionCode: "UNKNOWN" }),
-			).rejects.toMatchObject({ code: "BAD_REQUEST" });
-			await expect(
+				{ code: "BAD_REQUEST" },
+			);
+			await expectRejected(
 				caller.identity.updateAccount({
 					...input,
 					email: "admin@example.invalid",
 				}),
-			).rejects.toMatchObject({ code: "CONFLICT" });
+				{ code: "CONFLICT" },
+			);
 			expect(
 				await db.select().from(user).where(eq(user.id, resident.userId)),
 			).toEqual(before);
@@ -759,21 +787,23 @@ test("lifecycle scratch guard and calendar-date validation", () => {
 				authConfig: config,
 				session: { user: { id: resident.userId } } as never,
 			});
-			await expect(
-				ordinary.identity.updateAccount(input),
-			).rejects.toMatchObject({ code: "FORBIDDEN" });
-			await expect(
+			await expectRejected(ordinary.identity.updateAccount(input), {
+				code: "FORBIDDEN",
+			});
+			await expectRejected(
 				ordinary.identity.archiveAccount({
 					userId: resident.userId,
 					expectedUpdatedAt: input.expectedUpdatedAt,
 				}),
-			).rejects.toMatchObject({ code: "FORBIDDEN" });
-			await expect(
+				{ code: "FORBIDDEN" },
+			);
+			await expectRejected(
 				caller.identity.archiveAccount({
 					userId: adminId,
 					expectedUpdatedAt: input.expectedUpdatedAt,
 				}),
-			).rejects.toMatchObject({ code: "NOT_FOUND" });
+				{ code: "NOT_FOUND" },
+			);
 		});
 		test("archive disables native login and revokes sessions while preserving identity, audit and membership; edit restores access", async () => {
 			const resident = await maintenanceResident();
@@ -900,15 +930,17 @@ test("lifecycle scratch guard and calendar-date validation", () => {
 				sql`CREATE TRIGGER maintenance_audit_failure BEFORE INSERT ON public.account_audit_logs FOR EACH ROW EXECUTE FUNCTION public.reject_maintenance_audit()`,
 			);
 			try {
-				await expect(
+				await expectRejected(
 					caller.identity.updateAccount({ ...input, name: "Should roll back" }),
-				).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
-				await expect(
+					{ code: "INTERNAL_SERVER_ERROR" },
+				);
+				await expectRejected(
 					caller.identity.archiveAccount({
 						userId: resident.userId,
 						expectedUpdatedAt: input.expectedUpdatedAt,
 					}),
-				).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+					{ code: "INTERNAL_SERVER_ERROR" },
+				);
 				expect(
 					await db.select().from(user).where(eq(user.id, resident.userId)),
 				).toEqual(beforeUser);

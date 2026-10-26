@@ -13,8 +13,8 @@ import { and, asc, desc, eq, ne } from "drizzle-orm";
 import type { z } from "zod";
 import {
 	canAccessPersonalSr,
-	canManageInternalAttendanceManually,
 	canManageInternalEvent,
+	canManageManualAttendance,
 	isValidSrAssignment,
 } from "../identity/identity.public";
 import { auditHistorySchema, ownHistorySchema } from "./attendance.schema";
@@ -111,7 +111,7 @@ export async function recap(
 							? context.event.committeeName
 							: null,
 				},
-				canManual: canManageInternalAttendanceManually(identity),
+				canManual: await canManageManualAttendance(tx, identity),
 				counts: {
 					invited: participants.length,
 					present: participants.filter((row) => row.presence === "PRESENT")
@@ -212,7 +212,7 @@ export async function auditHistory(
 	identity: ActiveIdentity,
 	input: z.input<typeof auditHistorySchema>,
 ) {
-	if (!canManageInternalAttendanceManually(identity))
+	if (!(await canManageManualAttendance(db, identity)))
 		throw new TRPCError({ code: "FORBIDDEN" });
 	const data = auditHistorySchema.parse(input);
 	const rows = await db

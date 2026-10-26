@@ -11,7 +11,7 @@ import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
 import type { z } from "zod";
 import {
-	canManageInternalAttendanceManually,
+	canManageManualAttendance,
 	getActiveSrCandidate,
 	getLiveOperationalIdentity,
 } from "../identity/identity.public";
@@ -22,8 +22,12 @@ import {
 	manualEffectiveTime,
 } from "./reporting-policy";
 
-function requireOperator(identity: ActiveIdentity) {
-	if (!canManageInternalAttendanceManually(identity))
+async function requireOperator(
+	db: Database | DatabaseTransaction,
+	identity: ActiveIdentity,
+	lock = false,
+) {
+	if (!(await canManageManualAttendance(db, identity, lock)))
 		throw new TRPCError({
 			code: "FORBIDDEN",
 			message: "MANUAL_ACCESS_REQUIRED",
@@ -54,7 +58,7 @@ async function lockContext(
 			code: "FORBIDDEN",
 			message: "MANUAL_ACCESS_REQUIRED",
 		});
-	requireOperator(live);
+	await requireOperator(tx, live, true);
 	return { event, session };
 }
 
@@ -81,7 +85,7 @@ export async function manualInsert(
 	identity: ActiveIdentity,
 	input: z.infer<typeof manualInsertSchema>,
 ) {
-	requireOperator(identity);
+	await requireOperator(db, identity);
 	const data = manualInsertSchema.parse(input);
 	return db.transaction(async (tx) => {
 		const { event, session } = await lockContext(tx, identity, data.eventId);
@@ -158,7 +162,7 @@ export async function manualCorrect(
 	identity: ActiveIdentity,
 	input: z.infer<typeof manualCorrectSchema>,
 ) {
-	requireOperator(identity);
+	await requireOperator(db, identity);
 	const data = manualCorrectSchema.parse(input);
 	return db.transaction(async (tx) => {
 		const [binding] = await tx

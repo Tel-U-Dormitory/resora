@@ -177,6 +177,37 @@ export const systemPrivileges = pgTable(
 	],
 );
 
+export const userPermissionGrants = pgTable(
+	"user_permission_grants",
+	{
+		userId: text("user_id")
+			.notNull()
+			.references(() => user.id),
+		permissionCode: text("permission_code").notNull(),
+		grantedByUserId: text("granted_by_user_id")
+			.notNull()
+			.references(() => user.id),
+		grantedAt: timestamp("granted_at", { withTimezone: true })
+			.defaultNow()
+			.notNull(),
+		revokedByUserId: text("revoked_by_user_id").references(() => user.id),
+		revokedAt: timestamp("revoked_at", { withTimezone: true }),
+	},
+	(t) => [
+		primaryKey({ columns: [t.userId, t.permissionCode] }),
+		check(
+			"user_permission_grants_code_check",
+			sql`${t.permissionCode} IN ('ATTENDANCE_MANUAL_MANAGE')`,
+		),
+		check(
+			"user_permission_grants_revocation_check",
+			sql`(${t.revokedAt} IS NULL AND ${t.revokedByUserId} IS NULL) OR (${t.revokedAt} IS NOT NULL AND ${t.revokedByUserId} IS NOT NULL AND ${t.revokedAt} >= ${t.grantedAt})`,
+		),
+		index("user_permission_grants_grantor_idx").on(t.grantedByUserId),
+		index("user_permission_grants_revoker_idx").on(t.revokedByUserId),
+	],
+).enableRLS();
+
 export const accountAuditLogs = pgTable(
 	"account_audit_logs",
 	{
@@ -194,7 +225,7 @@ export const accountAuditLogs = pgTable(
 	(table) => [
 		check(
 			"account_audit_logs_action_check",
-			sql`(${table.action} IN ('ACCOUNT_CREATED', 'ACCOUNT_UPDATED', 'ACCOUNT_ARCHIVED', 'PASSWORD_RESET', 'PERIOD_CREATED', 'PERIOD_EXTENDED', 'PERIOD_ASSIGNED') AND ${table.actorUserId} IS NOT NULL) OR (${table.action} = 'SYSTEM_ADMIN_BOOTSTRAPPED' AND ${table.actorUserId} IS NULL)`,
+			sql`(${table.action} IN ('ACCOUNT_CREATED', 'ACCOUNT_UPDATED', 'ACCOUNT_ARCHIVED', 'PASSWORD_RESET', 'PERIOD_CREATED', 'PERIOD_EXTENDED', 'PERIOD_ASSIGNED', 'ACCOUNT_PERMISSION_GRANTED', 'ACCOUNT_PERMISSION_REVOKED') AND ${table.actorUserId} IS NOT NULL) OR (${table.action} = 'SYSTEM_ADMIN_BOOTSTRAPPED' AND ${table.actorUserId} IS NULL)`,
 		),
 		index("account_audit_logs_actor_created_idx").on(
 			table.actorUserId,
@@ -218,6 +249,7 @@ export const identityRelations = defineRelationsPart(
 		positions,
 		buildings,
 		systemPrivileges,
+		userPermissionGrants,
 		accountAuditLogs,
 	},
 	(r) => ({
@@ -311,6 +343,25 @@ export const identityRelations = defineRelationsPart(
 				from: r.accountAuditLogs.targetUserId,
 				to: r.user.id,
 				optional: false,
+			}),
+		},
+		userPermissionGrants: {
+			user: r.one.user({
+				from: r.userPermissionGrants.userId,
+				to: r.user.id,
+				alias: "permissionRecipient",
+				optional: false,
+			}),
+			grantor: r.one.user({
+				from: r.userPermissionGrants.grantedByUserId,
+				to: r.user.id,
+				alias: "permissionGrantor",
+				optional: false,
+			}),
+			revoker: r.one.user({
+				from: r.userPermissionGrants.revokedByUserId,
+				to: r.user.id,
+				alias: "permissionRevoker",
 			}),
 		},
 	}),
