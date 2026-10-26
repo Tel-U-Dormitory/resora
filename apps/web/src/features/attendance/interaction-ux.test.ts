@@ -961,6 +961,7 @@ const jsxScope = {
 		}),
 	},
 	DashboardHeader: "DashboardHeader",
+	BroadcastFeed: "BroadcastFeed",
 	Avatar: "Avatar",
 	Link: "Link",
 	ArrowRight: "ArrowRight",
@@ -1031,12 +1032,13 @@ test("SSR login routes existing sessions and renders an expired-session message 
 	}
 });
 
-test("dashboard renders SR and system identity from verified SSR data without client requests or polling", async () => {
+test("dashboard renders verified SSR identity without redundant identity requests or polling", async () => {
 	for (const session of [
 		{
 			actor: "SR",
 			name: "Synthetic SR",
 			nim: "00000123",
+			canManageBroadcast: false,
 			requiresPasswordChange: false,
 			mustChangePassword: true,
 		},
@@ -1044,6 +1046,7 @@ test("dashboard renders SR and system identity from verified SSR data without cl
 			actor: "SYSTEM_ADMIN",
 			name: "Synthetic administrator",
 			username: "synthetic.admin",
+			canManageBroadcast: true,
 			requiresPasswordChange: false,
 		},
 	]) {
@@ -1053,6 +1056,8 @@ test("dashboard renders SR and system identity from verified SSR data without cl
 			redirect: redirected,
 		});
 		const rendered = JSON.stringify(await component());
+		expect(rendered).toContain('"tag":"BroadcastFeed"');
+		expect(rendered).toContain(`"canManage":${session.canManageBroadcast}`);
 		expect(rendered).toContain(session.name);
 		expect(rendered).toContain(
 			session.actor === "SR" ? "NIM: 00000123" : "Username: synthetic.admin",

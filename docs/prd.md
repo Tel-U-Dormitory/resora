@@ -133,7 +133,7 @@ Applicable existing activity FRs include `FR-040`, `FR-042–FR-047`, with Adapt
 
 ### 6.3 Broadcast / Pengumuman SR — B1
 
-Broadcast adalah pengumuman plain text untuk seluruh SR eligible, terpisah dari event dan kepanitiaan. B1 menyediakan fondasi backend; dashboard cards, View All, History UI dan form frontend menunggu B2/B3 serta UAT/release terpisah.
+Broadcast adalah pengumuman plain text untuk seluruh SR eligible, terpisah dari event dan kepanitiaan. B1 menyediakan fondasi backend; B2 menambahkan dashboard cards, View All, History dan form pengelolaan. UAT B3 serta release tetap merupakan tahap terpisah.
 
 - Read: SR aktif dengan penugasan struktural valid dan periode ACTIVE, atau SUPERADMIN sah termasuk SYSTEM_ADMIN. Mandatory password rotation tetap memblokir akses sesuai policy autentikasi existing; flag password awal SR biasa bukan mandatory rotation.
 - Create: INTI struktural KETUM/WAKETUM/SEKRETARIS/BENDAHARA, KADEP struktural di seluruh departemen non-INTI, atau SUPERADMIN sah. Jabatan kepanitiaan tidak memberi authority.
@@ -143,6 +143,8 @@ Broadcast adalah pengumuman plain text untuk seluruh SR eligible, terpisah dari 
 - Judul 1–150 dan isi multiline 1–5000 karakter setelah trim, tanpa rich text/HTML. Link opsional HTTP(S), maksimum 2048 karakter. Riwayat tetap dapat dibaca walaupun pembuat kemudian tidak aktif.
 
 Implementasi, kontrak API, migration dan verifikasi dijelaskan di [Architecture — Broadcast B1](architecture.md#broadcast--pengumuman-sr--fase-b1).
+
+Alur B2: dashboard menampilkan tiga pengumuman aktif terbaru; `Lihat Semua` menuju `/broadcasts` dengan pagination 10 item, dan History berada di `/broadcasts/history`. Detail lengkap dibuka melalui dialog. Tombol Create memakai capability session backend, sedangkan Edit/Archive mengikuti capability record. Form mendukung link opsional dan expiry WIB; archive memerlukan konfirmasi, History read-only. Setelah perubahan, hanya data Broadcast yang diperbarui tanpa reload aplikasi. Masa berlaku, ownership, eligibility, dan otorisasi tetap mengikuti B1. Konfirmasi penerapan migration DEV dan UAT keyboard/mobile/role pada B3 diperlukan sebelum release.
 
 ## 7. Current delivery scope, milestones and implementation state
 
