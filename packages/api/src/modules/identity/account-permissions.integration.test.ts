@@ -175,6 +175,9 @@ const target = process.env.RESORA_PERMISSION_TEST_DB_URL;
 		});
 		test("catalog/admin API is protected; grant/revoke/regrant are audited and idempotent", async () => {
 			expect(await caller().identity.permissionCatalog()).toHaveLength(1);
+			expect((await permissions("member")).catalog[0]?.category).toBe("HCO");
+			expect((await permissions("nonhco")).catalog).toEqual([]);
+			expect((await permissions("inactive")).catalog[0]?.category).toBe("HCO");
 			for (const key of ["member", "sekdep", "kadep", "nonhco"]) {
 				await rejected(
 					caller(key).identity.permissionCatalog(),
@@ -347,6 +350,10 @@ const target = process.env.RESORA_PERMISSION_TEST_DB_URL;
 				explicit: true,
 				effective: false,
 			});
+			const outside = await permissions("member");
+			expect(outside.catalog).toEqual([]);
+			expect(outside.permission.label).toBe("Input & Koreksi Absensi Manual");
+			await rejected(set("member", true), "PERMISSION_TARGET_INELIGIBLE");
 			await rejected(
 				manualInsert(db, stale, manualInput(next)),
 				"MANUAL_ACCESS_REQUIRED",

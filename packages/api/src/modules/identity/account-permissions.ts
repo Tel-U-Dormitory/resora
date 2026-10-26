@@ -13,6 +13,7 @@ import { z } from "zod";
 import { getLiveOperationalIdentity } from "./identity.public";
 import { hasSuperadminPrivilege } from "./identity-policy";
 import {
+	applicablePermissions,
 	manualPermissionState,
 	permissionCatalog,
 	permissionCodes,
@@ -63,9 +64,11 @@ async function readPermissions(tx: DatabaseTransaction, userId: string) {
 	const explicit = Boolean(grant && !grant.revokedAt);
 	return {
 		target,
-		catalog: permissionCatalog,
+		catalog: applicablePermissions(target.departmentCode),
 		permission: {
 			code: permissionCodes[0],
+			label: permissionCatalog[0].label,
+			description: permissionCatalog[0].description,
 			...manualPermissionState(live, explicit),
 			grantedAt: grant?.grantedAt ?? null,
 			revokedAt: grant?.revokedAt ?? null,

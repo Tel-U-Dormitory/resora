@@ -9,14 +9,22 @@ export type PermissionCode = (typeof permissionCodes)[number];
 export const permissionCatalog = [
 	{
 		code: permissionCodes[0],
-		category: "ABSENSI",
-		categoryLabel: "Absensi",
+		category: "HCO",
+		categoryLabel: "HCO",
 		label: "Input & Koreksi Absensi Manual",
 		description:
 			"Mengizinkan input dan koreksi kehadiran manual serta akses audit terkait.",
 		eligibleDepartment: "HCO",
 	},
 ] as const;
+
+export function applicablePermissions(
+	departmentCode: string | null | undefined,
+) {
+	return permissionCatalog.filter(
+		(permission) => permission.eligibleDepartment === departmentCode,
+	);
+}
 
 export function eligibleForManualGrant(
 	identity: ActiveIdentity | null | undefined,
