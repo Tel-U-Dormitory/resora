@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { attendanceQueryKeys, queryClient, trpc } from "@/utils/trpc";
 import { refreshAttendanceQueries } from "./attendance-queries";
+import { acquireLocation, freshPosition } from "./check-in-location";
 import { releaseCamera, scannerErrorMessage } from "./check-in-ui";
 import { formatEventTime } from "./event-ui";
 
@@ -34,6 +35,15 @@ export default function CheckInScanner() {
 	const busy = useRef(false);
 	const startingCamera = useRef(false);
 	const generation = useRef(0);
+	const qrToken = useRef<string | null>(null);
+	const gps = useRef<{
+		controller: AbortController;
+		promise: Promise<GeolocationPosition | null>;
+		pending: boolean;
+		position?: GeolocationPosition;
+		error?: string;
+	} | null>(null);
+	const [gpsStatus, setGpsStatus] = useState("");
 	const [phase, setPhase] = useState<
 		| "idle"
 		| "starting"
@@ -48,15 +58,54 @@ export default function CheckInScanner() {
 	useEffect(() => {
 		return () => {
 			generation.current++;
+			gps.current?.controller.abort();
+			qrToken.current = null;
 			releaseCamera(scanner.current, null, true);
 		};
 	}, []);
 	const showError = (code: string) => {
 		stopCamera();
+		gps.current?.controller.abort();
+		if (!code.startsWith("GPS_") && code !== "INVALID_LOCATION")
+			qrToken.current = null;
 		setError(scannerErrorMessage(code));
 		setPhase("error");
 	};
-	const processQr = async (token: string, attempt: number) => {
+	const prepareLocation = (attempt: number) => {
+		gps.current?.controller.abort();
+		const task: NonNullable<typeof gps.current> = {
+			controller: new AbortController(),
+			promise: Promise.resolve(null),
+			pending: true,
+		};
+		gps.current = task;
+		setGpsStatus("locating");
+		task.promise = acquireLocation(
+			navigator.geolocation,
+			task.controller.signal,
+		)
+			.then((position) => {
+				if (generation.current !== attempt || gps.current !== task) return null;
+				task.position = position;
+				setGpsStatus("ready");
+				return position;
+			})
+			.catch((cause: unknown) => {
+				if (generation.current !== attempt || gps.current !== task) return null;
+				task.error = cause instanceof Error ? cause.message : "GPS_UNAVAILABLE";
+				setGpsStatus(task.error);
+				return null;
+			})
+			.finally(() => {
+				task.pending = false;
+			});
+		return task;
+	};
+	const processQr = async (
+		token: string,
+		attempt: number,
+		retryLocation = false,
+	) => {
 		if (busy.current || generation.current !== attempt) return;
 		busy.current = true;
 		stopCamera();
@@ -65,20 +114,22 @@ export default function CheckInScanner() {
 				showError("INVALID_QR");
 				return;
 			}
-			if (!navigator.geolocation) {
-				showError("GPS_UNAVAILABLE");
-				return;
-			}
+			qrToken.current = token;
 			setPhase("locating");
-			const position = await new Promise<GeolocationPosition>(
-				(resolve, reject) =>
-					navigator.geolocation.getCurrentPosition(resolve, reject, {
-						enableHighAccuracy: true,
-						maximumAge: 0,
-						timeout: 15000,
-					}),
-			);
+			let task = gps.current;
+			if (
+				retryLocation ||
+				!task ||
+				(!task.pending && (!task.position || !freshPosition(task.position)))
+			)
+				task = prepareLocation(attempt);
+			const position =
+				task.position && freshPosition(task.position)
+					? task.position
+					: await task.promise;
 			if (generation.current !== attempt) return;
+			if (!position || !freshPosition(position))
+				throw new Error(task.error ?? "GPS_TIMEOUT");
 			setPhase("submitting");
 			await mutation.mutateAsync({
 				qrToken: token,
@@ -89,6 +140,8 @@ export default function CheckInScanner() {
 				},
 			});
 			if (generation.current === attempt) {
+				qrToken.current = null;
+				gps.current = null;
 				setPhase("result");
 				toast.success("Kehadiran terverifikasi");
 			}
@@ -102,14 +155,8 @@ export default function CheckInScanner() {
 							? "INVALID_LOCATION"
 							: cause.message,
 				);
-			else if (typeof cause === "object" && cause && "code" in cause)
-				showError(
-					cause.code === 1
-						? "GPS_DENIED"
-						: cause.code === 3
-							? "GPS_TIMEOUT"
-							: "GPS_UNAVAILABLE",
-				);
+			else if (cause instanceof Error && cause.message.startsWith("GPS_"))
+				showError(cause.message);
 			else showError("SERVER_FAILED");
 		} finally {
 			if (generation.current === attempt) busy.current = false;
@@ -117,9 +164,9 @@ export default function CheckInScanner() {
 	};
 	const startCamera = async () => {
 		if (busy.current || startingCamera.current || mutation.isPending) return;
-		busy.current = true;
 		startingCamera.current = true;
 		const attempt = ++generation.current;
+		qrToken.current = null;
 		mutation.reset();
 		setError("");
 		try {
@@ -133,11 +180,15 @@ export default function CheckInScanner() {
 			}
 			scanner.current?.destroy();
 			setPhase("starting");
+			prepareLocation(attempt);
 			const { default: Scanner } = await import("qr-scanner");
 			if (generation.current !== attempt) return;
+			let decoded = false;
 			const activeScanner = new Scanner(
 				video.current,
 				(result) => {
+					if (decoded || busy.current || generation.current !== attempt) return;
+					decoded = true;
 					void processQr(result.data, attempt);
 				},
 				{
@@ -151,7 +202,7 @@ export default function CheckInScanner() {
 			await activeScanner.start();
 			if (generation.current !== attempt)
 				releaseCamera(activeScanner, null, true);
-			else setPhase("camera");
+			else if (!decoded) setPhase("camera");
 		} catch (cause) {
 			if (generation.current === attempt)
 				showError(
@@ -160,15 +211,21 @@ export default function CheckInScanner() {
 						: "CAMERA_UNAVAILABLE",
 				);
 		} finally {
-			startingCamera.current = false;
-			if (generation.current === attempt) busy.current = false;
+			if (generation.current === attempt) startingCamera.current = false;
 		}
 	};
 	const processing =
 		phase === "starting" || phase === "locating" || phase === "submitting";
+	const scannerOpen =
+		phase === "starting" || phase === "camera" || phase === "locating";
 	const stop = () => {
 		generation.current++;
 		busy.current = false;
+		startingCamera.current = false;
+		gps.current?.controller.abort();
+		gps.current = null;
+		qrToken.current = null;
+		setGpsStatus("");
 		stopCamera();
 		setPhase("idle");
 	};
@@ -231,13 +288,32 @@ export default function CheckInScanner() {
 						{phase === "camera"
 							? "Arahkan kamera ke QR Code kegiatan"
 							: phase === "locating"
-								? "Memeriksa lokasi GPS…"
+								? "Menunggu akurasi GPS maksimal 40 m (hingga 20 detik)…"
 								: phase === "submitting"
 									? "Menyimpan kehadiran…"
 									: phase === "starting"
 										? "Menyiapkan kamera…"
 										: "Buka kamera untuk scan kehadiran"}
 					</p>
+					{phase === "camera" && gpsStatus && (
+						<p role="status" className="text-center text-sm">
+							{gpsStatus === "locating"
+								? "Menunggu lokasi dengan akurasi maksimal 40 m (hingga 20 detik)…"
+								: gpsStatus === "ready"
+									? "Lokasi siap; akan diperiksa kembali setelah QR terbaca."
+									: scannerErrorMessage(gpsStatus)}
+						</p>
+					)}
+					{phase === "camera" && gpsStatus.startsWith("GPS_") && (
+						<Button
+							onClick={() => {
+								if (!gps.current?.pending && !busy.current)
+									prepareLocation(generation.current);
+							}}
+						>
+							Perbarui Lokasi
+						</Button>
+					)}
 				</div>
 				<div className="relative flex flex-col items-center gap-3 px-5 pt-4 pb-7">
 					<p className="text-center text-white/70 text-xs">
@@ -245,17 +321,17 @@ export default function CheckInScanner() {
 					</p>
 					<Button
 						size="icon"
-						disabled={processing}
-						onClick={phase === "camera" ? stop : startCamera}
-						aria-label={phase === "camera" ? "Hentikan kamera" : "Buka kamera"}
+						disabled={phase === "submitting"}
+						onClick={scannerOpen ? stop : startCamera}
+						aria-label={scannerOpen ? "Hentikan kamera" : "Buka kamera"}
 						aria-describedby="scan-privacy"
 						className="size-16 rounded-full border-4 border-slate-950 bg-red-500 text-white ring-2 ring-white/80 hover:bg-red-600"
 					>
 						<ScanLine className="size-7" />
 					</Button>
 					<span className="text-white/80 text-xs">
-						{phase === "camera"
-							? "Memindai otomatis · Ketuk untuk berhenti"
+						{scannerOpen
+							? "Ketuk untuk menghentikan kamera dan lokasi"
 							: "Ketuk untuk membuka kamera"}
 					</span>
 				</div>
@@ -264,14 +340,16 @@ export default function CheckInScanner() {
 				id="scan-privacy"
 				className="px-2 text-muted-foreground text-xs leading-relaxed"
 			>
-				Kamera dibuka setelah Anda menekan tombol. Lokasi dan akurasi GPS
-				diminta ketika QR diproses, digunakan untuk verifikasi, dan disimpan
-				bersama kehadiran. RESORA tidak melacak lokasi secara terus-menerus.
+				Kamera dan izin lokasi dimulai saat Anda menekan Buka Kamera. GPS
+				diambil hingga 20 detik per percobaan dan dihentikan setelah lokasi
+				valid atau scanner ditutup. Lokasi dikirim dan disimpan bersama
+				kehadiran hanya ketika check-in. RESORA tidak melacak lokasi secara
+				terus-menerus.
 			</p>
 			<ActionDialog
 				open={phase === "error" || phase === "result"}
 				onOpenChange={(open) => {
-					if (!open) setPhase("idle");
+					if (!open) stop();
 				}}
 				title={
 					phase === "error"
@@ -280,10 +358,24 @@ export default function CheckInScanner() {
 							? "Anda sudah melakukan check-in"
 							: "Check-in berhasil"
 				}
-				onRetry={phase === "error" ? startCamera : undefined}
+				onRetry={
+					phase === "error" && !qrToken.current ? startCamera : undefined
+				}
 			>
 				{phase === "error" ? (
-					<p role="alert">{error}</p>
+					<>
+						<p role="alert">{error}</p>
+						{qrToken.current && (
+							<Button
+								onClick={() => {
+									const token = qrToken.current;
+									if (token) void processQr(token, generation.current, true);
+								}}
+							>
+								Perbarui Lokasi
+							</Button>
+						)}
+					</>
 				) : (
 					mutation.data && (
 						<>

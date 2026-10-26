@@ -14,11 +14,11 @@ const messages: Record<string, string> = {
 		"Akun Anda tidak memenuhi syarat check-in SR. Hubungi pengelola akun.",
 	PASSWORD_CHANGE_REQUIRED:
 		"Ganti password terlebih dahulu untuk melakukan check-in.",
-	GPS_DENIED: `Izin lokasi ditolak. ${gpsHelp}`,
-	GPS_TIMEOUT: `Pengambilan lokasi terlalu lama. Coba lagi di tempat dengan sinyal lebih baik. ${gpsHelp}`,
+	GPS_DENIED: `Izin lokasi ditolak. Aktifkan lokasi untuk RESORA melalui pengaturan browser/perangkat, lalu coba Perbarui Lokasi atau buka kamera kembali. ${gpsHelp}`,
+	GPS_TIMEOUT: `Pengambilan lokasi terlalu lama. Pilih Perbarui Lokasi di tempat dengan sinyal lebih baik. ${gpsHelp}`,
 	GPS_UNAVAILABLE: `Lokasi tidak tersedia. ${gpsHelp}`,
 	INVALID_LOCATION: `Lokasi yang diterima tidak valid. ${gpsHelp}`,
-	GPS_INACCURATE: `Akurasi GPS belum mencukupi untuk check-in. Coba di area terbuka. ${gpsHelp}`,
+	GPS_INACCURATE: `Akurasi GPS belum mencapai 40 meter. Coba Perbarui Lokasi di area terbuka. ${gpsHelp}`,
 	OUTSIDE_GEOFENCE: `Lokasi Anda di luar radius event. ${gpsHelp}`,
 	HTTPS_REQUIRED:
 		"Kamera dan lokasi memerlukan koneksi aman. Gunakan alamat HTTPS RESORA.",
