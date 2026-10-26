@@ -26,11 +26,34 @@ const messages: Record<string, string> = {
 		"Izin kamera ditolak. Izinkan kamera melalui pengaturan browser, lalu coba lagi.",
 	CAMERA_UNAVAILABLE:
 		"Kamera tidak tersedia atau sedang digunakan aplikasi lain. Periksa kamera dan coba lagi.",
+	VIDEO_NOT_READY:
+		"Video belum siap dipindai. Jika preview tidak bergerak, pilih Mulai Ulang Pemindaian.",
+	STREAM_ENDED:
+		"Stream kamera berhenti. Pilih Mulai Ulang Pemindaian untuk mencoba kembali.",
+	DECODER_FAILED:
+		"Pemindai mengalami kendala teknis. Pilih Mulai Ulang Pemindaian.",
 	SESSION_EXPIRED:
 		"Sesi telah berakhir atau akun tidak lagi eligible. Silakan masuk kembali.",
 	SERVER_FAILED:
 		"Koneksi atau layanan tidak tersedia. Coba lagi; catatan kehadiran yang sudah tersimpan tidak akan ditimpa.",
 };
+
+export type ScannerDiagnostic =
+	| "STARTING"
+	| "RESTARTING"
+	| "START_FAILED"
+	| "VIDEO_READY"
+	| "VIDEO_NOT_READY"
+	| "STREAM_ENDED"
+	| "FRAMES_NO_QR"
+	| "DECODER_FAILED"
+	| "QR_CALLBACK"
+	| "QR_CALLBACK_IGNORED"
+	| "WAITING_GPS"
+	| "SUBMITTING"
+	| "BACKGROUND"
+	| "FOREGROUND"
+	| "STOPPED";
 
 export function scannerErrorMessage(code: string) {
 	return messages[code] ?? messages.SERVER_FAILED;
