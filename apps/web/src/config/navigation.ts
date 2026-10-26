@@ -18,10 +18,12 @@ export const ADMIN_NAVIGATION = [
 export function getSidebarGroups({
 	isSr,
 	canManageEvents,
+	canManageCommittee = false,
 	isSuperadmin,
 }: {
 	isSr: boolean;
 	canManageEvents: boolean;
+	canManageCommittee?: boolean;
 	isSuperadmin: boolean;
 }) {
 	return [
@@ -32,12 +34,23 @@ export function getSidebarGroups({
 				({ href }) => isSr || href === "/dashboard",
 			),
 		},
-		...(canManageEvents
+		...(canManageEvents || canManageCommittee
 			? [
 					{
 						id: "hco",
 						title: "Departemen · HCO",
-						items: HCO_NAVIGATION,
+						items: [
+							...(canManageEvents ? HCO_NAVIGATION : []),
+							...(canManageCommittee
+								? [
+										{
+											title: "Kelola kepanitiaan",
+											href: "/committees",
+											icon: "committees",
+										} as const,
+									]
+								: []),
+						],
 					},
 				]
 			: []),

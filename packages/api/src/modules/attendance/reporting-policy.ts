@@ -1,5 +1,10 @@
 import { TRPCError } from "@trpc/server";
 import { classifyTiming, type TimingClass } from "./check-in-policy";
+import {
+	eventAssignment,
+	type OrganizationSnapshot,
+	type ReportingContext,
+} from "./reporting-context";
 
 export function presence(hasRecord: boolean, eventStatus: string) {
 	return hasRecord
@@ -108,7 +113,7 @@ function csvCell(value: string | number | null, textIdentifier = false) {
 }
 
 export function attendanceCsv(
-	rows: {
+	rows: (OrganizationSnapshot & {
 		nim: string;
 		name: string;
 		departmentCode: string;
@@ -119,12 +124,14 @@ export function attendanceCsv(
 		timingClass: TimingClass | null;
 		lateMinutes: number | null;
 		source: "QR" | "MANUAL" | null;
-	}[],
+	})[],
+	event: ReportingContext = { organizationContext: "SR", committeeName: null },
 ) {
 	const lines = [
-		"NIM,Name,Department,Position,Building,Presence,Attendance At (WIB),Timing Classification,Late Minutes,Source",
+		"NIM,Name,Department,Position,Building,Presence,Attendance At (WIB),Timing Classification,Late Minutes,Source,Organization Context,Committee,Event Division,Event Position",
 	];
 	for (const row of rows) {
+		const assignment = eventAssignment(event, row);
 		const time = row.attendanceAt
 			? `${new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Jakarta", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).format(row.attendanceAt)} WIB`
 			: null;
@@ -141,6 +148,12 @@ export function attendanceCsv(
 					row.timingClass,
 					row.lateMinutes,
 					row.source,
+					event.organizationContext ?? "SR",
+					event.organizationContext === "COMMITTEE"
+						? (event.committeeName ?? null)
+						: null,
+					assignment.divisionLabel,
+					assignment.positionLabel,
 				].map((value) => csvCell(value)),
 			].join(","),
 		);

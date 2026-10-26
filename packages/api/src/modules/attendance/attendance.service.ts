@@ -15,12 +15,14 @@ import {
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import QRCode from "qrcode";
+import { getCommitteeRoster } from "../committee/committee.public";
 import {
 	canAccessPersonalSr,
 	canManageInternalEvent,
 	getActiveSrDirectory,
 	getLiveOperationalIdentity,
 	hasSuperadminPrivilege,
+	type SrCandidate,
 } from "../identity/identity.public";
 import {
 	type AdvancedEventEdit,
@@ -30,12 +32,72 @@ import {
 	type EventDraft,
 	type EventListInput,
 	type EventVisibilityInput,
+	eventDraftSchema,
 	eventListSchema,
 	eventVisibilitySchema,
 	type VisibilityAction,
 } from "./attendance.schema";
 import { signChallenge } from "./qr";
-import { resolveRoster } from "./roster";
+import { resolveCommitteeRoster, resolveRoster } from "./roster";
+
+async function lockedRosterEvent(
+	tx: DatabaseTransaction,
+	eventId: string,
+	identity: ActiveIdentity,
+	newCommitteeId?: string | null,
+	superadminOnly = false,
+) {
+	const [hint] = await tx
+		.select({ committeeId: events.committeeId })
+		.from(events)
+		.where(eq(events.id, eventId));
+	if (!hint) throw new TRPCError({ code: "NOT_FOUND" });
+	const committees = new Map<
+		string,
+		Awaited<ReturnType<typeof getCommitteeRoster>>
+	>();
+	for (const id of [
+		...new Set(
+			[hint.committeeId, newCommitteeId].filter((id): id is string =>
+				Boolean(id),
+			),
+		),
+	].sort())
+		committees.set(id, await getCommitteeRoster(tx, id, true));
+	const locked = await lockedEvent(tx, eventId, identity, superadminOnly);
+	if ((locked.event.committeeId ?? null) !== (hint.committeeId ?? null))
+		throw new TRPCError({
+			code: "CONFLICT",
+			message: "EVENT_ORGANIZATION_CHANGED",
+		});
+	return {
+		...locked,
+		committee: locked.event.committeeId
+			? committees.get(locked.event.committeeId)
+			: undefined,
+	};
+}
+
+function participantSnapshot(
+	eventId: string,
+	sr: SrCandidate & {
+		committeeDivision?: string | null;
+		committeePosition?: typeof eventParticipants.$inferInsert.committeePosition;
+	},
+) {
+	return {
+		eventId,
+		userId: sr.userId,
+		nim: sr.nim,
+		name: sr.name,
+		departmentCode: sr.departmentCode,
+		positionCode: sr.positionCode,
+		buildingCode: sr.buildingCode,
+		buildingName: sr.buildingName,
+		committeeDivision: sr.committeeDivision ?? null,
+		committeePosition: sr.committeePosition ?? null,
+	};
+}
 
 function operator(identity: ActiveIdentity | null) {
 	if (!canManageInternalEvent(identity))
@@ -131,12 +193,20 @@ export async function advancedEditEvent(
 		});
 	const data = parsed.data;
 	return db.transaction(async (tx) => {
-		const { event, session } = await lockedEvent(
-			tx,
-			data.eventId,
-			identity,
-			true,
-		);
+		const locked =
+			data.mode === "FULL"
+				? await lockedRosterEvent(
+						tx,
+						data.eventId,
+						identity,
+						data.draft.committeeId,
+						true,
+					)
+				: {
+						...(await lockedEvent(tx, data.eventId, identity, true)),
+						committee: undefined,
+					};
+		const { event, session, committee } = locked;
 		const mode = await advancedEditMode(tx, event, session);
 		if (!mode || (data.mode === "FULL" && mode !== "FULL"))
 			throw new TRPCError({
@@ -152,6 +222,15 @@ export async function advancedEditEvent(
 		const after: EventEditAuditState = { ...before };
 		if (data.mode === "FULL") {
 			const draft = data.draft;
+			if (
+				(draft.organizationContext ?? "SR") !==
+					(event.organizationContext ?? "SR") ||
+				(draft.committeeId ?? null) !== (event.committeeId ?? null)
+			)
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "EVENT_ORGANIZATION_FROZEN",
+				});
 			const rosterChanged = !sameRoster(
 				event.rosterCriteria,
 				draft.rosterCriteria,
@@ -172,23 +251,50 @@ export async function advancedEditEvent(
 			// Retained invitees keep their original personal/organization snapshot.
 			if (rosterChanged) {
 				const directory = await getActiveSrDirectory(tx, true);
-				const roster = resolveRoster(
-					directory.candidates,
-					draft.rosterCriteria,
-				);
+				const roster = committee
+					? resolveCommitteeRoster(
+							directory.candidates,
+							draft.rosterCriteria,
+							committee.members,
+							new Set(),
+						)
+					: resolveRoster(directory.candidates, draft.rosterCriteria);
 				const existing = await tx
 					.select({ userId: eventParticipants.userId })
 					.from(eventParticipants)
 					.where(eq(eventParticipants.eventId, event.id));
 				const oldIds = new Set(existing.map((sr) => sr.userId));
-				const newIds = new Set(roster.map((sr) => sr.userId));
+				// Published committee membership is a frozen base, never the current committee roster.
+				const newIds = new Set(
+					committee
+						? [...oldIds, ...roster.map((sr) => sr.userId)].filter(
+								(id) => !draft.rosterCriteria.exclude.includes(id),
+							)
+						: roster.map((sr) => sr.userId),
+				);
+				if (
+					committee &&
+					[
+						...draft.rosterCriteria.individuals,
+						...draft.rosterCriteria.include,
+					].some(
+						(id) =>
+							!oldIds.has(id) &&
+							!draft.rosterCriteria.exclude.includes(id) &&
+							!roster.some((sr) => sr.userId === id),
+					)
+				)
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: "EVENT_INVITEE_INELIGIBLE",
+					});
 				const added = roster.filter((sr) => !oldIds.has(sr.userId));
 				const removed = existing
 					.filter((sr) => !newIds.has(sr.userId))
 					.map((sr) => sr.userId);
 				before.participants = { count: existing.length };
 				after.participants = {
-					count: roster.length,
+					count: newIds.size,
 					addedUserIds: added.map((sr) => sr.userId),
 					removedUserIds: removed,
 				};
@@ -202,18 +308,9 @@ export async function advancedEditEvent(
 							),
 						);
 				if (added.length)
-					await tx.insert(eventParticipants).values(
-						added.map((sr) => ({
-							eventId: event.id,
-							userId: sr.userId,
-							nim: sr.nim,
-							name: sr.name,
-							departmentCode: sr.departmentCode,
-							positionCode: sr.positionCode,
-							buildingCode: sr.buildingCode,
-							buildingName: sr.buildingName,
-						})),
-					);
+					await tx
+						.insert(eventParticipants)
+						.values(added.map((sr) => participantSnapshot(event.id, sr)));
 			}
 			await tx
 				.update(events)
@@ -448,10 +545,13 @@ export async function deleteEventDraft(
 export async function createEvent(
 	db: Database,
 	identity: ActiveIdentity,
-	draft: EventDraft,
+	input: EventDraft,
 ) {
 	operator(identity);
+	const draft = eventDraftSchema.parse(input);
 	return db.transaction(async (tx) => {
+		if (draft.committeeId)
+			await getCommitteeRoster(tx, draft.committeeId, true);
 		operator(await getLiveOperationalIdentity(tx, identity.userId));
 		const [event] = await tx
 			.insert(events)
@@ -462,6 +562,8 @@ export async function createEvent(
 				startsAt: new Date(draft.startsAt),
 				endsAt: new Date(draft.endsAt),
 				rosterCriteria: draft.rosterCriteria,
+				organizationContext: draft.organizationContext ?? "SR",
+				committeeId: draft.committeeId ?? null,
 			})
 			.returning();
 		if (!event) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
@@ -475,13 +577,19 @@ export async function editDraft(
 	db: Database,
 	identity: ActiveIdentity,
 	eventId: string,
-	draft: EventDraft,
+	input: EventDraft,
 ) {
 	operator(identity);
+	const draft = eventDraftSchema.parse(input);
 	return db.transaction(async (tx) => {
-		await lockedEvent(tx, eventId, identity).then(({ event }) =>
-			requireState(event.status, "DRAFT"),
+		const { event, session } = await lockedRosterEvent(
+			tx,
+			eventId,
+			identity,
+			draft.committeeId,
 		);
+		requireState(event.status, "DRAFT");
+		requireState(session.status, "INACTIVE");
 		await tx
 			.update(events)
 			.set({
@@ -490,6 +598,9 @@ export async function editDraft(
 				startsAt: new Date(draft.startsAt),
 				endsAt: new Date(draft.endsAt),
 				rosterCriteria: draft.rosterCriteria,
+				organizationContext: draft.organizationContext ?? "SR",
+				committeeId: draft.committeeId ?? null,
+				snapshotCommitteeName: null,
 			})
 			.where(eq(events.id, eventId));
 		await tx
@@ -600,6 +711,11 @@ export async function getEvent(
 		: null;
 	return {
 		canManage,
+		committeeName:
+			row.event.snapshotCommitteeName ??
+			(canManage && row.event.committeeId && row.event.status === "DRAFT"
+				? (await getCommitteeRoster(db, row.event.committeeId)).name
+				: null),
 		administration: hasSuperadminPrivilege(identity)
 			? {
 					visibilityActions: visibilityActions(row.event, row.session),
@@ -631,14 +747,27 @@ export async function previewRoster(
 	eventId: string,
 ) {
 	operator(identity);
-	const [event] = await db.select().from(events).where(eq(events.id, eventId));
-	if (!event) throw new TRPCError({ code: "NOT_FOUND" });
-	requireState(event.status, "DRAFT");
-	const directory = await getActiveSrDirectory(db);
-	return {
-		participants: resolveRoster(directory.candidates, event.rosterCriteria),
-		invalidAssignmentCount: directory.invalidAssignmentCount,
-	};
+	return db.transaction(async (tx) => {
+		const { event, committee } = await lockedRosterEvent(tx, eventId, identity);
+		requireState(event.status, "DRAFT");
+		const directory = await getActiveSrDirectory(tx);
+		return {
+			participants: committee
+				? resolveCommitteeRoster(
+						directory.candidates,
+						event.rosterCriteria,
+						committee.members,
+					)
+				: resolveRoster(directory.candidates, event.rosterCriteria).map(
+						(sr) => ({
+							...sr,
+							committeeDivision: null,
+							committeePosition: null,
+						}),
+					),
+			invalidAssignmentCount: directory.invalidAssignmentCount,
+		};
+	});
 }
 export async function publishEvent(
 	db: Database,
@@ -647,27 +776,32 @@ export async function publishEvent(
 ) {
 	operator(identity);
 	return db.transaction(async (tx) => {
-		const { event, session } = await lockedEvent(tx, eventId, identity);
+		const { event, session, committee } = await lockedRosterEvent(
+			tx,
+			eventId,
+			identity,
+		);
 		requireState(event.status, "DRAFT");
 		requireState(session.status, "INACTIVE");
 		const directory = await getActiveSrDirectory(tx, true);
-		const roster = resolveRoster(directory.candidates, event.rosterCriteria);
+		const roster = committee
+			? resolveCommitteeRoster(
+					directory.candidates,
+					event.rosterCriteria,
+					committee.members,
+				)
+			: resolveRoster(directory.candidates, event.rosterCriteria);
 		if (roster.length)
-			await tx.insert(eventParticipants).values(
-				roster.map((sr) => ({
-					eventId,
-					userId: sr.userId,
-					nim: sr.nim,
-					name: sr.name,
-					departmentCode: sr.departmentCode,
-					positionCode: sr.positionCode,
-					buildingCode: sr.buildingCode,
-					buildingName: sr.buildingName,
-				})),
-			);
+			await tx
+				.insert(eventParticipants)
+				.values(roster.map((sr) => participantSnapshot(eventId, sr)));
 		await tx
 			.update(events)
-			.set({ status: "PUBLISHED", publishedAt: new Date() })
+			.set({
+				status: "PUBLISHED",
+				publishedAt: new Date(),
+				snapshotCommitteeName: committee?.name ?? null,
+			})
 			.where(eq(events.id, eventId));
 		return {
 			participantCount: roster.length,

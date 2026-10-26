@@ -11,30 +11,34 @@ import { ModeToggle } from "./mode-toggle";
 export function AppShell({
 	name,
 	canManageEvents,
+	canManageCommittee,
 	isSuperadmin,
 	isSr,
 	children,
 }: {
 	name: string;
 	canManageEvents: boolean;
+	canManageCommittee?: boolean;
 	isSuperadmin: boolean;
 	isSr: boolean;
 	children: ReactNode;
 }) {
 	const pathname = usePathname();
-	const sectionTitle = pathname.startsWith("/admin/users")
-		? "Manajemen akun"
-		: pathname.startsWith("/admin/periods")
-			? "Periode menjabat"
-			: pathname.startsWith("/events")
-				? "Kegiatan internal"
-				: pathname.startsWith("/attendance")
-					? "Riwayat kehadiran"
-					: pathname === "/scan"
-						? "Scan kehadiran"
-						: pathname === "/profile"
-							? "Profil saya"
-							: "Dashboard";
+	const sectionTitle = pathname.startsWith("/committees")
+		? "Kelola kepanitiaan"
+		: pathname.startsWith("/admin/users")
+			? "Manajemen akun"
+			: pathname.startsWith("/admin/periods")
+				? "Periode menjabat"
+				: pathname.startsWith("/events")
+					? "Kegiatan internal"
+					: pathname.startsWith("/attendance")
+						? "Riwayat kehadiran"
+						: pathname === "/scan"
+							? "Scan kehadiran"
+							: pathname === "/profile"
+								? "Profil saya"
+								: "Dashboard";
 	return (
 		<TooltipProvider delay={150}>
 			<SidebarProvider className="resora-workspace min-h-dvh">
@@ -47,6 +51,7 @@ export function AppShell({
 				<AppSidebar
 					name={name}
 					canManageEvents={canManageEvents}
+					canManageCommittee={canManageCommittee}
 					isSuperadmin={isSuperadmin}
 					isSr={isSr}
 				/>
