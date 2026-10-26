@@ -14,6 +14,7 @@ import {
 import Link from "next/link";
 import type QrScanner from "qr-scanner";
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { attendanceQueryKeys, queryClient, trpc } from "@/utils/trpc";
@@ -32,6 +33,7 @@ export default function CheckInScanner() {
 	});
 	const video = useRef<HTMLVideoElement>(null);
 	const scanner = useRef<QrScanner | null>(null);
+	const [cameraAttempt, setCameraAttempt] = useState(0);
 	const busy = useRef(false);
 	const startingCamera = useRef(false);
 	const generation = useRef(0);
@@ -178,7 +180,11 @@ export default function CheckInScanner() {
 				showError("CAMERA_UNAVAILABLE");
 				return;
 			}
-			scanner.current?.destroy();
+			releaseCamera(scanner.current, null, true);
+			scanner.current = null;
+			// qr-scanner 1.4.2 has delayed stop() cleanup on its $video. Give each
+			// instance its own DOM node before construction, including after cancel.
+			flushSync(() => setCameraAttempt(attempt));
 			setPhase("starting");
 			prepareLocation(attempt);
 			const { default: Scanner } = await import("qr-scanner");
@@ -233,6 +239,7 @@ export default function CheckInScanner() {
 		<section className="mx-auto max-w-lg space-y-4">
 			<div className="relative isolate flex min-h-[min(72dvh,44rem)] flex-col overflow-hidden rounded-3xl bg-slate-950 text-white shadow-xl">
 				<video
+					key={cameraAttempt}
 					ref={video}
 					muted
 					playsInline

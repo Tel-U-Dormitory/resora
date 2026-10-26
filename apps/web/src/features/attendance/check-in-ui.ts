@@ -43,7 +43,8 @@ export function releaseCamera(
 	destroy = false,
 ) {
 	// Capture tracks before the library detaches srcObject or React clears the video ref.
-	const stream = video?.srcObject ?? scanner?.$video.srcObject;
+	// A stale instance may only release its own video, never a replacement ref.
+	const stream = scanner ? scanner.$video.srcObject : video?.srcObject;
 	if (destroy) scanner?.destroy();
 	else scanner?.stop();
 	if (stream && "getTracks" in stream)

@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { MAX_GPS_ACCURACY_M as backendAccuracy } from "@resora/api/modules/attendance/check-in-policy";
 import { TRPCClientError } from "@trpc/client";
+import QrScanner from "qr-scanner";
 import * as jsxRuntime from "react/jsx-runtime";
 import ts from "typescript";
 import {
@@ -208,7 +209,46 @@ test("camera tracks release on stop and teardown even if library detaches video 
 	releaseCamera(null, null, true);
 });
 
-type Element = { type: unknown; props: Record<string, unknown> };
+test("releaseCamera ignores a replacement video ref and releases only the owning scanner's stream", () => {
+	let ownedStops = 0;
+	let replacementStops = 0;
+	const owned = {
+		srcObject: {
+			getTracks: () => [
+				{
+					stop: () => {
+						ownedStops++;
+					},
+				},
+			],
+		},
+	} as unknown as HTMLVideoElement;
+	const replacement = {
+		srcObject: {
+			getTracks: () => [
+				{
+					stop: () => {
+						replacementStops++;
+					},
+				},
+			],
+		},
+	} as unknown as HTMLVideoElement;
+	const scanner: CameraHandle = {
+		$video: owned,
+		stop: () => {},
+		destroy: () => {},
+	};
+	releaseCamera(scanner, replacement, true);
+	expect(ownedStops).toBe(1);
+	expect(replacementStops).toBe(0);
+});
+
+type Element = {
+	type: unknown;
+	key?: string | null;
+	props: Record<string, unknown>;
+};
 function elements(node: unknown): Element[] {
 	if (Array.isArray(node)) return node.flatMap(elements);
 	if (!node || typeof node !== "object" || !("props" in node)) return [];
@@ -218,7 +258,7 @@ function elements(node: unknown): Element[] {
 
 // Execute the actual scanner component with offline hooks, media and transport
 // doubles, following the existing Broadcast/Committee JSX harness convention.
-function scannerFixture() {
+function scannerFixture(realCameraLifecycle = false) {
 	const gps = gpsFixture();
 	const hooks: unknown[] = [];
 	let cursor = 0;
@@ -229,6 +269,8 @@ function scannerFixture() {
 	let failure: unknown;
 	let holdRequest: Promise<void> | undefined;
 	let holdCamera: Promise<void> | undefined;
+	const cameras: Scanner[] = [];
+	const videos = new Map<string | null | undefined, HTMLVideoElement>();
 	const mutation = {
 		isPending: false,
 		data: undefined as unknown,
@@ -249,21 +291,54 @@ function scannerFixture() {
 	};
 	class Scanner {
 		$video: HTMLVideoElement;
+		_active = false;
+		_paused = false;
+		_destroyed = false;
+		_flashOn = false;
+		_qrEnginePromise = Promise.resolve({});
+		stream?: MediaStream;
 		constructor(
 			video: HTMLVideoElement,
 			decode: (result: { data: string }) => void,
 		) {
 			this.$video = video;
 			decoders.push(decode);
+			cameras.push(this);
 		}
 		start() {
+			if (realCameraLifecycle)
+				return QrScanner.prototype.start.call(this as unknown as QrScanner);
 			return holdCamera ?? Promise.resolve();
 		}
-		stop() {}
-		destroy() {}
+		async _getCameraStream() {
+			const pending = holdCamera;
+			if (pending) await pending;
+			return { stream: this.stream, facingMode: "environment" };
+		}
+		_setVideoMirror() {}
+		pause(immediate = false) {
+			return QrScanner.prototype.pause.call(
+				this as unknown as QrScanner,
+				immediate,
+			);
+		}
+		stop() {
+			if (realCameraLifecycle)
+				QrScanner.prototype.stop.call(this as unknown as QrScanner);
+		}
+		destroy() {
+			if (realCameraLifecycle)
+				QrScanner.prototype.destroy.call(this as unknown as QrScanner);
+		}
 	}
 	const mocks: Record<string, unknown> = {
 		"react/jsx-runtime": jsxRuntime,
+		"react-dom": {
+			flushSync: (run: () => void) => {
+				run();
+				render();
+			},
+		},
 		react: {
 			useRef: (initial: unknown) => {
 				const index = cursor++;
@@ -339,7 +414,14 @@ function scannerFixture() {
 		cursor = 0;
 		const tree = elements(exported.default());
 		const video = tree.find((item) => item.type === "video");
-		(video?.props.ref as { current: unknown }).current = { srcObject: null };
+		if (!videos.has(video?.key))
+			videos.set(video?.key, {
+				srcObject: null,
+				play: async () => {},
+				pause: () => {},
+				removeEventListener: () => {},
+			} as unknown as HTMLVideoElement);
+		(video?.props.ref as { current: unknown }).current = videos.get(video?.key);
 		return tree;
 	};
 	const button = (label: string) => {
@@ -358,6 +440,7 @@ function scannerFixture() {
 		render,
 		button,
 		decoders,
+		cameras,
 		setFailure: (value: unknown) => {
 			failure = value;
 		},
@@ -377,6 +460,104 @@ async function flush() {
 }
 const token =
 	"resora:v1:synthetic-session:synthetic-challenge:synthetic-signature";
+
+test("pending startup A -> stop -> startup B: late A and library delayed cleanup cannot stop B's owned stream", async () => {
+	const originalSet = globalThis.setTimeout;
+	const originalClear = globalThis.clearTimeout;
+	const globals = ["window", "document", "MediaStream"].map(
+		(key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const,
+	);
+	const timers: { run: () => void; ms: number }[] = [];
+	class Stream {
+		stops = 0;
+		tracks = [
+			{
+				stop: () => {
+					this.stops++;
+				},
+			},
+		];
+		getTracks() {
+			return [...this.tracks];
+		}
+		removeTrack(track: (typeof this.tracks)[number]) {
+			this.tracks = this.tracks.filter((item) => item !== track);
+		}
+	}
+	const f = scannerFixture(true);
+	try {
+		Object.defineProperty(globalThis, "window", {
+			configurable: true,
+			value: {
+				location: { protocol: "https:" },
+				removeEventListener: () => {},
+			},
+		});
+		Object.defineProperty(globalThis, "document", {
+			configurable: true,
+			value: { hidden: false, removeEventListener: () => {} },
+		});
+		Object.defineProperty(globalThis, "MediaStream", {
+			configurable: true,
+			value: Stream,
+		});
+		globalThis.setTimeout = ((run: () => void, ms: number) => {
+			timers.push({ run, ms });
+			return timers.length;
+		}) as unknown as typeof setTimeout;
+		globalThis.clearTimeout = (() => {}) as typeof clearTimeout;
+		let releaseA = () => {};
+		f.holdCamera(
+			new Promise<void>((resolve) => {
+				releaseA = resolve;
+			}),
+		);
+		const openingA = f.button("Buka kamera")();
+		await flush();
+		const a = f.cameras[0];
+		const streamA = new Stream();
+		a.stream = streamA as unknown as MediaStream;
+		f.button("Hentikan kamera")();
+		let releaseB = () => {};
+		f.holdCamera(
+			new Promise<void>((resolve) => {
+				releaseB = resolve;
+			}),
+		);
+		const openingB = f.button("Buka kamera")();
+		await flush();
+		const b = f.cameras[1];
+		const streamB = new Stream();
+		b.stream = streamB as unknown as MediaStream;
+		releaseB();
+		await openingB;
+		releaseA();
+		await openingA;
+		for (const timer of timers.filter((timer) => timer.ms === 300)) timer.run();
+		await flush();
+		expect(streamB.stops).toBe(0);
+		expect(a.$video).not.toBe(b.$video);
+		expect(streamA.stops).toBeGreaterThan(0);
+		expect(b.$video.srcObject).toBe(streamB as unknown as MediaStream);
+		expect(b._active).toBe(true);
+		expect(b._destroyed).toBe(false);
+		expect(f.requests).toHaveLength(0);
+		f.watches[1].success(position());
+		await flush();
+		f.decoders[1]({ data: token });
+		await flush();
+		expect(f.requests).toHaveLength(1);
+	} finally {
+		f.unmount();
+		await flush();
+		globalThis.setTimeout = originalSet;
+		globalThis.clearTimeout = originalClear;
+		for (const [key, descriptor] of globals) {
+			if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+			else Reflect.deleteProperty(globalThis, key);
+		}
+	}
+});
 
 test("Buka Kamera starts GPS immediately without blocking decoding; a pending location allows only one submission", async () => {
 	const f = scannerFixture();
