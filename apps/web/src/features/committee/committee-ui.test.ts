@@ -193,6 +193,18 @@ test("actual SSR guard rejects missing/gated/unauthorized sessions and permits m
 			"/dashboard",
 		],
 		[{ requiresPasswordChange: false, canManageCommittee: true }, null],
+		...(["KADEP", "SEKDEP", "ANGGOTA"] as const).map(
+			(positionCode) =>
+				[
+					{
+						departmentCode: "HCO",
+						positionCode,
+						requiresPasswordChange: false,
+						canManageCommittee: true,
+					},
+					null,
+				] as const,
+		),
 	] as const) {
 		const exports: {
 			default?: (props: { children: string }) => Promise<unknown>;

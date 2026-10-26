@@ -161,7 +161,7 @@ async function expectFailure(
 						);
 					else {
 						await tx.execute(
-							sql`INSERT INTO sr_profiles(user_id,department_code,position_code,building_id) SELECT ${id},${["kadep", "sekdep", "hco", "invalid"].includes(key) ? "HCO" : "RND"},${key === "invalid" ? "KETUM" : ["kadep", "rnd"].includes(key) ? "KADEP" : key === "sekdep" ? "SEKDEP" : "ANGGOTA"},id FROM buildings WHERE code='A'`,
+							sql`INSERT INTO sr_profiles(user_id,department_code,position_code,building_id) SELECT ${id},${["kadep", "sekdep", "hco", "invalid", "inactive", "expired", "future", "unassigned"].includes(key) ? "HCO" : "RND"},${key === "invalid" ? "KETUM" : ["kadep", "rnd"].includes(key) ? "KADEP" : key === "sekdep" ? "SEKDEP" : "ANGGOTA"},id FROM buildings WHERE code='A'`,
 						);
 						if (key !== "unassigned") {
 							const selected = periods.rows.find(
@@ -195,8 +195,8 @@ async function expectFailure(
 			await db?.$client.end();
 		});
 
-		test("SUPERADMIN and structural KADEP HCO create/update with backend creator and trimmed fields", async () => {
-			for (const key of ["admin", "kadep"]) {
+		test("SUPERADMIN and all eligible structural HCO create/update with backend creator and trimmed fields", async () => {
+			for (const key of ["admin", "kadep", "sekdep", "hco"]) {
 				const created = await caller(key).committee.create({
 					name: `  Synthetic ${key}  `,
 					description: " Test ",
@@ -229,10 +229,10 @@ async function expectFailure(
 				);
 			}
 		});
-		test("event HCO operators read but cannot write; other roles cannot read/write", async () => {
-			const input = await fixture();
-			await caller().committee.addMember({ ...input, positionCode: "KADEP" });
+		test("SEKDEP and ANGGOTA HCO manage another creator's committee, divisions and members; non-HCO stay denied", async () => {
 			for (const key of ["hco", "sekdep"]) {
+				const input = await fixture(); // Created by SUPERADMIN, not this operator.
+				const api = caller(key).committee;
 				expect(
 					(
 						await caller(key).committee.detail({
@@ -241,17 +241,76 @@ async function expectFailure(
 					).id,
 				).toBe(input.committeeId);
 				expect((await caller(key).committee.list({})).total).toBeGreaterThan(0);
-				await expectFailure(caller(key).committee.create({ name: "Denied" }), {
-					code: "FORBIDDEN",
+				expect(
+					(
+						await api.candidates({
+							committeeId: input.committeeId,
+							search: "Synthetic",
+						})
+					).some((row) => row.userId === input.userId),
+				).toBe(true);
+				await api.update({
+					committeeId: input.committeeId,
+					name: `Managed by ${key}`,
 				});
+				const division = await api.createDivision({
+					committeeId: input.committeeId,
+					name: "Konsumsi",
+				});
+				if (!division) throw Error("Missing division");
+				await api.updateDivision({
+					committeeId: input.committeeId,
+					divisionId: input.divisionId,
+					name: "Acara baru",
+				});
+				await api.addMember(input);
+				await expectFailure(api.addMember(input), { code: "CONFLICT" });
+				await api.updateMember({
+					...input,
+					divisionId: division.id,
+					positionCode: "PIC1",
+				});
+				const detail = await api.detail({ committeeId: input.committeeId });
+				expect(detail.name).toBe(`Managed by ${key}`);
+				expect(
+					detail.divisions.find((row) => row.id === input.divisionId)?.name,
+				).toBe("Acara baru");
+				expect(detail.members).toMatchObject([
+					{
+						userId: input.userId,
+						divisionId: division.id,
+						positionCode: "PIC1",
+					},
+				]);
 				await expectFailure(
-					caller(key).committee.candidates({
+					api.deleteDivision({
 						committeeId: input.committeeId,
-						search: "Synthetic",
+						divisionId: division.id,
 					}),
-					{ code: "FORBIDDEN" },
+					{ code: "CONFLICT" },
 				);
+				await expectFailure(api.delete({ committeeId: input.committeeId }), {
+					code: "CONFLICT",
+				});
+				await api.removeMember({
+					committeeId: input.committeeId,
+					userId: input.userId,
+				});
+				await api.deleteDivision({
+					committeeId: input.committeeId,
+					divisionId: input.divisionId,
+				});
+				await api.deleteDivision({
+					committeeId: input.committeeId,
+					divisionId: division.id,
+				});
+				await api.delete({ committeeId: input.committeeId });
+				await expectFailure(api.detail({ committeeId: input.committeeId }), {
+					code: "NOT_FOUND",
+				});
 			}
+			const input = await fixture();
+			await caller().committee.addMember({ ...input, positionCode: "KADEP" });
 			for (const key of ["rnd", "sr"]) {
 				await expectFailure(
 					caller(key).committee.detail({ committeeId: input.committeeId }),
@@ -262,7 +321,31 @@ async function expectFailure(
 				});
 			}
 		});
-		test("inactive, expired, future and unassigned operators are rejected by protected routes", async () => {
+		test("concurrent HCO member additions retain one membership without partial writes", async () => {
+			const input = await fixture();
+			const outcomes = await Promise.allSettled([
+				caller("hco").committee.addMember(input),
+				caller("sekdep").committee.addMember(input),
+			]);
+			expect(
+				outcomes.filter((result) => result.status === "fulfilled"),
+			).toHaveLength(1);
+			const rejected = outcomes.find((result) => result.status === "rejected");
+			if (rejected?.status !== "rejected")
+				throw Error("Expected duplicate rejection");
+			expect(rejected.reason).toMatchObject({
+				code: "CONFLICT",
+				message: "COMMITTEE_DUPLICATE",
+			});
+			expect(
+				(
+					await caller("hco").committee.detail({
+						committeeId: input.committeeId,
+					})
+				).members,
+			).toHaveLength(1);
+		});
+		test("inactive, expired, future and unassigned HCO operators are rejected by protected routes", async () => {
 			for (const key of ["inactive", "expired", "future", "unassigned"])
 				await expectFailure(caller(key).committee.list({}), {
 					code: "UNAUTHORIZED",
@@ -306,25 +389,27 @@ async function expectFailure(
 					);
 				}
 			}
-			const kadep = await getActiveIdentity(db, ids.kadep ?? "");
-			if (!kadep) throw Error("Missing KADEP identity");
-			await db.$client.query(
-				"UPDATE sr_profiles SET position_code='ANGGOTA' WHERE user_id=$1",
-				[ids.kadep],
-			);
-			try {
-				await expectFailure(
-					createCommittee(db, kadep, {
-						name: "Stale structural permission",
-						description: "",
-					}),
-					{ code: "FORBIDDEN" },
-				);
-			} finally {
+			for (const key of ["kadep", "sekdep", "hco"]) {
+				const operator = await getActiveIdentity(db, ids[key] ?? "");
+				if (!operator) throw Error("Missing HCO identity");
 				await db.$client.query(
-					"UPDATE sr_profiles SET position_code='KADEP' WHERE user_id=$1",
-					[ids.kadep],
+					"UPDATE sr_profiles SET department_code='RND' WHERE user_id=$1",
+					[ids[key]],
 				);
+				try {
+					await expectFailure(
+						createCommittee(db, operator, {
+							name: "Stale structural permission",
+							description: "",
+						}),
+						{ code: "FORBIDDEN" },
+					);
+				} finally {
+					await db.$client.query(
+						"UPDATE sr_profiles SET department_code='HCO' WHERE user_id=$1",
+						[ids[key]],
+					);
+				}
 			}
 		});
 		test("division names are trimmed and case-insensitively unique within their owner", async () => {
@@ -547,17 +632,26 @@ async function expectFailure(
 			expect(after.updatedAt).toEqual(before.updatedAt);
 		});
 		test("session capability is backend-derived without expanding event permissions", async () => {
-			for (const key of ["admin", "kadep"])
+			for (const key of ["admin", "kadep", "hco", "sekdep"])
 				expect((await caller(key).identity.session())?.canManageCommittee).toBe(
 					true,
 				);
-			for (const key of ["hco", "sekdep", "rnd", "sr"])
+			for (const key of ["rnd", "sr"])
 				expect((await caller(key).identity.session())?.canManageCommittee).toBe(
 					false,
 				);
 			expect(
 				(await caller("hco").identity.session())?.canManageInternalEvents,
 			).toBe(true);
+			for (const key of ["hco", "sekdep"])
+				expect(await caller(key).identity.session()).toMatchObject({
+					canManageCommittee: true,
+					canManageInternalEvents: true,
+					canManageInternalAttendanceManually: false,
+					canManageBroadcast: false,
+					canOperateGeneralActivity: false,
+					isSuperadmin: false,
+				});
 		});
 
 		const eventInput = (committeeId?: string) => ({
@@ -869,7 +963,7 @@ async function expectFailure(
 				await appRouter
 					.createCaller({
 						db: tx as unknown as Database,
-						session: { user: { id: ids.admin } } as never,
+						session: { user: { id: ids.sekdep } } as never,
 					})
 					.committee.updateMember({ ...f, positionCode: "PJ" });
 				ready();

@@ -70,6 +70,7 @@ test("applicable catalog follows structural department independently of operatio
 test("intrinsic/explicit/effective permissions retain structural role isolation and password gates", () => {
 	for (const positionCode of ["KADEP", "SEKDEP", "ANGGOTA"]) {
 		const sr = { ...identity, positionCode };
+		expect(canManageCommittee(sr)).toBe(true);
 		expect(manualPermissionState(sr, false).effective).toBe(
 			positionCode === "KADEP",
 		);
@@ -87,7 +88,11 @@ test("intrinsic/explicit/effective permissions retain structural role isolation 
 		{ ...identity, isSuperadmin: true, mustChangePassword: true },
 	])
 		expect(manualPermissionState(sr, true).effective).toBe(false);
-	const sr = { ...identity, committeePositionCode: "KADEP" };
+	const sr = {
+		...identity,
+		departmentCode: "RND",
+		committeePositionCode: "KADEP",
+	};
 	expect(hasSuperadminPrivilege(sr)).toBe(false);
 	expect(canManageCommittee(sr)).toBe(false);
 	expect(canManageBroadcast(sr)).toBe(false);

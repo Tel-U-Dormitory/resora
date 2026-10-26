@@ -250,7 +250,7 @@ const target = process.env.RESORA_PERMISSION_TEST_DB_URL;
 			});
 			expect(after).toMatchObject({
 				canManageInternalEvents: true,
-				canManageCommittee: false,
+				canManageCommittee: true,
 				canManageBroadcast: false,
 				isSuperadmin: false,
 			});

@@ -82,8 +82,6 @@ test("membership uses exactly Phase 1 position codes and rejects extra permissio
 });
 
 for (const [label, patch] of [
-	["SEKDEP HCO", { positionCode: "SEKDEP" }],
-	["ANGGOTA HCO", { positionCode: "ANGGOTA" }],
 	["KADEP RND", { departmentCode: "RND" }],
 	["inactive", { isActive: false }],
 	["invalid assignment", { positionCode: "KETUM" }],
@@ -145,9 +143,14 @@ test("stale operator identity is rechecked inside the transaction before create"
 			return run(tx);
 		},
 	} as unknown as Database;
-	await expect(
-		createCommittee(db, identity, { name: "Test", description: "" }),
-	).rejects.toMatchObject({ code: "FORBIDDEN" });
-	expect(transactions).toBe(1);
+	for (const positionCode of ["KADEP", "SEKDEP", "ANGGOTA"])
+		await expect(
+			createCommittee(
+				db,
+				{ ...identity, positionCode },
+				{ name: "Test", description: "" },
+			),
+		).rejects.toMatchObject({ code: "FORBIDDEN" });
+	expect(transactions).toBe(3);
 	expect(inserts).toBe(0);
 });
