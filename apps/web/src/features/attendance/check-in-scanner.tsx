@@ -83,19 +83,22 @@ export default function CheckInScanner() {
 	const inspectVideo = (element: HTMLVideoElement, attempt: number) => {
 		if (attempt !== generation.current || busy.current || document.hidden)
 			return;
+		const tracks =
+			element.srcObject && "getTracks" in element.srcObject
+				? element.srcObject.getTracks()
+				: [];
 		const ready =
-			element.srcObject &&
+			tracks.some((track) => track.readyState === "live") &&
 			element.readyState > 1 &&
 			element.videoWidth > 0 &&
 			element.videoHeight > 0 &&
 			!element.paused &&
 			!element.ended;
 		report(ready ? "VIDEO_READY" : "VIDEO_NOT_READY", attempt);
-		if (!ready) setCameraIssue("VIDEO_NOT_READY");
-		else setCameraIssue((issue) => (issue === "VIDEO_NOT_READY" ? "" : issue));
-		if (ready && element.srcObject && "getTracks" in element.srcObject) {
+		if (!ready) setCameraIssue((issue) => issue || "VIDEO_NOT_READY");
+		else setCameraIssue((issue) => (issue === "DECODER_FAILED" ? issue : ""));
+		if (ready) {
 			cameraListeners.current?.();
-			const tracks = element.srcObject.getTracks();
 			const onEnded = () => {
 				if (generation.current !== attempt || busy.current || document.hidden)
 					return;
@@ -286,6 +289,9 @@ export default function CheckInScanner() {
 								cause.message === Scanner.NO_QR_CODE_FOUND)
 						) {
 							report("FRAMES_NO_QR", attempt);
+							setCameraIssue((issue) =>
+								issue === "DECODER_FAILED" ? "" : issue,
+							);
 							return;
 						}
 						report("DECODER_FAILED", attempt);

@@ -76,6 +76,7 @@ test("GPS precheck matches backend and rejects stale, future, malformed or inacc
 	for (const accuracy of [0, -1, 40.1, Number.NaN, Number.POSITIVE_INFINITY])
 		expect(freshPosition(position(accuracy))).toBe(false);
 	const now = Date.now();
+	expect(freshPosition(position(10, now - GPS_FRESH_MS), now)).toBe(true);
 	expect(freshPosition(position(10, now - GPS_FRESH_MS - 1), now)).toBe(false);
 	expect(freshPosition(position(10, now + 1), now)).toBe(false);
 	expect(
@@ -323,7 +324,16 @@ function scannerFixture(realCameraLifecycle = false) {
 		start() {
 			if (realCameraLifecycle)
 				return QrScanner.prototype.start.call(this as unknown as QrScanner);
-			this.$video.srcObject = { getTracks: () => [] } as unknown as MediaStream;
+			this.$video.srcObject = {
+				getTracks: () => [
+					{
+						readyState: "live",
+						stop: () => {},
+						addEventListener: () => {},
+						removeEventListener: () => {},
+					},
+				],
+			} as unknown as MediaStream;
 			return holdCamera ?? Promise.resolve();
 		}
 		async _getCameraStream() {
@@ -622,6 +632,143 @@ test("restart pending state prevents repeated startup and reports sanitized rest
 		).toBe(true);
 		expect(JSON.stringify(f.logs)).not.toContain("private-camera");
 		expect(f.cameras[1].destroys).toBeGreaterThan(0);
+		expect(f.requests).toHaveLength(0);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("fresh prepared GPS submits once without reacquisition or a misleading waiting-GPS diagnostic", async () => {
+	const f = scannerFixture();
+	try {
+		await f.button("Buka kamera")();
+		f.watches[0].success(position());
+		await flush();
+		f.decoders[0]({ data: token });
+		f.decoders[0]({ data: token });
+		await flush();
+		expect(f.requests).toHaveLength(1);
+		expect(f.watches).toHaveLength(1);
+		expect(
+			f.logs.some((entry) => JSON.stringify(entry).includes("WAITING_GPS")),
+		).toBe(false);
+		expect(f.successes).toHaveLength(1);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("unmount during pending camera startup cancels GPS and ignores late startup, decoder and permission callbacks", async () => {
+	const f = scannerFixture();
+	let release = () => {};
+	f.holdCamera(
+		new Promise<void>((resolve) => {
+			release = resolve;
+		}),
+	);
+	const opening = f.button("Buka kamera")();
+	await flush();
+	f.unmount();
+	const logs = f.logs.length;
+	f.watches[0].success(position());
+	f.watches[0].failure({ code: 1 } as GeolocationPositionError);
+	f.decoders[0]({ data: token });
+	release();
+	await opening;
+	expect(f.cameras[0].destroys).toBeGreaterThan(0);
+	expect(f.cleared).toEqual([1]);
+	expect(f.requests).toHaveLength(0);
+	expect(f.successes).toHaveLength(0);
+	expect(f.logs).toHaveLength(logs);
+	expect(f.visibilityListeners.size).toBe(0);
+});
+
+test("recovered decoder clears its warning only after a successful decode attempt, not video playback alone", async () => {
+	const f = scannerFixture();
+	try {
+		await f.button("Buka kamera")();
+		f.decodeErrors[0](new Error("synthetic-decoder-failure"));
+		const warning = () =>
+			f
+				.render()
+				.some(
+					(item) =>
+						item.props.children === scannerErrorMessage("DECODER_FAILED"),
+				);
+		expect(warning()).toBe(true);
+		f.videoEvent("onPlaying");
+		expect(warning()).toBe(true);
+		for (let i = 0; i < 100; i++) f.decodeErrors[0](QrScanner.NO_QR_CODE_FOUND);
+		expect(warning()).toBe(false);
+		expect(
+			f.logs.filter((entry) => JSON.stringify(entry).includes("FRAMES_NO_QR")),
+		).toHaveLength(1);
+		expect(f.requests).toHaveLength(0);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("new live preview clears an old stream-ended warning; transient video readiness recovers without restart", async () => {
+	const f = scannerFixture();
+	try {
+		await f.button("Buka kamera")();
+		const video = f.cameras[0].$video;
+		const listeners = new Set<() => void>();
+		const track = {
+			kind: "video",
+			readyState: "live",
+			stop: () => {},
+			addEventListener: (_event: string, run: () => void) => listeners.add(run),
+			removeEventListener: (_event: string, run: () => void) =>
+				listeners.delete(run),
+		};
+		video.srcObject = { getTracks: () => [track] } as unknown as MediaStream;
+		f.videoEvent("onPlaying");
+		track.readyState = "ended";
+		for (const run of listeners) run();
+		const warning = () =>
+			f
+				.render()
+				.some(
+					(item) => item.props.children === scannerErrorMessage("STREAM_ENDED"),
+				);
+		expect(warning()).toBe(true);
+		f.videoEvent("onPlaying"); // Old frame metadata alone cannot revive an ended track.
+		expect(warning()).toBe(true);
+		const replacement = { ...track, readyState: "live" };
+		video.srcObject = {
+			getTracks: () => [replacement],
+		} as unknown as MediaStream;
+		f.videoEvent("onPlaying");
+		expect(warning()).toBe(false);
+		Object.defineProperty(video, "readyState", {
+			value: 1,
+			configurable: true,
+		});
+		f.videoEvent("onWaiting");
+		expect(
+			f
+				.render()
+				.some(
+					(item) =>
+						item.props.children === scannerErrorMessage("VIDEO_NOT_READY"),
+				),
+		).toBe(true);
+		Object.defineProperty(video, "readyState", {
+			value: 2,
+			configurable: true,
+		});
+		f.videoEvent("onPlaying");
+		expect(
+			f
+				.render()
+				.some(
+					(item) =>
+						item.props.children === scannerErrorMessage("VIDEO_NOT_READY"),
+				),
+		).toBe(false);
+		expect(f.cameras).toHaveLength(1);
 		expect(f.requests).toHaveLength(0);
 	} finally {
 		f.unmount();
