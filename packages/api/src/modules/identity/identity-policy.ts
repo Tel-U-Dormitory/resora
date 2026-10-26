@@ -50,6 +50,26 @@ export function canManageCommittee(identity: Identity) {
 	);
 }
 
+export function canReadBroadcast(identity: Identity) {
+	return (
+		identity != null &&
+		!requiresPasswordChange(identity) &&
+		(hasSuperadminPrivilege(identity) ||
+			(canAccessPersonalSr(identity) &&
+				isValidSrAssignment(identity.departmentCode, identity.positionCode)))
+	);
+}
+
+export function canManageBroadcast(identity: Identity) {
+	return (
+		canReadBroadcast(identity) &&
+		(hasSuperadminPrivilege(identity) ||
+			(identity?.actor === "SR" &&
+				(identity.departmentCode === "INTI" ||
+					identity.positionCode === "KADEP")))
+	);
+}
+
 // Includes general-activity manual attendance: no KADEP requirement.
 export function canOperateGeneralActivity(identity: Identity) {
 	return (

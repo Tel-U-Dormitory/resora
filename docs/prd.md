@@ -131,6 +131,19 @@ A participant (mahasiswa/maba, or another eligible RESORA user including SR) **m
 
 Applicable existing activity FRs include `FR-040`, `FR-042–FR-047`, with Adaptif-specific session/manual FRs `FR-133–FR-134`. NEED-007 is **not** implicitly included in the NEED-001 pilot deliverable.
 
+### 6.3 Broadcast / Pengumuman SR — B1
+
+Broadcast adalah pengumuman plain text untuk seluruh SR eligible, terpisah dari event dan kepanitiaan. B1 menyediakan fondasi backend; dashboard cards, View All, History UI dan form frontend menunggu B2/B3 serta UAT/release terpisah.
+
+- Read: SR aktif dengan penugasan struktural valid dan periode ACTIVE, atau SUPERADMIN sah termasuk SYSTEM_ADMIN. Mandatory password rotation tetap memblokir akses sesuai policy autentikasi existing; flag password awal SR biasa bukan mandatory rotation.
+- Create: INTI struktural KETUM/WAKETUM/SEKRETARIS/BENDAHARA, KADEP struktural di seluruh departemen non-INTI, atau SUPERADMIN sah. Jabatan kepanitiaan tidak memberi authority.
+- Update/archive: pembuat yang masih mempunyai hak manage, atau SUPERADMIN untuk pengumuman siapa pun. Status dan permission diperiksa ulang secara live pada mutation.
+- Pengumuman langsung terbit, maksimum **168 jam** dari publikasi pertama; expiry lebih pendek diperbolehkan. Edit tidak mereset waktu publikasi. Aktif iff belum diarsipkan dan `published_at <= now < expires_at`; History iff archived atau expired. Semua dibaca langsung dari database tanpa snapshot/cron/pemindahan row.
+- Pengumuman expired/archived tidak bisa diedit, direstore, atau diaktifkan kembali; terbitkan pengumuman baru bila diperlukan. Tidak ada hard delete.
+- Judul 1–150 dan isi multiline 1–5000 karakter setelah trim, tanpa rich text/HTML. Link opsional HTTP(S), maksimum 2048 karakter. Riwayat tetap dapat dibaca walaupun pembuat kemudian tidak aktif.
+
+Implementasi, kontrak API, migration dan verifikasi dijelaskan di [Architecture — Broadcast B1](architecture.md#broadcast--pengumuman-sr--fase-b1).
+
 ## 7. Current delivery scope, milestones and implementation state
 
 The earlier plan identifies **2026-10-18 as a target for a controlled NEED-001 pilot**. Treat this as a **planning target**, not evidence that release is feasible or approved; reassess scope, readiness and UAT against actual team capacity before committing.

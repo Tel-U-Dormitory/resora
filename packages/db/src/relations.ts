@@ -8,6 +8,7 @@ export const relations = {
 	...schema.identityRelations,
 	...schema.attendanceRelations,
 	...schema.committeeRelations,
+	...schema.broadcastRelations,
 	user: {
 		...schema.authRelations.user,
 		relations: {
