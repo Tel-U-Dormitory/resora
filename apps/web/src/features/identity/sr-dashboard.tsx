@@ -13,6 +13,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { cn } from "@/lib/utils";
+import BroadcastFeed from "../broadcast/broadcast-feed";
 import { getSrSession } from "./server-session";
 
 export default async function SrDashboard() {
@@ -60,6 +61,7 @@ export default async function SrDashboard() {
 				name={session.name}
 				isSystem={session.actor === "SYSTEM_ADMIN"}
 			/>
+			<BroadcastFeed view="LATEST" canManage={session.canManageBroadcast} />
 			{(isSr || session.isSuperadmin) && (
 				<Card className="resora-panel resora-feature-panel">
 					<CardContent className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">

@@ -20,9 +20,11 @@ import { and, eq, inArray } from "drizzle-orm";
 export { isValidSrAssignment } from "@resora/db/organization";
 export {
 	canAccessPersonalSr,
+	canManageBroadcast,
 	canManageCommittee,
 	canManageInternalAttendanceManually,
 	canManageInternalEvent,
+	canReadBroadcast,
 	hasSuperadminPrivilege,
 } from "./identity-policy";
 
