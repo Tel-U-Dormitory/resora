@@ -45,8 +45,7 @@ export function canManageCommittee(identity: Identity) {
 		(hasSuperadminPrivilege(identity) ||
 			(canAccessPersonalSr(identity) &&
 				isValidSrAssignment(identity.departmentCode, identity.positionCode) &&
-				identity.departmentCode === "HCO" &&
-				identity.positionCode === "KADEP"))
+				identity.departmentCode === "HCO"))
 	);
 }
 

@@ -5,6 +5,7 @@ import type { Database } from "@resora/db";
 import { committeePositionCodes } from "@resora/db/schema/committee";
 import { committeeRouter } from "./committee.router";
 import {
+	addMembersSchema,
 	candidateSchema,
 	committeeFieldsSchema,
 	listCommitteesSchema,
@@ -81,9 +82,47 @@ test("membership uses exactly Phase 1 position codes and rejects extra permissio
 	);
 });
 
+test("bulk membership accepts 1–30 unique opaque user IDs and rejects invalid or forged batch inputs", () => {
+	const input = {
+		committeeId: randomUUID(),
+		divisionId: randomUUID(),
+		positionCode: "ANGGOTA" as const,
+		userIds: ["user-001"],
+	};
+	for (const size of [1, 30]) {
+		const userIds = Array.from({ length: size }, (_, index) => `user-${index}`);
+		expect(addMembersSchema.parse({ ...input, userIds })).toEqual({
+			...input,
+			userIds,
+		});
+	}
+	for (const patch of [
+		{ userIds: [] },
+		{ userIds: Array.from({ length: 31 }, (_, index) => `user-${index}`) },
+		{ userIds: ["duplicate", "duplicate"] },
+		{ userIds: [""] },
+		{ userIds: ["   "] },
+		{ userIds: ["x".repeat(129)] },
+		{ userIds: [1] },
+		{ userIds: "user-001" },
+		{ committeeId: "invalid" },
+		{ divisionId: "invalid" },
+		{ positionCode: "SUPERADMIN" },
+		{ userId: "forged" },
+		{ isSuperadmin: true },
+		{ departmentCode: "HCO" },
+		{
+			assignments: [
+				{ userId: "user-001", divisionId: randomUUID(), positionCode: "PJ" },
+			],
+		},
+	])
+		expect(addMembersSchema.safeParse({ ...input, ...patch }).success).toBe(
+			false,
+		);
+});
+
 for (const [label, patch] of [
-	["SEKDEP HCO", { positionCode: "SEKDEP" }],
-	["ANGGOTA HCO", { positionCode: "ANGGOTA" }],
 	["KADEP RND", { departmentCode: "RND" }],
 	["inactive", { isActive: false }],
 	["invalid assignment", { positionCode: "KETUM" }],
@@ -145,9 +184,14 @@ test("stale operator identity is rechecked inside the transaction before create"
 			return run(tx);
 		},
 	} as unknown as Database;
-	await expect(
-		createCommittee(db, identity, { name: "Test", description: "" }),
-	).rejects.toMatchObject({ code: "FORBIDDEN" });
-	expect(transactions).toBe(1);
+	for (const positionCode of ["KADEP", "SEKDEP", "ANGGOTA"])
+		await expect(
+			createCommittee(
+				db,
+				{ ...identity, positionCode },
+				{ name: "Test", description: "" },
+			),
+		).rejects.toMatchObject({ code: "FORBIDDEN" });
+	expect(transactions).toBe(3);
 	expect(inserts).toBe(0);
 });

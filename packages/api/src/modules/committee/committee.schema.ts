@@ -31,6 +31,14 @@ export const memberSchema = memberIdSchema.extend({
 	divisionId: z.uuid(),
 	positionCode: z.enum(committeePositionCodes),
 });
+export const addMembersSchema = divisionIdSchema.extend({
+	positionCode: memberSchema.shape.positionCode,
+	userIds: z
+		.array(memberIdSchema.shape.userId.refine((id) => id.trim().length > 0))
+		.min(1)
+		.max(30)
+		.refine((ids) => new Set(ids).size === ids.length, "Duplicate user IDs"),
+});
 export const candidateSchema = committeeIdSchema.extend({
 	search: z.string().trim().min(2).max(100),
 });
