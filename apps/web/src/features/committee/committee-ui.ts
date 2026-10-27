@@ -10,6 +10,10 @@ export function committeeError(error: unknown) {
 		return "Sesi berakhir. Silakan masuk kembali.";
 	}
 	const messages: Record<string, string> = {
+		COMMITTEE_BULK_SELECTION_INVALID:
+			"Pilih 1–30 SR yang berbeda untuk ditambahkan.",
+		COMMITTEE_BULK_ASSIGNMENT_INVALID:
+			"Pilih divisi dan jabatan kepanitiaan yang valid untuk seluruh pilihan.",
 		COMMITTEE_ACCESS_DENIED:
 			"Anda tidak memiliki izin mengelola kepanitiaan. Muat ulang untuk memeriksa akses terbaru.",
 		COMMITTEE_NOT_FOUND:

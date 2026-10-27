@@ -12,6 +12,8 @@ function fixture(file: string, extraExports = "") {
 	const states: unknown[] = [];
 	const queries: Record<string, unknown>[] = [];
 	const mutations: { operation: string; input: unknown }[] = [];
+	let mutationFailure: unknown;
+	let pendingMutation: Promise<unknown> | undefined;
 	let cursor = 0;
 	let result: Record<string, unknown> = {
 		isPending: false,
@@ -27,7 +29,8 @@ function fixture(file: string, extraExports = "") {
 				return [
 					states[index],
 					(value: unknown) => {
-						states[index] = value;
+						states[index] =
+							typeof value === "function" ? value(states[index]) : value;
 					},
 				];
 			},
@@ -67,6 +70,7 @@ function fixture(file: string, extraExports = "") {
 						"updateDivision",
 						"deleteDivision",
 						"addMember",
+						"addMembers",
 						"updateMember",
 						"removeMember",
 					].map((operation) => [
@@ -74,6 +78,8 @@ function fixture(file: string, extraExports = "") {
 						{
 							mutate: async (input: unknown) => {
 								mutations.push({ operation, input });
+								if (pendingMutation) await pendingMutation;
+								if (mutationFailure) throw mutationFailure;
 							},
 						},
 					]),
@@ -81,7 +87,7 @@ function fixture(file: string, extraExports = "") {
 			},
 		},
 	};
-	for (const component of ["input", "label", "select"])
+	for (const component of ["input", "label", "select", "checkbox"])
 		mocks[`@resora/ui/components/${component}`] = {
 			[component[0]?.toUpperCase() + component.slice(1)]: component,
 		};
@@ -106,6 +112,12 @@ function fixture(file: string, extraExports = "") {
 		states,
 		queries,
 		mutations,
+		failMutation: (error: unknown) => {
+			mutationFailure = error;
+		},
+		blockMutation: (promise: Promise<unknown>) => {
+			pendingMutation = promise;
+		},
 		setQuery: (value: Record<string, unknown>) => {
 			result = value;
 		},
@@ -118,12 +130,14 @@ function fixture(file: string, extraExports = "") {
 	};
 }
 function elements(value: unknown): Element[] {
+	if (typeof value === "function") return elements(value(false));
 	if (Array.isArray(value)) return value.flatMap(elements);
 	if (!value || typeof value !== "object" || !("props" in value)) return [];
 	const element = value as Element;
 	return [element, ...elements(element.props.children)];
 }
 function text(value: unknown): string {
+	if (typeof value === "function") return text(value(false));
 	if (Array.isArray(value)) return value.map(text).join(" ");
 	if (value && typeof value === "object" && "props" in value)
 		return text((value as Element).props.children);
@@ -276,7 +290,7 @@ test("list renders loading, local error/retry, empty state and safe counts with 
 test("create/edit metadata and confirmations invoke the correct scoped mutation", async () => {
 	const f = fixture(
 		"committee-detail.tsx",
-		"exports.Editor = CommitteeEditor;",
+		"exports.Editor = CommitteeEditor; exports.Fields = MemberFields;",
 	);
 	const data = {
 		id: "synthetic",
@@ -293,7 +307,6 @@ test("create/edit metadata and confirmations invoke the correct scoped mutation"
 		"deleteDivision",
 		"member",
 		"removeMember",
-		"addMember",
 		"addDivision",
 	]) {
 		const member = {
@@ -316,6 +329,20 @@ test("create/edit metadata and confirmations invoke the correct scoped mutation"
 		expect(tree.props.description).toContain("Welday");
 		if (kind === "removeMember")
 			expect(tree.props.description).toContain("Synthetic SR (0001)");
+		if (kind === "member") {
+			const assignment = f.render({ committee: data, member }, "Fields");
+			expect(field(assignment, "member-division").props.defaultValue).toBe(
+				member.divisionId,
+			);
+			expect(field(assignment, "member-position").props.defaultValue).toBe(
+				member.positionCode,
+			);
+			expect(
+				elements(assignment).find(
+					(row) => row.type === "input" && row.props.name === "userId",
+				)?.props.value,
+			).toBe(member.userId);
+		}
 		const fields = new FormData();
 		fields.set("name", " Renamed ");
 		fields.set("description", " Description ");
@@ -336,13 +363,32 @@ test("create/edit metadata and confirmations invoke the correct scoped mutation"
 		"deleteDivision",
 		"updateMember",
 		"removeMember",
-		"addMember",
 		"createDivision",
 	]);
 	expect(f.mutations[0]?.input).toMatchObject({
 		name: "Renamed",
 		description: "Description",
 	});
+	expect(f.mutations[4]).toEqual({
+		operation: "updateMember",
+		input: {
+			committeeId: "synthetic",
+			userId: "sr",
+			divisionId: "division",
+			positionCode: "PIC1",
+		},
+	});
+	const bulk = f.render(
+		{
+			editor: { kind: "addMember" },
+			data,
+			onClose: () => {},
+			onDeleted: () => {},
+		},
+		"Editor",
+	);
+	expect((bulk.type as { name: string }).name).toBe("BulkMemberDialog");
+	expect(bulk.props.committee).toEqual(data);
 	const list = fixture("committee-list.tsx");
 	list.setQuery({ data: { total: 0, committees: [] } });
 	(byText(list.render(), "Tambah kepanitiaan").props.onClick as () => void)();
@@ -358,52 +404,216 @@ test("create/edit metadata and confirmations invoke the correct scoped mutation"
 	]);
 });
 
-test("member selection searches only with two characters and preserves division/position assignment", () => {
-	const f = fixture("committee-detail.tsx", "exports.Fields = MemberFields;");
-	const committee = {
-		id: "synthetic",
-		divisions: [{ id: "division", name: "Acara" }],
-		positions: [
-			"ANGGOTA",
-			"SEKDEP",
-			"KADEP",
-			"SEKRE",
-			"BENDAHARA",
-			"PIC1",
-			"PIC2",
-			"PJ",
-		],
-	};
-	f.setQuery({ data: [] });
-	let tree = f.render({ committee }, "Fields");
-	expect(f.queries.at(-1)?.enabled).toBe(false);
-	expect(field(tree, "candidate-user").props.required).toBe(true);
-	(field(tree, "candidate-search").props.onChange as (value: unknown) => void)({
-		target: { value: "Syn" },
+const bulkCommittee = {
+	id: "synthetic",
+	name: "Welday",
+	description: "",
+	members: [],
+	divisions: [{ id: "division", name: "Acara" }],
+	positions: [
+		"ANGGOTA",
+		"SEKDEP",
+		"KADEP",
+		"SEKRE",
+		"BENDAHARA",
+		"PIC1",
+		"PIC2",
+		"PJ",
+	],
+};
+const candidate = (index: number) => ({
+	userId: `sr-${index}`,
+	name: `Synthetic ${index}`,
+	nim: `000${index}`,
+});
+function searchCandidates(tree: Element, value: string) {
+	(field(tree, "candidate-search").props.onChange as (event: unknown) => void)({
+		target: { value },
 	});
-	f.setQuery({ data: [{ userId: "sr", name: "Synthetic SR", nim: "0001" }] });
-	tree = f.render({ committee }, "Fields");
-	expect(f.queries.at(-1)?.enabled).toBe(true);
-	expect(text(tree)).toContain("Synthetic SR");
-	expect(field(tree, "member-division").props.name).toBe("divisionId");
-	expect(field(tree, "member-position").props.name).toBe("positionCode");
+}
+function chooseCandidate(tree: Element, index: number, checked = true) {
+	(
+		field(tree, `candidate-sr-${index}`).props.onCheckedChange as (
+			checked: boolean,
+		) => void
+	)(checked);
+}
+function assignment() {
+	const fields = new FormData();
+	fields.set("divisionId", "division");
+	fields.set("positionCode", "PIC1");
+	return fields;
+}
+function submitBulk(tree: Element, fields = assignment()) {
+	return (tree.props.onSubmit as (fields: FormData) => Promise<unknown>)(
+		fields,
+	);
+}
+test("bulk selection queries at two characters, persists across searches, rejects duplicate selection and supports removal", async () => {
+	const f = fixture(
+		"committee-detail.tsx",
+		"exports.Bulk = BulkMemberDialog; exports.Fields = MemberFields;",
+	);
+	const render = () =>
+		f.render({ committee: bulkCommittee, onClose: () => {} }, "Bulk");
+	f.setQuery({ data: [] });
+	expect(f.queries).toHaveLength(0);
+	expect(text(render())).toContain("0 / 30 SR dipilih");
+	expect(f.queries.at(-1)?.enabled).toBe(false);
+	searchCandidates(render(), "S");
+	render();
+	expect(f.queries.at(-1)?.enabled).toBe(false);
+	searchCandidates(render(), " Syn ");
+	f.setQuery({ data: [candidate(1), candidate(2)] });
+	const tree = render();
+	expect(f.queries.at(-1)).toMatchObject({
+		enabled: true,
+		input: { committeeId: "synthetic", search: "Syn" },
+	});
+	expect(text(tree)).toContain("Synthetic 1");
+	expect(text(tree)).toContain("0001");
+	expect(field(tree, "candidate-sr-1").props.checked).toBe(false);
+	chooseCandidate(tree, 1);
+	chooseCandidate(tree, 1); // Same-frame duplicate callbacks.
+	expect(render().props.submitLabel).toBe("Tambahkan 1 anggota");
+	await submitBulk(render());
+	expect(f.mutations[0]).toEqual({
+		operation: "addMembers",
+		input: {
+			committeeId: "synthetic",
+			divisionId: "division",
+			positionCode: "PIC1",
+			userIds: ["sr-1"],
+		},
+	});
+	searchCandidates(render(), "Different");
+	f.setQuery({ data: [candidate(2)] });
+	expect(text(render())).toContain("Synthetic 1");
+	chooseCandidate(render(), 2);
+	expect(render().props.submitLabel).toBe("Tambahkan 2 anggota");
+	await submitBulk(render());
+	expect(f.mutations[1]?.input).toMatchObject({ userIds: ["sr-1", "sr-2"] });
+	const remove = elements(render()).find(
+		(row) => row.props["aria-label"] === "Batalkan pilihan Synthetic 1 (0001)",
+	);
+	if (!remove) throw Error("Missing selected-user removal");
+	(remove.props.onClick as () => void)();
+	expect(render().props.submitLabel).toBe("Tambahkan 1 anggota");
+	searchCandidates(render(), "");
+	expect(text(render())).toContain("Synthetic 2");
+	expect(f.queries.at(-1)?.enabled).toBe(false);
+	let prevented = false;
+	(
+		field(render(), "candidate-search").props.onKeyDown as (
+			event: unknown,
+		) => void
+	)({
+		key: "Enter",
+		preventDefault() {
+			prevented = true;
+		},
+	});
+	expect(prevented).toBe(true);
+	const fields = f.render({ committee: bulkCommittee }, "Fields");
+	expect(field(fields, "member-division").props).toMatchObject({
+		name: "divisionId",
+		required: true,
+	});
+	expect(field(fields, "member-position").props).toMatchObject({
+		name: "positionCode",
+		required: true,
+		defaultValue: "ANGGOTA",
+	});
 	expect(
-		elements(tree).filter(
+		elements(fields).filter(
 			(row) =>
 				row.type === "option" &&
 				["PIC1", "PIC2", "PJ"].includes(String(row.props.value)),
 		),
 	).toHaveLength(3);
-	(field(tree, "candidate-user").props.onChange as (value: unknown) => void)({
-		target: { value: "sr" },
+});
+test("bulk selection reaches 30 across searches capped by the API at 20 results and cannot add a 31st", async () => {
+	const f = fixture("committee-detail.tsx", "exports.Bulk = BulkMemberDialog;");
+	const render = () =>
+		f.render({ committee: bulkCommittee, onClose: () => {} }, "Bulk");
+	searchCandidates(render(), "First");
+	f.setQuery({
+		data: Array.from({ length: 20 }, (_, index) => candidate(index)),
 	});
-	tree = f.render({ committee }, "Fields");
-	expect(field(tree, "candidate-user").props.value).toBe("sr");
-	(field(tree, "candidate-search").props.onChange as (value: unknown) => void)({
-		target: { value: "Different" },
+	let tree = render();
+	for (let index = 0; index < 20; index++) chooseCandidate(tree, index);
+	expect(render().props.submitLabel).toBe("Tambahkan 20 anggota");
+	searchCandidates(render(), "Second");
+	f.setQuery({
+		data: Array.from({ length: 11 }, (_, index) => candidate(index + 20)),
 	});
-	tree = f.render({ committee }, "Fields");
-	expect(field(tree, "candidate-user").props.value).toBe("");
+	tree = render();
+	for (let index = 20; index <= 30; index++) chooseCandidate(tree, index);
+	expect(render().props.submitLabel).toBe("Tambahkan 30 anggota");
+	expect(field(render(), "candidate-sr-30").props.disabled).toBe(true);
+	expect(field(render(), "candidate-sr-20").props.disabled).toBe(false);
+	expect(text(render())).toContain("bukan seluruh kandidat");
+	await submitBulk(render());
+	const input = f.mutations[0]?.input as { userIds: string[] };
+	expect(input.userIds).toHaveLength(30);
+	expect(new Set(input.userIds).size).toBe(30);
+	chooseCandidate(render(), 20, false);
+	expect(field(render(), "candidate-sr-30").props.disabled).toBe(false);
+	chooseCandidate(render(), 30);
+	expect(render().props.submitLabel).toBe("Tambahkan 30 anggota");
+});
+test("bulk submission rejects empty/duplicate/oversized selections and missing or invalid assignments without a mutation", () => {
+	const f = fixture("committee-detail.tsx", "exports.Bulk = BulkMemberDialog;");
+	const render = () =>
+		f.render({ committee: bulkCommittee, onClose: () => {} }, "Bulk");
+	expect(() => submitBulk(render())).toThrow(
+		"COMMITTEE_BULK_SELECTION_INVALID",
+	);
+	f.states[1] = [candidate(1), candidate(1)];
+	expect(() => submitBulk(render())).toThrow(
+		"COMMITTEE_BULK_SELECTION_INVALID",
+	);
+	f.states[1] = Array.from({ length: 31 }, (_, index) => candidate(index));
+	expect(() => submitBulk(render())).toThrow(
+		"COMMITTEE_BULK_SELECTION_INVALID",
+	);
+	f.states[1] = [candidate(1)];
+	for (const [divisionId, positionCode] of [
+		["", "PIC1"],
+		["wrong", "PIC1"],
+		["division", ""],
+		["division", "SUPERADMIN"],
+	]) {
+		const fields = new FormData();
+		fields.set("divisionId", divisionId ?? "");
+		fields.set("positionCode", positionCode ?? "");
+		expect(() => submitBulk(render(), fields)).toThrow(
+			"COMMITTEE_BULK_ASSIGNMENT_INVALID",
+		);
+	}
+	expect(f.mutations).toHaveLength(0);
+	expect(committeeError(Error("COMMITTEE_BULK_SELECTION_INVALID"))).toContain(
+		"1–30",
+	);
+	expect(committeeError(Error("COMMITTEE_BULK_ASSIGNMENT_INVALID"))).toContain(
+		"divisi dan jabatan",
+	);
+});
+test("bulk candidate loading, safe error/retry and empty states retain staged selections", () => {
+	const f = fixture("committee-detail.tsx", "exports.Bulk = BulkMemberDialog;");
+	const render = () =>
+		f.render({ committee: bulkCommittee, onClose: () => {} }, "Bulk");
+	searchCandidates(render(), "Syn");
+	f.setQuery({ data: [candidate(1)] });
+	chooseCandidate(render(), 1);
+	f.setQuery({ isPending: true });
+	expect(text(render())).toContain("Mencari SR");
+	f.setQuery({ isError: true, error: Error("SQL private details") });
+	expect(text(render())).not.toContain("SQL private details");
+	expect(byText(render(), "Coba kembali")).toBeDefined();
+	f.setQuery({ data: [] });
+	expect(text(render())).toContain("Tidak ada SR eligible");
+	expect(render().props.submitLabel).toBe("Tambahkan 1 anggota");
 });
 
 test("detail keeps ineligible members visible/removable and uses responsive cards with paginated search", () => {
@@ -441,7 +651,11 @@ test("detail keeps ineligible members visible/removable and uses responsive card
 	expect(text(tree)).not.toContain("Synthetic 14");
 });
 
-function submitFixture(fail = false) {
+function submitFixture(
+	fail = false,
+	fields = new FormData(),
+	submit?: (fields: FormData) => Promise<unknown>,
+) {
 	const source = ts.createSourceFile(
 		"dialog.tsx",
 		readFileSync(new URL("committee-dialog.tsx", import.meta.url), "utf8"),
@@ -477,20 +691,30 @@ function submitFixture(fail = false) {
 		setError: (value: string) => {
 			observed.error = value;
 		},
-		FormData: class {},
-		onSubmit: async () => {
+		FormData: class extends FormData {
+			constructor() {
+				super();
+				fields.forEach((value, key) => {
+					this.append(key, value);
+				});
+			}
+		},
+		onSubmit: async (fields: FormData) => {
 			observed.calls++;
 			if (fail) throw Error("COMMITTEE_DUPLICATE");
+			await submit?.(fields);
 		},
 		onClose: () => {
 			observed.closes++;
 		},
-		onSuccess: () => {
-			observed.successes++;
-		},
+		onSuccess: submit
+			? undefined
+			: () => {
+					observed.successes++;
+				},
 		committeeError,
 		queryClient: {
-			invalidateQueries: async () => {
+			invalidateQueries: async (_options: unknown) => {
 				observed.invalidations++;
 			},
 		},
@@ -556,4 +780,112 @@ test("mutation errors stay in the dialog, restore submit ability and do not inva
 	expect(source).toContain("disabled={busy}");
 	expect(source).toContain('role="alert"');
 	expect(source).toContain("initialFocus={titleRef}");
+});
+
+test("bulk success uses one request, blocks duplicate submits and refreshes displayed member counts before closing", async () => {
+	const f = fixture("committee-detail.tsx", "exports.Bulk = BulkMemberDialog;");
+	const render = () =>
+		f.render({ committee: bulkCommittee, onClose: () => {} }, "Bulk");
+	searchCandidates(render(), "Syn");
+	f.setQuery({ data: [candidate(1), candidate(2)] });
+	chooseCandidate(render(), 1);
+	chooseCandidate(render(), 2);
+	const dialog = submitFixture(false, assignment(), (fields) =>
+		submitBulk(render(), fields),
+	);
+	let release = () => {};
+	f.blockMutation(
+		new Promise<void>((resolve) => {
+			release = resolve;
+		}),
+	);
+	const detail = fixture("committee-detail.tsx");
+	detail.setQuery({ data: bulkCommittee });
+	expect(text(detail.render({ committeeId: "synthetic" }))).toContain(
+		"Anggota ( 0",
+	);
+	let invalidation: unknown;
+	dialog.scope.queryClient.invalidateQueries = async (options: unknown) => {
+		invalidation = options;
+		dialog.observed.invalidations++;
+		detail.setQuery({
+			data: {
+				...bulkCommittee,
+				members: [candidate(1), candidate(2)].map((row) => ({
+					...row,
+					divisionId: "division",
+					positionCode: "PIC1",
+					eligible: true,
+				})),
+			},
+		});
+	};
+	const first = dialog.run();
+	await dialog.run();
+	expect(f.mutations).toHaveLength(1);
+	expect(dialog.observed.busy).toBe(true);
+	expect(dialog.scope.submitting.current).toBe(true);
+	const busyContent = (render().props.children as (busy: boolean) => Element)(
+		true,
+	);
+	expect(field(busyContent, "candidate-sr-1").props.disabled).toBe(true);
+	chooseCandidate(busyContent, 1, false);
+	expect(render().props.submitLabel).toBe("Tambahkan 2 anggota");
+	expect(dialog.observed.closes).toBe(0);
+	release();
+	await first;
+	expect(invalidation).toEqual({
+		queryKey: ["committee"],
+		refetchType: "active",
+	});
+	expect(dialog.observed.closes).toBe(1);
+	expect(dialog.observed.invalidations).toBe(1);
+	const tree = detail.render({ committeeId: "synthetic" });
+	expect(text(tree)).toContain("Anggota ( 2");
+	expect(text(tree).replace(/\s+/g, " ")).toContain("2 anggota");
+	expect(text(tree)).toContain("Synthetic 1");
+	expect(text(tree)).toContain("Synthetic 2");
+	expect(f.mutations[0]).toEqual({
+		operation: "addMembers",
+		input: {
+			committeeId: "synthetic",
+			divisionId: "division",
+			positionCode: "PIC1",
+			userIds: ["sr-1", "sr-2"],
+		},
+	});
+});
+test("bulk mutation failure preserves selections and assignment, keeps the dialog open and allows correction/retry", async () => {
+	const f = fixture("committee-detail.tsx", "exports.Bulk = BulkMemberDialog;");
+	const render = () =>
+		f.render({ committee: bulkCommittee, onClose: () => {} }, "Bulk");
+	searchCandidates(render(), "Syn");
+	f.setQuery({ data: [candidate(1), candidate(2)] });
+	chooseCandidate(render(), 1);
+	chooseCandidate(render(), 2);
+	const fields = assignment();
+	const dialog = submitFixture(false, fields, (input) =>
+		submitBulk(render(), input),
+	);
+	f.failMutation(Error("COMMITTEE_MEMBER_INELIGIBLE"));
+	await dialog.run();
+	expect(dialog.observed.error).toContain("SR tidak memenuhi syarat");
+	expect(dialog.observed.busy).toBe(false);
+	expect(dialog.observed.closes).toBe(0);
+	expect(dialog.observed.invalidations).toBe(0);
+	expect(render().props.submitLabel).toBe("Tambahkan 2 anggota");
+	expect(text(render())).toContain("Synthetic 1");
+	expect(text(render())).toContain("Synthetic 2");
+	expect(fields.get("divisionId")).toBe("division");
+	expect(fields.get("positionCode")).toBe("PIC1");
+	chooseCandidate(render(), 2, false);
+	f.failMutation(undefined);
+	await dialog.run();
+	expect(f.mutations[1]?.input).toMatchObject({
+		userIds: ["sr-1"],
+		divisionId: "division",
+		positionCode: "PIC1",
+	});
+	expect(dialog.observed.closes).toBe(1);
+	expect(dialog.observed.error).toBe("");
 });

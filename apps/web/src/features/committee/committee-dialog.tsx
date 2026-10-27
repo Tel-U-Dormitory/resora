@@ -61,7 +61,7 @@ export function CommitteeDialog({
 }: {
 	title: string;
 	description: string;
-	children?: ReactNode;
+	children?: ReactNode | ((busy: boolean) => ReactNode);
 	submitLabel?: string;
 	onSubmit: (fields: FormData) => Promise<unknown>;
 	onClose: () => void;
@@ -119,7 +119,7 @@ export function CommitteeDialog({
 					}}
 				>
 					<fieldset disabled={busy} className="min-w-0 space-y-4">
-						{children}
+						{typeof children === "function" ? children(busy) : children}
 					</fieldset>
 					{error && (
 						<p role="alert" className="text-destructive text-sm">
