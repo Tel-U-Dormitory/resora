@@ -784,8 +784,27 @@ manual. No workflow has `workflow_dispatch` or a deployment step.
 | `CD — Publish Images` (`docker-publish.yml`) | Push to `staging` only | `contents: read`, `packages: write` |
 
 Code Quality retains pinned pnpm, Node 24/Bun 1.3.13, frozen dependency install,
-Varlock codegen, Next type generation, Biome, typecheck, offline tests and application
-build with synthetic env. Application builds on PRs to main are quality checks,
+Varlock codegen and synthetic env. After installation it runs the same local gate:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm run verify:pr
+```
+
+`verify:pr` stops at the first failure, in order: Next type generation → `lint` →
+workspace typecheck → `test:offline` → `test:loadtest` → web/server production build.
+For isolated verification, use the nonfunctional environment values in `ci.yml`;
+no Docker, Supabase credentials or database integration target is required.
+`test:offline` discovers sorted, unique `.test.ts`/`.test.tsx` files under `apps/`
+and `packages/` through Git, including new nonignored tests. It excludes integration
+tests and generated/dependency/scratch paths, disables Bun dotenv loading and
+propagates test failures (an empty discovery also fails). Keep new database tests
+named `.integration.test.ts[x]` and opt-in against a verified disposable target.
+`test:loadtest` runs only the two offline harnesses under `tests/resora-loadtest/`;
+it never invokes k6 or generates live traffic. Biome honors Git ignore rules;
+the API TypeScript project includes `src`, not local scratch scripts.
+
+Application builds on PRs to main are quality checks,
 not new container images. Docker PR verification uses default PR integration merge
 checkout, Buildx and `push: false` for both existing Dockerfiles; it never logs in
 to a registry. The PR event is `pull_request`, not `pull_request_target`.
