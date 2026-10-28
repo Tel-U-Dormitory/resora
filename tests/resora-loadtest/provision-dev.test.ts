@@ -549,7 +549,11 @@ test("existing converter accepts only a COMMITTED checksum-matched full export (
 	};
 	const convert = () =>
 		Bun.spawnSync(
-			["py", "-3", join(directory, "convert-credentials.py"), credentials],
+			[
+				...(process.platform === "win32" ? ["py", "-3"] : ["python3"]),
+				join(directory, "convert-credentials.py"),
+				credentials,
+			],
 			{ stdout: "pipe", stderr: "pipe" },
 		);
 	await writeFile(
