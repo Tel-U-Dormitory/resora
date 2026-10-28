@@ -4,15 +4,15 @@ import { join, relative, resolve } from "node:path";
 import {
 	type InitialCredential,
 	prepareCredentials,
-} from "../../packages/api/src/modules/identity/provisioning-credentials";
+} from "../../packages/api/src/modules/provisioning/provisioning-credentials";
 import {
 	maxCsvBytes,
 	ProvisioningError,
 	parseSrCsv,
 	type SrImportRow,
-} from "../../packages/api/src/modules/identity/provisioning-csv";
-import { provisionSrAccounts } from "../../packages/api/src/modules/identity/sr-provisioning";
-import { BootstrapError } from "../../packages/api/src/modules/identity/system-admin-bootstrap";
+} from "../../packages/api/src/modules/provisioning/provisioning-csv";
+import { provisionSrAccounts } from "../../packages/api/src/modules/provisioning/sr-provisioning";
+import { BootstrapError } from "../../packages/api/src/modules/provisioning/system-admin-bootstrap";
 import { createDb, type Database } from "../../packages/db/src/index";
 
 const projectRoot = resolve(import.meta.dir, "../..");

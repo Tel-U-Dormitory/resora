@@ -8,12 +8,12 @@ import {
 	encodeCsv,
 	ProvisioningError,
 	readCsv,
-} from "../../packages/api/src/modules/identity/provisioning-csv";
+} from "../../packages/api/src/modules/provisioning/provisioning-csv";
 import {
 	localProvisioningTarget,
 	provisionSrAccounts,
-} from "../../packages/api/src/modules/identity/sr-provisioning";
-import { BootstrapError } from "../../packages/api/src/modules/identity/system-admin-bootstrap";
+} from "../../packages/api/src/modules/provisioning/sr-provisioning";
+import { BootstrapError } from "../../packages/api/src/modules/provisioning/system-admin-bootstrap";
 import type { Database } from "../../packages/db/src/index";
 import { getPoolConfig } from "../../packages/db/src/pool-config";
 import { account, user } from "../../packages/db/src/schema/auth";
@@ -549,7 +549,11 @@ test("existing converter accepts only a COMMITTED checksum-matched full export (
 	};
 	const convert = () =>
 		Bun.spawnSync(
-			["py", "-3", join(directory, "convert-credentials.py"), credentials],
+			[
+				...(process.platform === "win32" ? ["py", "-3"] : ["python3"]),
+				join(directory, "convert-credentials.py"),
+				credentials,
+			],
 			{ stdout: "pipe", stderr: "pipe" },
 		);
 	await writeFile(
@@ -604,8 +608,19 @@ test("k6 maps 2/5/10/25/50 VUs to distinct accounts without network execution", 
 			},
 			get: () => ({
 				status: 200,
+				headers: { "Content-Type": "text/html" },
 				timings: { duration: 1 },
-				json: () => ({ result: { data: { actor: "SR" } } }),
+				html: () => ({
+					find: (selector: string) => ({
+						text: () =>
+							selector === "h1"
+								? "Dashboard SR"
+								: selector === "h2"
+									? "Selamat datang, synthetic."
+									: `NIM: ${rows[vu.idInTest - 1]?.nim}`,
+						size: () => 0,
+					}),
+				}),
 			}),
 		};
 		const metric = class {
@@ -682,9 +697,9 @@ test("k6 failure diagnostics log only fixed phase/status/classification and pres
 		[500, "SERVER_ERROR"],
 		[503, "SERVER_ERROR"],
 		[0, "NETWORK_ERROR"],
-		[200, "INVALID_SESSION"],
+		[200, "UNAUTHENTICATED_DASHBOARD"],
 	] as const) {
-		for (const phase of ["LOGIN", "SESSION"] as const) {
+		for (const phase of ["LOGIN", "DASHBOARD"] as const) {
 			if (status === 200 && phase === "LOGIN") continue;
 			const logs: unknown[][] = [];
 			let posts = 0;
@@ -693,14 +708,12 @@ test("k6 failure diagnostics log only fixed phase/status/classification and pres
 				status: code,
 				timings: { duration: 1 },
 				body: "sensitive-response-body",
-				headers: { "set-cookie": "sensitive-cookie" },
-				json: () => ({
-					result: {
-						data:
-							code === 200 && phase === "LOGIN"
-								? { user: "sensitive-user" }
-								: null,
-					},
+				headers: {
+					"Content-Type": "text/html",
+					"set-cookie": "sensitive-cookie",
+				},
+				html: () => ({
+					find: () => ({ text: () => "sensitive-login-page", size: () => 1 }),
 				}),
 			});
 			const http = {
@@ -732,7 +745,7 @@ test("k6 failure diagnostics log only fixed phase/status/classification and pres
 					JSON.stringify({
 						accounts: [
 							{
-								username: "sensitive-username",
+								username: "lt_resora_20261014_001",
 								password: "sensitive-password",
 							},
 						],
@@ -755,7 +768,7 @@ test("k6 failure diagnostics log only fixed phase/status/classification and pres
 				],
 			]);
 			expect(JSON.stringify(logs)).not.toMatch(
-				/sensitive|cookie|password|username|Authorization|body|token|https:/i,
+				/sensitive|lt_resora_|cookie|password|username|Authorization|body|token|https:/i,
 			);
 		}
 	}

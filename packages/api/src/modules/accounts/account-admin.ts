@@ -19,6 +19,9 @@ import { srTenurePeriods, srTenureStatus } from "@resora/db/sr-tenure";
 import { TRPCError } from "@trpc/server";
 import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
 import type { z } from "zod";
+import { getLiveOperationalIdentity } from "../identity/identity.public";
+import { hasSuperadminPrivilege } from "../identity/identity-policy";
+import { createSrAccount } from "../provisioning/sr-account";
 import {
 	archiveAccountSchema,
 	createAccountSchema,
@@ -26,9 +29,6 @@ import {
 	resetAccountPasswordSchema,
 	updateAccountSchema,
 } from "./account-admin.schema";
-import { getLiveOperationalIdentity } from "./identity.public";
-import { hasSuperadminPrivilege } from "./identity-policy";
-import { createSrAccount } from "./sr-account";
 
 function requireAdmin(identity: ActiveIdentity | null) {
 	if (!hasSuperadminPrivilege(identity))

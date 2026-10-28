@@ -6,7 +6,7 @@ import { eventAuditLogs, events } from "@resora/db/schema/attendance";
 import {
 	administrativeHistorySchema,
 	eventAuditHistorySchema,
-} from "./attendance.schema";
+} from "../attendance/attendance.schema";
 import {
 	administrativeChanges,
 	deletedDraftHistory,

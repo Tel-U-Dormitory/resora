@@ -8,8 +8,8 @@ import { attendanceRecords } from "@resora/db/schema/attendance";
 import { getTableName } from "drizzle-orm";
 import { getTableConfig } from "drizzle-orm/pg-core";
 import { appRouter } from "../../routers";
+import { checkInSchema } from "../attendance/attendance.schema";
 import { getActiveSrDirectory } from "../identity/identity.public";
-import { checkInSchema } from "./attendance.schema";
 import { checkIn } from "./check-in";
 import {
 	classifyTiming,

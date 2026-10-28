@@ -4,12 +4,12 @@ import { relative, resolve } from "node:path";
 import {
 	maxCsvBytes,
 	ProvisioningError,
-} from "@resora/api/modules/identity/provisioning-csv";
+} from "@resora/api/modules/provisioning/provisioning-csv";
 import {
 	localProvisioningTarget,
 	provisionSrAccounts,
 	verifyLocalProvisioningDatabase,
-} from "@resora/api/modules/identity/sr-provisioning";
+} from "@resora/api/modules/provisioning/sr-provisioning";
 import { createDb, type Database } from "@resora/db";
 
 // Deliberately no Varlock/services import or DATABASE_URL fallback: local scratch only.

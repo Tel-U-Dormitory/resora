@@ -17,15 +17,15 @@ import { assignSyntheticSrTenure } from "@resora/db/sr-tenure.fixture";
 import { eq, inArray } from "drizzle-orm";
 import { createApp } from "../../../../../apps/server/src/app";
 import {
+	localProvisioningTarget,
+	verifyLocalProvisioningDatabase,
+} from "../provisioning/sr-provisioning";
+import {
 	canManageInternalAttendanceManually,
 	canManageInternalEvent,
 	canOperateGeneralActivity,
 	hasSuperadminPrivilege,
 } from "./identity-policy";
-import {
-	localProvisioningTarget,
-	verifyLocalProvisioningDatabase,
-} from "./sr-provisioning";
 
 const target = process.env.RESORA_IDENTITY_TEST_DB_URL;
 (target ? describe : describe.skip)(

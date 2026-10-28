@@ -5,8 +5,8 @@ import { createDb, type Database } from "@resora/db";
 import { seedOrganization } from "@resora/db/organization";
 import { assignSyntheticSrTenure } from "@resora/db/sr-tenure.fixture";
 import { readMigrationFiles } from "drizzle-orm/migrator";
-import { createSrAccount } from "../../api/src/modules/identity/sr-account";
-import { localProvisioningTarget } from "../../api/src/modules/identity/sr-provisioning";
+import { createSrAccount } from "../../api/src/modules/provisioning/sr-account";
+import { localProvisioningTarget } from "../../api/src/modules/provisioning/sr-provisioning";
 import { createAuth } from "./index";
 import { ResetMailError } from "./password-reset-mail";
 
