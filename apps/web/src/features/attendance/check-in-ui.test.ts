@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { MAX_GPS_ACCURACY_M as backendAccuracy } from "@resora/api/modules/attendance/check-in-policy";
+import { MAX_GPS_ACCURACY_M as backendAccuracy } from "@resora/api/modules/check-in/check-in-policy";
 import { TRPCClientError } from "@trpc/client";
 import QrScanner from "qr-scanner";
 import * as jsxRuntime from "react/jsx-runtime";

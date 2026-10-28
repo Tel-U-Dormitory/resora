@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { classifyTiming, type TimingClass } from "./check-in-policy";
+import { classifyTiming, type TimingClass } from "../check-in/check-in-policy";
 import {
 	eventAssignment,
 	type OrganizationSnapshot,

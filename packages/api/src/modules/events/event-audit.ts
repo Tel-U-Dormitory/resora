@@ -10,11 +10,11 @@ import { user } from "@resora/db/schema/auth";
 import { TRPCError } from "@trpc/server";
 import { desc, eq } from "drizzle-orm";
 import type { z } from "zod";
-import { hasSuperadminPrivilege } from "../identity/identity.public";
 import {
 	administrativeHistorySchema,
 	eventAuditHistorySchema,
-} from "./attendance.schema";
+} from "../attendance/attendance.schema";
+import { hasSuperadminPrivilege } from "../identity/identity.public";
 
 type AuditState = typeof eventAuditLogs.$inferSelect.beforeState;
 type AuditValue = string | number | null;

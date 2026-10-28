@@ -21,12 +21,12 @@ import {
 import { assignSyntheticSrTenure } from "@resora/db/sr-tenure.fixture";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { readMigrationFiles } from "drizzle-orm/migrator";
+import { eventDraftSchema } from "../attendance/attendance.schema";
+import * as service from "../events/event.service";
 import {
 	localProvisioningTarget,
 	verifyLocalProvisioningDatabase,
 } from "../identity/sr-provisioning";
-import { eventDraftSchema } from "./attendance.schema";
-import * as service from "./attendance.service";
 import { checkIn } from "./check-in";
 import { signChallenge } from "./qr";
 

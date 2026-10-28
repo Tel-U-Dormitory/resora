@@ -23,7 +23,7 @@ import { assignSyntheticSrTenure } from "@resora/db/sr-tenure.fixture";
 import { eq, sql } from "drizzle-orm";
 import { appRouter } from "../../routers";
 import { eventDraftSchema } from "../attendance/attendance.schema";
-import { signChallenge } from "../attendance/qr";
+import { signChallenge } from "../check-in/qr";
 import { getActiveSrDirectory } from "./identity.public";
 import { prepareCredentials } from "./provisioning-credentials";
 import { readCsv } from "./provisioning-csv";

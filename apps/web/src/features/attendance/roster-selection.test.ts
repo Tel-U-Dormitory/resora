@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { resolveRoster } from "@resora/api/modules/attendance/roster";
+import { resolveRoster } from "@resora/api/modules/events/roster";
 import { participantPage } from "./participant-list";
 import {
 	isInvited,

@@ -15,15 +15,6 @@ import {
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import QRCode from "qrcode";
-import { getCommitteeRoster } from "../committee/committee.public";
-import {
-	canAccessPersonalSr,
-	canManageInternalEvent,
-	getActiveSrDirectory,
-	getLiveOperationalIdentity,
-	hasSuperadminPrivilege,
-	type SrCandidate,
-} from "../identity/identity.public";
 import {
 	type AdvancedEventEdit,
 	advancedEventEditSchema,
@@ -36,8 +27,17 @@ import {
 	eventListSchema,
 	eventVisibilitySchema,
 	type VisibilityAction,
-} from "./attendance.schema";
-import { signChallenge } from "./qr";
+} from "../attendance/attendance.schema";
+import { signChallenge } from "../check-in/qr";
+import { getCommitteeRoster } from "../committee/committee.public";
+import {
+	canAccessPersonalSr,
+	canManageInternalEvent,
+	getActiveSrDirectory,
+	getLiveOperationalIdentity,
+	hasSuperadminPrivilege,
+	type SrCandidate,
+} from "../identity/identity.public";
 import { resolveCommitteeRoster, resolveRoster } from "./roster";
 
 async function lockedRosterEvent(

@@ -5,10 +5,10 @@ import {
 	officialDepartments,
 	officialPositions,
 } from "@resora/db/organization";
+import { parseChallenge, signChallenge } from "../check-in/qr";
+import { resolveCommitteeRoster, resolveRoster } from "../events/roster";
 import type { SrCandidate } from "../identity/identity.public";
 import { eventDraftSchema, rosterSchema } from "./attendance.schema";
-import { parseChallenge, signChallenge } from "./qr";
-import { resolveCommitteeRoster, resolveRoster } from "./roster";
 
 test("committee roster intersects eligibility, deduplicates explicit invitations and applies exclusion last", () => {
 	const members = [
