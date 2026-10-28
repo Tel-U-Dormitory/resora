@@ -30,7 +30,7 @@ import { getActiveSrDirectory } from "../identity/identity.public";
 import {
 	localProvisioningTarget,
 	verifyLocalProvisioningDatabase,
-} from "../identity/sr-provisioning";
+} from "../provisioning/sr-provisioning";
 import * as service from "./event.service";
 
 // Await Drizzle thenables directly: Bun's promise matcher can stall after deferred errors.

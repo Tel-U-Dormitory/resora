@@ -351,7 +351,7 @@ After `pnpm run build`, optional CLI-only production-page verification starts an
 
 ```powershell
 $env:RESORA_PROVISION_WEB_SMOKE = '1'
-pnpm.cmd exec bun test packages/api/src/modules/identity/sr-provisioning.integration.test.ts --test-name-pattern 'dry-run|one dummy'
+pnpm.cmd exec bun test packages/api/src/modules/provisioning/sr-provisioning.integration.test.ts --test-name-pattern 'dry-run|one dummy'
 Remove-Item Env:RESORA_PROVISION_WEB_SMOKE
 ```
 
@@ -492,7 +492,7 @@ On `/admin/users`, create a period under **Kelola periode menjabat**, choose mem
 
 Use **Reset password** and its confirmation to issue a temporary credential, privately hand it to the owner, and close the one-time display. Other sessions are revoked and the owner must change the password after login. A lost response leaves the result uncertain: perform a new explicit reset if a usable credential is needed. Cached directory data is memory-only and can be refreshed with **Perbarui data**; logout/login/reload clears it.
 
-Offline additions can be checked with `bun --no-env-file test apps/web/src/features/identity/account-status.test.ts packages/api/src/modules/identity/account-lifecycle.integration.test.ts` (database cases skip without opt-in). For the database suite, set only `RESORA_ADMIN_LIFECYCLE_TEST_DB_URL` to an **empty** PostgreSQL database named exactly `resora_identity_test_admin_lifecycle` on `127.0.0.1`, without URL options, then run the lifecycle integration file. It refuses existing public tables, applies the complete migration chain and writes synthetic fixtures. Never substitute the application's DATABASE_URL. The test database/container can be disposed of after the suite. CLI verification does not replace browser/manual UAT for search, selection, one-time credential display and the purna notification.
+Offline additions can be checked with `bun --no-env-file test apps/web/src/features/identity/account-status.test.ts packages/api/src/modules/accounts/account-lifecycle.integration.test.ts` (database cases skip without opt-in). For the database suite, set only `RESORA_ADMIN_LIFECYCLE_TEST_DB_URL` to an **empty** PostgreSQL database named exactly `resora_identity_test_admin_lifecycle` on `127.0.0.1`, without URL options, then run the lifecycle integration file. It refuses existing public tables, applies the complete migration chain and writes synthetic fixtures. Never substitute the application's DATABASE_URL. The test database/container can be disposed of after the suite. CLI verification does not replace browser/manual UAT for search, selection, one-time credential display and the purna notification.
 
 ### Local verification evidence (2026-10-19, not released)
 
@@ -532,7 +532,7 @@ Verification for this update:
 
 - `bun run test:offline`: **272 passed / 5,074 assertions**. The first sandboxed run could not bind the loopback HTTP listener; the permitted local rerun passed.
 - `bun test apps/web/src/config/navigation.test.ts`: **3 passed / 65 assertions**.
-- `RESORA_ADMIN_LIFECYCLE_TEST_DB_URL=<fresh loopback scratch URL> bun --no-env-file test packages/api/src/modules/identity/account-lifecycle.integration.test.ts`: **16 passed / 111 assertions**, including audited edit/archival, session revocation, login denial/restoration, stale and concurrent writes, immutable participant snapshots and audit-failure rollback. The scratch guard refuses remote/nonempty databases. An initial connection check ran before container readiness and was rerun after `pg_isready` succeeded.
+- `RESORA_ADMIN_LIFECYCLE_TEST_DB_URL=<fresh loopback scratch URL> bun --no-env-file test packages/api/src/modules/accounts/account-lifecycle.integration.test.ts`: **16 passed / 111 assertions**, including audited edit/archival, session revocation, login denial/restoration, stale and concurrent writes, immutable participant snapshots and audit-failure rollback. The scratch guard refuses remote/nonempty databases. An initial connection check ran before container readiness and was rerun after `pg_isready` succeeded.
 - `tsc --noEmit` in `apps/web` and `packages/api`: passed.
 - `next build` in `apps/web`, `tsdown` in `apps/server`: passed. No deployment was performed.
 - `biome check .` and `git diff --check`: passed.

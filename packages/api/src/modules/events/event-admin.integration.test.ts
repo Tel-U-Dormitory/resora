@@ -29,7 +29,7 @@ import { getActiveSrDirectory } from "../identity/identity.public";
 import {
 	localProvisioningTarget,
 	verifyLocalProvisioningDatabase,
-} from "../identity/sr-provisioning";
+} from "../provisioning/sr-provisioning";
 import * as service from "./event.service";
 import { deletedDraftHistory, eventAuditHistory } from "./event-audit";
 

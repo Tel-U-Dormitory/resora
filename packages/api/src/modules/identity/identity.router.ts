@@ -20,25 +20,25 @@ import {
 	listAccounts,
 	maintainAccount,
 	resetAccountPassword,
-} from "./account-admin";
+} from "../accounts/account-admin";
 import {
 	archiveAccountSchema,
 	createAccountSchema,
 	listAccountsSchema,
 	resetAccountPasswordSchema,
 	updateAccountSchema,
-} from "./account-admin.schema";
+} from "../accounts/account-admin.schema";
 import {
 	assignPeriod,
 	createPeriod,
 	extendPeriod,
 	listPeriods,
-} from "./account-period";
+} from "../accounts/account-period";
 import {
 	assignPeriodSchema,
 	createPeriodSchema,
 	extendPeriodSchema,
-} from "./account-period.schema";
+} from "../accounts/account-period.schema";
 import {
 	accountPermissions,
 	accountPermissionsSchema,

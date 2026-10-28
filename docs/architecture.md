@@ -94,6 +94,19 @@ resora/
 │   │   └── src/
 │   │       ├── modules/            # Domain-first; flat per domain
 │   │       │   ├── identity/
+│   │       │   │   ├── identity.router.ts
+│   │       │   │   ├── identity.public.ts
+│   │       │   │   ├── identity-policy.ts
+│   │       │   │   └── account-permissions.ts
+│   │       │   ├── accounts/
+│   │       │   │   ├── account-admin.ts
+│   │       │   │   └── account-period.ts
+│   │       │   ├── provisioning/
+│   │       │   │   ├── sr-account.ts
+│   │       │   │   ├── sr-provisioning.ts
+│   │       │   │   ├── provisioning-csv.ts
+│   │       │   │   ├── provisioning-credentials.ts
+│   │       │   │   └── system-admin-bootstrap.ts
 │   │       │   ├── attendance/
 │   │       │   │   ├── attendance.router.ts
 │   │       │   │   ├── attendance.schema.ts
@@ -212,6 +225,8 @@ Frontend still follows the established NEED boundaries: HCO event/roster screens
 
 ### 6.1 Identity baseline
 
+Backend organization: sibling `identity/` retains the `identity.*` router, public Identity boundary, authorization policies, permission catalog and grants. `accounts/` owns account administration and SR period management; `provisioning/` owns SR account creation, CSV parsing, credential preparation, provisioning and system-admin bootstrap. Existing services and tests remain intact, with domain tests colocated (including the cross-module `system-admin.integration.test.ts` in Provisioning). Server CLI entrypoints stay in `apps/server/src/scripts/`. This organization does not change public API contracts, authorization, account lifecycle, transactions or CLI behavior; consumers continue using `identity.public.ts` for operational Identity access.
+
 - Use Better Auth with Username Plugin: **SR `username = NIM`**, preserving leading zeros as a string. Confirm status for a user before permitting protected actions; session alone is not an active-account guarantee.
 - The user has one primary actor: `SR`, `MAHASISWA`, `ASUS`, `DITMAWA`, or dedicated `SYSTEM_ADMIN` (SA-03). SR attributes include exactly one department, one position and one building; **Inti** means the official INTI department; approved pair validation restricts executive positions to INTI and KADEP/SEKDEP/ANGGOTA to other departments.
 - Pilot authentication accepts **SR and explicitly privileged SYSTEM_ADMIN only** (SA-03). Prevent public sign-up on backend, not merely UI. Phase 2C supplies guarded local CSV provisioning and temporary credentials; real imports/distribution still require approval; use real email addresses for eventual recovery, with SMTP settings only in server environment.
@@ -261,7 +276,7 @@ A stored unrevoked grant becomes ineffective outside HCO, without ACTIVE tenure,
 
 P2 adds **Kelola Hak Akses** to the existing `/admin/users` account actions. Its separate AccountModal loads only the selected user, groups the backend catalog, and distinguishes intrinsic read-only access, explicit grants and current effective access. Ineligible HCO cannot receive a grant but existing grants remain revocable; out-of-HCO grants appear only under **Izin lama tidak berlaku**. If a former recipient now holds intrinsic access, its redundant explicit grant can be cleaned up separately without removing intrinsic access. Revocation requires inline confirmation. Pending mutations block duplicate submits and closing; failures retain selection and refresh server state. Successful writes update and invalidate only that user's permission query, without optimistic writes, polling or account-profile changes. Reopening waits for a fresh server read; target-keyed dialogs prevent selections crossing accounts. Account listing remains protected by SUPERADMIN-only backend APIs. P3 mobile/keyboard/focus and live revocation UAT remain pending. Migration `20261026122216_user_permission_grants` must be applied by PM to verified DEV before UAT; merging P1 alone does not prove it is applied. No remote migration or release is performed by P2.
 
-Targeted verification: `bun --no-env-file test packages/api/src/modules/identity/account-permissions.test.ts packages/api/src/modules/identity/identity-policy.test.ts packages/api/src/modules/identity/identity-profile.test.ts packages/api/src/modules/identity/account-admin.test.ts packages/api/src/modules/attendance/reporting.test.ts`; opt-in real PostgreSQL suite `packages/api/src/modules/identity/account-permissions.integration.test.ts` uses only a verified empty loopback `resora_identity_test_permissions` via `RESORA_PERMISSION_TEST_DB_URL`. It checks all migration hashes, RLS/FKs/CHECKs, audit rollback/idempotency, role/tenure/password transitions, intrinsic regression, manual insert/correct/audit and both revoke/write transaction orders with deterministic lock coordination. Existing account lifecycle integration is also run on a separate empty scratch database. Use the target-aware migration workflow in `docs/setup.md` only after separate operator approval for DEV/PROD.
+Targeted verification: `bun --no-env-file test packages/api/src/modules/identity/account-permissions.test.ts packages/api/src/modules/identity/identity-policy.test.ts packages/api/src/modules/identity/identity-profile.test.ts packages/api/src/modules/accounts/account-admin.test.ts packages/api/src/modules/attendance/reporting.test.ts`; opt-in real PostgreSQL suite `packages/api/src/modules/identity/account-permissions.integration.test.ts` uses only a verified empty loopback `resora_identity_test_permissions` via `RESORA_PERMISSION_TEST_DB_URL`. It checks all migration hashes, RLS/FKs/CHECKs, audit rollback/idempotency, role/tenure/password transitions, intrinsic regression, manual insert/correct/audit and both revoke/write transaction orders with deterministic lock coordination. Existing account lifecycle integration is also run on a separate empty scratch database. Use the target-aware migration workflow in `docs/setup.md` only after separate operator approval for DEV/PROD.
 
 P2 targeted CLI UI coverage: `bun --no-env-file test apps/web/src/features/identity/account-permissions-dialog.test.ts` uses the existing React hook/transport-double pattern, without a browser. Category and Identity/attendance regression tests plus the disposable PostgreSQL suite verify filtered catalogs, inapplicable grant cleanup and unchanged authorization. Actual dialog focus, Escape, responsive layout and cross-session revocation presentation require P3 manual UAT.
 
