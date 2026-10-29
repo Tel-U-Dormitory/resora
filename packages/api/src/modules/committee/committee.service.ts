@@ -7,7 +7,7 @@ import {
 	committees,
 } from "@resora/db/schema/committee";
 import { TRPCError } from "@trpc/server";
-import { and, asc, count, eq, ilike, sql } from "drizzle-orm";
+import { and, asc, count, eq, ilike, inArray, sql } from "drizzle-orm";
 import type { z } from "zod";
 import {
 	canManageCommittee,
@@ -18,6 +18,7 @@ import {
 	getSrMemberIdentities,
 } from "../identity/identity.public";
 import type {
+	addMembersSchema,
 	committeeFieldsSchema,
 	listCommitteesSchema,
 	memberSchema,
@@ -360,6 +361,57 @@ export function saveMember(
 		return { success: true };
 	});
 }
+export function addMembers(
+	db: Database,
+	identity: ActiveIdentity,
+	input: z.infer<typeof addMembersSchema>,
+) {
+	return write(db, identity, input.committeeId, async (tx) => {
+		const [division] = await tx
+			.select({ id: committeeDivisions.id })
+			.from(committeeDivisions)
+			.where(
+				and(
+					eq(committeeDivisions.committeeId, input.committeeId),
+					eq(committeeDivisions.id, input.divisionId),
+				),
+			);
+		if (!division)
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: "COMMITTEE_DIVISION_NOT_FOUND",
+			});
+		// Keep candidate SHARE locks and their order consistent across batches.
+		for (const userId of [...input.userIds].sort())
+			if (!(await getActiveSrCandidate(tx, userId)))
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "COMMITTEE_MEMBER_INELIGIBLE",
+				});
+		const [existing] = await tx
+			.select({ userId: committeeMembers.userId })
+			.from(committeeMembers)
+			.where(
+				and(
+					eq(committeeMembers.committeeId, input.committeeId),
+					inArray(committeeMembers.userId, input.userIds),
+				),
+			)
+			.limit(1);
+		if (existing)
+			throw new TRPCError({ code: "CONFLICT", message: "COMMITTEE_DUPLICATE" });
+		await tx.insert(committeeMembers).values(
+			input.userIds.map((userId) => ({
+				committeeId: input.committeeId,
+				divisionId: input.divisionId,
+				positionCode: input.positionCode,
+				userId,
+			})),
+		);
+		return { success: true, addedCount: input.userIds.length };
+	});
+}
+
 export function removeMember(
 	db: Database,
 	identity: ActiveIdentity,

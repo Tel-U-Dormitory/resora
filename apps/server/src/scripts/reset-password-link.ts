@@ -5,7 +5,7 @@ import {
 	type BootstrapTarget,
 	validateBootstrapTarget,
 	verifyBootstrapDatabase,
-} from "@resora/api/modules/identity/system-admin-bootstrap";
+} from "@resora/api/modules/provisioning/system-admin-bootstrap";
 import { createAuth } from "@resora/auth";
 import {
 	recoveryEligible,

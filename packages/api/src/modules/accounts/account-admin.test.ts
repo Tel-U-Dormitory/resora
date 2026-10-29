@@ -8,13 +8,13 @@ import { accountAuditLogs } from "@resora/db/schema/identity";
 import { getTableName, type SQL } from "drizzle-orm";
 import { getTableConfig, PgDialect } from "drizzle-orm/pg-core";
 import { appRouter } from "../../routers";
+import { provisionSrAccounts } from "../provisioning/sr-provisioning";
 import {
 	archiveAccountSchema,
 	createAccountSchema,
 	listAccountsSchema,
 	updateAccountSchema,
 } from "./account-admin.schema";
-import { provisionSrAccounts } from "./sr-provisioning";
 
 const authConfig: AuthConfig = {
 	BETTER_AUTH_URL: "http://127.0.0.1:3000",

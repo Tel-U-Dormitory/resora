@@ -155,6 +155,7 @@ test("session permissions reflect DB SUPERADMIN grant/revocation without changin
 
 for (const [departmentCode, positionCode, allowed] of [
 	["HCO", "ANGGOTA", true],
+	["HCO", "SEKDEP", true],
 	["HCO", "KADEP", true],
 	["HCO", "KETUM", false],
 	["RND", "KADEP", false],
@@ -162,7 +163,9 @@ for (const [departmentCode, positionCode, allowed] of [
 ] as const)
 	test(`session navigation capability uses existing policy for ${departmentCode}/${positionCode}`, async () => {
 		const f = fixture({ departmentCode, positionCode });
-		expect((await f.caller.session())?.canManageInternalEvents).toBe(allowed);
+		const session = await f.caller.session();
+		expect(session?.canManageInternalEvents).toBe(allowed);
+		expect(session?.canManageCommittee).toBe(allowed);
 	});
 
 test("session broadcast capability comes from structural authority or explicit privilege, never committee roles", async () => {

@@ -22,16 +22,16 @@ import { eq, sql } from "drizzle-orm";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import { getTableConfig } from "drizzle-orm/pg-core";
 import { appRouter } from "../../routers";
+import { eventDraftSchema } from "../attendance/attendance.schema";
+import { manualInsert } from "../attendance/manual-attendance";
+import { exportCsv, ownHistory, recap } from "../attendance/reporting";
 import { getActiveSrDirectory } from "../identity/identity.public";
 import {
 	localProvisioningTarget,
 	verifyLocalProvisioningDatabase,
-} from "../identity/sr-provisioning";
-import { eventDraftSchema } from "./attendance.schema";
-import * as service from "./attendance.service";
+} from "../provisioning/sr-provisioning";
+import * as service from "./event.service";
 import { deletedDraftHistory, eventAuditHistory } from "./event-audit";
-import { manualInsert } from "./manual-attendance";
-import { exportCsv, ownHistory, recap } from "./reporting";
 
 const target = process.env.RESORA_EVENT_ADMIN_TEST_DB_URL;
 // Opt-in, loopback, purpose-specific disposable database only; never any application env fallback.

@@ -1,6 +1,7 @@
 "use client";
 
 import type { AppRouter } from "@resora/api/routers/index";
+import { Checkbox } from "@resora/ui/components/checkbox";
 import { Input } from "@resora/ui/components/input";
 import { Label } from "@resora/ui/components/label";
 import { Select } from "@resora/ui/components/select";
@@ -30,82 +31,14 @@ function MemberFields({
 	committee: Detail;
 	member?: Member;
 }) {
-	const [search, setSearch] = useState("");
-	const [userId, setUserId] = useState(member?.userId ?? "");
-	const candidates = useQuery({
-		...trpc.committee.candidates.queryOptions({
-			committeeId: committee.id,
-			search: search.trim(),
-		}),
-		enabled: !member && search.trim().length >= 2,
-		meta: { errorHandledLocally: true },
-	});
 	return (
 		<>
-			{member ? (
+			{member && (
 				<p className="break-words font-semibold">
 					{member.name} · {member.nim}
 				</p>
-			) : (
-				<>
-					<div className="space-y-2">
-						<Label htmlFor="candidate-search">Cari SR aktif (nama / NIM)</Label>
-						<Input
-							id="candidate-search"
-							type="search"
-							value={search}
-							maxLength={100}
-							onChange={(event) => {
-								setSearch(event.target.value);
-								setUserId("");
-							}}
-						/>
-						<p className="text-muted-foreground text-xs">
-							Ketik minimal 2 karakter. Maksimal 20 hasil; perjelas pencarian
-							bila diperlukan.
-						</p>
-					</div>
-					{search.trim().length >= 2 &&
-						(candidates.isPending ? (
-							<p role="status">Mencari SR…</p>
-						) : candidates.isError ? (
-							<div role="alert">
-								<p>{committeeError(candidates.error)}</p>
-								<Button
-									type="button"
-									variant="outline"
-									onClick={() => void candidates.refetch()}
-								>
-									Coba kembali
-								</Button>
-							</div>
-						) : candidates.data?.length === 0 ? (
-							<p role="status">
-								Tidak ada SR eligible yang sesuai atau semua hasil sudah menjadi
-								anggota.
-							</p>
-						) : null)}
-					<div className="space-y-2">
-						<Label htmlFor="candidate-user">Anggota SR</Label>
-						<Select
-							id="candidate-user"
-							name="userId"
-							value={userId}
-							required
-							onChange={(event) => setUserId(event.target.value)}
-						>
-							<option value="">Pilih SR</option>
-							{search.trim().length >= 2 &&
-								candidates.data?.map((row) => (
-									<option key={row.userId} value={row.userId}>
-										{row.name} · {row.nim}
-									</option>
-								))}
-						</Select>
-					</div>
-				</>
 			)}
-			{member && <input type="hidden" name="userId" value={userId} />}
+			{member && <input type="hidden" name="userId" value={member.userId} />}
 			<div className="space-y-2">
 				<Label htmlFor="member-division">Divisi</Label>
 				<Select
@@ -141,6 +74,189 @@ function MemberFields({
 				</p>
 			</div>
 		</>
+	);
+}
+
+function BulkMemberDialog({
+	committee,
+	onClose,
+}: {
+	committee: Detail;
+	onClose: () => void;
+}) {
+	const [search, setSearch] = useState("");
+	const [selected, setSelected] = useState<
+		Pick<Member, "userId" | "name" | "nim">[]
+	>([]);
+	const candidates = useQuery({
+		...trpc.committee.candidates.queryOptions({
+			committeeId: committee.id,
+			search: search.trim(),
+		}),
+		enabled: search.trim().length >= 2,
+		meta: { errorHandledLocally: true },
+	});
+	const toggle = (
+		candidate: Pick<Member, "userId" | "name" | "nim">,
+		checked: boolean,
+	) => {
+		setSelected((current) => {
+			if (!checked)
+				return current.filter((row) => row.userId !== candidate.userId);
+			if (
+				current.length >= 30 ||
+				current.some((row) => row.userId === candidate.userId)
+			)
+				return current;
+			return [...current, candidate];
+		});
+	};
+	return (
+		<CommitteeDialog
+			title="Tambah anggota"
+			description={`Kepanitiaan: ${committee.name}. Satu divisi dan jabatan berlaku untuk seluruh pilihan.`}
+			onClose={onClose}
+			submitLabel={`Tambahkan ${selected.length} anggota`}
+			onSubmit={(fields) => {
+				const userIds = selected.map((row) => row.userId);
+				if (
+					!userIds.length ||
+					userIds.length > 30 ||
+					new Set(userIds).size !== userIds.length
+				)
+					throw Error("COMMITTEE_BULK_SELECTION_INVALID");
+				const divisionId = String(fields.get("divisionId") ?? "");
+				const positionCode = committee.positions.find(
+					(code) => code === fields.get("positionCode"),
+				);
+				if (
+					!committee.divisions.some((row) => row.id === divisionId) ||
+					!positionCode
+				)
+					throw Error("COMMITTEE_BULK_ASSIGNMENT_INVALID");
+				return trpcClient.committee.addMembers.mutate({
+					committeeId: committee.id,
+					divisionId,
+					positionCode,
+					userIds,
+				});
+			}}
+		>
+			{(busy) => (
+				<>
+					<div className="space-y-2">
+						<Label htmlFor="candidate-search">Cari SR aktif (nama / NIM)</Label>
+						<Input
+							id="candidate-search"
+							type="search"
+							value={search}
+							maxLength={100}
+							onChange={(event) => setSearch(event.target.value)}
+							onKeyDown={(event) => {
+								if (event.key === "Enter") event.preventDefault();
+							}}
+						/>
+						<p className="text-muted-foreground text-xs">
+							Ketik minimal 2 karakter. Maksimal 20 hasil per pencarian, bukan
+							seluruh kandidat. Perjelas kata kunci untuk mencari SR lainnya.
+						</p>
+					</div>
+					{search.trim().length >= 2 &&
+						(candidates.isPending ? (
+							<p role="status">Mencari SR…</p>
+						) : candidates.isError ? (
+							<div role="alert" className="space-y-2">
+								<p>{committeeError(candidates.error)}</p>
+								<Button
+									type="button"
+									variant="outline"
+									onClick={() => void candidates.refetch()}
+								>
+									Coba kembali
+								</Button>
+							</div>
+						) : !candidates.data?.length ? (
+							<p role="status">
+								Tidak ada SR eligible yang sesuai atau semua hasil sudah menjadi
+								anggota.
+							</p>
+						) : (
+							<fieldset className="space-y-2">
+								<legend className="font-semibold text-sm">
+									Hasil pencarian
+								</legend>
+								<ul className="max-h-60 space-y-2 overflow-y-auto">
+									{candidates.data.map((row) => {
+										const checked = selected.some(
+											(item) => item.userId === row.userId,
+										);
+										return (
+											<li
+												key={row.userId}
+												className="flex items-start gap-3 rounded-lg border border-border p-3"
+											>
+												<Checkbox
+													id={`candidate-${row.userId}`}
+													checked={checked}
+													disabled={busy || (!checked && selected.length >= 30)}
+													onCheckedChange={(value) => {
+														if (!busy) toggle(row, value);
+													}}
+												/>
+												<Label
+													htmlFor={`candidate-${row.userId}`}
+													className="min-w-0 break-words"
+												>
+													{row.name} · {row.nim}
+												</Label>
+											</li>
+										);
+									})}
+								</ul>
+							</fieldset>
+						))}
+					<div className="space-y-2">
+						<p
+							role="status"
+							className="font-semibold text-sm"
+						>{`${selected.length} / 30 SR dipilih`}</p>
+						{selected.length > 0 && (
+							<ul
+								aria-label="SR terpilih"
+								className="max-h-60 space-y-2 overflow-y-auto"
+							>
+								{selected.map((row) => (
+									<li
+										key={row.userId}
+										className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border p-3"
+									>
+										<span className="min-w-0 break-words text-sm">
+											{row.name} · {row.nim}
+										</span>
+										<Button
+											type="button"
+											variant="outline"
+											size="sm"
+											aria-label={`Batalkan pilihan ${row.name} (${row.nim})`}
+											onClick={() => toggle(row, false)}
+										>
+											Batalkan
+										</Button>
+									</li>
+								))}
+							</ul>
+						)}
+						{selected.length === 30 && (
+							<p className="text-muted-foreground text-xs">
+								Batas 30 anggota tercapai. Batalkan pilihan sebelum memilih SR
+								lain.
+							</p>
+						)}
+					</div>
+					<MemberFields committee={committee} />
+				</>
+			)}
+		</CommitteeDialog>
 	);
 }
 
@@ -513,11 +629,14 @@ function CommitteeEditor({
 				</div>
 			</CommitteeDialog>
 		);
+	if (editor.kind === "addMember")
+		return (
+			<BulkMemberDialog key={committeeId} committee={data} onClose={onClose} />
+		);
+	if (editor.kind !== "member") return null;
 	return (
 		<CommitteeDialog
-			title={
-				editor.kind === "member" ? "Edit penugasan anggota" : "Tambah anggota"
-			}
+			title="Edit penugasan anggota"
 			description={context}
 			onClose={onClose}
 			onSubmit={(fields) => {
@@ -529,15 +648,10 @@ function CommitteeEditor({
 						fields.get("positionCode"),
 					) as Detail["positions"][number],
 				};
-				return editor.kind === "member"
-					? trpcClient.committee.updateMember.mutate(input)
-					: trpcClient.committee.addMember.mutate(input);
+				return trpcClient.committee.updateMember.mutate(input);
 			}}
 		>
-			<MemberFields
-				committee={data}
-				member={editor.kind === "member" ? editor.member : undefined}
-			/>
+			<MemberFields committee={data} member={editor.member} />
 		</CommitteeDialog>
 	);
 }

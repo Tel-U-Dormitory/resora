@@ -11,6 +11,7 @@ import {
 } from "@resora/db/schema/identity";
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 
 import { protectedProcedure, publicProcedure, router } from "../../index";
 import {
@@ -19,35 +20,53 @@ import {
 	listAccounts,
 	maintainAccount,
 	resetAccountPassword,
-} from "./account-admin";
+} from "../accounts/account-admin";
 import {
 	archiveAccountSchema,
 	createAccountSchema,
 	listAccountsSchema,
 	resetAccountPasswordSchema,
 	updateAccountSchema,
-} from "./account-admin.schema";
+} from "../accounts/account-admin.schema";
 import {
 	assignPeriod,
 	createPeriod,
 	extendPeriod,
 	listPeriods,
-} from "./account-period";
+} from "../accounts/account-period";
 import {
 	assignPeriodSchema,
 	createPeriodSchema,
 	extendPeriodSchema,
-} from "./account-period.schema";
+} from "../accounts/account-period.schema";
+import {
+	accountPermissions,
+	accountPermissionsSchema,
+	getPermissionCatalog,
+	setAccountPermission,
+	setAccountPermissionSchema,
+} from "./account-permissions";
+import { canManageManualAttendance } from "./identity.public";
 import {
 	canManageBroadcast,
 	canManageCommittee,
-	canManageInternalAttendanceManually,
 	canManageInternalEvent,
 	canOperateGeneralActivity,
 	hasSuperadminPrivilege,
 } from "./identity-policy";
 
 export const identityRouter = router({
+	permissionCatalog: protectedProcedure
+		.input(z.void())
+		.query(({ ctx }) => getPermissionCatalog(ctx.db, ctx.identity)),
+	accountPermissions: protectedProcedure
+		.input(accountPermissionsSchema)
+		.query(({ ctx, input }) => accountPermissions(ctx.db, ctx.identity, input)),
+	setAccountPermission: protectedProcedure
+		.input(setAccountPermissionSchema)
+		.mutation(({ ctx, input }) =>
+			setAccountPermission(ctx.db, ctx.identity, input),
+		),
 	updateAccount: protectedProcedure
 		.input(updateAccountSchema)
 		.mutation(({ ctx, input }) => maintainAccount(ctx.db, ctx.identity, input)),
@@ -142,8 +161,10 @@ export const identityRouter = router({
 			canManageInternalEvents: canManageInternalEvent(identity),
 			canManageBroadcast: canManageBroadcast(identity),
 			canManageCommittee: canManageCommittee(identity),
-			canManageInternalAttendanceManually:
-				canManageInternalAttendanceManually(identity),
+			canManageInternalAttendanceManually: await canManageManualAttendance(
+				ctx.db,
+				identity,
+			),
 			canOperateGeneralActivity: canOperateGeneralActivity(identity),
 			isSuperadmin: hasSuperadminPrivilege(identity),
 		};
