@@ -163,14 +163,27 @@ test("permanent CI/CD scopes PR validation and staging-only publication safely",
 	expect(qualityJob?.name).toBe("CI — Code Quality");
 	expect(
 		qualityJob?.steps.filter((step) => step.run).map((step) => step.run),
-	).toEqual([
-		"pnpm install --frozen-lockfile",
+	).toEqual(["pnpm install --frozen-lockfile", "pnpm run verify:pr"]);
+	const { scripts } = JSON.parse(
+		readFileSync(new URL("package.json", root), "utf8"),
+	) as { scripts: Record<string, string> };
+	expect(scripts["verify:pr"]?.split(" && ")).toEqual([
 		"pnpm --filter web exec next typegen",
-		"pnpm exec biome check .",
+		"pnpm run lint",
 		"pnpm run check-types",
 		"pnpm run test:offline",
+		"pnpm run test:loadtest",
 		"pnpm run build",
 	]);
+	expect(scripts.lint).toBe("biome check .");
+	expect(scripts["test:offline"]).toBe(
+		"bun --no-env-file scripts/test-offline.ts",
+	);
+	expect(scripts["test:loadtest"]).toBe(
+		"bun --no-env-file test tests/resora-loadtest/loadtest.test.ts tests/resora-loadtest/provision-dev.test.ts",
+	);
+	for (const step of qualityJob?.steps ?? [])
+		expect(step["continue-on-error"]).not.toBe(true);
 	// biome-ignore lint/suspicious/noTemplateCurlyInString: Literal GitHub Actions expression.
 	const shaExpression = "${{ github.sha }}";
 	for (const workflow of [verify, publish]) {

@@ -10,13 +10,14 @@ import {
 	TooltipTrigger,
 } from "@resora/ui/components/tooltip";
 import { useQuery } from "@tanstack/react-query";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, ShieldCheck, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { queryErrorMessage } from "@/utils/request-error";
 import { queryClient, trpc, trpcClient } from "@/utils/trpc";
 import { AccountModal } from "./account-modal";
 import AccountPasswordReset from "./account-password-reset";
+import AccountPermissionsDialog from "./account-permissions-dialog";
 
 type ManagedAccount = Awaited<
 	ReturnType<typeof trpcClient.identity.accountSnapshot.query>
@@ -27,7 +28,9 @@ export default function AccountActions({
 }: {
 	account: ManagedAccount;
 }) {
-	const [action, setAction] = useState<"edit" | "archive" | null>(null);
+	const [action, setAction] = useState<
+		"edit" | "archive" | "permissions" | null
+	>(null);
 	const [notice, setNotice] = useState("");
 	return (
 		<>
@@ -76,6 +79,27 @@ export default function AccountActions({
 					</TooltipContent>
 				</Tooltip>
 				<AccountPasswordReset userId={account.userId} name={account.name} />
+				<Tooltip>
+					<TooltipTrigger
+						render={
+							<Button
+								variant="ghost"
+								size="icon"
+								className="resora-account-action size-11"
+								aria-label={`Kelola Hak Akses ${account.name} (${account.nim ?? "Tanpa NIM"})`}
+								onClick={() => {
+									setNotice("");
+									setAction("permissions");
+								}}
+							/>
+						}
+					>
+						<ShieldCheck size={18} aria-hidden="true" />
+					</TooltipTrigger>
+					<TooltipContent className="rounded-lg">
+						Kelola Hak Akses
+					</TooltipContent>
+				</Tooltip>
 			</div>
 			{notice && (
 				<p
@@ -85,7 +109,14 @@ export default function AccountActions({
 					{notice}
 				</p>
 			)}
-			{action && (
+			{action === "permissions" && (
+				<AccountPermissionsDialog
+					key={account.userId}
+					userId={account.userId}
+					onClose={() => setAction(null)}
+				/>
+			)}
+			{(action === "edit" || action === "archive") && (
 				<AccountMaintenance
 					key={action}
 					account={account}

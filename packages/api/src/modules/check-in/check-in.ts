@@ -9,12 +9,12 @@ import {
 } from "@resora/db/schema/attendance";
 import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
+import type { CheckInInput } from "../attendance/attendance.schema";
 import {
 	canAccessPersonalSr,
 	getCheckInSr,
 	isValidSrAssignment,
 } from "../identity/identity.public";
-import type { CheckInInput } from "./attendance.schema";
 import { classifyTiming, locationFailure } from "./check-in-policy";
 import { parseChallenge, verifySessionChallenge } from "./qr";
 

@@ -7,6 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Auth } from "@resora/auth";
 import type { Database } from "@resora/db";
+import { attendanceAuditLogs } from "@resora/db/schema/attendance";
+import { userPermissionGrants, userProfiles } from "@resora/db/schema/identity";
 import { createApp, resolveClientIp } from "./app";
 import { DatabaseBackupError } from "./database-backup";
 
@@ -20,17 +22,39 @@ let failContext = false;
 let failAuth = false;
 let failQuery = false;
 let authStatus: number | undefined;
-const query = {
-	innerJoin: () => query,
-	leftJoin: () => query,
-	where: async () => {
-		if (failQuery) throw new Error("synthetic-private-query");
-		return identity ? [{ tenureStatus: "ACTIVE", ...identity }] : [];
-	},
-};
+let manualGrant: { userId: string; revokedAt: Date | null } | null = null;
+let grantReads = 0;
+function queryFor(table: unknown) {
+	const query = {
+		innerJoin: () => query,
+		leftJoin: () => query,
+		where: () => {
+			if (failQuery) throw new Error("synthetic-private-query");
+			if (table === userProfiles)
+				return Promise.resolve(
+					identity ? [{ tenureStatus: "ACTIVE", ...identity }] : [],
+				);
+			if (table === userPermissionGrants) {
+				grantReads++;
+				return Promise.resolve(
+					manualGrant?.userId === identity?.userId &&
+						manualGrant?.revokedAt === null
+						? [{ userId: manualGrant.userId }]
+						: [],
+				);
+			}
+			if (table === attendanceAuditLogs)
+				return {
+					orderBy: () => ({ limit: () => ({ offset: async () => [] }) }),
+				};
+			throw new Error("Unexpected offline database read");
+		},
+	};
+	return query;
+}
 const db = {
 	$client: { totalCount: 1, idleCount: 0, waitingCount: 3 },
-	select: () => ({ from: () => query }),
+	select: () => ({ from: queryFor }),
 	transaction: () => {
 		writes++;
 		throw new Error("Unexpected offline database write");
@@ -87,6 +111,8 @@ beforeEach(() => {
 	failAuth = false;
 	failQuery = false;
 	authStatus = undefined;
+	manualGrant = null;
+	grantReads = 0;
 });
 
 test("initial-password SR can use protected API; live grant adds the mandatory gate", async () => {
@@ -269,6 +295,7 @@ test("originless SSR GET works; anonymous mutation still requires authentication
 test("direct HTTP denies manual/audit for ordinary HCO, other KADEP, Adaptif and unprivileged SR", async () => {
 	for (const [departmentCode, positionCode, isSuperadmin] of [
 		["HCO", "ANGGOTA", false],
+		["HCO", "SEKDEP", false],
 		["ADAPTIF", "KADEP", false],
 		["ADAPTIF", "ANGGOTA", false],
 		["SOSIAL", "ANGGOTA", false],
@@ -305,6 +332,38 @@ test("direct HTTP denies manual/audit for ordinary HCO, other KADEP, Adaptif and
 			{ headers: { origin } },
 		);
 		expect(audit.status).toBe(403);
+	}
+	expect(writes).toBe(0);
+	expect(grantReads).toBe(6); // Insert, correction and audit for both ordinary HCO positions.
+});
+
+test("HTTP manual capability and audit distinguish intrinsic access from explicit active grants", async () => {
+	for (const positionCode of ["KADEP", "SEKDEP", "ANGGOTA"]) {
+		identity = { ...identity, positionCode };
+		for (const grant of [
+			null,
+			{ userId: "other-user", revokedAt: null },
+			{ userId: "synthetic-http-sr", revokedAt: new Date() },
+			{ userId: "synthetic-http-sr", revokedAt: null },
+		]) {
+			manualGrant = grant;
+			const allowed =
+				positionCode === "KADEP" ||
+				(grant?.userId === "synthetic-http-sr" && grant.revokedAt === null);
+			const response = await fetch(`${base}/trpc/identity.session`);
+			expect(response.status).toBe(200);
+			expect(
+				(
+					(await response.json()) as {
+						result: { data: { canManageInternalAttendanceManually: boolean } };
+					}
+				).result.data.canManageInternalAttendanceManually,
+			).toBe(allowed);
+			const audit = await fetch(
+				`${base}/trpc/attendance.auditHistory?input=${encodeURIComponent(JSON.stringify({ eventId: randomUUID(), userId: "synthetic" }))}`,
+			);
+			expect(audit.status).toBe(allowed ? 200 : 403);
+		}
 	}
 	expect(writes).toBe(0);
 });

@@ -33,11 +33,12 @@ test("regular SR initial-password flag preserves department permissions", () => 
 	}
 });
 
-test("committee management is limited to structural KADEP HCO and valid SUPERADMIN", () => {
+test("independent committee policy allows all eligible structural HCO and valid SUPERADMIN", () => {
+	expect(canManageCommittee).not.toBe(canManageInternalEvent);
 	for (const [department, position, allowed] of [
 		["HCO", "KADEP", true],
-		["HCO", "SEKDEP", false],
-		["HCO", "ANGGOTA", false],
+		["HCO", "SEKDEP", true],
+		["HCO", "ANGGOTA", true],
 		["RND", "KADEP", false],
 		["ADAPTIF", "KADEP", false],
 		["INTI", "KETUM", false],
@@ -68,8 +69,13 @@ test("committee management is limited to structural KADEP HCO and valid SUPERADM
 		{ ...admin, passwordResetRequired: true },
 		{ ...identity("HCO", "KADEP"), isActive: false },
 		{ ...identity("HCO", "KADEP"), passwordResetRequired: true },
+		{ ...identity("HCO", "SEKDEP"), passwordResetRequired: true },
+		{ ...identity("HCO", "ANGGOTA"), isActive: false },
 		identity("HCO", "KETUM", true),
 		{ ...identity("RND", "ANGGOTA"), committeePositionCode: "KADEP" },
+		{ ...identity("RND", "ANGGOTA"), committeePositionCode: "PJ" },
+		{ ...identity("RND", "ANGGOTA"), committeePositionCode: "PIC1" },
+		{ ...identity("RND", "ANGGOTA"), committeePositionCode: "PIC2" },
 	])
 		expect(
 			canManageCommittee(invalid as ActiveIdentity | null | undefined),
@@ -90,22 +96,25 @@ test("committee management is limited to structural KADEP HCO and valid SUPERADM
 });
 
 test("committee policy consumes live tenure-verified identities rather than membership roles", async () => {
-	for (const status of ["ACTIVE", "EXPIRED", "SCHEDULED", "UNASSIGNED"]) {
-		const row = {
-			...identity("HCO", "KADEP"),
-			tenureStatus: status,
-			srUserId: "synthetic-policy",
-		};
-		const query = {
-			innerJoin: () => query,
-			leftJoin: () => query,
-			where: async () => [row],
-		};
-		const db = { select: () => ({ from: () => query }) } as unknown as Database;
-		expect(canManageCommittee(await getActiveIdentity(db, row.userId))).toBe(
-			status === "ACTIVE",
-		);
-	}
+	for (const position of ["KADEP", "SEKDEP", "ANGGOTA"])
+		for (const status of ["ACTIVE", "EXPIRED", "SCHEDULED", "UNASSIGNED"]) {
+			const row = {
+				...identity("HCO", position),
+				tenureStatus: status,
+				srUserId: "synthetic-policy",
+			};
+			const query = {
+				innerJoin: () => query,
+				leftJoin: () => query,
+				where: async () => [row],
+			};
+			const db = {
+				select: () => ({ from: () => query }),
+			} as unknown as Database;
+			expect(canManageCommittee(await getActiveIdentity(db, row.userId))).toBe(
+				status === "ACTIVE",
+			);
+		}
 });
 
 const identity = (

@@ -1,5 +1,8 @@
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../../index";
+import { checkIn } from "../check-in/check-in";
+import * as attendance from "../events/event.service";
+import { deletedDraftHistory, eventAuditHistory } from "../events/event-audit";
 import {
 	administrativeHistorySchema,
 	advancedEventEditSchema,
@@ -17,9 +20,6 @@ import {
 	manualInsertSchema,
 	ownHistorySchema,
 } from "./attendance.schema";
-import * as attendance from "./attendance.service";
-import { checkIn } from "./check-in";
-import { deletedDraftHistory, eventAuditHistory } from "./event-audit";
 import { manualCorrect, manualInsert } from "./manual-attendance";
 import { auditHistory, exportCsv, ownHistory, recap } from "./reporting";
 

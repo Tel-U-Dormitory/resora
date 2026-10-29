@@ -18,7 +18,7 @@ import {
 	eventDraftSchema,
 	eventVisibilitySchema,
 	visibilitySchema,
-} from "./attendance.schema";
+} from "../attendance/attendance.schema";
 import {
 	activateSession,
 	advancedEditEvent,
@@ -29,7 +29,7 @@ import {
 	getEvent,
 	listEvents,
 	setEventVisibility,
-} from "./attendance.service";
+} from "./event.service";
 
 // Actual services/public Identity queries with a rollback-capable offline DB double.
 // This does not simulate PostgreSQL lock scheduling or enforce SQL triggers.

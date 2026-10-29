@@ -1,5 +1,6 @@
 import { protectedProcedure, router } from "../../index";
 import {
+	addMembersSchema,
 	candidateSchema,
 	committeeFieldsSchema,
 	committeeIdSchema,
@@ -12,6 +13,7 @@ import {
 	updateDivisionSchema,
 } from "./committee.schema";
 import {
+	addMembers,
 	committeeCandidates,
 	committeeDetail,
 	createCommittee,
@@ -68,6 +70,9 @@ export const committeeRouter = router({
 	addMember: protectedProcedure
 		.input(memberSchema)
 		.mutation(({ ctx, input }) => saveMember(ctx.db, ctx.identity, input)),
+	addMembers: protectedProcedure
+		.input(addMembersSchema)
+		.mutation(({ ctx, input }) => addMembers(ctx.db, ctx.identity, input)),
 	updateMember: protectedProcedure
 		.input(memberSchema)
 		.mutation(({ ctx, input }) =>

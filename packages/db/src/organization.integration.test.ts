@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import {
 	localProvisioningTarget,
 	verifyLocalProvisioningDatabase,
-} from "../../api/src/modules/identity/sr-provisioning";
+} from "../../api/src/modules/provisioning/sr-provisioning";
 import { createDb, type Database, type DatabaseTransaction } from "./index";
 import {
 	OrganizationConflictError,
