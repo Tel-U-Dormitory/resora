@@ -80,7 +80,11 @@ export default function CheckInScanner() {
 		releaseCamera(scanner.current, null, true);
 		scanner.current = null;
 	};
-	const inspectVideo = (element: HTMLVideoElement, attempt: number) => {
+	const inspectVideo = (
+		element: HTMLVideoElement,
+		attempt: number,
+		stalled = false,
+	) => {
 		if (attempt !== generation.current || busy.current || document.hidden)
 			return;
 		const tracks =
@@ -95,8 +99,11 @@ export default function CheckInScanner() {
 			!element.paused &&
 			!element.ended;
 		report(ready ? "VIDEO_READY" : "VIDEO_NOT_READY", attempt);
-		if (!ready) setCameraIssue((issue) => issue || "VIDEO_NOT_READY");
-		else setCameraIssue((issue) => (issue === "DECODER_FAILED" ? issue : ""));
+		// Loading/pause events can precede a healthy frame during startup or resume.
+		if (!ready && stalled)
+			setCameraIssue((issue) => issue || "VIDEO_NOT_READY");
+		else if (ready)
+			setCameraIssue((issue) => (issue === "DECODER_FAILED" ? issue : ""));
 		if (ready) {
 			cameraListeners.current?.();
 			const onEnded = () => {
@@ -283,10 +290,11 @@ export default function CheckInScanner() {
 					onDecodeError: (cause) => {
 						if (generation.current !== attempt || decoded || busy.current)
 							return;
+						const message = cause instanceof Error ? cause.message : cause;
+						// The native BarcodeDetector path prefixes even a normal empty frame.
 						if (
-							cause === Scanner.NO_QR_CODE_FOUND ||
-							(cause instanceof Error &&
-								cause.message === Scanner.NO_QR_CODE_FOUND)
+							message === Scanner.NO_QR_CODE_FOUND ||
+							message === `Scanner error: ${Scanner.NO_QR_CODE_FOUND}`
 						) {
 							report("FRAMES_NO_QR", attempt);
 							setCameraIssue((issue) =>
@@ -330,6 +338,13 @@ export default function CheckInScanner() {
 		phase === "restarting" ||
 		phase === "camera" ||
 		phase === "locating";
+	const restartCamera =
+		Boolean(cameraIssue) && (phase === "camera" || phase === "starting");
+	const cameraLabel = restartCamera
+		? "Mulai ulang pemindaian"
+		: scannerOpen
+			? "Hentikan kamera dan lokasi"
+			: "Buka kamera dan lokasi";
 	const stop = () => {
 		report("STOPPED");
 		generation.current++;
@@ -363,7 +378,7 @@ export default function CheckInScanner() {
 					}
 					onPause={(event) => inspectVideo(event.currentTarget, cameraAttempt)}
 					onStalled={(event) =>
-						inspectVideo(event.currentTarget, cameraAttempt)
+						inspectVideo(event.currentTarget, cameraAttempt, true)
 					}
 					onEmptied={(event) =>
 						inspectVideo(event.currentTarget, cameraAttempt)
@@ -432,13 +447,11 @@ export default function CheckInScanner() {
 											? "Memulai ulang pemindaian…"
 											: "Buka kamera untuk scan kehadiran"}
 					</p>
-					{phase === "camera" && gpsStatus && (
+					{phase === "camera" && gpsStatus && gpsStatus !== "ready" && (
 						<p role="status" className="text-center text-sm">
 							{gpsStatus === "locating"
-								? "Menunggu lokasi dengan akurasi maksimal 40 m (hingga 20 detik)…"
-								: gpsStatus === "ready"
-									? "Lokasi siap; akan diperiksa kembali setelah QR terbaca."
-									: scannerErrorMessage(gpsStatus)}
+								? "Menyiapkan lokasi (maksimal 20 detik)…"
+								: scannerErrorMessage(gpsStatus)}
 						</p>
 					)}
 					{phase === "camera" && gpsStatus.startsWith("GPS_") && (
@@ -453,39 +466,38 @@ export default function CheckInScanner() {
 					)}
 				</div>
 				<div className="relative flex flex-col items-center gap-3 px-5 pt-4 pb-7">
-					<p className="text-center text-white/70 text-xs">
-						Gunakan QR kegiatan yang ditampilkan HCO
-					</p>
 					{phase === "camera" && cameraIssue && (
 						<p role="status" className="text-center text-sm">
 							{scannerErrorMessage(cameraIssue)}
 						</p>
 					)}
-					{(phase === "camera" ||
-						phase === "starting" ||
-						phase === "restarting") && (
-						<Button
-							variant="secondary"
-							disabled={phase === "restarting"}
-							onClick={() => startCamera(true)}
-						>
-							Mulai Ulang Pemindaian
-						</Button>
-					)}
 					<Button
 						size="icon"
-						disabled={phase === "submitting"}
-						onClick={scannerOpen ? stop : () => startCamera()}
-						aria-label={scannerOpen ? "Hentikan kamera" : "Buka kamera"}
+						disabled={
+							phase === "locating" ||
+							phase === "submitting" ||
+							mutation.isPending
+						}
+						onClick={() => {
+							if (busy.current || mutation.isPending) return;
+							if (restartCamera) return startCamera(true);
+							if (scannerOpen) return stop();
+							return startCamera();
+						}}
+						aria-label={cameraLabel}
 						aria-describedby="scan-privacy"
 						className="size-16 rounded-full border-4 border-slate-950 bg-red-500 text-white ring-2 ring-white/80 hover:bg-red-600"
 					>
 						<ScanLine className="size-7" />
 					</Button>
 					<span className="text-white/80 text-xs">
-						{scannerOpen
-							? "Ketuk untuk menghentikan kamera dan lokasi"
-							: "Ketuk untuk membuka kamera"}
+						{phase === "locating" || phase === "submitting"
+							? "Tunggu proses kehadiran selesai"
+							: restartCamera
+								? "Ketuk untuk memulai ulang pemindaian"
+								: scannerOpen
+									? "Ketuk untuk menghentikan kamera dan lokasi"
+									: "Ketuk untuk membuka kamera dan lokasi"}
 					</span>
 				</div>
 			</div>
