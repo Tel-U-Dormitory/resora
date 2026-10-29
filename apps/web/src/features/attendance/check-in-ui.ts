@@ -27,11 +27,11 @@ const messages: Record<string, string> = {
 	CAMERA_UNAVAILABLE:
 		"Kamera tidak tersedia atau sedang digunakan aplikasi lain. Periksa kamera dan coba lagi.",
 	VIDEO_NOT_READY:
-		"Video belum siap dipindai. Jika preview tidak bergerak, pilih Mulai Ulang Pemindaian.",
+		"Video belum siap dipindai. Ketuk tombol kamera untuk memulai ulang pemindaian.",
 	STREAM_ENDED:
-		"Stream kamera berhenti. Pilih Mulai Ulang Pemindaian untuk mencoba kembali.",
+		"Stream kamera berhenti. Ketuk tombol kamera untuk memulai ulang pemindaian.",
 	DECODER_FAILED:
-		"Pemindai mengalami kendala teknis. Pilih Mulai Ulang Pemindaian.",
+		"Pemindai mengalami kendala teknis. Ketuk tombol kamera untuk memulai ulang pemindaian.",
 	SESSION_EXPIRED:
 		"Sesi telah berakhir atau akun tidak lagi eligible. Silakan masuk kembali.",
 	SERVER_FAILED:
