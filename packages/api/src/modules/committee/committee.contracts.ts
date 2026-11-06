@@ -1,9 +1,4 @@
-import type { committeePositionCodes } from "@resora/db/schema/committee";
-
-export const committeePositionLabels: Record<
-	(typeof committeePositionCodes)[number],
-	string
-> = {
+export const committeePositionLabels = {
 	ANGGOTA: "Anggota",
 	SEKDEP: "Sekdep",
 	KADEP: "Kadep",
@@ -12,4 +7,6 @@ export const committeePositionLabels: Record<
 	PIC1: "PIC 1",
 	PIC2: "PIC 2",
 	PJ: "PJ",
-};
+} as const;
+
+export type CommitteePosition = keyof typeof committeePositionLabels;

@@ -1,20 +1,30 @@
 import type { Database, DatabaseTransaction } from "@resora/db";
 import {
-	type EventEditAuditState,
 	eventAuditLogs,
 	eventDeletionAudits,
 	eventParticipants,
 	events,
-	type RosterCriteria,
 } from "@resora/db/schema/attendance";
 import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import type { EventDraft, EventListInput } from "../../contracts/attendance";
 import type { SrCandidate } from "../identity/identity.public";
 
 type Db = Database | DatabaseTransaction;
-export type EventFact = typeof events.$inferSelect;
-export type InvitationFact = typeof eventParticipants.$inferSelect;
-export type { EventEditAuditState, RosterCriteria };
+
+import type {
+	EventAuditEvidence,
+	EventFact,
+	InvitationFact,
+} from "./event.types";
+
+export type {
+	EventEditAuditState,
+	EventFact,
+	InvitationFact,
+	RosterCriteria,
+} from "./event.types";
+
+import { TRPCError } from "@trpc/server";
 
 type SnapshotCandidate = SrCandidate & {
 	committeeDivision?: string | null;
@@ -27,7 +37,10 @@ export async function eventOrganizationHint(db: Db, eventId: string) {
 		.where(eq(events.id, eventId));
 }
 
-export async function lockEventForManagement(db: Db, eventId: string) {
+export async function lockEventForManagement(
+	db: Db,
+	eventId: string,
+): Promise<EventFact[]> {
 	return await db
 		.select()
 		.from(events)
@@ -47,7 +60,7 @@ export async function removeInvitationsBeforeAttendance(
 	eventId: string,
 	removed: string[],
 ) {
-	return await db
+	await db
 		.delete(eventParticipants)
 		.where(
 			and(
@@ -83,7 +96,7 @@ export async function addInvitationSnapshots(
 	eventId: string,
 	added: SnapshotCandidate[],
 ) {
-	return await db
+	await db
 		.insert(eventParticipants)
 		.values(added.map((sr) => participantSnapshot(eventId, sr)));
 }
@@ -94,7 +107,7 @@ export async function amendPublishedConfiguration(
 	draft: EventDraft,
 	rosterChanged: boolean,
 ) {
-	return await db
+	await db
 		.update(events)
 		.set({
 			title: draft.title,
@@ -111,7 +124,7 @@ export async function amendPublishedDetails(
 	eventId: string,
 	data: { title: string; description: string; endsAt?: string },
 ) {
-	return await db
+	await db
 		.update(events)
 		.set({
 			title: data.title,
@@ -121,18 +134,7 @@ export async function amendPublishedDetails(
 		.where(eq(events.id, eventId));
 }
 
-export async function appendEventAudit(
-	db: Db,
-	evidence: Pick<
-		typeof eventAuditLogs.$inferInsert,
-		| "eventId"
-		| "actorUserId"
-		| "reason"
-		| "action"
-		| "beforeState"
-		| "afterState"
-	>,
-) {
+export async function appendEventAudit(db: Db, evidence: EventAuditEvidence) {
 	await db.insert(eventAuditLogs).values(evidence);
 }
 
@@ -150,13 +152,28 @@ export async function changeVisibility(
 	eventId: string,
 	visibility: EventFact["visibility"],
 ) {
-	return await db
+	await db
 		.update(events)
 		.set({ visibility: visibility })
 		.where(eq(events.id, eventId));
 }
 
-export async function deleteUnusedDraft(db: Db, eventId: string) {
+export async function deleteUnusedDraft(
+	db: DatabaseTransaction,
+	eventId: string,
+) {
+	const [event] = await lockEventForManagement(db, eventId);
+	const [references] = await eventHasDeletionReferences(db, eventId);
+	if (
+		!event ||
+		event.status !== "DRAFT" ||
+		event.visibility !== "VISIBLE" ||
+		references?.hasReferences !== false
+	)
+		throw new TRPCError({
+			code: "CONFLICT",
+			message: "DRAFT_DELETE_NOT_ALLOWED",
+		});
 	return await db
 		.delete(events)
 		.where(eq(events.id, eventId))
@@ -169,7 +186,7 @@ export async function recordDraftDeletion(
 	actorUserId: string,
 	reason: string,
 ) {
-	return await db.insert(eventDeletionAudits).values({
+	await db.insert(eventDeletionAudits).values({
 		eventId: event.id,
 		actorUserId: actorUserId,
 		action: "EVENT_DRAFT_DELETED",
@@ -208,7 +225,7 @@ export async function replaceDraftDetails(
 	eventId: string,
 	draft: EventDraft,
 ) {
-	return await db
+	await db
 		.update(events)
 		.set({
 			title: draft.title,
@@ -228,7 +245,7 @@ export async function editPublishedMetadata(
 	eventId: string,
 	metadata: { title: string; description: string },
 ) {
-	return await db.update(events).set(metadata).where(eq(events.id, eventId));
+	await db.update(events).set(metadata).where(eq(events.id, eventId));
 }
 
 const eventListFields = {
@@ -268,7 +285,7 @@ export async function listInvitedEvents(db: Db, userId: string) {
 		.orderBy(desc(events.startsAt));
 }
 
-export async function readEvent(db: Db, eventId: string) {
+export async function readEvent(db: Db, eventId: string): Promise<EventFact[]> {
 	return await db.select().from(events).where(eq(events.id, eventId));
 }
 
@@ -288,7 +305,10 @@ export async function invitationForUser(
 		);
 }
 
-export async function invitationSnapshots(db: Db, eventId: string) {
+export async function invitationSnapshots(
+	db: Db,
+	eventId: string,
+): Promise<InvitationFact[]> {
 	return await db
 		.select()
 		.from(eventParticipants)
@@ -300,7 +320,7 @@ export async function publishInternalDraft(
 	eventId: string,
 	committeeName: string | null,
 ) {
-	return await db
+	await db
 		.update(events)
 		.set({
 			status: "PUBLISHED",
@@ -311,7 +331,7 @@ export async function publishInternalDraft(
 }
 
 export async function closePublishedEvent(db: Db, eventId: string, now: Date) {
-	return await db
+	await db
 		.update(events)
 		.set({ status: "CLOSED", closedAt: now })
 		.where(eq(events.id, eventId));
@@ -319,7 +339,10 @@ export async function closePublishedEvent(db: Db, eventId: string, now: Date) {
 
 // Attendance calls these after checking its own operator scope. Lock order is
 // Event -> Session -> live Identity; these reads do not grant mutation authority.
-export async function lockEventForCheckIn(db: Db, eventId: string) {
+export async function lockEventForCheckIn(
+	db: Db,
+	eventId: string,
+): Promise<EventFact[]> {
 	return await db
 		.select()
 		.from(events)

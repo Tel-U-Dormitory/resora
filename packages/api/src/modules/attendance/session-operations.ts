@@ -9,8 +9,16 @@ import { and, eq, sql } from "drizzle-orm";
 import type { EventDraft } from "../../contracts/attendance";
 
 type Db = Database | DatabaseTransaction;
-export type SessionFact = typeof attendanceSessions.$inferSelect;
-export async function lockInternalSession(db: Db, eventId: string) {
+
+import type { SessionFact } from "./session.types";
+
+export type { SessionFact } from "./session.types";
+
+import { TRPCError } from "@trpc/server";
+export async function lockInternalSession(
+	db: Db,
+	eventId: string,
+): Promise<SessionFact[]> {
 	return await db
 		.select()
 		.from(attendanceSessions)
@@ -31,7 +39,7 @@ export async function configureSession(
 	sessionId: string,
 	configuration: EventDraft["session"],
 ) {
-	return await db
+	await db
 		.update(attendanceSessions)
 		.set(configuration)
 		.where(eq(attendanceSessions.id, sessionId));
@@ -58,7 +66,7 @@ export async function createInternalSession(
 	eventId: string,
 	configuration: EventDraft["session"],
 ) {
-	return await db
+	await db
 		.insert(attendanceSessions)
 		.values({ internalEventId: eventId, ...configuration });
 }
@@ -68,13 +76,16 @@ export async function configureInternalSession(
 	eventId: string,
 	configuration: EventDraft["session"],
 ) {
-	return await db
+	await db
 		.update(attendanceSessions)
 		.set(configuration)
 		.where(eq(attendanceSessions.internalEventId, eventId));
 }
 
-export async function readInternalSession(db: Db, eventId: string) {
+export async function readInternalSession(
+	db: Db,
+	eventId: string,
+): Promise<SessionFact[]> {
 	return await db
 		.select()
 		.from(attendanceSessions)
@@ -82,11 +93,21 @@ export async function readInternalSession(db: Db, eventId: string) {
 }
 
 export async function activateInternalSession(
-	db: Db,
+	db: DatabaseTransaction,
 	sessionId: string,
 	now: Date,
 ) {
-	return await db
+	const [session] = await db
+		.select()
+		.from(attendanceSessions)
+		.where(eq(attendanceSessions.id, sessionId))
+		.for("update");
+	if (!session || session.status !== "INACTIVE")
+		throw new TRPCError({
+			code: "CONFLICT",
+			message: "Event/session state does not permit this action",
+		});
+	await db
 		.update(attendanceSessions)
 		.set({ status: "ACTIVE", activatedAt: now })
 		.where(eq(attendanceSessions.id, sessionId));
@@ -98,7 +119,7 @@ export async function issueSessionChallenge(
 	now: Date,
 	actorUserId: string,
 ) {
-	return await db.insert(qrChallenges).values({
+	await db.insert(qrChallenges).values({
 		sessionId: session.id,
 		activatedAt: now,
 		expiresAt: new Date(now.getTime() + session.qrTtlMinutes * 60_000),
@@ -123,14 +144,14 @@ export async function revokeSessionChallenge(
 	challengeId: string,
 	now: Date,
 ) {
-	return await db
+	await db
 		.update(qrChallenges)
 		.set({ revokedAt: now })
 		.where(eq(qrChallenges.id, challengeId));
 }
 
 export async function retireSessionChallenge(db: Db, challengeId: string) {
-	return await db
+	await db
 		.update(qrChallenges)
 		.set({ isCurrent: false })
 		.where(eq(qrChallenges.id, challengeId));
@@ -141,7 +162,7 @@ export async function invalidateSessionChallenges(
 	sessionId: string,
 	now: Date,
 ) {
-	return await db
+	await db
 		.update(qrChallenges)
 		.set({
 			isCurrent: false,
@@ -160,7 +181,7 @@ export async function closeInternalSession(
 	sessionId: string,
 	now: Date,
 ) {
-	return await db
+	await db
 		.update(attendanceSessions)
 		.set({ status: "CLOSED", closedAt: now })
 		.where(eq(attendanceSessions.id, sessionId));
