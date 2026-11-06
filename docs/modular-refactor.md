@@ -73,3 +73,10 @@ contract per page; no foreign-table join or active-account filter. Detail uses
 repeatable read for composed data. Browser validation has an explicit contracts
 entry. Verification: 17 unit tests plus 1 display-name batch test passed; API
 typecheck passed. One table-access exception removed.
+
+## Phase 5 — Identity capabilities
+
+Accounts and Provisioning now reside inside Identity. Server CLIs use a guarded
+public provisioning entry and router composition uses a public transport entry.
+Verification: 86 passed, 60 database integration cases skipped without opt-in,
+0 failed; API/server typechecks passed. Relative migration fixture paths updated.

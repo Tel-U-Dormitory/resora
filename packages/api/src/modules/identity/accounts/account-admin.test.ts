@@ -7,7 +7,7 @@ import type { Database } from "@resora/db";
 import { accountAuditLogs } from "@resora/db/schema/identity";
 import { getTableName, type SQL } from "drizzle-orm";
 import { getTableConfig, PgDialect } from "drizzle-orm/pg-core";
-import { appRouter } from "../../routers";
+import { appRouter } from "../../../routers";
 import { provisionSrAccounts } from "../provisioning/sr-provisioning";
 import {
 	archiveAccountSchema,
@@ -559,7 +559,7 @@ test("input rejects blank names, malformed usernames/email and forged privileges
 		"created_at",
 	]);
 	const migration = readFileSync(
-		`${import.meta.dir}/../../../../db/src/migrations/20261013170324_sa02_account_management/migration.sql`,
+		`${import.meta.dir}/../../../../../db/src/migrations/20261013170324_sa02_account_management/migration.sql`,
 		"utf8",
 	);
 	expect(migration).toContain("BEFORE UPDATE OR DELETE");

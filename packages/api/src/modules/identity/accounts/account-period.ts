@@ -9,8 +9,8 @@ import {
 import { TRPCError } from "@trpc/server";
 import { asc, eq, inArray, sql } from "drizzle-orm";
 import type { z } from "zod";
-import { getLiveOperationalIdentity } from "../identity/identity.public";
-import { hasSuperadminPrivilege } from "../identity/identity-policy";
+import { getLiveOperationalIdentity } from "../identity.public";
+import { hasSuperadminPrivilege } from "../identity-policy";
 import {
 	assignPeriodSchema,
 	createPeriodSchema,

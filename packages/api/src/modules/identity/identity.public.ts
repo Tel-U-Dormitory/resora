@@ -242,3 +242,5 @@ export async function getUserDisplayNames(
 		.where(inArray(user.id, [...new Set(userIds)]));
 	return new Map(rows.map((row) => [row.userId, row.name]));
 }
+
+export type { ActiveIdentity, ActiveSrIdentity } from "@resora/auth/sr-access";

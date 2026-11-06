@@ -26,7 +26,7 @@ import * as service from "../events/event.service";
 import {
 	localProvisioningTarget,
 	verifyLocalProvisioningDatabase,
-} from "../provisioning/sr-provisioning";
+} from "../identity/provisioning/sr-provisioning";
 import { checkIn } from "./check-in";
 import { signChallenge } from "./qr";
 

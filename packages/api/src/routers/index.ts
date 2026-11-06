@@ -2,7 +2,7 @@ import { protectedProcedure, publicProcedure, router } from "../index";
 import { attendanceRouter } from "../modules/attendance/attendance.router";
 import { broadcastRouter } from "../modules/broadcast/broadcast.public";
 import { committeeRouter } from "../modules/committee/committee.router";
-import { identityRouter } from "../modules/identity/identity.router";
+import { identityRouter } from "../modules/identity/identity-transport.public";
 
 export const appRouter = router({
 	identity: identityRouter,

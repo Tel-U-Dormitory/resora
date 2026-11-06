@@ -20,7 +20,7 @@ import {
 } from "@resora/db/schema/identity";
 import { assignSyntheticSrTenure } from "@resora/db/sr-tenure.fixture";
 import { eq, inArray, like } from "drizzle-orm";
-import { createApp } from "../../../../../apps/server/src/app";
+import { createApp } from "../../../../../../apps/server/src/app";
 import { prepareCredentials } from "./provisioning-credentials";
 import { csvColumns, encodeCsv, readCsv } from "./provisioning-csv";
 import {
@@ -98,7 +98,7 @@ async function rejected(operation: Promise<unknown>, code: string) {
 		};
 		const prefix = `synthetic-provision-${randomUUID()}`;
 		let buildingId: string;
-		const projectRoot = resolve(import.meta.dir, "../../../../..");
+		const projectRoot = resolve(import.meta.dir, "../../../../../..");
 		const inputPath = resolve(projectRoot, "tmp", `${prefix}.csv`);
 		const cli = async (apply: boolean) => {
 			const result = await promisify(execFile)(
