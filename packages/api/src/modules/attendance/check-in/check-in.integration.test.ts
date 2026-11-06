@@ -21,12 +21,12 @@ import {
 import { assignSyntheticSrTenure } from "@resora/db/sr-tenure.fixture";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { readMigrationFiles } from "drizzle-orm/migrator";
-import { eventDraftSchema } from "../attendance/attendance.schema";
-import * as service from "../events/event.service";
+import { eventDraftSchema } from "../../../contracts/attendance";
+import * as service from "../../../application/internal-events";
 import {
 	localProvisioningTarget,
 	verifyLocalProvisioningDatabase,
-} from "../identity/provisioning/sr-provisioning";
+} from "../../identity/provisioning/sr-provisioning";
 import { checkIn } from "./check-in";
 import { signChallenge } from "./qr";
 
@@ -67,7 +67,7 @@ const target = process.env.RESORA_IDENTITY_TEST_DB_URL;
 				readMigrationFiles({
 					migrationsFolder: resolve(
 						import.meta.dir,
-						"../../../../db/src/migrations",
+						"../../../../../db/src/migrations",
 					),
 				}).map((migration) => migration.hash),
 			);

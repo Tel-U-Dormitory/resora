@@ -7,9 +7,9 @@ import type { Database } from "@resora/db";
 import { attendanceRecords } from "@resora/db/schema/attendance";
 import { getTableName } from "drizzle-orm";
 import { getTableConfig } from "drizzle-orm/pg-core";
-import { appRouter } from "../../routers";
-import { checkInSchema } from "../attendance/attendance.schema";
-import { getActiveSrDirectory } from "../identity/identity.public";
+import { appRouter } from "../../../routers";
+import { checkInSchema } from "../../../contracts/attendance";
+import { getActiveSrDirectory } from "../../identity/identity.public";
 import { checkIn } from "./check-in";
 import {
 	classifyTiming,
@@ -489,7 +489,7 @@ test("record schema/migration is additive, unique, numeric and immutable-origin 
 		expect(c.getSQLType()).toBe("double precision");
 		expect(c.notNull).toBe(false);
 	}
-	const root = join(import.meta.dir, "../../../../db/src/migrations");
+	const root = join(import.meta.dir, "../../../../../db/src/migrations");
 	const directory = readdirSync(root).find((name) =>
 		name.endsWith("_phase5_checkin"),
 	);

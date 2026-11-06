@@ -17,7 +17,7 @@ import {
 	canManageManualAttendance,
 	isValidSrAssignment,
 } from "../identity/identity.public";
-import { auditHistorySchema, ownHistorySchema } from "./attendance.schema";
+import { auditHistorySchema, ownHistorySchema } from "../../contracts/attendance";
 import {
 	filterRecapParticipants,
 	type RecapFilters,

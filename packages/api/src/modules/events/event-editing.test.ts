@@ -11,14 +11,6 @@ import {
 } from "@resora/db/schema/attendance";
 import { getTableName, type SQL } from "drizzle-orm";
 import { getTableConfig, PgDialect } from "drizzle-orm/pg-core";
-import { appRouter } from "../../routers";
-import {
-	advancedEventEditSchema,
-	deleteDraftSchema,
-	eventDraftSchema,
-	eventVisibilitySchema,
-	visibilitySchema,
-} from "../attendance/attendance.schema";
 import {
 	activateSession,
 	advancedEditEvent,
@@ -29,7 +21,15 @@ import {
 	getEvent,
 	listEvents,
 	setEventVisibility,
-} from "./event.service";
+} from "../../application/internal-events";
+import {
+	advancedEventEditSchema,
+	deleteDraftSchema,
+	eventDraftSchema,
+	eventVisibilitySchema,
+	visibilitySchema,
+} from "../../contracts/attendance";
+import { appRouter } from "../../routers";
 
 // Actual services/public Identity queries with a rollback-capable offline DB double.
 // This does not simulate PostgreSQL lock scheduling or enforce SQL triggers.

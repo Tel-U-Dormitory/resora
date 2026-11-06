@@ -15,7 +15,7 @@ import {
 	getActiveSrCandidate,
 	getLiveOperationalIdentity,
 } from "../identity/identity.public";
-import { manualCorrectSchema, manualInsertSchema } from "./attendance.schema";
+import { manualCorrectSchema, manualInsertSchema } from "../../contracts/attendance";
 import {
 	auditState,
 	classifyTiming,

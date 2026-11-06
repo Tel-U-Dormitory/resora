@@ -21,8 +21,9 @@ import { assignSyntheticSrTenure } from "@resora/db/sr-tenure.fixture";
 import { eq, sql } from "drizzle-orm";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import { getTableConfig } from "drizzle-orm/pg-core";
+import * as service from "../../application/internal-events";
+import { eventDraftSchema } from "../../contracts/attendance";
 import { appRouter } from "../../routers";
-import { eventDraftSchema } from "../attendance/attendance.schema";
 import { manualInsert } from "../attendance/manual-attendance";
 import { exportCsv, ownHistory, recap } from "../attendance/reporting";
 import { getActiveSrDirectory } from "../identity/identity.public";
@@ -30,7 +31,6 @@ import {
 	localProvisioningTarget,
 	verifyLocalProvisioningDatabase,
 } from "../identity/provisioning/sr-provisioning";
-import * as service from "./event.service";
 import { deletedDraftHistory, eventAuditHistory } from "./event-audit";
 
 const target = process.env.RESORA_EVENT_ADMIN_TEST_DB_URL;

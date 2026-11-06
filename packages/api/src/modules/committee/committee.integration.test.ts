@@ -12,7 +12,7 @@ import {
 	eventAssignment,
 	filterRecapParticipants,
 } from "../attendance/reporting-context";
-import { signChallenge } from "../check-in/qr";
+import { signChallenge } from "../attendance/check-in/qr";
 import { addMembers, createCommittee } from "./committee.service";
 
 function scratchTarget(value: string) {

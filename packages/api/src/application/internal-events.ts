@@ -1,19 +1,6 @@
 import type { ActiveIdentity } from "@resora/auth/sr-access";
 import type { Database, DatabaseTransaction } from "@resora/db";
-import {
-	attendanceAuditLogs,
-	attendanceRecords,
-	attendanceSessions,
-	type EventEditAuditState,
-	eventAuditLogs,
-	eventDeletionAudits,
-	eventParticipants,
-	events,
-	qrChallenges,
-	type RosterCriteria,
-} from "@resora/db/schema/attendance";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import QRCode from "qrcode";
 import {
 	type AdvancedEventEdit,
@@ -27,18 +14,28 @@ import {
 	eventListSchema,
 	eventVisibilitySchema,
 	type VisibilityAction,
-} from "../attendance/attendance.schema";
-import { signChallenge } from "../check-in/qr";
-import { getCommitteeRoster } from "../committee/committee.public";
+} from "../contracts/attendance";
+import type { SessionFact } from "../modules/attendance/attendance.public";
+import * as attendanceOperations from "../modules/attendance/attendance.public";
+import { signChallenge } from "../modules/attendance/attendance.public";
+import { getCommitteeRoster } from "../modules/committee/committee.public";
+import type {
+	EventEditAuditState,
+	EventFact,
+	RosterCriteria,
+} from "../modules/events/events.public";
+import * as eventOperations from "../modules/events/events.public";
+import {
+	resolveCommitteeRoster,
+	resolveRoster,
+} from "../modules/events/events.public";
 import {
 	canAccessPersonalSr,
 	canManageInternalEvent,
 	getActiveSrDirectory,
 	getLiveOperationalIdentity,
 	hasSuperadminPrivilege,
-	type SrCandidate,
-} from "../identity/identity.public";
-import { resolveCommitteeRoster, resolveRoster } from "./roster";
+} from "../modules/identity/identity.public";
 
 async function lockedRosterEvent(
 	tx: DatabaseTransaction,
@@ -47,10 +44,7 @@ async function lockedRosterEvent(
 	newCommitteeId?: string | null,
 	superadminOnly = false,
 ) {
-	const [hint] = await tx
-		.select({ committeeId: events.committeeId })
-		.from(events)
-		.where(eq(events.id, eventId));
+	const [hint] = await eventOperations.eventOrganizationHint(tx, eventId);
 	if (!hint) throw new TRPCError({ code: "NOT_FOUND" });
 	const committees = new Map<
 		string,
@@ -78,27 +72,6 @@ async function lockedRosterEvent(
 	};
 }
 
-function participantSnapshot(
-	eventId: string,
-	sr: SrCandidate & {
-		committeeDivision?: string | null;
-		committeePosition?: typeof eventParticipants.$inferInsert.committeePosition;
-	},
-) {
-	return {
-		eventId,
-		userId: sr.userId,
-		nim: sr.nim,
-		name: sr.name,
-		departmentCode: sr.departmentCode,
-		positionCode: sr.positionCode,
-		buildingCode: sr.buildingCode,
-		buildingName: sr.buildingName,
-		committeeDivision: sr.committeeDivision ?? null,
-		committeePosition: sr.committeePosition ?? null,
-	};
-}
-
 function operator(identity: ActiveIdentity | null) {
 	if (!canManageInternalEvent(identity))
 		throw new TRPCError({ code: "FORBIDDEN", message: "HCO access required" });
@@ -109,18 +82,10 @@ async function lockedEvent(
 	identity: ActiveIdentity,
 	superadminOnly = false,
 ) {
-	const [event] = await tx
-		.select()
-		.from(events)
-		.where(eq(events.id, eventId))
-		.for("update");
+	const [event] = await eventOperations.lockEventForManagement(tx, eventId);
 	if (!event)
 		throw new TRPCError({ code: "NOT_FOUND", message: "Event unavailable" });
-	const [session] = await tx
-		.select()
-		.from(attendanceSessions)
-		.where(eq(attendanceSessions.internalEventId, eventId))
-		.for("update");
+	const [session] = await attendanceOperations.lockInternalSession(tx, eventId);
 	if (!session) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 	const live = await getLiveOperationalIdentity(tx, identity.userId);
 	if (superadminOnly) {
@@ -132,19 +97,18 @@ async function lockedEvent(
 
 async function advancedEditMode(
 	db: Database | DatabaseTransaction,
-	event: typeof events.$inferSelect,
-	session: typeof attendanceSessions.$inferSelect,
+	event: EventFact,
+	session: SessionFact,
 ) {
 	if (event.status === "CLOSED" && session.status === "CLOSED")
 		return "METADATA" as const;
 	if (event.status !== "PUBLISHED") return null;
 	if (session.status === "ACTIVE") return "LIMITED" as const;
 	if (session.status !== "INACTIVE") return null;
-	const [record] = await db
-		.select({ id: attendanceRecords.id })
-		.from(attendanceRecords)
-		.where(eq(attendanceRecords.sessionId, session.id))
-		.limit(1);
+	const [record] = await attendanceOperations.recordExistsForSession(
+		db,
+		session.id,
+	);
 	return record ? ("LIMITED" as const) : ("FULL" as const);
 }
 
@@ -161,7 +125,7 @@ function sameRoster(left: RosterCriteria, right: RosterCriteria) {
 	return JSON.stringify(normalize(left)) === JSON.stringify(normalize(right));
 }
 
-function sessionConfiguration(session: typeof attendanceSessions.$inferSelect) {
+function sessionConfiguration(session: SessionFact) {
 	const {
 		centerLat,
 		centerLng,
@@ -259,10 +223,7 @@ export async function advancedEditEvent(
 							new Set(),
 						)
 					: resolveRoster(directory.candidates, draft.rosterCriteria);
-				const existing = await tx
-					.select({ userId: eventParticipants.userId })
-					.from(eventParticipants)
-					.where(eq(eventParticipants.eventId, event.id));
+				const existing = await eventOperations.invitationIds(tx, event.id);
 				const oldIds = new Set(existing.map((sr) => sr.userId));
 				// Published committee membership is a frozen base, never the current committee roster.
 				const newIds = new Set(
@@ -299,33 +260,25 @@ export async function advancedEditEvent(
 					removedUserIds: removed,
 				};
 				if (removed.length)
-					await tx
-						.delete(eventParticipants)
-						.where(
-							and(
-								eq(eventParticipants.eventId, event.id),
-								inArray(eventParticipants.userId, removed),
-							),
-						);
+					await eventOperations.removeInvitationsBeforeAttendance(
+						tx,
+						event.id,
+						removed,
+					);
 				if (added.length)
-					await tx
-						.insert(eventParticipants)
-						.values(added.map((sr) => participantSnapshot(event.id, sr)));
+					await eventOperations.addInvitationSnapshots(tx, event.id, added);
 			}
-			await tx
-				.update(events)
-				.set({
-					title: draft.title,
-					description: draft.description,
-					startsAt: new Date(draft.startsAt),
-					endsAt: new Date(draft.endsAt),
-					...(rosterChanged ? { rosterCriteria: draft.rosterCriteria } : {}),
-				})
-				.where(eq(events.id, event.id));
-			await tx
-				.update(attendanceSessions)
-				.set(draft.session)
-				.where(eq(attendanceSessions.id, session.id));
+			await eventOperations.amendPublishedConfiguration(
+				tx,
+				event.id,
+				draft,
+				rosterChanged,
+			);
+			await attendanceOperations.configureSession(
+				tx,
+				session.id,
+				draft.session,
+			);
 		} else {
 			if (data.endsAt !== undefined) {
 				const end = new Date(data.endsAt);
@@ -338,18 +291,9 @@ export async function advancedEditEvent(
 			}
 			after.title = data.title;
 			after.description = data.description;
-			await tx
-				.update(events)
-				.set({
-					title: data.title,
-					description: data.description,
-					...(data.endsAt !== undefined
-						? { endsAt: new Date(data.endsAt) }
-						: {}),
-				})
-				.where(eq(events.id, event.id));
+			await eventOperations.amendPublishedDetails(tx, event.id, data);
 		}
-		await tx.insert(eventAuditLogs).values({
+		await eventOperations.appendEventAudit(tx, {
 			eventId: event.id,
 			actorUserId: identity.userId,
 			reason: data.reason,
@@ -373,8 +317,8 @@ function requireState(actual: string, expected: string) {
 }
 
 function visibilityActions(
-	event: typeof events.$inferSelect,
-	session: typeof attendanceSessions.$inferSelect,
+	event: EventFact,
+	session: SessionFact,
 ): VisibilityAction[] {
 	const closed = event.status === "CLOSED" && session.status === "CLOSED";
 	const inactive =
@@ -390,8 +334,8 @@ function visibilityActions(
 
 async function draftDeletionBlocker(
 	db: Database | DatabaseTransaction,
-	event: typeof events.$inferSelect,
-	session: typeof attendanceSessions.$inferSelect,
+	event: EventFact,
+	session: SessionFact,
 ) {
 	if (event.status !== "DRAFT") return "DRAFT_REQUIRED" as const;
 	if (
@@ -403,18 +347,7 @@ async function draftDeletionBlocker(
 		return "UNUSED_SESSION_REQUIRED" as const;
 	// One bounded existence query covers every current operational/audit FK.
 	// Parent row locks also block concurrent FK insertions; FKs remain the final guard.
-	const [references] = await db
-		.select({
-			hasReferences: sql<boolean>`
-		EXISTS (SELECT 1 FROM ${attendanceRecords} WHERE ${attendanceRecords.sessionId} = ${session.id})
-		OR EXISTS (SELECT 1 FROM ${eventParticipants} WHERE ${eventParticipants.eventId} = ${event.id})
-		OR EXISTS (SELECT 1 FROM ${qrChallenges} WHERE ${qrChallenges.sessionId} = ${session.id})
-		OR EXISTS (SELECT 1 FROM ${eventAuditLogs} WHERE ${eventAuditLogs.eventId} = ${event.id})
-		OR EXISTS (SELECT 1 FROM ${attendanceAuditLogs} WHERE ${attendanceAuditLogs.sessionId} = ${session.id})
-	`,
-		})
-		.from(attendanceSessions)
-		.where(eq(attendanceSessions.id, session.id));
+	const [references] = await deletionReferences(db, event.id, session.id);
 	return references?.hasReferences === false
 		? null
 		: ("REFERENCES_EXIST" as const);
@@ -454,11 +387,8 @@ export async function setEventVisibility(
 		} as const;
 		const change = changes[data.action];
 		const previousVisibility = event.visibility;
-		await tx
-			.update(events)
-			.set({ visibility: change.visibility })
-			.where(eq(events.id, event.id));
-		await tx.insert(eventAuditLogs).values({
+		await eventOperations.changeVisibility(tx, event.id, change.visibility);
+		await eventOperations.appendEventAudit(tx, {
 			eventId: event.id,
 			actorUserId: identity.userId,
 			action: change.action,
@@ -499,31 +429,25 @@ export async function deleteEventDraft(
 				});
 			// The inverse session constraint is deferred: once BOTH rows are gone,
 			// it finds no parent at commit. No cascade or trigger bypass is needed.
-			const [deletedSession] = await tx
-				.delete(attendanceSessions)
-				.where(eq(attendanceSessions.id, session.id))
-				.returning({ id: attendanceSessions.id });
-			const [deletedEvent] = await tx
-				.delete(events)
-				.where(eq(events.id, event.id))
-				.returning({ id: events.id });
+			const [deletedSession] = await attendanceOperations.deleteUnusedSession(
+				tx,
+				session.id,
+			);
+			const [deletedEvent] = await eventOperations.deleteUnusedDraft(
+				tx,
+				event.id,
+			);
 			if (!deletedSession || !deletedEvent)
 				throw new TRPCError({
 					code: "CONFLICT",
 					message: "DRAFT_DELETE_NOT_ALLOWED",
 				});
-			await tx.insert(eventDeletionAudits).values({
-				eventId: event.id,
-				actorUserId: identity.userId,
-				action: "EVENT_DRAFT_DELETED",
-				reason: data.reason,
-				eventSnapshot: {
-					title: event.title,
-					status: "DRAFT",
-					startsAt: event.startsAt.toISOString(),
-					endsAt: event.endsAt.toISOString(),
-				},
-			});
+			await eventOperations.recordDraftDeletion(
+				tx,
+				event,
+				identity.userId,
+				data.reason,
+			);
 			return { eventId: event.id };
 		});
 	} catch (error) {
@@ -553,23 +477,17 @@ export async function createEvent(
 		if (draft.committeeId)
 			await getCommitteeRoster(tx, draft.committeeId, true);
 		operator(await getLiveOperationalIdentity(tx, identity.userId));
-		const [event] = await tx
-			.insert(events)
-			.values({
-				title: draft.title,
-				description: draft.description,
-				createdByUserId: identity.userId,
-				startsAt: new Date(draft.startsAt),
-				endsAt: new Date(draft.endsAt),
-				rosterCriteria: draft.rosterCriteria,
-				organizationContext: draft.organizationContext ?? "SR",
-				committeeId: draft.committeeId ?? null,
-			})
-			.returning();
+		const [event] = await eventOperations.createInternalDraft(
+			tx,
+			draft,
+			identity.userId,
+		);
 		if (!event) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-		await tx
-			.insert(attendanceSessions)
-			.values({ internalEventId: event.id, ...draft.session });
+		await attendanceOperations.createInternalSession(
+			tx,
+			event.id,
+			draft.session,
+		);
 		return { eventId: event.id };
 	});
 }
@@ -590,23 +508,12 @@ export async function editDraft(
 		);
 		requireState(event.status, "DRAFT");
 		requireState(session.status, "INACTIVE");
-		await tx
-			.update(events)
-			.set({
-				title: draft.title,
-				description: draft.description,
-				startsAt: new Date(draft.startsAt),
-				endsAt: new Date(draft.endsAt),
-				rosterCriteria: draft.rosterCriteria,
-				organizationContext: draft.organizationContext ?? "SR",
-				committeeId: draft.committeeId ?? null,
-				snapshotCommitteeName: null,
-			})
-			.where(eq(events.id, eventId));
-		await tx
-			.update(attendanceSessions)
-			.set(draft.session)
-			.where(eq(attendanceSessions.internalEventId, eventId));
+		await eventOperations.replaceDraftDetails(tx, eventId, draft);
+		await attendanceOperations.configureInternalSession(
+			tx,
+			eventId,
+			draft.session,
+		);
 	});
 }
 export async function editMetadata(
@@ -619,7 +526,7 @@ export async function editMetadata(
 	return db.transaction(async (tx) => {
 		const { event } = await lockedEvent(tx, eventId, identity);
 		requireState(event.status, "PUBLISHED");
-		await tx.update(events).set(metadata).where(eq(events.id, eventId));
+		await eventOperations.editPublishedMetadata(tx, eventId, metadata);
 	});
 }
 export async function listEvents(
@@ -634,77 +541,36 @@ export async function listEvents(
 	const filter = eventListSchema.parse(input);
 	if (!isSuperadmin && filter.visibility !== "NON_ARCHIVED")
 		throw new TRPCError({ code: "FORBIDDEN" });
-	const selection = {
-		id: events.id,
-		title: events.title,
-		description: events.description,
-		status: events.status,
-		startsAt: events.startsAt,
-		endsAt: events.endsAt,
-		visibility: events.visibility,
-	};
+
 	const rows = canManage
-		? await db
-				.select(selection)
-				.from(events)
-				.where(
-					filter.visibility === "NON_ARCHIVED"
-						? ne(events.visibility, "ARCHIVED")
-						: eq(events.visibility, filter.visibility),
-				)
-				.orderBy(desc(events.startsAt))
-		: await db
-				.select(selection)
-				.from(events)
-				.innerJoin(eventParticipants, eq(eventParticipants.eventId, events.id))
-				.where(
-					and(
-						eq(events.status, "PUBLISHED"),
-						eq(events.visibility, "VISIBLE"),
-						eq(eventParticipants.userId, identity.userId),
-					),
-				)
-				.orderBy(desc(events.startsAt));
+		? await eventOperations.listManagedEvents(db, filter)
+		: await eventOperations.listInvitedEvents(db, identity.userId);
 	return { canManage, isSuperadmin, events: rows };
 }
-export async function getEvent(
-	db: Database,
+async function readEventDetail(
+	db: Database | DatabaseTransaction,
 	identity: ActiveIdentity,
 	eventId: string,
 ) {
 	if (!canAccessPersonalSr(identity) && !hasSuperadminPrivilege(identity))
 		throw new TRPCError({ code: "FORBIDDEN" });
-	const [row] = await db
-		.select({ event: events, session: attendanceSessions })
-		.from(events)
-		.innerJoin(
-			attendanceSessions,
-			eq(attendanceSessions.internalEventId, events.id),
-		)
-		.where(eq(events.id, eventId));
+	const [row] = await readEventContext(db, eventId);
 	if (!row)
 		throw new TRPCError({ code: "NOT_FOUND", message: "Event unavailable" });
 	const canManage = canManageInternalEvent(identity);
 	if (!canManage) {
 		if (row.event.visibility !== "VISIBLE")
 			throw new TRPCError({ code: "NOT_FOUND", message: "Event unavailable" });
-		const [invited] = await db
-			.select({ userId: eventParticipants.userId })
-			.from(eventParticipants)
-			.where(
-				and(
-					eq(eventParticipants.eventId, eventId),
-					eq(eventParticipants.userId, identity.userId),
-				),
-			);
+		const [invited] = await eventOperations.invitationForUser(
+			db,
+			eventId,
+			identity.userId,
+		);
 		if (row.event.status !== "PUBLISHED" || !invited)
 			throw new TRPCError({ code: "NOT_FOUND", message: "Event unavailable" });
 	}
 	const participants = canManage
-		? await db
-				.select()
-				.from(eventParticipants)
-				.where(eq(eventParticipants.eventId, eventId))
+		? await eventOperations.invitationSnapshots(db, eventId)
 		: [];
 	const deletionBlockedReason = hasSuperadminPrivilege(identity)
 		? await draftDeletionBlocker(db, row.event, row.session)
@@ -792,17 +658,12 @@ export async function publishEvent(
 				)
 			: resolveRoster(directory.candidates, event.rosterCriteria);
 		if (roster.length)
-			await tx
-				.insert(eventParticipants)
-				.values(roster.map((sr) => participantSnapshot(eventId, sr)));
-		await tx
-			.update(events)
-			.set({
-				status: "PUBLISHED",
-				publishedAt: new Date(),
-				snapshotCommitteeName: committee?.name ?? null,
-			})
-			.where(eq(events.id, eventId));
+			await eventOperations.addInvitationSnapshots(tx, eventId, roster);
+		await eventOperations.publishInternalDraft(
+			tx,
+			eventId,
+			committee?.name ?? null,
+		);
 		return {
 			participantCount: roster.length,
 			invalidAssignmentCount: directory.invalidAssignmentCount,
@@ -825,16 +686,13 @@ export async function activateSession(
 				message: "HIDDEN_EVENT_ACTIVATION_FORBIDDEN",
 			});
 		const now = new Date();
-		await tx
-			.update(attendanceSessions)
-			.set({ status: "ACTIVE", activatedAt: now })
-			.where(eq(attendanceSessions.id, session.id));
-		await tx.insert(qrChallenges).values({
-			sessionId: session.id,
-			activatedAt: now,
-			expiresAt: new Date(now.getTime() + session.qrTtlMinutes * 60_000),
-			issuedByUserId: identity.userId,
-		});
+		await attendanceOperations.activateInternalSession(tx, session.id, now);
+		await attendanceOperations.issueSessionChallenge(
+			tx,
+			session,
+			now,
+			identity.userId,
+		);
 	});
 }
 export async function changeQr(
@@ -848,22 +706,14 @@ export async function changeQr(
 		const { event, session } = await lockedEvent(tx, eventId, identity);
 		requireState(event.status, "PUBLISHED");
 		requireState(session.status, "ACTIVE");
-		const [current] = await tx
-			.select()
-			.from(qrChallenges)
-			.where(
-				and(
-					eq(qrChallenges.sessionId, session.id),
-					eq(qrChallenges.isCurrent, true),
-				),
-			);
+		const [current] = await attendanceOperations.currentChallenge(
+			tx,
+			session.id,
+		);
 		const now = new Date();
 		if (action === "revoke") {
 			if (current && !current.revokedAt)
-				await tx
-					.update(qrChallenges)
-					.set({ revokedAt: now })
-					.where(eq(qrChallenges.id, current.id));
+				await attendanceOperations.revokeSessionChallenge(tx, current.id, now);
 			return;
 		}
 		if (current && !current.revokedAt && current.expiresAt > now)
@@ -872,16 +722,13 @@ export async function changeQr(
 				message: "Revoke or wait for expiry before reissue",
 			});
 		if (current)
-			await tx
-				.update(qrChallenges)
-				.set({ isCurrent: false })
-				.where(eq(qrChallenges.id, current.id));
-		await tx.insert(qrChallenges).values({
-			sessionId: session.id,
-			activatedAt: now,
-			expiresAt: new Date(now.getTime() + session.qrTtlMinutes * 60_000),
-			issuedByUserId: identity.userId,
-		});
+			await attendanceOperations.retireSessionChallenge(tx, current.id);
+		await attendanceOperations.issueSessionChallenge(
+			tx,
+			session,
+			now,
+			identity.userId,
+		);
 	});
 }
 export async function closeEvent(
@@ -894,26 +741,9 @@ export async function closeEvent(
 		const { event, session } = await lockedEvent(tx, eventId, identity);
 		requireState(event.status, "PUBLISHED");
 		const now = new Date();
-		await tx
-			.update(qrChallenges)
-			.set({
-				isCurrent: false,
-				revokedAt: sql`coalesce(${qrChallenges.revokedAt}, ${now})`,
-			})
-			.where(
-				and(
-					eq(qrChallenges.sessionId, session.id),
-					eq(qrChallenges.isCurrent, true),
-				),
-			);
-		await tx
-			.update(attendanceSessions)
-			.set({ status: "CLOSED", closedAt: now })
-			.where(eq(attendanceSessions.id, session.id));
-		await tx
-			.update(events)
-			.set({ status: "CLOSED", closedAt: now })
-			.where(eq(events.id, eventId));
+		await attendanceOperations.invalidateSessionChallenges(tx, session.id, now);
+		await attendanceOperations.closeInternalSession(tx, session.id, now);
+		await eventOperations.closePublishedEvent(tx, eventId, now);
 	});
 }
 export async function getQr(
@@ -924,15 +754,10 @@ export async function getQr(
 ) {
 	operator(identity);
 	const row = await getEvent(db, identity, eventId);
-	const [challenge] = await db
-		.select()
-		.from(qrChallenges)
-		.where(
-			and(
-				eq(qrChallenges.sessionId, row.session.id),
-				eq(qrChallenges.isCurrent, true),
-			),
-		);
+	const [challenge] = await attendanceOperations.currentChallenge(
+		db,
+		row.session.id,
+	);
 	if (!challenge)
 		return { state: "NONE" as const, expiresAt: null, image: null };
 	const state = challenge.revokedAt
@@ -953,4 +778,43 @@ export async function getQr(
 			? await QRCode.toDataURL(token, { width: 320, errorCorrectionLevel: "M" })
 			: null,
 	};
+}
+
+async function readEventContext(
+	db: Database | DatabaseTransaction,
+	eventId: string,
+) {
+	const [event] = await eventOperations.readEvent(db, eventId);
+	if (!event) return [];
+	const [session] = await attendanceOperations.readInternalSession(db, eventId);
+	return session ? [{ event, session }] : [];
+}
+async function deletionReferences(
+	db: Database | DatabaseTransaction,
+	eventId: string,
+	sessionId: string,
+) {
+	const [event] = await eventOperations.eventHasDeletionReferences(db, eventId);
+	const [session] = await attendanceOperations.sessionHasDeletionReferences(
+		db,
+		sessionId,
+	);
+	return [
+		{
+			hasReferences:
+				event?.hasReferences !== false || session?.hasReferences !== false,
+		},
+	];
+}
+
+// Composed Event/Attendance reads retain a single MVCC snapshot.
+export async function getEvent(
+	db: Database,
+	identity: ActiveIdentity,
+	eventId: string,
+) {
+	return db.transaction((tx) => readEventDetail(tx, identity, eventId), {
+		isolationLevel: "repeatable read",
+		accessMode: "read only",
+	});
 }

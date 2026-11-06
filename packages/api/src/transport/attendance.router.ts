@@ -1,8 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { protectedProcedure, router } from "../../index";
-import { checkIn } from "../check-in/check-in";
-import * as attendance from "../events/event.service";
-import { deletedDraftHistory, eventAuditHistory } from "../events/event-audit";
+import * as attendance from "../application/internal-events";
 import {
 	administrativeHistorySchema,
 	advancedEventEditSchema,
@@ -19,9 +16,21 @@ import {
 	manualCorrectSchema,
 	manualInsertSchema,
 	ownHistorySchema,
-} from "./attendance.schema";
-import { manualCorrect, manualInsert } from "./manual-attendance";
-import { auditHistory, exportCsv, ownHistory, recap } from "./reporting";
+} from "../contracts/attendance";
+import { protectedProcedure, router } from "../index";
+import {
+	auditHistory,
+	checkIn,
+	exportCsv,
+	manualCorrect,
+	manualInsert,
+	ownHistory,
+	recap,
+} from "../modules/attendance/attendance.public";
+import {
+	deletedDraftHistory,
+	eventAuditHistory,
+} from "../modules/events/events.public";
 
 export const attendanceRouter = router({
 	eventAuditHistory: protectedProcedure

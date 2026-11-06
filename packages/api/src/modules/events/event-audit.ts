@@ -6,15 +6,17 @@ import {
 	eventDeletionAudits,
 	events,
 } from "@resora/db/schema/attendance";
-import { user } from "@resora/db/schema/auth";
 import { TRPCError } from "@trpc/server";
 import { desc, eq } from "drizzle-orm";
 import type { z } from "zod";
 import {
 	administrativeHistorySchema,
 	eventAuditHistorySchema,
-} from "../attendance/attendance.schema";
-import { hasSuperadminPrivilege } from "../identity/identity.public";
+} from "../../contracts/attendance";
+import {
+	getUserDisplayNames,
+	hasSuperadminPrivilege,
+} from "../identity/identity.public";
 
 type AuditState = typeof eventAuditLogs.$inferSelect.beforeState;
 type AuditValue = string | number | null;
@@ -105,24 +107,30 @@ export async function eventAuditHistory(
 		.select({
 			id: eventAuditLogs.id,
 			action: eventAuditLogs.action,
-			operator: user.name,
+			actorUserId: eventAuditLogs.actorUserId,
 			createdAt: eventAuditLogs.createdAt,
 			reason: eventAuditLogs.reason,
 			before: eventAuditLogs.beforeState,
 			after: eventAuditLogs.afterState,
 		})
 		.from(eventAuditLogs)
-		.innerJoin(user, eq(user.id, eventAuditLogs.actorUserId))
 		.where(eq(eventAuditLogs.eventId, eventId))
 		.orderBy(desc(eventAuditLogs.createdAt), desc(eventAuditLogs.id))
 		.limit(limit + 1)
 		.offset(offset);
+	const names = await getUserDisplayNames(
+		db,
+		rows.map((row) => row.actorUserId),
+	);
 	return {
 		hasMore: rows.length > limit,
-		items: rows.slice(0, limit).map(({ before, after, ...row }) => ({
-			...row,
-			...administrativeChanges(before, after),
-		})),
+		items: rows
+			.slice(0, limit)
+			.map(({ before, after, actorUserId, ...row }) => ({
+				...row,
+				operator: names.get(actorUserId) ?? "",
+				...administrativeChanges(before, after),
+			})),
 	};
 }
 
@@ -138,20 +146,24 @@ export async function deletedDraftHistory(
 		.select({
 			id: eventDeletionAudits.id,
 			eventId: eventDeletionAudits.eventId,
-			operator: user.name,
+			actorUserId: eventDeletionAudits.actorUserId,
 			reason: eventDeletionAudits.reason,
 			createdAt: eventDeletionAudits.createdAt,
 			snapshot: eventDeletionAudits.eventSnapshot,
 		})
 		.from(eventDeletionAudits)
-		.innerJoin(user, eq(user.id, eventDeletionAudits.actorUserId))
 		.orderBy(desc(eventDeletionAudits.createdAt), desc(eventDeletionAudits.id))
 		.limit(limit + 1)
 		.offset(offset);
+	const names = await getUserDisplayNames(
+		db,
+		rows.map((row) => row.actorUserId),
+	);
 	return {
 		hasMore: rows.length > limit,
-		items: rows.slice(0, limit).map(({ snapshot, ...row }) => ({
+		items: rows.slice(0, limit).map(({ snapshot, actorUserId, ...row }) => ({
 			...row,
+			operator: names.get(actorUserId) ?? "",
 			title: snapshot.title,
 			startsAt: snapshot.startsAt,
 			endsAt: snapshot.endsAt,

@@ -24,14 +24,17 @@ import { assignSyntheticSrTenure } from "@resora/db/sr-tenure.fixture";
 import { and, eq, inArray } from "drizzle-orm";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import { createApp } from "../../../../../apps/server/src/app";
-import { eventDraftSchema } from "../attendance/attendance.schema";
-import { signChallenge, verifySessionChallenge } from "../check-in/qr";
+import * as service from "../../application/internal-events";
+import { eventDraftSchema } from "../../contracts/attendance";
+import {
+	signChallenge,
+	verifySessionChallenge,
+} from "../attendance/check-in/qr";
 import { getActiveSrDirectory } from "../identity/identity.public";
 import {
 	localProvisioningTarget,
 	verifyLocalProvisioningDatabase,
 } from "../identity/provisioning/sr-provisioning";
-import * as service from "./event.service";
 
 // Await Drizzle thenables directly: Bun's promise matcher can stall after deferred errors.
 async function rejects(operation: PromiseLike<unknown>, code?: string) {

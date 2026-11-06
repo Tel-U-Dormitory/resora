@@ -1,4 +1,4 @@
-import { committeePositionLabels } from "../committee/committee-positions";
+import { committeePositionLabels } from "../committee/committee.contracts";
 
 export const nonCommitteeLabel = "Non-Panitia / Undangan";
 export type ReportingContext = {

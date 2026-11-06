@@ -3,10 +3,11 @@ import { randomUUID } from "node:crypto";
 import type { ActiveIdentity, ActiveSrIdentity } from "@resora/auth/sr-access";
 import type { Database } from "@resora/db";
 import { eventAuditLogs, events } from "@resora/db/schema/attendance";
+import { user } from "@resora/db/schema/auth";
 import {
 	administrativeHistorySchema,
 	eventAuditHistorySchema,
-} from "../attendance/attendance.schema";
+} from "../../contracts/attendance";
 import {
 	administrativeChanges,
 	deletedDraftHistory,
@@ -32,7 +33,7 @@ function fixture() {
 	const row = {
 		id: randomUUID(),
 		action: "PUBLISHED_CONFIGURATION_EDITED",
-		operator: "Synthetic admin",
+		actorUserId: "synthetic-admin",
 		reason: "Approved correction",
 		createdAt: new Date(),
 		before: state,
@@ -42,15 +43,17 @@ function fixture() {
 		select: (fields: Record<string, unknown>) => {
 			let table: unknown;
 			const q = Object.assign(
-				Promise.resolve().then(() => {
+				Promise.resolve().then<unknown[]>(() => {
+					if (table === user)
+						return [{ userId: "synthetic-admin", name: "Synthetic admin" }];
 					if (table === events) return Promise.resolve([{ id: "event" }]);
 					if (table === eventAuditLogs) return Promise.resolve([row, row]);
-					expect(Object.keys(fields)).not.toContain("actorUserId");
+					expect(Object.keys(fields)).not.toContain("password");
 					return Promise.resolve([
 						{
 							id: randomUUID(),
 							eventId: randomUUID(),
-							operator: "Synthetic admin",
+							actorUserId: "synthetic-admin",
 							reason: "Unused",
 							createdAt: new Date(),
 							snapshot: {

@@ -41,3 +41,5 @@ export async function getCommitteeRoster(
 		.where(eq(committeeMembers.committeeId, committeeId));
 	return { ...committee, members };
 }
+
+export { committeeRouter } from "./committee.router";

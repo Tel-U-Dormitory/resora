@@ -1,8 +1,8 @@
 import { protectedProcedure, publicProcedure, router } from "../index";
-import { attendanceRouter } from "../modules/attendance/attendance.router";
 import { broadcastRouter } from "../modules/broadcast/broadcast.public";
-import { committeeRouter } from "../modules/committee/committee.router";
+import { committeeRouter } from "../modules/committee/committee.public";
 import { identityRouter } from "../modules/identity/identity-transport.public";
+import { attendanceRouter } from "../transport/attendance.router";
 
 export const appRouter = router({
 	identity: identityRouter,

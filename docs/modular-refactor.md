@@ -80,3 +80,17 @@ Accounts and Provisioning now reside inside Identity. Server CLIs use a guarded
 public provisioning entry and router composition uses a public transport entry.
 Verification: 86 passed, 60 database integration cases skipped without opt-in,
 0 failed; API/server typechecks passed. Relative migration fixture paths updated.
+
+## Phase 6 — Events, Committee and workflow composition
+
+Moved mixed workflows to application/internal-events.ts and the compatibility
+router to transport. All its persistence is executed through Event/Attendance
+public operations; domain tables never leave their owner. Committee labels have
+a browser contract. Accounts/Check-in imports and all affected test paths were
+updated. Event audit names use a batch Identity read. Event detail composition
+uses repeatable read. Original lock/transaction ordering retained.
+
+Verification: 45 domain tests passed; API typecheck passed. Full offline run had
+445 pass and one CI-script expectation failure after adding the architecture gate;
+updated that expected gate, then all 49 tests in the affected suites passed.
+Remaining 14 boundary exceptions are Attendance/FE work for phases 7–8.

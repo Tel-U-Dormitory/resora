@@ -14,7 +14,7 @@ import {
 	manualInsertSchema,
 	ownHistorySchema,
 	rosterSchema,
-} from "./attendance.schema";
+} from "../../contracts/attendance";
 import { manualCorrect, manualInsert } from "./manual-attendance";
 import { auditHistory, exportCsv, ownHistory, recap } from "./reporting";
 import {
