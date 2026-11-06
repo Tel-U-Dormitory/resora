@@ -71,8 +71,7 @@ export async function deleteUnusedDraft(
 	const [event] = await lockEventForManagement(db, eventId);
 	const [references] = await eventHasDeletionReferences(db, eventId);
 	if (
-		!event ||
-		event.status !== "DRAFT" ||
+		event?.status !== "DRAFT" ||
 		event.visibility !== "VISIBLE" ||
 		references?.hasReferences !== false
 	)

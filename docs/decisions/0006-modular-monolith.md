@@ -1,7 +1,7 @@
 # ADR 0006 — enforced modular monolith
 
 Status: Accepted direction by user request, 2026-11-06. Implementation and verification
-are recorded separately in `docs/modular-refactor.md`. This supersedes earlier
+are recorded separately in `docs/modular-refactor.md` and `docs/modular-maintainability.md`. This supersedes earlier
 technical folder examples, not business decisions in the PRDs.
 
 ## Decision
@@ -45,8 +45,7 @@ nested independent transactions in atomic workflows.
 ## Enforcement and tests
 
 CI checks resolved relative/alias imports, public paths, module cycles, table ownership
-and browser transitive imports. Temporary violations are exact file/target pairs,
-removed as each phase migrates. Tests and central schema composition have explicit
+and browser transitive imports. The implementation has no production import exceptions. Tests and central schema composition have explicit
 roles; production application code has no blanket exception. Checker tests include
 negative fixtures. Unit tests protect behavior; guarded local PostgreSQL suites are
 needed to validate locks/triggers. Manual UAT and release remain separate gates.
@@ -58,3 +57,12 @@ contract, but distributed identity, transactions, consistency and delivery still
 require design. This refactor does not claim network independence. External
 participants, dynamic roster expansion, new event/session cardinalities and new
 committee ownership rules are out of scope.
+
+## Maintainability follow-up — 2026-11-06
+
+The approved follow-up retains this decision. It makes facts explicit, owner queries
+project columns, and destructive/lifecycle commands validate owner invariants. Backend
+workflows and frontend screens are grouped by capability. Small unit tests remain
+colocated; integration suites and large fixtures use dedicated test folders, which
+production code cannot import. No mandatory technical layers, schema change, network
+hop or new runtime dependency is introduced. See the Architecture for the current tree.

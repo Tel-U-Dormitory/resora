@@ -6,7 +6,9 @@ The current implementation follows an enforced modular monolith with Identity,
 Events, Committee, Attendance and Broadcast. See [current architecture](docs/architecture.md),
 [data ownership](docs/module-data-ownership.md) and [ADR 0006](docs/decisions/0006-modular-monolith.md).
 Run `pnpm check:architecture` to verify boundaries. The structural refactor preserves
-existing business behavior and requires no new database migration.
+existing business behavior and requires no new database migration. See the
+[folder/test conventions and phase evidence](docs/modular-maintainability.md) for the
+latest cleanup; small unit tests remain colocated and integration/fixtures have dedicated folders.
 
 ## Features
 

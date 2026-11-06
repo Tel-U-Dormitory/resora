@@ -24,3 +24,20 @@ session and immutable-binding triggers, append-only audits and original-record
 integrity. Historical migration SQL is never edited. Any future schema change must
 be additive first, verify data and compatibility, and have its own reviewed rollout.
 Remote execution remains separately authorized.
+
+## Contract shape and command responsibilities
+
+Event, Invitation, Session and audit facts are explicit domain DTOs, independent of
+ORM inference. Their query/returning projections enumerate columns. A new schema
+column does not automatically become an integration field. Committee position types
+are defined by the domain contract, not inferred from a database table.
+
+Owner commands guard their own lifecycle/destructive invariants (for example unused
+visible draft deletion and INACTIVE session activation) under the existing locks.
+Application workflows enforce permission/live Identity checks and compose related
+owner operations in one transaction. A public operation is not a general CRUD API;
+respect its documented lock/authorization prerequisites.
+
+Private fixtures may access several owners to build synthetic test state. Production
+imports of anything under test support are rejected by the boundary checker. See
+[test placement and current structure](architecture.md#test-placement-and-navigation).

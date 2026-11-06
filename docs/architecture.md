@@ -1,11 +1,11 @@
 # RESORA — Technical Architecture & Repository Standards
 
-> **2026-11-06 modular refactor:** [ADR 0006](decisions/0006-modular-monolith.md) governs current module ownership and public contracts. Earlier phase folder listings are historical. Business behavior is unchanged; see [execution record](modular-refactor.md).
+> **2026-11-06 modular refactor:** [ADR 0006](decisions/0006-modular-monolith.md) governs current module ownership and public contracts. Earlier phase folder listings are historical. Business behavior is unchanged; see the [original execution record](modular-refactor.md) and [maintainability follow-up](modular-maintainability.md).
 
 **Document type:** System-wide Technical Architecture  
-**Version:** 0.3.1 — folder convention clarified 2026-10-11  
+**Version:** 0.4.0 — implemented modular structure, 2026-11-06
 **Owner:** RnD engineering, subject to PM approval for consequential scope, data and deployment changes  
-**Status:** Approved technology direction + **proposed target folder/domain architecture**. Some foundation is implemented; Phase 4 internal event/session/QR is implemented; attendance records, folder reorganizations and deployment remain future work.
+**Status:** Modular boundaries and maintainability follow-up implemented and verified locally. Deployment, remote state and manual UAT have separate records and approval gates.
 
 > **Document boundary:** The [system-wide PRD](prd.md) owns **business rules, user actors, feature scope and ownership**; this document owns **how the implementation is organized, boundaries, constraints, interfaces, migration strategy and operations**. Module PRDs and FR Master are the authoritative reference for feature acceptance. A technical pattern written here does not grant new business permissions.
 
@@ -21,24 +21,33 @@ apps/web/src/
   app/                         URL/layout composition through feature entry points
   features/
     identity/                  public.ts (client), server.ts (SSR)
-    events/                    event lifecycle UI, roster and location controls
+      auth/ accounts/ permissions/ periods/ profile/ server/
+    events/                    public.ts, roster and location controls
+      form/                    model, draft editor, roster, schedule, session fields
+      detail/                  model, metadata, session, invitation, admin panels
     attendance/                scanner, own history, recap/manual UI
     committee/                 committee UI and public.ts
     broadcast/                 announcement UI and public.ts
     landing/                   public welcome UI
+  tests/workflows/             cross-feature JSX/callback regression suites
   components/event-feedback.tsx  reused display labels, date formatting and errors
   utils/internal-event-queries.ts  actual shared cache invalidation workflow
 packages/api/src/
   routers/index.ts             tRPC composition
   transport/attendance.router.ts  unchanged attendance.* compatibility namespace
   contracts/attendance.ts      existing composite transport inputs; server validation
-  application/internal-events.ts  atomic Event/Attendance use-case coordination
+  application/internal-events/
+    index.ts                   explicit atomic workflow entry
+    context.ts                 lock/authorization coordination
+    lifecycle.ts sessions.ts administration.ts advanced-edit.ts queries.ts
+    tests/                     workflow tests, fixtures/, integration/
   modules/
     identity/                 accounts/, provisioning/, public server contracts
-    events/                   Event facts, invitations, roster and append-only evidence
-    attendance/               check-in/, sessions, QR, manual records and reporting
+    events/                   explicit facts, queries, commands, invitations, policy
+    attendance/               check-in/, sessions/, QR, manual records and reporting
     committee/                reusable committees, divisions and member assignments
     broadcast/                announcement lifecycle
+    <owner>/tests/integration/ owner-local guarded PostgreSQL suites
 packages/db/src/               central Drizzle schema, FKs and immutable migration history
 packages/config/src/architecture.ts  executable boundary policy
 ```
@@ -57,6 +66,9 @@ packages/config/src/architecture.ts  executable boundary policy
   layer coordinates both through named public operations. No generic SQL/CRUD port is
   exposed. Public trusted operations document lifecycle/authorization prerequisites;
   the transport and application maintain existing gates and live rechecks.
+  Facts are explicit DTOs with explicit select/returning projections; adding a database
+  column must not silently expand an integration contract. Owner commands revalidate
+  destructive/lifecycle invariants; application checks still coordinate other owners.
 - The composite legacy `attendance.*` input contract remains stable, including its
   session configuration; it is not an ownerless business model or a new Event API.
 - FE routes and features consume `public.ts` or SSR `server.ts`. Server-only session
@@ -88,6 +100,8 @@ Run `pnpm check:architecture`. CI runs it before lint, types, unit tests and bui
 There are no transitional import exceptions. The checker resolves aliases/relative
 imports, rejects private cross-owner imports and domain/feature cycles, checks table
 imports and explicit SQL/relational access, and traverses browser runtime dependencies.
+Production code cannot import test suites or fixtures. Tests and test-support folders
+are outside the production ownership graph; this is not an exception for application code.
 Dynamic SQL assembled at runtime still requires review and integration tests; static
 analysis is not proof of every possible database access.
 
@@ -103,19 +117,19 @@ unused layers, an event bus or a package merely to match a template.
 
 | Layer                | Baseline                                                          | Current state / caution                                                                                                                              |
 | -------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Frontend             | **Next.js**, React, TypeScript                                    | Scaffold/repository present; feature-based folders below are **target standard**.                                                                    |
+| Frontend             | **Next.js**, React, TypeScript                                    | Feature capabilities and explicit client/server entries implemented; Event screens decomposed.                                                                    |
 | Backend entrypoint   | **Express.js** with **Bun 1.3.13** runtime                        | Repo present; keep runtime bootstrap thin.                                                                                                           |
-| API boundary         | **tRPC** + Zod schema validation                                  | Existing `packages/api`; Identity and Phase 4 Attendance modules implemented.                                                                                                    |
+| API boundary         | **tRPC** + Zod schema validation                                  | Five backend domains with public server contracts; protected tRPC transport remains compatible.                                                                                                    |
 | Identity             | **Better Auth** + Username Plugin (`username=NIM` for SR)         | Phase 2B SR login/logout, live active-account enforcement and first-password-change gate tested locally; provisioning/recovery and pilot UAT pending. |
 | Primary database     | **External Supabase PostgreSQL (production for now)**                                   | Docker PostgreSQL is optional development-only; local manual SUPERADMIN backups remain available, disabled in production.                                                                      |
-| ORM & schema         | **Drizzle**                                                       | Existing schema and **three applied/verified identity foundation migrations** in Supabase Development. Attendance/domain migrations **not applied**. |
+| ORM & schema         | **Drizzle**                                                       | Central schema and immutable migration history. Follow-up validated the chain on scratch PostgreSQL; remote state is recorded separately in Setup. |
 | Workspace            | **pnpm 10.33.4**, pnpm workspaces, Turborepo                      | Project scaffold exists.                                                                                                                             |
 | Shared packages      | `packages/api`, `auth`, `db`, `config`, `ui`                      | Some package content still scaffold-level.                                                                                                           |
-| Tooling              | TypeScript strict checks, Biome, Varlock/environment schema       | Preserve actual scripts/tool versions from repo; CI policy TBD.                                                                                      |
+| Tooling              | TypeScript strict checks, Biome, Varlock/environment schema       | Boundary checks, lint, types, offline/loadtest-tool tests and builds in verify:pr / CI.                                                                                      |
 | Deployment           | Rumahweb VPS + Docker Compose + existing NPM | **Not deployed or production-proven.** Proxy/limiter, TLS/pool, secrets, operations and backup gates remain. |
 | Development database | Supabase Development; optional disposable local Docker PostgreSQL | Never confuse successful Development migration with production readiness.                                                                            |
 
-**Correction to the previous Architecture:** Phase 2A.6 **did apply and verify** the reviewed identity migration chain on Supabase Development. Any older closing statement claiming that no migrations have been applied is obsolete. There have been **no attendance-domain migrations**.
+**Migration evidence:** Earlier phase-specific deployment statements below are historical. The [Setup migration records](setup.md) record later authorized staging work. This structural follow-up changed no migration and performed no remote database operation.
 
 ## 2. Logical architecture
 
@@ -156,12 +170,32 @@ Accounts/Provisioning and Attendance Check-in are capability submodules, not new
 independent domains. Do not create mandatory technical-layer directories or empty
 future modules. Next.js route groups remain optional and existing URLs are retained.
 
+### Test placement and navigation
+
+- Small unit/policy tests stay beside their implementation (`*.test.ts`). Colocation
+  is intentional; a directory per file type is not required.
+- Large workflow suites use `tests/` with adjacent `fixtures/`; PostgreSQL suites use
+  their owning capability's `tests/integration/*.integration.test.ts`.
+- Event/Attendance atomic workflow tests live in `application/internal-events/tests`;
+  frontend cross-feature workflows live in `apps/web/src/tests/workflows`.
+- Submodules are internal capabilities, not separately deployable services. Consumers
+  still use the owning module's public entry; do not expose each private file.
+- Shared UI stays in `packages/ui` only for reusable primitives; shared domain business
+  rules keep their owner. Avoid a general shared service or generic repository facade.
+- Add directories when several cohesive files need navigation. File length is a review
+  signal, not a requirement to split a coherent unit or build pass-through layers.
+
+The tRPC boundary serves browser/server transport. Backend domains communicate through
+explicit in-process public operations; they do not make loopback HTTP requests.
+Future service extraction must replace that integration and redesign shared atomic
+transactions/read consistency; moving a folder alone does not provide that guarantee.
+
 ### 3.1 Rules against unnecessary abstraction and nesting
 
 | Rule              | Standard                                                                                                                                                                                                         |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Primary grouping  | One directory per stable business feature/domain.                                                                                                                                                                |
-| Default depth     | Files are **flat within their feature folder**; no one-file technical-layer subfolders.                                                                                                                          |
+| Default depth     | Keep small capabilities shallow; group growing capabilities such as accounts, sessions, Event form/detail. No one-file technical-layer subfolders.                                                                                                                          |
 | File creation     | Introduce `.service.ts`, `.repository.ts`, `.schema.ts`, hooks or test files **only when responsibilities justify them**; not every feature must contain every layer.                                            |
 | Subfolders        | Add a subfolder only when it groups several genuinely related files or a substantial **business subfeature** and demonstrably improves navigation. Do not group by file type reflexively.                        |
 | Naming            | Directories in `kebab-case`; feature files use descriptive names with predictable suffixes, e.g. `attendance.router.ts`, `attendance.service.ts`, `use-attendance.ts`, `attendance-form.tsx`.                    |
@@ -290,9 +324,9 @@ A stored unrevoked grant becomes ineffective outside HCO, without ACTIVE tenure,
 
 P2 adds **Kelola Hak Akses** to the existing `/admin/users` account actions. Its separate AccountModal loads only the selected user, groups the backend catalog, and distinguishes intrinsic read-only access, explicit grants and current effective access. Ineligible HCO cannot receive a grant but existing grants remain revocable; out-of-HCO grants appear only under **Izin lama tidak berlaku**. If a former recipient now holds intrinsic access, its redundant explicit grant can be cleaned up separately without removing intrinsic access. Revocation requires inline confirmation. Pending mutations block duplicate submits and closing; failures retain selection and refresh server state. Successful writes update and invalidate only that user's permission query, without optimistic writes, polling or account-profile changes. Reopening waits for a fresh server read; target-keyed dialogs prevent selections crossing accounts. Account listing remains protected by SUPERADMIN-only backend APIs. P3 mobile/keyboard/focus and live revocation UAT remain pending. Migration `20261026122216_user_permission_grants` must be applied by PM to verified DEV before UAT; merging P1 alone does not prove it is applied. No remote migration or release is performed by P2.
 
-Targeted verification: `bun --no-env-file test packages/api/src/modules/identity/account-permissions.test.ts packages/api/src/modules/identity/identity-policy.test.ts packages/api/src/modules/identity/identity-profile.test.ts packages/api/src/modules/identity/accounts/account-admin.test.ts packages/api/src/modules/attendance/reporting.test.ts`; opt-in real PostgreSQL suite `packages/api/src/modules/identity/account-permissions.integration.test.ts` uses only a verified empty loopback `resora_identity_test_permissions` via `RESORA_PERMISSION_TEST_DB_URL`. It checks all migration hashes, RLS/FKs/CHECKs, audit rollback/idempotency, role/tenure/password transitions, intrinsic regression, manual insert/correct/audit and both revoke/write transaction orders with deterministic lock coordination. Existing account lifecycle integration is also run on a separate empty scratch database. Use the target-aware migration workflow in `docs/setup.md` only after separate operator approval for DEV/PROD.
+Targeted verification: `bun --no-env-file test packages/api/src/modules/identity/account-permissions.test.ts packages/api/src/modules/identity/identity-policy.test.ts packages/api/src/modules/identity/identity-profile.test.ts packages/api/src/modules/identity/accounts/account-admin.test.ts packages/api/src/modules/attendance/tests/reporting.test.ts`; opt-in real PostgreSQL suite `packages/api/src/modules/identity/tests/integration/account-permissions.integration.test.ts` uses only a verified empty loopback `resora_identity_test_permissions` via `RESORA_PERMISSION_TEST_DB_URL`. It checks all migration hashes, RLS/FKs/CHECKs, audit rollback/idempotency, role/tenure/password transitions, intrinsic regression, manual insert/correct/audit and both revoke/write transaction orders with deterministic lock coordination. Existing account lifecycle integration is also run on a separate empty scratch database. Use the target-aware migration workflow in `docs/setup.md` only after separate operator approval for DEV/PROD.
 
-P2 targeted CLI UI coverage: `bun --no-env-file test apps/web/src/features/identity/account-permissions-dialog.test.ts` uses the existing React hook/transport-double pattern, without a browser. Category and Identity/attendance regression tests plus the disposable PostgreSQL suite verify filtered catalogs, inapplicable grant cleanup and unchanged authorization. Actual dialog focus, Escape, responsive layout and cross-session revocation presentation require P3 manual UAT.
+P2 targeted CLI UI coverage: `bun --no-env-file test apps/web/src/features/identity/permissions/account-permissions-dialog.test.ts` uses the existing React hook/transport-double pattern, without a browser. Category and Identity/attendance regression tests plus the disposable PostgreSQL suite verify filtered catalogs, inapplicable grant cleanup and unchanged authorization. Actual dialog focus, Escape, responsive layout and cross-session revocation presentation require P3 manual UAT.
 
 P2 read-only DEV preflight (`pnpm db:migrate dev --check`, 2026-10-26) verified the isolated configured DEV project with certificate/hostname verification and a compatible applied migration prefix. It reported exactly one pending migration: `20261026122216_user_permission_grants`. No migration was executed; manual UAT remains gated on PM applying it to the intended DEV target.
 
@@ -462,7 +496,7 @@ A universal attendance FK to `event_participants` is not part of the shared-engi
 
 ### Phase 4 implementation boundaries
 
-`packages/api/src/transport/attendance.router.ts` retains the thin protected compatibility router; `contracts/attendance.ts` retains its input validation. `modules/events/` owns event facts, invitations, audits and roster resolution. `modules/attendance/` owns sessions, manual attendance, reporting and internal `check-in/`. `application/internal-events.ts` coordinates atomic lifecycle/QR workflows through both public interfaces. Domain tests are colocated; the mixed `attendance.test.ts` stays in Attendance. The public namespace remains `attendance.*`, with unchanged signatures and exports. Identity exposes `identity.public.ts` for current eligible SR directory and HCO policy; these modules do not read private Identity tables. Publishing obtains a locked consistent directory view and stores historical snapshots atomically. Event/session row locks serialize all lifecycle/QR mutations; partial unique current-challenge index is a second concurrency guard. Event/session creation and event/session/QR closure are atomic; exactly-one inverse and immutable binding are custom versioned SQL triggers. All HCO members can manage internal events regardless of creator; invited non-HCO sees PUBLISHED events only, without roster or QR secrets.
+`packages/api/src/transport/attendance.router.ts` retains the thin protected compatibility router; `contracts/attendance.ts` retains its input validation. `modules/events/` owns event facts, invitations, audits and roster resolution. `modules/attendance/` owns sessions, manual attendance, reporting and internal `check-in/`. `application/internal-events/index.ts` coordinates atomic lifecycle/QR workflows through both public interfaces. Domain tests are colocated; the mixed `attendance.test.ts` stays in Attendance. The public namespace remains `attendance.*`, with unchanged signatures and exports. Identity exposes `identity.public.ts` for current eligible SR directory and HCO policy; these modules do not read private Identity tables. Publishing obtains a locked consistent directory view and stores historical snapshots atomically. Event/session row locks serialize all lifecycle/QR mutations; partial unique current-challenge index is a second concurrency guard. Event/session creation and event/session/QR closure are atomic; exactly-one inverse and immutable binding are custom versioned SQL triggers. All HCO members can manage internal events regardless of creator; invited non-HCO sees PUBLISHED events only, without roster or QR secrets.
 
 **Historical Phase 4 verification (later implementation is described above):** `attendance.public.ts` initially exposed backend-only QR verification for Phase 5. Stable signed payloads use HMAC-SHA256 and a domain-separated HKDF key derived from existing Better Auth secret. No raw bearer token is persisted; secret rotation invalidates signatures. `qrcode` is the only added runtime dependency, for actual PNG rendering. No new auth provider, permission engine or session system. Frontend `features/attendance/` reuses existing UI/tRPC with thin `/events` routes and existing session/password redirects. Four-table additive migration is applied only to guarded local scratch; remote application still requires PM approval. Check-in, records, audit, reports and future Activity integration remain unimplemented.
 
@@ -535,7 +569,7 @@ Dialogs use existing Base UI title/description/focus/scroll primitives, labeled 
 
 Content is rendered as escaped React text (`whitespace-pre-wrap`, word wrapping), with card excerpts and a full detail dialog; no HTML/Markdown parsing. Link guards accept only absolute HTTP(S), do not fetch metadata, and use `target="_blank" rel="noopener noreferrer"` with readable names. Responsive wrapping, scrollable dialogs and existing theme/tokens are reused without new dependencies or navigation redesign.
 
-B2 CLI verification: `bun --no-env-file test apps/web/src/features/broadcast/broadcast-ui.test.ts packages/api/src/modules/identity/identity-profile.test.ts packages/api/src/modules/broadcast/broadcast.test.ts apps/web/src/features/attendance/interaction-ux.test.ts --test-name-pattern '^(?!.*(?:CSV|csv|export)).*$'`. Tests execute actual JSX/callbacks with local hook/transport doubles and React server escaping; they are not browser E2E. Coverage includes latest/capabilities, pagination/clamping, detail fetch, inputs/WIB, create/edit/archive, confirmation, pending/cancel, conflict/error preservation and scoped invalidation. The existing B1 PostgreSQL suite is not rerun because its schema/business logic is unchanged. Workspace typecheck, scoped Biome, web/server builds and diff checks are separate validation gates.
+B2 CLI verification: `bun --no-env-file test apps/web/src/features/broadcast/broadcast-ui.test.ts packages/api/src/modules/identity/identity-profile.test.ts packages/api/src/modules/broadcast/broadcast.test.ts apps/web/src/tests/workflows/interaction-ux.test.ts --test-name-pattern '^(?!.*(?:CSV|csv|export)).*$'`. Tests execute actual JSX/callbacks with local hook/transport doubles and React server escaping; they are not browser E2E. Coverage includes latest/capabilities, pagination/clamping, detail fetch, inputs/WIB, create/edit/archive, confirmation, pending/cancel, conflict/error preservation and scoped invalidation. The existing B1 PostgreSQL suite is not rerun because its schema/business logic is unchanged. Workspace typecheck, scoped Biome, web/server builds and diff checks are separate validation gates.
 
 Local B2 evidence (2026-10-26): **54 tests passed**, one unrelated CSV case excluded; workspace typecheck (six packages), scoped Biome, web/server builds and diff checks passed. New Next.js route types were regenerated using `next typegen` without TypeScript configuration changes. Installed Next.js 16.4.0 emitted an existing vulnerability notice and paused the first build; the identical retry succeeded after the reminder. Dependency upgrades are outside B2 and remain a separate security follow-up. No browser, database connection, migration, email or deployment was executed for B2.
 
@@ -560,12 +594,12 @@ Two narrow corrections: **MAJOR fixed** — READ COMMITTED let an archive betwee
 Reproduction commands (database suites require the existing explicit empty-loopback guards; never supply DEV/PROD URLs):
 
 ```powershell
-bun --no-env-file test apps/web/src/features/broadcast/broadcast-ui.test.ts packages/api/src/modules/broadcast/broadcast.test.ts packages/db/src/schema/broadcast.test.ts packages/db/scripts/migrate.test.ts packages/api/src/modules/identity/identity-policy.test.ts packages/api/src/modules/identity/identity-profile.test.ts packages/auth/src/identity-access.test.ts packages/auth/src/password-policy.test.ts packages/api/src/modules/committee/committee.test.ts apps/web/src/features/committee/committee-ui.test.ts packages/api/src/modules/attendance/attendance.test.ts packages/api/src/modules/attendance/check-in/check-in.test.ts packages/api/src/modules/attendance/reporting.test.ts apps/web/src/features/attendance/interaction-ux.test.ts --test-name-pattern '^(?!.*(?:CSV|csv|export|protected Phase 6 routes)).*$'
+bun --no-env-file test apps/web/src/features/broadcast/broadcast-ui.test.ts packages/api/src/modules/broadcast/broadcast.test.ts packages/db/src/schema/broadcast.test.ts packages/db/scripts/migrate.test.ts packages/api/src/modules/identity/identity-policy.test.ts packages/api/src/modules/identity/identity-profile.test.ts packages/auth/src/identity-access.test.ts packages/auth/src/password-policy.test.ts packages/api/src/modules/committee/committee.test.ts apps/web/src/features/committee/committee-ui.test.ts packages/api/src/modules/attendance/attendance.test.ts packages/api/src/modules/attendance/check-in/check-in.test.ts packages/api/src/modules/attendance/tests/reporting.test.ts apps/web/src/tests/workflows/interaction-ux.test.ts --test-name-pattern '^(?!.*(?:CSV|csv|export|protected Phase 6 routes)).*$'
 # Dedicated fresh PostgreSQL 18 scratch cluster: 127.0.0.1:55438, role resora_b3_test.
 # Set RESORA_BROADCAST_TEST_DB_URL only to its empty resora_test_broadcast database.
-bun --no-env-file test packages/api/src/modules/broadcast/broadcast.integration.test.ts
+bun --no-env-file test packages/api/src/modules/broadcast/tests/integration/broadcast.integration.test.ts
 # Set RESORA_COMMITTEE_API_TEST_DB_URL only to its separate empty resora_identity_test_committee_api database.
-bun --no-env-file test packages/api/src/modules/committee/committee.integration.test.ts --test-name-pattern '^(?!.*manual attendance, QR duplicate/lifecycle gates and historical reporting).*$'
+bun --no-env-file test packages/api/src/modules/committee/tests/integration/committee.integration.test.ts --test-name-pattern '^(?!.*manual attendance, QR duplicate/lifecycle gates and historical reporting).*$'
 pnpm.cmd run check-types
 pnpm.cmd --filter web build
 pnpm.cmd --filter server build
@@ -735,8 +769,8 @@ UI menyediakan Export Semua Peserta (mengabaikan filter aktif) dan Export Sesuai
 Perintah Fase 4 non-CSV dari root:
 
 ```sh
-bun --no-env-file test packages/api/src/modules/attendance/reporting.test.ts apps/web/src/features/attendance/interaction-ux.test.ts packages/api/src/modules/events/event-editing.test.ts packages/api/src/modules/identity/identity-policy.test.ts --test-name-pattern '^(?!.*(?:CSV|csv|export|protected Phase 6 routes)).*$'
-bun --no-env-file test packages/api/src/modules/committee/committee.integration.test.ts --test-name-pattern 'Phase 4 recap'
+bun --no-env-file test packages/api/src/modules/attendance/tests/reporting.test.ts apps/web/src/tests/workflows/interaction-ux.test.ts packages/api/src/application/internal-events/tests/event-editing.test.ts packages/api/src/modules/identity/identity-policy.test.ts --test-name-pattern '^(?!.*(?:CSV|csv|export|protected Phase 6 routes)).*$'
+bun --no-env-file test packages/api/src/modules/committee/tests/integration/committee.integration.test.ts --test-name-pattern 'Phase 4 recap'
 pnpm run check-types
 pnpm --filter web build
 pnpm --filter server build
@@ -749,7 +783,7 @@ Targeted checks Fase 1–3 (historis; beberapa suite mencakup CSV):
 ```sh
 bun --no-env-file test packages/db/src/schema/committee.test.ts packages/db/src/schema/committee.integration.test.ts packages/api/src/modules/identity/identity-policy.test.ts
 pnpm run test:committee
-bun --no-env-file test packages/api/src/modules/attendance/attendance.test.ts packages/api/src/modules/events/event-editing.test.ts packages/api/src/modules/attendance/check-in/check-in.test.ts packages/api/src/modules/attendance/reporting.test.ts apps/web/src/features/events/event-ui.test.ts apps/web/src/features/attendance/interaction-ux.test.ts
+bun --no-env-file test packages/api/src/modules/attendance/attendance.test.ts packages/api/src/application/internal-events/tests/event-editing.test.ts packages/api/src/modules/attendance/check-in/check-in.test.ts packages/api/src/modules/attendance/tests/reporting.test.ts apps/web/src/features/events/event-ui.test.ts apps/web/src/tests/workflows/interaction-ux.test.ts
 pnpm --filter @resora/db check-types
 pnpm --filter @resora/api check-types
 pnpm --filter web check-types
@@ -757,4 +791,4 @@ pnpm --filter web check-types
 
 Suite PostgreSQL hanya aktif melalui `RESORA_COMMITTEE_TEST_DB_URL`, tanpa fallback env aplikasi. Target harus database **kosong dan disposable**, bernama `resora_identity_test_committees` di `127.0.0.1`, dengan role/port eksplisit dan tanpa query/hash URL. Suite memverifikasi identitas koneksi, menerapkan chain lokal ke database kosong tersebut, dan memakai fixture sintetis dalam transaksi rollback. Tanpa opt-in, kasus database di-skip; skip bukan bukti integrasi PostgreSQL. Jangan arahkan variabel ini ke Supabase atau database operasional.
 
-Suite API Fase 2: `bun --no-env-file test packages/api/src/modules/committee/committee.integration.test.ts`, opt-in terpisah `RESORA_COMMITTEE_API_TEST_DB_URL`, aturan target sama tetapi nama database **`resora_identity_test_committee_api`**. Suite menerapkan chain ke database kosong yang terverifikasi dan memakai fixture sintetis; buang hanya database scratch milik pengujian setelah selesai. Cakupan: read/write matrix, privilege live/revocation, target eligibility, unique/FK, perpindahan anggota, penghapusan kosong, pagination/count DTO aman dan rollback write terakhir. Tes UI CLI mengeksekusi JSX/callback aktual dengan hook/API doubles untuk form, pilihan anggota, konfirmasi, pending/error/invalidation; ini bukan pengganti UAT browser. Fase 2 tidak mengubah event/QR/rekap; integrasi event Fase 3 dijelaskan berikut.
+Suite API Fase 2: `bun --no-env-file test packages/api/src/modules/committee/tests/integration/committee.integration.test.ts`, opt-in terpisah `RESORA_COMMITTEE_API_TEST_DB_URL`, aturan target sama tetapi nama database **`resora_identity_test_committee_api`**. Suite menerapkan chain ke database kosong yang terverifikasi dan memakai fixture sintetis; buang hanya database scratch milik pengujian setelah selesai. Cakupan: read/write matrix, privilege live/revocation, target eligibility, unique/FK, perpindahan anggota, penghapusan kosong, pagination/count DTO aman dan rollback write terakhir. Tes UI CLI mengeksekusi JSX/callback aktual dengan hook/API doubles untuk form, pilihan anggota, konfirmasi, pending/error/invalidation; ini bukan pengganti UAT browser. Fase 2 tidak mengubah event/QR/rekap; integrasi event Fase 3 dijelaskan berikut.

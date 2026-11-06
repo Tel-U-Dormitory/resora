@@ -60,3 +60,30 @@ Verification: 452 offline tests passed (58 files); API/web types and boundary ch
 passed. Six guarded PostgreSQL suites passed 81 tests / 732 assertions against an
 isolated loopback-only PostgreSQL 17 container with synthetic data. Other opt-in
 integration suites were relocated and typechecked, but not executed in this follow-up.
+
+## Phase 5 result
+
+Architecture now describes the actual capability folders, explicit DTO/projection and
+owner-command rules, public entry points and test conventions. ADR 0006, ownership,
+Setup and README agree with the new paths. Earlier phase execution evidence remains
+historical and links to this follow-up. Small coherent modules/unit tests deliberately
+remain shallow/colocated. No empty layer folders or future-module scaffolding were added.
+
+Final verification:
+
+- `bun --no-env-file scripts/test-offline.ts`: 452 passed, 0 failed, 58 files.
+- `bun --no-env-file test tests/resora-loadtest/loadtest.test.ts tests/resora-loadtest/provision-dev.test.ts`: 35 passed, 0 failed (tooling tests, not a live load test).
+- `biome check .`: 349 files checked, no errors or warnings.
+- Architecture CLI and its negative boundary/production-test-import fixtures passed.
+- TypeScript checks passed for API, server, web and the architecture checker/tests.
+- Backend tsdown bundle and frontend Next.js production build passed with installed tools.
+- Six guarded local PostgreSQL suites: 81 passed, 0 failed; temporary container removed.
+- Path/manifest checks and `git diff --check` passed. Database package/migration history,
+  lockfile and workspace dependency configuration are unchanged from the follow-up baseline.
+
+Browser/manual UAT, other opt-in integration suites, live traffic load testing and
+remote/deployment verification were not performed. This work is locally implemented
+and tested, not released. All five phases are local commits on the requested branch;
+no GitHub push, external database write or runtime environment configuration change occurred.
+Service extraction still needs an explicit design for distributed transactions,
+consistency, authentication and failure handling; public interfaces provide the seam.

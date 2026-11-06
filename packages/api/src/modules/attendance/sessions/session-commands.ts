@@ -56,7 +56,7 @@ export async function activateInternalSession(
 		.from(attendanceSessions)
 		.where(eq(attendanceSessions.id, sessionId))
 		.for("update");
-	if (!session || session.status !== "INACTIVE")
+	if (session?.status !== "INACTIVE")
 		throw new TRPCError({
 			code: "CONFLICT",
 			message: "Event/session state does not permit this action",

@@ -1,3 +1,5 @@
+> Historical execution record for the first refactor. Current file locations and follow-up verification: [maintainability phases](modular-maintainability.md) and [architecture](architecture.md).
+
 # Modular monolith refactor — execution record
 
 Date: 2026-11-06. Scope authorized in the refactor chat: all phases, local commits
