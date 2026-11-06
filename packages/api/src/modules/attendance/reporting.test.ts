@@ -15,14 +15,14 @@ import {
 	rosterSchema,
 } from "../../contracts/attendance";
 import { appRouter } from "../../routers";
-import { manualCorrect, manualInsert } from "./manual-attendance";
-import { auditHistory, exportCsv, ownHistory, recap } from "./reporting";
 import {
 	eventAssignment,
 	filterRecapParticipants,
 	nonCommitteeLabel,
 	recapFilterOptions,
-} from "./reporting-context";
+} from "./attendance.contracts";
+import { manualCorrect, manualInsert } from "./manual-attendance";
+import { auditHistory, exportCsv, ownHistory, recap } from "./reporting";
 import {
 	attendanceCsv,
 	auditState,
@@ -360,7 +360,7 @@ function fixture() {
 						rows = selection?.nim
 							? reports
 									.filter((row) => row.participant)
-									.map((row) => row.participant!)
+									.map((row) => row.participant)
 							: joined || selection?.participant
 								? state.reports
 								: state.invited

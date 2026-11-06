@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { resolveRoster } from "@resora/api/modules/events/roster";
-import { participantPage } from "./participant-list";
+import { resolveRoster } from "../../../../../packages/api/src/modules/events/roster";
+import { participantPage } from "../../utils/participant-page";
 import {
 	isInvited,
 	type RosterCandidate,

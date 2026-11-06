@@ -109,3 +109,42 @@ Committee, Broadcast, permission revoke/write races and account lifecycle. Initi
 Docker NAT was refused by the existing host/port guard; reran on a dedicated
 loopback-bound synthetic container without changing the guard. No application
 database was used. Six remaining exceptions are frontend imports only.
+
+## Phase 8 — frontend, enforcement and final verification
+
+Frontend Event UI/roster/location code now lives in `features/events`; Attendance
+retains scanner/history/recap. Each feature exposes client `public.ts`; Identity
+also exposes SSR `server.ts`. Routes compose those entries. Shared display helpers,
+pagination and query invalidation have actual cross-feature consumers. API wildcard
+exports are closed; browser schemas/helpers use explicit contracts paths. Load-test
+provisioning uses the Identity public CLI contract and root script paths are verified.
+
+Removed the transitional exception mechanism entirely. CI checks private imports,
+backend/frontend cycles, imported foreign tables, explicit SQL/relational foreign
+table access and transitive browser/server dependencies. Negative fixtures and a
+repository-wide unit assertion enforce the boundary policy. Dynamic SQL still needs
+review; no static checker proves arbitrary generated SQL safe.
+
+Final verification:
+
+- Offline unit/HTTP/CLI suites: **449 passed, 0 failed**, 56 files.
+- Load-test tooling unit suites: **35 passed, 0 failed**, no remote load traffic.
+- Fresh synthetic PostgreSQL integration repeat: **81 passed, 0 failed**, six suites.
+- API, server and web TypeScript checks passed. Architecture-tool strict typecheck
+  passed using the installed TypeScript CLI (`--ignoreConfig` for explicit files).
+- Repository Biome check passed; architecture check passed with **no exceptions**.
+- Production Next.js frontend build and tsdown backend build passed locally.
+- Migration files, dependency lockfile and environment configuration are unchanged.
+  The physical schema and application data were not modified. Only dedicated
+  ephemeral synthetic databases were migrated for integration verification.
+
+The frontend build was verified after moving UI and closing API exports. Subsequent
+changes were backend audit read transactions, CLI/test entry exports, script path
+checks, documentation and unit fixtures; backend build/typechecks and integration
+were rerun for these changes. Sandbox subprocess restrictions required local test
+execution outside the sandbox; target guards were retained.
+
+All phases have local commits on the requested branch. No push, remote database
+mutation or deployment was performed. Manual browser/device UAT, production migration
+execution (none required here), real load testing and release sign-off were not run.
+This is implemented and CLI-tested architecture work, not a release approval.

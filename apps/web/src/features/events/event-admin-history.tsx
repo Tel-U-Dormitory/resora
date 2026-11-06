@@ -5,7 +5,10 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { trpc } from "@/utils/trpc";
-import { eventErrorMessage, formatEventTime } from "./event-ui";
+import {
+	eventErrorMessage,
+	formatEventTime,
+} from "../../components/event-feedback";
 
 const actions = {
 	PUBLISHED_CONFIGURATION_EDITED: "Konfigurasi event diperbarui",

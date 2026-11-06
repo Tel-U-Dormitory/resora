@@ -21,8 +21,8 @@ import {
 } from "@resora/db/schema/identity";
 import { assignSyntheticSrTenure } from "@resora/db/sr-tenure.fixture";
 import { eq, sql } from "drizzle-orm";
-import { appRouter } from "../../../routers";
 import { eventDraftSchema } from "../../../contracts/attendance";
+import { appRouter } from "../../../routers";
 import { signChallenge } from "../../attendance/check-in/qr";
 import { getActiveSrDirectory } from "../identity.public";
 import { prepareCredentials } from "./provisioning-credentials";

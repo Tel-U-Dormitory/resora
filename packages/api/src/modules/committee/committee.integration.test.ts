@@ -11,7 +11,7 @@ import { appRouter } from "../../routers";
 import {
 	eventAssignment,
 	filterRecapParticipants,
-} from "../attendance/reporting-context";
+} from "../attendance/attendance.contracts";
 import { signChallenge } from "../attendance/check-in/qr";
 import { addMembers, createCommittee } from "./committee.service";
 

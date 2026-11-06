@@ -10,12 +10,12 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { trpc } from "@/utils/trpc";
-import { DeletedDraftHistory } from "./event-admin-history";
 import {
 	eventErrorMessage,
 	formatEventSchedule,
 	StatusBadge,
-} from "./event-ui";
+} from "../../components/event-feedback";
+import { DeletedDraftHistory } from "./event-admin-history";
 
 const visibilityFilters = [
 	["NON_ARCHIVED", "Semua nonarsip"],

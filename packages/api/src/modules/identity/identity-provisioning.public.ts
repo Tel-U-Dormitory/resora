@@ -1,4 +1,10 @@
 // Server CLI contract. Every entry retains its target/TLS/local-database guards.
+
+export {
+	type InitialCredential,
+	prepareCredentials,
+} from "./provisioning/provisioning-credentials";
+export type { SrImportRow } from "./provisioning/provisioning-csv";
 export {
 	maxCsvBytes,
 	ProvisioningError,

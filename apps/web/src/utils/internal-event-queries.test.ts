@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { QueryCache, QueryClient, QueryObserver } from "@tanstack/react-query";
-import { refreshAttendanceQueries } from "./attendance-queries";
+import { refreshAttendanceQueries } from "./internal-event-queries";
 
 const keys = {
 	all: [["attendance"]],

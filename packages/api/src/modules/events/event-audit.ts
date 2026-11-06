@@ -1,5 +1,5 @@
 import type { ActiveIdentity } from "@resora/auth/sr-access";
-import type { Database } from "@resora/db";
+import type { Database, DatabaseTransaction } from "@resora/db";
 import type { RosterCriteria } from "@resora/db/schema/attendance";
 import {
 	eventAuditLogs,
@@ -90,8 +90,8 @@ export function administrativeChanges(before: AuditState, after: AuditState) {
 	return { changes, participants };
 }
 
-export async function eventAuditHistory(
-	db: Database,
+async function readeventAuditHistory(
+	db: Database | DatabaseTransaction,
 	identity: ActiveIdentity,
 	input: z.input<typeof eventAuditHistorySchema>,
 ) {
@@ -134,8 +134,8 @@ export async function eventAuditHistory(
 	};
 }
 
-export async function deletedDraftHistory(
-	db: Database,
+async function readdeletedDraftHistory(
+	db: Database | DatabaseTransaction,
 	identity: ActiveIdentity,
 	input: z.input<typeof administrativeHistorySchema>,
 ) {
@@ -169,4 +169,30 @@ export async function deletedDraftHistory(
 			endsAt: snapshot.endsAt,
 		})),
 	};
+}
+
+export async function eventAuditHistory(
+	db: Database,
+	identity: ActiveIdentity,
+	input: z.input<typeof eventAuditHistorySchema>,
+) {
+	if (!hasSuperadminPrivilege(identity))
+		throw new TRPCError({ code: "FORBIDDEN" });
+	return db.transaction((tx) => readeventAuditHistory(tx, identity, input), {
+		isolationLevel: "repeatable read",
+		accessMode: "read only",
+	});
+}
+
+export async function deletedDraftHistory(
+	db: Database,
+	identity: ActiveIdentity,
+	input: z.input<typeof administrativeHistorySchema>,
+) {
+	if (!hasSuperadminPrivilege(identity))
+		throw new TRPCError({ code: "FORBIDDEN" });
+	return db.transaction((tx) => readdeletedDraftHistory(tx, identity, input), {
+		isolationLevel: "repeatable read",
+		accessMode: "read only",
+	});
 }

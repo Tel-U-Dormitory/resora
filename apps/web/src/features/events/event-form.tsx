@@ -15,20 +15,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { attendanceQueryKeys, queryClient, trpc } from "@/utils/trpc";
-import { committeePositionLabels } from "../committee/committee-ui";
-import { refreshAttendanceQueries } from "./attendance-queries";
-import {
-	DORM_HALL,
-	EventLocationPicker,
-	type LocationPoint,
-} from "./event-location-picker";
 import {
 	eventErrorMessage,
 	formatEventSchedule,
 	parseWibDateTimeInput,
 	toWibDateTimeInput,
-} from "./event-ui";
-import { participantPage } from "./participant-list";
+} from "../../components/event-feedback";
+import { refreshAttendanceQueries } from "../../utils/internal-event-queries";
+import { participantPage } from "../../utils/participant-page";
+import { committeePositionLabels } from "../committee/public";
+import {
+	DORM_HALL,
+	EventLocationPicker,
+	type LocationPoint,
+} from "./event-location-picker";
 import {
 	isInvited,
 	type RosterCandidate,

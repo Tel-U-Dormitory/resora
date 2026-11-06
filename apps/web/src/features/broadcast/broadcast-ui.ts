@@ -4,7 +4,7 @@ import type { trpcClient } from "@/utils/trpc";
 import {
 	parseWibDateTimeInput,
 	toWibDateTimeInput,
-} from "../attendance/event-ui";
+} from "../../components/event-feedback";
 
 export type Broadcast = Awaited<
 	ReturnType<typeof trpcClient.broadcast.detail.query>

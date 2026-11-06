@@ -1,5 +1,5 @@
 import type { ActiveIdentity } from "@resora/auth/sr-access";
-import type { Database } from "@resora/db";
+import type { Database, DatabaseTransaction } from "@resora/db";
 import {
 	attendanceAuditLogs,
 	attendanceRecords,
@@ -27,7 +27,7 @@ import {
 import {
 	filterRecapParticipants,
 	type RecapFilters,
-} from "./reporting-context";
+} from "./attendance.contracts";
 import { attendanceCsv, reportAttendance } from "./reporting-policy";
 
 const recordFields = {
@@ -210,8 +210,8 @@ export async function ownHistory(
 	);
 }
 
-export async function auditHistory(
-	db: Database,
+async function readauditHistory(
+	db: Database | DatabaseTransaction,
 	identity: ActiveIdentity,
 	input: z.input<typeof auditHistorySchema>,
 ) {
@@ -267,4 +267,17 @@ export async function auditHistory(
 		})),
 		nextOffset: rows.length > data.limit ? data.offset + data.limit : null,
 	};
+}
+
+export async function auditHistory(
+	db: Database,
+	identity: ActiveIdentity,
+	input: z.input<typeof auditHistorySchema>,
+) {
+	if (!(await canManageManualAttendance(db, identity)))
+		throw new TRPCError({ code: "FORBIDDEN" });
+	return db.transaction((tx) => readauditHistory(tx, identity, input), {
+		isolationLevel: "repeatable read",
+		accessMode: "read only",
+	});
 }

@@ -12,13 +12,17 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EventRecap } from "@/features/attendance/public";
 import { attendanceQueryKeys, queryClient, trpc } from "@/utils/trpc";
-import { committeePositionLabels } from "../committee/committee-ui";
-import { refreshAttendanceQueries } from "./attendance-queries";
+import {
+	eventErrorMessage,
+	formatEventTime,
+	StatusBadge,
+} from "../../components/event-feedback";
+import { refreshAttendanceQueries } from "../../utils/internal-event-queries";
+import { participantPage } from "../../utils/participant-page";
+import { committeePositionLabels } from "../committee/public";
 import { EventAuditHistory } from "./event-admin-history";
-import EventRecap from "./event-recap";
-import { eventErrorMessage, formatEventTime, StatusBadge } from "./event-ui";
-import { participantPage } from "./participant-list";
 
 const administrativeLabels = {
 	HIDE: "Sembunyikan event",

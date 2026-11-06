@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
-import { violations } from "./src/architecture";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { repositorySources, violations } from "./src/architecture";
 
 const modulePath = (name: string, file: string) =>
 	`packages/api/src/modules/${name}/${file}.ts`;
@@ -96,4 +99,56 @@ test("type-only references are safe and frontend feature boundaries reject priva
 			]),
 		).join(),
 	).toContain("private feature import");
+});
+
+test("raw SQL, relational queries, external private consumers and client/server entries are guarded", () => {
+	for (const code of [
+		"db.execute(sql`select * from events`)",
+		"db.query.events.findMany()",
+	]) {
+		expect(
+			violations(new Map([[modulePath("broadcast", "service"), code]])).join(),
+		).toContain("foreign SQL table access");
+	}
+	expect(
+		violations(
+			new Map([
+				[
+					"apps/server/src/job.ts",
+					'import "@resora/api/modules/broadcast/broadcast.service";',
+				],
+				[modulePath("broadcast", "broadcast.service"), ""],
+			]),
+		).join(),
+	).toContain("private module import");
+	expect(
+		violations(
+			new Map([
+				[
+					"apps/web/src/features/identity/view.tsx",
+					'"use client"; import "./server";',
+				],
+				["apps/web/src/features/identity/server.ts", ""],
+			]),
+		).join(),
+	).toContain("server dependency in browser");
+});
+
+test("the repository has no production boundary exceptions", () => {
+	const root = fileURLToPath(new URL("../../", import.meta.url));
+	expect(violations(repositorySources(root))).toEqual([]);
+});
+
+test("root verification scripts reference existing files after module moves", () => {
+	const root = fileURLToPath(new URL("../../", import.meta.url));
+	const manifest = JSON.parse(
+		readFileSync(resolve(root, "package.json"), "utf8"),
+	);
+	for (const command of Object.values(manifest.scripts) as string[]) {
+		for (const match of command.matchAll(
+			/\b(?:apps|packages|scripts|tests)\/[^\s]+\.(?:tsx?|mjs)\b/g,
+		)) {
+			expect(existsSync(resolve(root, match[0]))).toBe(true);
+		}
+	}
 });

@@ -106,6 +106,13 @@ function dto(
 	};
 }
 
+function authorName(names: Map<string, string>, userId: string) {
+	const name = names.get(userId);
+	if (name === undefined)
+		throw new Error("Broadcast author reference unavailable");
+	return name;
+}
+
 export async function listBroadcasts(
 	db: Database,
 	identity: ActiveIdentity,
@@ -147,7 +154,7 @@ export async function listBroadcasts(
 			return {
 				items: rows.map((row) =>
 					dto(
-						{ ...row, creatorName: names.get(row.createdByUserId)! },
+						{ ...row, creatorName: authorName(names, row.createdByUserId) },
 						live,
 						now,
 					),
@@ -182,7 +189,7 @@ export async function broadcastDetail(
 			if (!row) fail("BROADCAST_NOT_FOUND", "NOT_FOUND");
 			const names = await getUserDisplayNames(tx, [row.createdByUserId]);
 			return dto(
-				{ ...row, creatorName: names.get(row.createdByUserId)! },
+				{ ...row, creatorName: authorName(names, row.createdByUserId) },
 				live,
 				now,
 			);

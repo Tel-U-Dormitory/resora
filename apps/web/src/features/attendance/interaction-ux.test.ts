@@ -3,13 +3,16 @@ import { readFileSync } from "node:fs";
 import {
 	filterRecapParticipants,
 	recapFilterOptions,
-} from "@resora/api/modules/attendance/reporting-context";
+} from "@resora/api/modules/attendance/attendance.contracts";
 import { cache } from "react";
 import ts from "typescript";
+import {
+	parseWibDateTimeInput,
+	toWibDateTimeInput,
+} from "../../components/event-feedback";
 import { getSidebarGroups, isSidebarLinkActive } from "../../config/navigation";
-import { parseWibDateTimeInput, toWibDateTimeInput } from "./event-ui";
-import { participantPage } from "./participant-list";
-import { resetEventOrganization } from "./roster-selection";
+import { participantPage } from "../../utils/participant-page";
+import { resetEventOrganization } from "../events/roster-selection";
 
 // Execute the actual JSX callbacks with small UI/API doubles, without a browser or DB.
 function jsxCallback(file: string, attribute: string, contains = "") {
@@ -237,7 +240,10 @@ test("event editor submits only permitted advanced fields, requires a reason and
 				timeRangeMessage: "Waktu tidak valid.",
 			};
 			const submit = () =>
-				compile<Submit>(jsxCallback("event-form.tsx", "onSubmit"), scope);
+				compile<Submit>(
+					jsxCallback("../events/event-form.tsx", "onSubmit"),
+					scope,
+				);
 			if (advancedMode) {
 				scope.reason = " ";
 				await submit()(event);
@@ -289,13 +295,13 @@ test("event editor submits only permitted advanced fields, requires a reason and
 		}
 	}
 	const source = readFileSync(
-		new URL("event-form.tsx", import.meta.url),
+		new URL("../events/event-form.tsx", import.meta.url),
 		"utf8",
 	);
 	expect(source).toContain('advancedMode !== "METADATA"');
 	expect(source).toContain("{fullEditing && (");
 	const detail = readFileSync(
-		new URL("event-detail.tsx", import.meta.url),
+		new URL("../events/event-detail.tsx", import.meta.url),
 		"utf8",
 	);
 	expect(detail).toContain("detail.data.advancedEditMode");
@@ -308,7 +314,11 @@ test("event context/committee callbacks reset stale selection; published preview
 		rosterCriteria: { allSr: true, include: ["old"], exclude: ["other"] },
 	};
 	const context = compile<(event: { target: { value: string } }) => void>(
-		jsxCallback("event-form.tsx", "onChange", "event.target.value as"),
+		jsxCallback(
+			"../events/event-form.tsx",
+			"onChange",
+			"event.target.value as",
+		),
 		{
 			draft,
 			setDraft: (value: typeof draft) => {
@@ -325,7 +335,11 @@ test("event context/committee callbacks reset stale selection; published preview
 		rosterCriteria: { allSr: false, include: [], exclude: [] },
 	});
 	const choose = compile<(event: { target: { value: string } }) => void>(
-		jsxCallback("event-form.tsx", "onChange", "event.target.value || null"),
+		jsxCallback(
+			"../events/event-form.tsx",
+			"onChange",
+			"event.target.value || null",
+		),
 		{
 			draft,
 			setDraft: (value: typeof draft) => {
@@ -338,7 +352,7 @@ test("event context/committee callbacks reset stale selection; published preview
 	choose({ target: { value: "committee-2" } });
 	expect(draft).toMatchObject({ committeeId: "committee-2" });
 	const source = readFileSync(
-		new URL("event-form.tsx", import.meta.url),
+		new URL("../events/event-form.tsx", import.meta.url),
 		"utf8",
 	);
 	const tree = ts.createSourceFile(
@@ -438,7 +452,11 @@ test("visibility/deletion UI requires reason and confirmation, respects pending 
 		};
 		const submit = () =>
 			compile<(event: SubmitEvent) => void>(
-				jsxCallback("event-detail.tsx", "onSubmit", "administrativeOptions"),
+				jsxCallback(
+					"../events/event-detail.tsx",
+					"onSubmit",
+					"administrativeOptions",
+				),
 				scope,
 			)(event);
 		submit();
@@ -468,20 +486,26 @@ test("visibility/deletion UI requires reason and confirmation, respects pending 
 		expect(scope.administrativeReason).toBe("");
 	}
 	const detail = readFileSync(
-		new URL("event-detail.tsx", import.meta.url),
+		new URL("../events/event-detail.tsx", import.meta.url),
 		"utf8",
 	);
 	expect(detail).toContain("{administration && (");
 	expect(detail).toContain('disabled={busy || event.visibility !== "VISIBLE"}');
-	const list = readFileSync(new URL("event-list.tsx", import.meta.url), "utf8");
+	const list = readFileSync(
+		new URL("../events/event-list.tsx", import.meta.url),
+		"utf8",
+	);
 	expect(list).toContain("management && query.data?.isSuperadmin");
 	expect(list).toContain('event.visibility === "VISIBLE"');
 });
 
 test("successful DRAFT deletion redirects without refetching deleted detail; failure retains retry feedback", async () => {
 	const source = ts.createSourceFile(
-		"event-detail.tsx",
-		readFileSync(new URL("event-detail.tsx", import.meta.url), "utf8"),
+		"../events/event-detail.tsx",
+		readFileSync(
+			new URL("../events/event-detail.tsx", import.meta.url),
+			"utf8",
+		),
 		ts.ScriptTarget.Latest,
 		true,
 		ts.ScriptKind.TSX,
@@ -704,7 +728,7 @@ test("recap keeps global server counts/full CSV and gates manual/audit controls;
 	visit(source);
 	expect(auditButton).toBe(true);
 	const detail = readFileSync(
-		new URL("event-detail.tsx", import.meta.url),
+		new URL("../events/event-detail.tsx", import.meta.url),
 		"utf8",
 	);
 	expect(detail).toContain("aria-expanded={invitationsOpen}");
@@ -873,7 +897,7 @@ test("manual success closes the dialog and refreshes data; refresh failure remai
 test("event submit labels reflect create, draft edit, advanced edit and pending contexts", () => {
 	const source = ts.createSourceFile(
 		"form.tsx",
-		readFileSync(new URL("event-form.tsx", import.meta.url), "utf8"),
+		readFileSync(new URL("../events/event-form.tsx", import.meta.url), "utf8"),
 		ts.ScriptTarget.Latest,
 		true,
 		ts.ScriptKind.TSX,
@@ -909,12 +933,15 @@ test("event submit labels reflect create, draft edit, advanced edit and pending 
 
 test("administrative audit UI is backend-gated, expandable, paginated and renders meaningful fields without JSON", () => {
 	const detail = readFileSync(
-		new URL("event-detail.tsx", import.meta.url),
+		new URL("../events/event-detail.tsx", import.meta.url),
 		"utf8",
 	);
-	const list = readFileSync(new URL("event-list.tsx", import.meta.url), "utf8");
+	const list = readFileSync(
+		new URL("../events/event-list.tsx", import.meta.url),
+		"utf8",
+	);
 	const history = readFileSync(
-		new URL("event-admin-history.tsx", import.meta.url),
+		new URL("../events/event-admin-history.tsx", import.meta.url),
 		"utf8",
 	);
 	expect(detail).toContain(
@@ -1152,7 +1179,11 @@ test("location preset restores Dorm Hall and custom selection preserves the exis
 		let custom: boolean | undefined;
 		let point = { centerLat: -6.9, centerLng: 107.6 };
 		const handler = compile<() => void>(
-			jsxCallback("./event-location-picker.tsx", "onChange", "setCustom"),
+			jsxCallback(
+				"../events/event-location-picker.tsx",
+				"onChange",
+				"setCustom",
+			),
 			{
 				value,
 				DORM_HALL: dormHall,
@@ -1175,7 +1206,7 @@ test("location preset restores Dorm Hall and custom selection preserves the exis
 test("keyboard map selection uses wrapped center coordinates", () => {
 	let selected: unknown;
 	const handler = compile<() => void>(
-		jsxCallback("./event-location-map.tsx", "onClick", "getCenter"),
+		jsxCallback("../events/event-location-map.tsx", "onClick", "getCenter"),
 		{
 			map: { getCenter: () => ({ wrap: () => ({ lat: -6.97, lng: 107.62 }) }) },
 			onChange: (point: unknown) => {
@@ -1198,11 +1229,11 @@ test("map zoom controls invoke Leaflet zoom in and out and tolerate a loading ma
 		},
 	};
 	const zoomIn = compile<() => void>(
-		jsxCallback("./event-location-map.tsx", "onClick", "zoomIn"),
+		jsxCallback("../events/event-location-map.tsx", "onClick", "zoomIn"),
 		{ map },
 	);
 	const zoomOut = compile<() => void>(
-		jsxCallback("./event-location-map.tsx", "onClick", "zoomOut"),
+		jsxCallback("../events/event-location-map.tsx", "onClick", "zoomOut"),
 		{ map },
 	);
 	zoomOut();
@@ -1211,7 +1242,7 @@ test("map zoom controls invoke Leaflet zoom in and out and tolerate a loading ma
 	expect(zoom).toBe(18);
 	for (const action of ["zoomIn", "zoomOut"]) {
 		const withoutMap = compile<() => void>(
-			jsxCallback("./event-location-map.tsx", "onClick", action),
+			jsxCallback("../events/event-location-map.tsx", "onClick", action),
 			{ map: null },
 		);
 		expect(withoutMap).not.toThrow();
@@ -1405,7 +1436,7 @@ test("event form native validation reveals collapsed settings and identifies the
 			closest: () => details,
 		};
 		const validate = compile<(event: { preventDefault: () => void }) => void>(
-			jsxCallback("./event-form.tsx", "onInvalidCapture"),
+			jsxCallback("../events/event-form.tsx", "onInvalidCapture"),
 			{
 				formRef: {
 					current: { querySelector: () => (hasField ? field : null) },
@@ -1438,8 +1469,8 @@ test("event form native validation reveals collapsed settings and identifies the
 
 test("event location changes cannot modify the submitted snapshot while saving", () => {
 	const source = ts.createSourceFile(
-		"event-form.tsx",
-		readFileSync(new URL("./event-form.tsx", import.meta.url), "utf8"),
+		"../events/event-form.tsx",
+		readFileSync(new URL("../events/event-form.tsx", import.meta.url), "utf8"),
 		ts.ScriptTarget.Latest,
 		true,
 		ts.ScriptKind.TSX,

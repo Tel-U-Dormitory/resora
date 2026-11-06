@@ -12,8 +12,8 @@ import {
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DashboardHeader } from "@/components/dashboard-header";
+import { BroadcastFeed } from "@/features/broadcast/public";
 import { cn } from "@/lib/utils";
-import BroadcastFeed from "../broadcast/broadcast-feed";
 import { getSrSession } from "./server-session";
 
 export default async function SrDashboard() {

@@ -16,13 +16,9 @@ function owner(path: string, root: string) {
 	return path.startsWith(root) ? path.slice(root.length).split("/")[0] : null;
 }
 function domain(path: string) {
-	const name = owner(path, moduleRoot);
-	return name === "accounts" || name === "provisioning"
-		? "identity"
-		: name === "check-in"
-			? "attendance"
-			: name;
+	return owner(path, moduleRoot);
 }
+
 export function imports(path: string, source: string) {
 	const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
 	const result: { specifier: string; runtime: boolean; names: string[] }[] = [];
@@ -101,6 +97,71 @@ const eventTables = new Set([
 	"EventVisibility",
 	"EventEditAuditState",
 ]);
+function toServerEntry(specifier: string) {
+	return /(?:^|\/)server(?:\.ts)?$/.test(specifier);
+}
+const tableOwners: Record<string, string> = {
+	events: "events",
+	event_participants: "events",
+	event_audit_logs: "events",
+	event_deletion_audits: "events",
+	attendance_sessions: "attendance",
+	qr_challenges: "attendance",
+	attendance_records: "attendance",
+	attendance_audit_logs: "attendance",
+	committees: "committee",
+	committee_divisions: "committee",
+	committee_members: "committee",
+	broadcasts: "broadcast",
+	user: "identity",
+	account: "identity",
+	session: "identity",
+	verification: "identity",
+	user_profiles: "identity",
+	sr_profiles: "identity",
+	departments: "identity",
+	positions: "identity",
+	buildings: "identity",
+	sr_periods: "identity",
+	sr_period_memberships: "identity",
+	system_privileges: "identity",
+	user_permission_grants: "identity",
+	account_audit_logs: "identity",
+};
+function explicitSqlTables(path: string, source: string) {
+	const result = new Set<string>();
+	const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
+	function visit(node: ts.Node) {
+		if (
+			(ts.isTaggedTemplateExpression(node) &&
+				node.tag.getText(file) === "sql") ||
+			(ts.isCallExpression(node) && node.expression.getText(file) === "sql.raw")
+		) {
+			for (const match of node
+				.getText(file)
+				.matchAll(
+					/\b(?:from|join|update|into)\s+(?:public\.)?"?([a-z_]+)"?/gi,
+				)) {
+				if (match[1] && tableOwners[match[1]]) result.add(match[1]);
+			}
+		}
+		// Also reject relational-query access without a table import.
+		if (
+			ts.isPropertyAccessExpression(node) &&
+			ts.isPropertyAccessExpression(node.expression) &&
+			node.expression.name.text === "query"
+		) {
+			const snake = node.name.text.replace(
+				/[A-Z]/g,
+				(c) => `_${c.toLowerCase()}`,
+			);
+			if (tableOwners[snake]) result.add(snake);
+		}
+		ts.forEachChild(node, visit);
+	}
+	visit(file);
+	return result;
+}
 export function violations(sources: SourceMap) {
 	const errors = new Set<string>();
 	const graph = new Map<string, Set<string>>();
@@ -108,20 +169,33 @@ export function violations(sources: SourceMap) {
 	for (const [path, source] of sources) {
 		if (/\.test\.tsx?$/.test(path)) continue;
 		const from = domain(path);
+		const application = path.startsWith("packages/api/src/application/");
+		for (const table of explicitSqlTables(path, source)) {
+			if (application || (from && tableOwners[table] !== from))
+				errors.add(`${path} -> ${table}: foreign SQL table access`);
+		}
+
 		const feature = owner(path, featureRoot);
 		for (const item of imports(path, source)) {
 			const to = target(path, item.specifier, sources);
 			if (item.runtime && to) links.set(path, [...(links.get(path) ?? []), to]);
 			const other = to ? domain(to) : null;
-			if (from && other && from !== other) {
+			if (other && from !== other) {
 				if (!/\.(public|contracts)\.ts$/.test(to ?? ""))
 					errors.add(`${path} -> ${to}: private module import`);
-				if (!to?.endsWith(".contracts.ts"))
+				if (from && !to?.endsWith(".contracts.ts"))
 					graph.set(from, new Set([...(graph.get(from) ?? []), other]));
 			}
 			const otherFeature = to ? owner(to, featureRoot) : null;
+			if (feature && otherFeature && feature !== otherFeature) {
+				const key = `web:${feature}`;
+				graph.set(
+					key,
+					new Set([...(graph.get(key) ?? []), `web:${otherFeature}`]),
+				);
+			}
+
 			if (
-				feature &&
 				otherFeature &&
 				feature !== otherFeature &&
 				!/\/(public|server)\.ts$/.test(to ?? "")
@@ -182,7 +256,10 @@ export function violations(sources: SourceMap) {
 				if (
 					item.runtime &&
 					(/^(node:|@resora\/(db|auth)(\/|$))/.test(item.specifier) ||
-						item.specifier === "@trpc/server")
+						item.specifier === "@trpc/server" ||
+						item.specifier === "next/headers" ||
+						item.specifier === "server-only" ||
+						toServerEntry(item.specifier))
 				)
 					errors.add(
 						`${entry} -> ${path}#${item.specifier}: server dependency in browser`,

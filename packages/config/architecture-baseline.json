@@ -1,8 +1,0 @@
-[
-  "apps/web/src/features/attendance/event-detail.tsx -> apps/web/src/features/committee/committee-ui.ts: private feature import",
-  "apps/web/src/features/attendance/event-form.tsx -> apps/web/src/features/committee/committee-ui.ts: private feature import",
-  "apps/web/src/features/broadcast/broadcast-dialog.tsx -> apps/web/src/features/attendance/event-ui.tsx: private feature import",
-  "apps/web/src/features/broadcast/broadcast-feed.tsx -> apps/web/src/features/attendance/event-ui.tsx: private feature import",
-  "apps/web/src/features/broadcast/broadcast-ui.ts -> apps/web/src/features/attendance/event-ui.tsx: private feature import",
-  "apps/web/src/features/identity/sr-dashboard.tsx -> apps/web/src/features/broadcast/broadcast-feed.tsx: private feature import"
-]

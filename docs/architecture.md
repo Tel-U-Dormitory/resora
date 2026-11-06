@@ -9,6 +9,96 @@
 
 > **Document boundary:** The [system-wide PRD](prd.md) owns **business rules, user actors, feature scope and ownership**; this document owns **how the implementation is organized, boundaries, constraints, interfaces, migration strategy and operations**. Module PRDs and FR Master are the authoritative reference for feature acceptance. A technical pattern written here does not grant new business permissions.
 
+
+## Current module boundaries — ADR 0006
+
+The 2026-11-06 refactor changes implementation ownership only. Earlier dated phase
+sections below retain design/test history; their old folder examples do not override
+this section or change previously approved business behavior.
+
+```text
+apps/web/src/
+  app/                         URL/layout composition through feature entry points
+  features/
+    identity/                  public.ts (client), server.ts (SSR)
+    events/                    event lifecycle UI, roster and location controls
+    attendance/                scanner, own history, recap/manual UI
+    committee/                 committee UI and public.ts
+    broadcast/                 announcement UI and public.ts
+    landing/                   public welcome UI
+  components/event-feedback.tsx  reused display labels, date formatting and errors
+  utils/internal-event-queries.ts  actual shared cache invalidation workflow
+packages/api/src/
+  routers/index.ts             tRPC composition
+  transport/attendance.router.ts  unchanged attendance.* compatibility namespace
+  contracts/attendance.ts      existing composite transport inputs; server validation
+  application/internal-events.ts  atomic Event/Attendance use-case coordination
+  modules/
+    identity/                 accounts/, provisioning/, public server contracts
+    events/                   Event facts, invitations, roster and append-only evidence
+    attendance/               check-in/, sessions, QR, manual records and reporting
+    committee/                reusable committees, divisions and member assignments
+    broadcast/                announcement lifecycle
+packages/db/src/               central Drizzle schema, FKs and immutable migration history
+packages/config/src/architecture.ts  executable boundary policy
+```
+
+### Contracts and ownership
+
+- Domain consumers import explicit `.public.ts` server operations or `.contracts.ts`
+  browser-safe data/helper entry points. No wildcard API package export is available.
+- Identity owns account/organization data and provider integration. Historical author
+  names are obtained through `getUserDisplayNames` in one batch per result page.
+- Events owns `events`, invitation snapshots and event audits. Attendance owns sessions,
+  QR challenges, attendance records and attendance audits. See the complete
+  [table ownership matrix](module-data-ownership.md).
+- Events uses Identity/Committee public contracts. Attendance uses Events/Identity.
+  Committee and Broadcast use Identity. Events never imports Attendance: the application
+  layer coordinates both through named public operations. No generic SQL/CRUD port is
+  exposed. Public trusted operations document lifecycle/authorization prerequisites;
+  the transport and application maintain existing gates and live rechecks.
+- The composite legacy `attendance.*` input contract remains stable, including its
+  session configuration; it is not an ownerless business model or a new Event API.
+- FE routes and features consume `public.ts` or SSR `server.ts`. Server-only session
+  access remains in Identity. Shared UI helpers have demonstrated callers in multiple
+  features; they do not decide backend permissions or eligibility.
+
+### Transactions and integrity
+
+Application workflows keep one transaction and pass its handle to owner operations.
+The handle is server-only infrastructure, never a DTO or permission to query foreign
+persistence. Lock order remains Committee (when applicable) -> Event -> Session ->
+live Identity, with record/grant ordering preserved. Check-in keeps SHARE locks and
+unique conflict handling; administrative mutations keep UPDATE locks. Exactly-one
+session, immutable binding and append-only triggers remain in place.
+
+Cross-owner reporting composes materialized data inside repeatable-read transactions.
+Recap starts from ordered invitation snapshots and merges Attendance records by user
+ID. Own history paginates invited Events first, then reads sessions/records in a batch;
+hidden/archived historical evidence and pagination semantics are retained. Event detail,
+Broadcast and audit display-name composition use a consistent read snapshot.
+
+No physical schema, data, business rule, route, dependency or deployment change is
+required. No external-participant support or broader post-publication roster editing
+is introduced. The existing SUPERADMIN advanced-edit exception is preserved.
+
+### Enforcement and adding a capability
+
+Run `pnpm check:architecture`. CI runs it before lint, types, unit tests and builds.
+There are no transitional import exceptions. The checker resolves aliases/relative
+imports, rejects private cross-owner imports and domain/feature cycles, checks table
+imports and explicit SQL/relational access, and traverses browser runtime dependencies.
+Dynamic SQL assembled at runtime still requires review and integration tests; static
+analysis is not proof of every possible database access.
+
+Add new domain code only for approved scope. Declare its tables and dependencies in
+the ownership policy; keep its internals feature-local, add narrow public operations
+for actual consumers, compose its tRPC router centrally and expose only approved
+package paths. Keep UI under its feature with a deliberate public entry. Add negative
+boundary fixtures and behavior/contract tests, then update this map. Do not create
+unused layers, an event bus or a package merely to match a template.
+
+
 ## 1. Current technology baseline and readiness
 
 | Layer                | Baseline                                                          | Current state / caution                                                                                                                              |
@@ -58,94 +148,13 @@
 4. **Shared engine, separate domain owners.** MOD-03 Attendance is reusable; its HCO and Adaptif contexts must remain isolated by operator and eligibility policy.
 5. Shared code is extracted only when there is a genuine reused, stable contract. Avoid a universal god-service or `shared/` folder as a dump for business rules.
 
-## 3. Repository structure standard — feature-first, shallow, **TARGET**
+## 3. Repository structure standard — feature-first and shallow
 
-RESORA uses **one directory per stable business domain/feature**, with related files **co-located directly inside that directory**. Do **not** create mandatory `components/`, `hooks/`, `api/`, `types/`, `router/`, `service/`, `repository/`, `schema/`, `policy/`, or `tests/` subdirectories inside each feature when they would contain only one file. Names such as `attendance.service.ts` describe the file’s responsibility without requiring another nesting level.
-
-This is the **target convention** for new work and incremental refactoring, not the current repository tree. Existing working routes/routers must not be moved solely to match the diagram. The directory list below is illustrative: **do not generate empty feature directories** before those features are implemented. The only sample files shown are for `attendance`, to clarify file co-location; this is not a mandatory file checklist.
-
-```text
-resora/
-├── apps/
-│   ├── web/
-│   │   └── src/
-│   │       ├── app/                  # Next.js URL routing/layouts
-│   │       │   ├── (auth)/           # Route groups only if useful
-│   │       │   ├── (dashboard)/
-│   │       │   └── (public)/
-│   │       ├── features/             # Feature-first; flat per domain
-│   │       │   ├── identity/
-│   │       │   ├── attendance/
-│   │       │   │   ├── attendance-view.tsx
-│   │       │   │   ├── attendance-form.tsx
-│   │       │   │   ├── use-attendance.ts
-│   │       │   │   └── attendance.schema.ts
-│   │       │   ├── activity/
-│   │       │   ├── resident/
-│   │       │   ├── inspection/
-│   │       │   ├── complaint/
-│   │       │   ├── performance/
-│   │       │   └── inventory/
-│   │       ├── components/           # Truly reusable within this app
-│   │       └── lib/                  # Shared app-level infrastructure
-│   └── server/
-│       └── src/                    # Thin Express/Bun bootstrap
-│
-├── packages/
-│   ├── api/
-│   │   └── src/
-│   │       ├── modules/            # Domain-first; flat per domain
-│   │       │   ├── identity/
-│   │       │   │   ├── identity.router.ts
-│   │       │   │   ├── identity.public.ts
-│   │       │   │   ├── identity-policy.ts
-│   │       │   │   └── account-permissions.ts
-│   │       │   ├── accounts/
-│   │       │   │   ├── account-admin.ts
-│   │       │   │   └── account-period.ts
-│   │       │   ├── provisioning/
-│   │       │   │   ├── sr-account.ts
-│   │       │   │   ├── sr-provisioning.ts
-│   │       │   │   ├── provisioning-csv.ts
-│   │       │   │   ├── provisioning-credentials.ts
-│   │       │   │   └── system-admin-bootstrap.ts
-│   │       │   ├── attendance/
-│   │       │   │   ├── attendance.router.ts
-│   │       │   │   ├── attendance.schema.ts
-│   │       │   │   ├── attendance.public.ts
-│   │       │   │   ├── manual-attendance.ts
-│   │       │   │   └── reporting.ts
-│   │       │   ├── events/
-│   │       │   │   ├── event.service.ts
-│   │       │   │   ├── event-audit.ts
-│   │       │   │   └── roster.ts
-│   │       │   ├── check-in/
-│   │       │   │   ├── check-in.ts
-│   │       │   │   ├── check-in-policy.ts
-│   │       │   │   └── qr.ts
-│   │       │   ├── activity/
-│   │       │   ├── resident/
-│   │       │   ├── inspection/
-│   │       │   ├── complaint/
-│   │       │   ├── performance/
-│   │       │   └── inventory/
-│   │       └── shared/             # Only for real cross-domain reuse
-│   ├── auth/                        # Better Auth provider/session
-│   ├── db/
-│   │   ├── src/
-│   │   │   ├── schema/              # Drizzle table definitions
-│   │   │   └── migrations/          # Reviewed migration chain
-│   │   └── scripts/
-│   ├── config/
-│   └── ui/                         # Shared design system
-│
-└── docs/
-    ├── modules/                   # PRDs/acceptance per NEED
-    │   └── need-001/
-    └── decisions/                 # ADRs
-```
-
-The attendance example is deliberately **not** duplicated as separate feature trees for HCO and Adaptif. Their UI flows and backend permissions may vary, but both use the `attendance` domain and the single MOD-03 engine. Source code domains are named `attendance`, `activity`, etc., **not** `need-001` or `need-007`. Next.js route groups are optional organization mechanisms, not a requirement to modify existing URLs.
+The current tree is documented in **Current module boundaries — ADR 0006** above.
+Use one directory per stable business domain, with related files colocated. Identity
+Accounts/Provisioning and Attendance Check-in are capability submodules, not new
+independent domains. Do not create mandatory technical-layer directories or empty
+future modules. Next.js route groups remain optional and existing URLs are retained.
 
 ### 3.1 Rules against unnecessary abstraction and nesting
 
@@ -213,6 +222,9 @@ Frontend still follows the established NEED boundaries: HCO event/roster screens
 | -------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | `identity`     | MOD-01; RnD/SUPERADMIN-controlled administration          | Better Auth provider configuration itself stays in `packages/auth`.                                  |
 | `attendance`   | **MOD-03 shared**; HCO/Adaptif according to event context | One QR/session engine, context-specific eligibility/permissions.                                     |
+| `events` | Internal Event lifecycle, invitations and evidence | Independent ownership; internal workflow still requires exactly one Attendance session. |
+| `committee` | Reusable committees, divisions and member assignments | Existing relationship to Events is preserved. |
+| `broadcast` | SR announcements | Historical author display via Identity contract. |
 | `activity`     | MOD-06/NEED-007; Adaptif                                  | Event registration, quotas, cancellation; delivers registered-participant eligibility to attendance. |
 | `resident`     | MOD-02 resident information                               | Student occupancy and official data sync separate from SR organizational identity.                   |
 | `inspection`   | MOD-04                                                    | Policies/details await owner validation.                                                             |
@@ -227,7 +239,7 @@ Frontend still follows the established NEED boundaries: HCO event/roster screens
 
 ### 6.1 Identity baseline
 
-Backend organization: sibling `identity/` retains the `identity.*` router, public Identity boundary, authorization policies, permission catalog and grants. `accounts/` owns account administration and SR period management; `provisioning/` owns SR account creation, CSV parsing, credential preparation, provisioning and system-admin bootstrap. Existing services and tests remain intact, with domain tests colocated (including the cross-module `system-admin.integration.test.ts` in Provisioning). Server CLI entrypoints stay in `apps/server/src/scripts/`. This organization does not change public API contracts, authorization, account lifecycle, transactions or CLI behavior; consumers continue using `identity.public.ts` for operational Identity access.
+Backend organization: `identity/` retains the `identity.*` router, public Identity boundary, authorization policies, permission catalog and grants. Internal `identity/accounts/` owns account administration and SR period management; `identity/provisioning/` owns SR account creation, CSV parsing, credential preparation, provisioning and system-admin bootstrap. Existing services and tests remain intact, with domain tests colocated (including the cross-module `system-admin.integration.test.ts` in Provisioning). Server CLI entrypoints stay in `apps/server/src/scripts/`. This organization does not change public API contracts, authorization, account lifecycle, transactions or CLI behavior; consumers continue using `identity.public.ts` for operational Identity access.
 
 - Use Better Auth with Username Plugin: **SR `username = NIM`**, preserving leading zeros as a string. Confirm status for a user before permitting protected actions; session alone is not an active-account guarantee.
 - The user has one primary actor: `SR`, `MAHASISWA`, `ASUS`, `DITMAWA`, or dedicated `SYSTEM_ADMIN` (SA-03). SR attributes include exactly one department, one position and one building; **Inti** means the official INTI department; approved pair validation restricts executive positions to INTI and KADEP/SEKDEP/ANGGOTA to other departments.
@@ -278,7 +290,7 @@ A stored unrevoked grant becomes ineffective outside HCO, without ACTIVE tenure,
 
 P2 adds **Kelola Hak Akses** to the existing `/admin/users` account actions. Its separate AccountModal loads only the selected user, groups the backend catalog, and distinguishes intrinsic read-only access, explicit grants and current effective access. Ineligible HCO cannot receive a grant but existing grants remain revocable; out-of-HCO grants appear only under **Izin lama tidak berlaku**. If a former recipient now holds intrinsic access, its redundant explicit grant can be cleaned up separately without removing intrinsic access. Revocation requires inline confirmation. Pending mutations block duplicate submits and closing; failures retain selection and refresh server state. Successful writes update and invalidate only that user's permission query, without optimistic writes, polling or account-profile changes. Reopening waits for a fresh server read; target-keyed dialogs prevent selections crossing accounts. Account listing remains protected by SUPERADMIN-only backend APIs. P3 mobile/keyboard/focus and live revocation UAT remain pending. Migration `20261026122216_user_permission_grants` must be applied by PM to verified DEV before UAT; merging P1 alone does not prove it is applied. No remote migration or release is performed by P2.
 
-Targeted verification: `bun --no-env-file test packages/api/src/modules/identity/account-permissions.test.ts packages/api/src/modules/identity/identity-policy.test.ts packages/api/src/modules/identity/identity-profile.test.ts packages/api/src/modules/accounts/account-admin.test.ts packages/api/src/modules/attendance/reporting.test.ts`; opt-in real PostgreSQL suite `packages/api/src/modules/identity/account-permissions.integration.test.ts` uses only a verified empty loopback `resora_identity_test_permissions` via `RESORA_PERMISSION_TEST_DB_URL`. It checks all migration hashes, RLS/FKs/CHECKs, audit rollback/idempotency, role/tenure/password transitions, intrinsic regression, manual insert/correct/audit and both revoke/write transaction orders with deterministic lock coordination. Existing account lifecycle integration is also run on a separate empty scratch database. Use the target-aware migration workflow in `docs/setup.md` only after separate operator approval for DEV/PROD.
+Targeted verification: `bun --no-env-file test packages/api/src/modules/identity/account-permissions.test.ts packages/api/src/modules/identity/identity-policy.test.ts packages/api/src/modules/identity/identity-profile.test.ts packages/api/src/modules/identity/accounts/account-admin.test.ts packages/api/src/modules/attendance/reporting.test.ts`; opt-in real PostgreSQL suite `packages/api/src/modules/identity/account-permissions.integration.test.ts` uses only a verified empty loopback `resora_identity_test_permissions` via `RESORA_PERMISSION_TEST_DB_URL`. It checks all migration hashes, RLS/FKs/CHECKs, audit rollback/idempotency, role/tenure/password transitions, intrinsic regression, manual insert/correct/audit and both revoke/write transaction orders with deterministic lock coordination. Existing account lifecycle integration is also run on a separate empty scratch database. Use the target-aware migration workflow in `docs/setup.md` only after separate operator approval for DEV/PROD.
 
 P2 targeted CLI UI coverage: `bun --no-env-file test apps/web/src/features/identity/account-permissions-dialog.test.ts` uses the existing React hook/transport-double pattern, without a browser. Category and Identity/attendance regression tests plus the disposable PostgreSQL suite verify filtered catalogs, inapplicable grant cleanup and unchanged authorization. Actual dialog focus, Escape, responsive layout and cross-session revocation presentation require P3 manual UAT.
 
@@ -450,9 +462,9 @@ A universal attendance FK to `event_participants` is not part of the shared-engi
 
 ### Phase 4 implementation boundaries
 
-`packages/api/src/modules/attendance/` retains the thin protected tRPC router, input schemas, public compatibility boundary, manual attendance and reporting. Sibling `events/` owns the intact `event.service.ts` (event/session lifecycle and QR management), event audit and roster resolution; sibling `check-in/` owns check-in transactions, location/timing policy and signed QR helpers. Domain tests are colocated; the mixed `attendance.test.ts` stays in Attendance. The public namespace remains `attendance.*`, with unchanged signatures and exports. Identity exposes `identity.public.ts` for current eligible SR directory and HCO policy; these modules do not read private Identity tables. Publishing obtains a locked consistent directory view and stores historical snapshots atomically. Event/session row locks serialize all lifecycle/QR mutations; partial unique current-challenge index is a second concurrency guard. Event/session creation and event/session/QR closure are atomic; exactly-one inverse and immutable binding are custom versioned SQL triggers. All HCO members can manage internal events regardless of creator; invited non-HCO sees PUBLISHED events only, without roster or QR secrets.
+`packages/api/src/transport/attendance.router.ts` retains the thin protected compatibility router; `contracts/attendance.ts` retains its input validation. `modules/events/` owns event facts, invitations, audits and roster resolution. `modules/attendance/` owns sessions, manual attendance, reporting and internal `check-in/`. `application/internal-events.ts` coordinates atomic lifecycle/QR workflows through both public interfaces. Domain tests are colocated; the mixed `attendance.test.ts` stays in Attendance. The public namespace remains `attendance.*`, with unchanged signatures and exports. Identity exposes `identity.public.ts` for current eligible SR directory and HCO policy; these modules do not read private Identity tables. Publishing obtains a locked consistent directory view and stores historical snapshots atomically. Event/session row locks serialize all lifecycle/QR mutations; partial unique current-challenge index is a second concurrency guard. Event/session creation and event/session/QR closure are atomic; exactly-one inverse and immutable binding are custom versioned SQL triggers. All HCO members can manage internal events regardless of creator; invited non-HCO sees PUBLISHED events only, without roster or QR secrets.
 
-`attendance.public.ts` exposes backend-only QR verification for future Phase 5. Stable signed payloads use HMAC-SHA256 and a domain-separated HKDF key derived from existing Better Auth secret. No raw bearer token is persisted; secret rotation invalidates signatures. `qrcode` is the only added runtime dependency, for actual PNG rendering. No new auth provider, permission engine or session system. Frontend `features/attendance/` reuses existing UI/tRPC with thin `/events` routes and existing session/password redirects. Four-table additive migration is applied only to guarded local scratch; remote application still requires PM approval. Check-in, records, audit, reports and future Activity integration remain unimplemented.
+**Historical Phase 4 verification (later implementation is described above):** `attendance.public.ts` initially exposed backend-only QR verification for Phase 5. Stable signed payloads use HMAC-SHA256 and a domain-separated HKDF key derived from existing Better Auth secret. No raw bearer token is persisted; secret rotation invalidates signatures. `qrcode` is the only added runtime dependency, for actual PNG rendering. No new auth provider, permission engine or session system. Frontend `features/attendance/` reuses existing UI/tRPC with thin `/events` routes and existing session/password redirects. Four-table additive migration is applied only to guarded local scratch; remote application still requires PM approval. Check-in, records, audit, reports and future Activity integration remain unimplemented.
 
 ### Phase 5 check-in implementation boundaries
 
@@ -474,7 +486,7 @@ Express rejects foreign Origin on tRPC and requires exact configured frontend Or
 
 Express/Next add nosniff, DENY framing and strict-origin-when-cross-origin; Next disables framework disclosure and allows camera/geolocation only for self (no restrictive CSP that would break Next assets). Auth/tRPC HTTP responses use no-store. Frontend query errors use safe messages; scanner releases captured media tracks on stop/unmount/late start and invalidates Attendance queries on success. Manual mutation invalidation already refreshes recap/audit/history. Draft and manual datetime inputs explicitly use WIB, independent of device timezone; server storage remains UTC. Raw QR/GPS/credentials are excluded from general DTOs/CSV/logging; audit access stays KADEP HCO only.
 
-**QR location reliability F1:** Buka Kamera starts high-accuracy geolocation alongside camera startup. Native Geolocation handles existing/prompt/denied permission without depending on Permissions API; blocked permission requires browser/device settings and an explicit retry. A cancellable watcher uses `maximumAge: 0`, a 20-second total window and the backend's unchanged 40 m accuracy limit (guarded by an offline consistency test). The first valid reading ends tracking; prepared readings older than 10 seconds are reacquired before submission. GPS failure preserves the decoded QR only in component memory for **Perbarui Lokasi**, which always starts a fresh acquisition; no check-in request occurs during location-only preparation. Stop, unmount and replaced attempts cancel watchers/timers and ignore stale callbacks. Each scanner instance owns a separate keyed video element, synchronously committed before construction: qr-scanner 1.4.2 delayed `pause()` cleanup and late startup completion cannot touch a newer instance's stream. Explicit cleanup reads only the owning scanner's video. The CLI regression reproduces overlapping startup A/cancel/startup B with the installed library's real lifecycle methods and synthetic media. A decoder attempt and synchronous submission guard prevent duplicate requests. Backend expiry/revocation still requires a new scan; geofence, eligibility, transactions and duplicate protection are unchanged. CLI verification: `bun --no-env-file test apps/web/src/features/attendance/check-in-ui.test.ts packages/api/src/modules/check-in/check-in.test.ts` and `pnpm --filter web check-types`. Actual permission prompts, device GPS behavior and mobile interaction remain **PENDING MANUAL UAT**; scanner restart/decoder improvements belong to F2.
+**QR location reliability F1:** Buka Kamera starts high-accuracy geolocation alongside camera startup. Native Geolocation handles existing/prompt/denied permission without depending on Permissions API; blocked permission requires browser/device settings and an explicit retry. A cancellable watcher uses `maximumAge: 0`, a 20-second total window and the backend's unchanged 40 m accuracy limit (guarded by an offline consistency test). The first valid reading ends tracking; prepared readings older than 10 seconds are reacquired before submission. GPS failure preserves the decoded QR only in component memory for **Perbarui Lokasi**, which always starts a fresh acquisition; no check-in request occurs during location-only preparation. Stop, unmount and replaced attempts cancel watchers/timers and ignore stale callbacks. Each scanner instance owns a separate keyed video element, synchronously committed before construction: qr-scanner 1.4.2 delayed `pause()` cleanup and late startup completion cannot touch a newer instance's stream. Explicit cleanup reads only the owning scanner's video. The CLI regression reproduces overlapping startup A/cancel/startup B with the installed library's real lifecycle methods and synthetic media. A decoder attempt and synchronous submission guard prevent duplicate requests. Backend expiry/revocation still requires a new scan; geofence, eligibility, transactions and duplicate protection are unchanged. CLI verification: `bun --no-env-file test apps/web/src/features/attendance/check-in-ui.test.ts packages/api/src/modules/attendance/check-in/check-in.test.ts` and `pnpm --filter web check-types`. Actual permission prompts, device GPS behavior and mobile interaction remain **PENDING MANUAL UAT**; scanner restart/decoder improvements belong to F2.
 
 PR CI (`.github/workflows/ci.yml`, `CI — Code Quality`) targets dev, staging and main with read-only token, pnpm from pinned packageManager, Node 24 and Bun 1.3.13. Frozen install runs existing Varlock postinstall; synthetic nonfunctional env values satisfy validation without real credentials. CI and developers share `pnpm run verify:pr`: Next typegen → Biome lint → workspace typecheck → offline app/package tests → offline load-test harnesses → production build, stopping on any failure. `scripts/test-offline.ts` discovers sorted unique non-integration tests under apps/packages using Git's tracked and nonignored new files, excludes generated/dependency/scratch paths, runs Bun with `--no-env-file` and preserves failing exits. `test:loadtest` executes mock harnesses only, never k6 traffic. Biome honors Git ignores without changing source rules; the API TypeScript project includes `src` to avoid local scratch files. No DB services, migration/seed/provisioning, deployment or real secrets. Local validation does not prove a GitHub Actions run; remote CI remains pending PR execution. Docker validation (`CI — Docker Build`) runs only on PRs to staging, with read-only permissions, integration merge checkout and no registry login/push. Staging pushes trigger `CD — Publish Images`, which uses the built-in package-write token and a serialized publication group to build/publish the two linux/amd64 GHCR images with the same full staging commit SHA. No container build/publication runs on main. Staging/home-server and production/VPS deployment stay manual; production reuses the image SHA/digests approved by staging UAT, even if the main merge SHA differs. See [CI/CD and promotion runbook](setup.md#11-permanent-cicd-and-artifact-promotion-configured-remote-runs-unverified).
 
@@ -486,7 +498,7 @@ PR CI (`.github/workflows/ci.yml`, `CI — Code Quality`) targets dev, staging a
 
 ## Broadcast / Pengumuman SR — Fase B1
 
-B1 implements only database, Identity policies and `packages/api/src/modules/broadcast/{broadcast.schema,broadcast.service,broadcast.router}.ts`; [approved behavior](prd.md#63-broadcast--pengumuman-sr--b1). B2 frontend is described below; B3 UAT and production release remain pending. Notifications, targeting, attendance integration and schedulers remain out of scope.
+B1 implements only database, Identity policies and `packages/api/src/modules/broadcast/{broadcast.contracts,broadcast.service,broadcast.router}.ts`; [approved behavior](prd.md#63-broadcast--pengumuman-sr--b1). B2 frontend is described below; B3 UAT and production release remain pending. Notifications, targeting, attendance integration and schedulers remain out of scope.
 
 **Storage:** additive Drizzle migration `20261026013410_dashboard_broadcast` follows `20261025050126_committee_event_snapshots`. `broadcasts` stores UUID, trimmed title/content, optional HTTP(S) link, creator/editor user FKs, publication/expiry/archive and creation/update timestamptz. Noncascading FKs preserve author references. CHECKs bound text lengths, URL protocol/length and `published_at < expires_at <= published_at + interval '168 hours'`. Indexes support publication/UUID ordering, unarchived expiry and FK lookups. RLS is enabled without client policies; PUBLIC/anon/authenticated grants are revoked following other server-only tables. Runtime uses the existing trusted server DB role, not a Supabase client role. Previous migrations and committee/attendance schemas are unchanged.
 
@@ -548,7 +560,7 @@ Two narrow corrections: **MAJOR fixed** — READ COMMITTED let an archive betwee
 Reproduction commands (database suites require the existing explicit empty-loopback guards; never supply DEV/PROD URLs):
 
 ```powershell
-bun --no-env-file test apps/web/src/features/broadcast/broadcast-ui.test.ts packages/api/src/modules/broadcast/broadcast.test.ts packages/db/src/schema/broadcast.test.ts packages/db/scripts/migrate.test.ts packages/api/src/modules/identity/identity-policy.test.ts packages/api/src/modules/identity/identity-profile.test.ts packages/auth/src/identity-access.test.ts packages/auth/src/password-policy.test.ts packages/api/src/modules/committee/committee.test.ts apps/web/src/features/committee/committee-ui.test.ts packages/api/src/modules/attendance/attendance.test.ts packages/api/src/modules/check-in/check-in.test.ts packages/api/src/modules/attendance/reporting.test.ts apps/web/src/features/attendance/interaction-ux.test.ts --test-name-pattern '^(?!.*(?:CSV|csv|export|protected Phase 6 routes)).*$'
+bun --no-env-file test apps/web/src/features/broadcast/broadcast-ui.test.ts packages/api/src/modules/broadcast/broadcast.test.ts packages/db/src/schema/broadcast.test.ts packages/db/scripts/migrate.test.ts packages/api/src/modules/identity/identity-policy.test.ts packages/api/src/modules/identity/identity-profile.test.ts packages/auth/src/identity-access.test.ts packages/auth/src/password-policy.test.ts packages/api/src/modules/committee/committee.test.ts apps/web/src/features/committee/committee-ui.test.ts packages/api/src/modules/attendance/attendance.test.ts packages/api/src/modules/attendance/check-in/check-in.test.ts packages/api/src/modules/attendance/reporting.test.ts apps/web/src/features/attendance/interaction-ux.test.ts --test-name-pattern '^(?!.*(?:CSV|csv|export|protected Phase 6 routes)).*$'
 # Dedicated fresh PostgreSQL 18 scratch cluster: 127.0.0.1:55438, role resora_b3_test.
 # Set RESORA_BROADCAST_TEST_DB_URL only to its empty resora_test_broadcast database.
 bun --no-env-file test packages/api/src/modules/broadcast/broadcast.integration.test.ts
@@ -708,7 +720,7 @@ Rekap/filter dan implementasi CSV Fase 4 dijelaskan di bawah. Rekap gabungan lin
 
 Prasyarat tetap migration Fase 3 `20261025050126_committee_event_snapshots`; Fase 4 tidak menambah migration. `attendance.recap({ eventId })` mempertahankan MVCC read-only `repeatable read`, status PRESENT/PENDING/ABSENT, waktu, lateness, source dan izin manual/audit. `event` menambahkan `organizationContext` serta `committeeName` dari `events.snapshot_committee_name` (NULL untuk SR). Peserta menambahkan `committeeDivision/committeePosition` nullable dari `event_participants`. Tidak ada join ke committees/membership live. SR lama tetap memakai snapshot struktural; ordinary SR tidak memperoleh recap administratif.
 
-Helper murni `reporting-context.ts` dipakai UI/server. SR menggunakan departmentCode/positionCode; COMMITTEE menggunakan divisi/posisi snapshot panitia dan label jabatan Fase 1. Kedua snapshot panitia NULL berarti **Non-Panitia / Undangan**, tanpa fallback ke jabatan struktural. Label jabatan direuse dari `committee-positions.ts`; jabatan panitia tidak menjadi permission sistem.
+Helper murni `attendance.contracts.ts` dipakai UI/server. SR menggunakan departmentCode/positionCode; COMMITTEE menggunakan divisi/posisi snapshot panitia dan label jabatan Fase 1. Kedua snapshot panitia NULL berarti **Non-Panitia / Undangan**, tanpa fallback ke jabatan struktural. Label jabatan direuse dari `committee.contracts.ts`; jabatan panitia tidak menjadi permission sistem.
 
 Rekap menampilkan konteks/nama historis, mengutamakan divisi/jabatan panitia dan mempertahankan info struktural sekunder. Opsi filter berasal hanya dari snapshot event: division (departemen SR atau nama divisi panitia), position (kode jabatan), participantType ALL/COMMITTEE/GUEST (hanya COMMITTEE), serta pencarian nama/NIM case-insensitive. Semua kondisi dikombinasikan AND sebelum pagination lokal 15 peserta. Perubahan/reset filter kembali ke halaman pertama; event berganti me-remount state. Statistik global tidak difilter, jumlah hasil ditampilkan terpisah. Loading/error/retry/empty state dan keyboard controls tetap tersedia.
 
@@ -737,7 +749,7 @@ Targeted checks Fase 1–3 (historis; beberapa suite mencakup CSV):
 ```sh
 bun --no-env-file test packages/db/src/schema/committee.test.ts packages/db/src/schema/committee.integration.test.ts packages/api/src/modules/identity/identity-policy.test.ts
 pnpm run test:committee
-bun --no-env-file test packages/api/src/modules/attendance/attendance.test.ts packages/api/src/modules/events/event-editing.test.ts packages/api/src/modules/check-in/check-in.test.ts packages/api/src/modules/attendance/reporting.test.ts apps/web/src/features/attendance/event-ui.test.ts apps/web/src/features/attendance/interaction-ux.test.ts
+bun --no-env-file test packages/api/src/modules/attendance/attendance.test.ts packages/api/src/modules/events/event-editing.test.ts packages/api/src/modules/attendance/check-in/check-in.test.ts packages/api/src/modules/attendance/reporting.test.ts apps/web/src/features/events/event-ui.test.ts apps/web/src/features/attendance/interaction-ux.test.ts
 pnpm --filter @resora/db check-types
 pnpm --filter @resora/api check-types
 pnpm --filter web check-types

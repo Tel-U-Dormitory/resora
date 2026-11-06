@@ -4,7 +4,7 @@ import { TRPCClientError } from "@trpc/client";
 import * as jsxRuntime from "react/jsx-runtime";
 import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
-import { formatEventTime } from "../attendance/event-ui";
+import { formatEventTime } from "../../components/event-feedback";
 import * as broadcastUi from "./broadcast-ui";
 
 const item: broadcastUi.Broadcast = {
@@ -115,7 +115,7 @@ function fixture(file: string) {
 			},
 		},
 		"./broadcast-ui": broadcastUi,
-		"../attendance/event-ui": {
+		"../../components/event-feedback": {
 			formatEventTime,
 			toWibDateTimeInput: (value: string) =>
 				new Date(new Date(value).getTime() + 7 * 3600000)

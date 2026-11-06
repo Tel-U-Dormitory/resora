@@ -40,6 +40,7 @@ function fixture() {
 		after: { ...state, title: "After" },
 	};
 	const db = {
+		transaction: async (run: (tx: unknown) => Promise<unknown>) => run(db),
 		select: (fields: Record<string, unknown>) => {
 			let table: unknown;
 			const q = Object.assign(

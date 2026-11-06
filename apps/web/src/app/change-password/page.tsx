@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
-import PasswordChangeForm from "@/features/identity/password-change-form";
-import { getSrSession } from "@/features/identity/server-session";
+import { PasswordChangeForm } from "@/features/identity/public";
+import { getSrSession } from "@/features/identity/server";
 
 export default async function PasswordChangePage() {
 	const session = await getSrSession();

@@ -60,7 +60,7 @@ import {
 	formatEventTime,
 	parseWibDateTimeInput,
 	toWibDateTimeInput,
-} from "./event-ui";
+} from "../../components/event-feedback";
 
 test("advanced edit errors explain stale eligibility and end-time restrictions safely", () => {
 	expect(

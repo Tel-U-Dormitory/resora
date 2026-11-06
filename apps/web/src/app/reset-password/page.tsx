@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import PasswordRecoveryForm from "@/features/identity/password-recovery-form";
+import { PasswordRecoveryForm } from "@/features/identity/public";
 
 export const metadata: Metadata = {
 	title: "Reset password | RESORA",
