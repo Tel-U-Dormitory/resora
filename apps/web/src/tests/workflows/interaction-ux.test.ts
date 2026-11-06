@@ -11,8 +11,8 @@ import {
 	toWibDateTimeInput,
 } from "../../components/event-feedback";
 import { getSidebarGroups, isSidebarLinkActive } from "../../config/navigation";
+import { resetEventOrganization } from "../../features/events/roster-selection";
 import { participantPage } from "../../utils/participant-page";
-import { resetEventOrganization } from "../events/roster-selection";
 
 // Read the real composed form sources after capability extraction; no callback is mocked.
 function readUiSource(url: URL, _encoding: "utf8") {
@@ -130,7 +130,7 @@ function loginFixture() {
 	};
 	const submit = () =>
 		compile<Submit>(
-			jsxCallback("../identity/auth/login-form.tsx", "onSubmit"),
+			jsxCallback("../../features/identity/auth/login-form.tsx", "onSubmit"),
 			scope,
 		);
 	return { observed, submitting, scope, submit };
@@ -162,7 +162,7 @@ test("login stays pending through sign-in and fresh SSR navigation without a cli
 	expect(fixture.observed.calls).toBe(1);
 	expect(fixture.observed.error).toBe("");
 	const source = readUiSource(
-		new URL("../identity/auth/login-form.tsx", import.meta.url),
+		new URL("../../features/identity/auth/login-form.tsx", import.meta.url),
 		"utf8",
 	);
 	expect(source).not.toContain("fetchQuery");
@@ -271,7 +271,7 @@ test("event editor submits only permitted advanced fields, requires a reason and
 			};
 			const submit = () =>
 				compile<Submit>(
-					jsxCallback("../events/form/event-form.tsx", "onSubmit"),
+					jsxCallback("../../features/events/form/event-form.tsx", "onSubmit"),
 					scope,
 				);
 			if (advancedMode) {
@@ -325,13 +325,13 @@ test("event editor submits only permitted advanced fields, requires a reason and
 		}
 	}
 	const source = readUiSource(
-		new URL("../events/form/event-form.tsx", import.meta.url),
+		new URL("../../features/events/form/event-form.tsx", import.meta.url),
 		"utf8",
 	);
 	expect(source).toContain('advancedMode !== "METADATA"');
 	expect(source).toContain("{fullEditing && (");
 	const detail = readUiSource(
-		new URL("../events/detail/event-detail.tsx", import.meta.url),
+		new URL("../../features/events/detail/event-detail.tsx", import.meta.url),
 		"utf8",
 	);
 	expect(detail).toContain("data.advancedEditMode");
@@ -345,7 +345,7 @@ test("event context/committee callbacks reset stale selection; published preview
 	};
 	const context = compile<(event: { target: { value: string } }) => void>(
 		jsxCallback(
-			"../events/form/event-form.tsx",
+			"../../features/events/form/event-form.tsx",
 			"onChange",
 			"event.target.value as",
 		),
@@ -366,7 +366,7 @@ test("event context/committee callbacks reset stale selection; published preview
 	});
 	const choose = compile<(event: { target: { value: string } }) => void>(
 		jsxCallback(
-			"../events/form/event-form.tsx",
+			"../../features/events/form/event-form.tsx",
 			"onChange",
 			"event.target.value || null",
 		),
@@ -382,7 +382,7 @@ test("event context/committee callbacks reset stale selection; published preview
 	choose({ target: { value: "committee-2" } });
 	expect(draft).toMatchObject({ committeeId: "committee-2" });
 	const source = readUiSource(
-		new URL("../events/form/event-form.tsx", import.meta.url),
+		new URL("../../features/events/form/event-form.tsx", import.meta.url),
 		"utf8",
 	);
 	const tree = ts.createSourceFile(
@@ -483,7 +483,7 @@ test("visibility/deletion UI requires reason and confirmation, respects pending 
 		const submit = () =>
 			compile<(event: SubmitEvent) => void>(
 				jsxCallback(
-					"../events/detail/event-detail.tsx",
+					"../../features/events/detail/event-detail.tsx",
 					"onSubmit",
 					"administrativeOptions",
 				),
@@ -516,13 +516,13 @@ test("visibility/deletion UI requires reason and confirmation, respects pending 
 		expect(scope.administrativeReason).toBe("");
 	}
 	const detail = readUiSource(
-		new URL("../events/detail/event-detail.tsx", import.meta.url),
+		new URL("../../features/events/detail/event-detail.tsx", import.meta.url),
 		"utf8",
 	);
 	expect(detail).toContain("{administration && <AdministrationPanel");
 	expect(detail).toContain('disabled={busy || event.visibility !== "VISIBLE"}');
 	const list = readUiSource(
-		new URL("../events/event-list.tsx", import.meta.url),
+		new URL("../../features/events/event-list.tsx", import.meta.url),
 		"utf8",
 	);
 	expect(list).toContain("management && query.data?.isSuperadmin");
@@ -531,9 +531,9 @@ test("visibility/deletion UI requires reason and confirmation, respects pending 
 
 test("successful DRAFT deletion redirects without refetching deleted detail; failure retains retry feedback", async () => {
 	const source = ts.createSourceFile(
-		"../events/detail/event-detail.tsx",
+		"../../features/events/detail/event-detail.tsx",
 		readUiSource(
-			new URL("../events/detail/event-detail.tsx", import.meta.url),
+			new URL("../../features/events/detail/event-detail.tsx", import.meta.url),
 			"utf8",
 		),
 		ts.ScriptTarget.Latest,
@@ -601,7 +601,7 @@ test("dialog Escape closes only when idle; native modal opening/focus/cleanup re
 		let closes = 0;
 		let prevented = false;
 		const cancel = compile<(event: SubmitEvent) => void>(
-			jsxCallback("event-recap.tsx", "onCancel"),
+			jsxCallback("../../features/attendance/event-recap.tsx", "onCancel"),
 			{
 				busy,
 				onClose: () => {
@@ -618,7 +618,7 @@ test("dialog Escape closes only when idle; native modal opening/focus/cleanup re
 		expect(closes).toBe(busy ? 0 : 1);
 	}
 	const text = readUiSource(
-		new URL("event-recap.tsx", import.meta.url),
+		new URL("../../features/attendance/event-recap.tsx", import.meta.url),
 		"utf8",
 	);
 	for (const markup of [
@@ -684,7 +684,7 @@ test("manual dialog keeps closed-time/reason validation, original API payloads, 
 			},
 		};
 		const submit = compile<Submit>(
-			jsxCallback("event-recap.tsx", "onSubmit"),
+			jsxCallback("../../features/attendance/event-recap.tsx", "onSubmit"),
 			scope,
 		);
 		await submit(event);
@@ -712,7 +712,7 @@ test("manual dialog keeps closed-time/reason validation, original API payloads, 
 
 test("recap keeps global server counts/full CSV and gates manual/audit controls; invitation toggle is accessible", () => {
 	const recap = readUiSource(
-		new URL("event-recap.tsx", import.meta.url),
+		new URL("../../features/attendance/event-recap.tsx", import.meta.url),
 		"utf8",
 	);
 	for (const count of ["invited", "present", "pending", "absent"])
@@ -721,14 +721,14 @@ test("recap keeps global server counts/full CSV and gates manual/audit controls;
 	expect(recap).toContain("audit && canManual");
 	expect(recap).toContain("visible.rows.map");
 	const exportAction = jsxCallback(
-		"event-recap.tsx",
+		"../../features/attendance/event-recap.tsx",
 		"onClick",
 		"trpcClient.attendance.exportCsv",
 	);
 	expect(exportAction).toContain('exportScope === "FILTERED"');
 	expect(exportAction).not.toMatch(/visible|page/);
 	const source = ts.createSourceFile(
-		"event-recap.tsx",
+		"../../features/attendance/event-recap.tsx",
 		recap,
 		ts.ScriptTarget.Latest,
 		true,
@@ -758,7 +758,7 @@ test("recap keeps global server counts/full CSV and gates manual/audit controls;
 	visit(source);
 	expect(auditButton).toBe(true);
 	const detail = readUiSource(
-		new URL("../events/detail/event-detail.tsx", import.meta.url),
+		new URL("../../features/events/detail/event-detail.tsx", import.meta.url),
 		"utf8",
 	);
 	expect(detail).toContain("aria-expanded={invitationsOpen}");
@@ -776,7 +776,11 @@ test("Phase 4 recap filter controls reset pagination, filter before paging and p
 	] as const) {
 		const state = { page: 4, value: "" };
 		const handler = compile<(event: { target: { value: string } }) => void>(
-			jsxCallback("event-recap.tsx", "onChange", `${setter}(`),
+			jsxCallback(
+				"../../features/attendance/event-recap.tsx",
+				"onChange",
+				`${setter}(`,
+			),
 			{
 				[setter]: (value: string) => {
 					state.value = value;
@@ -793,7 +797,7 @@ test("Phase 4 recap filter controls reset pagination, filter before paging and p
 		expect(state.value).toBe(key === "participantType" ? "GUEST" : "query");
 	}
 	const source = readUiSource(
-		new URL("event-recap.tsx", import.meta.url),
+		new URL("../../features/attendance/event-recap.tsx", import.meta.url),
 		"utf8",
 	);
 	const tree = ts.createSourceFile(
@@ -867,7 +871,11 @@ test("Phase 4 recap filter controls reset pagination, filter before paging and p
 	expect(source).toContain('role="alert"');
 	expect(source).toContain("Tidak ada peserta yang sesuai.");
 	const reset = compile<() => void>(
-		jsxCallback("event-recap.tsx", "onClick", 'setParticipantType("ALL")'),
+		jsxCallback(
+			"../../features/attendance/event-recap.tsx",
+			"onClick",
+			'setParticipantType("ALL")',
+		),
 		{
 			setSearch: (value: string) => expect(value).toBe(""),
 			setDivision: (value: string) => expect(value).toBe(""),
@@ -889,7 +897,7 @@ test("manual success closes the dialog and refreshes data; refresh failure remai
 			refreshes: 0,
 		};
 		const done = compile<() => Promise<void>>(
-			jsxCallback("event-recap.tsx", "onDone"),
+			jsxCallback("../../features/attendance/event-recap.tsx", "onDone"),
 			{
 				setSelected: () => {
 					observed.selected = false;
@@ -928,7 +936,7 @@ test("event submit labels reflect create, draft edit, advanced edit and pending 
 	const source = ts.createSourceFile(
 		"form.tsx",
 		readUiSource(
-			new URL("../events/form/event-form.tsx", import.meta.url),
+			new URL("../../features/events/form/event-form.tsx", import.meta.url),
 			"utf8",
 		),
 		ts.ScriptTarget.Latest,
@@ -966,15 +974,15 @@ test("event submit labels reflect create, draft edit, advanced edit and pending 
 
 test("administrative audit UI is backend-gated, expandable, paginated and renders meaningful fields without JSON", () => {
 	const detail = readUiSource(
-		new URL("../events/detail/event-detail.tsx", import.meta.url),
+		new URL("../../features/events/detail/event-detail.tsx", import.meta.url),
 		"utf8",
 	);
 	const list = readUiSource(
-		new URL("../events/event-list.tsx", import.meta.url),
+		new URL("../../features/events/event-list.tsx", import.meta.url),
 		"utf8",
 	);
 	const history = readUiSource(
-		new URL("../events/event-admin-history.tsx", import.meta.url),
+		new URL("../../features/events/event-admin-history.tsx", import.meta.url),
 		"utf8",
 	);
 	expect(detail).toContain(
@@ -1046,7 +1054,7 @@ function redirected(path: string): never {
 
 test("SSR dashboard and authenticated layout enforce invalid-session and mandatory-password redirects", async () => {
 	for (const file of [
-		"../identity/server/sr-dashboard.tsx",
+		"../../features/identity/server/sr-dashboard.tsx",
 		"../../app/(authenticated)/layout.tsx",
 	]) {
 		for (const session of [null, { requiresPasswordChange: true }]) {
@@ -1110,11 +1118,14 @@ test("dashboard renders verified SSR identity without redundant identity request
 			requiresPasswordChange: false,
 		},
 	]) {
-		const component = serverComponent("../identity/server/sr-dashboard.tsx", {
-			...jsxScope,
-			getSrSession: async () => session,
-			redirect: redirected,
-		});
+		const component = serverComponent(
+			"../../features/identity/server/sr-dashboard.tsx",
+			{
+				...jsxScope,
+				getSrSession: async () => session,
+				redirect: redirected,
+			},
+		);
 		const rendered = JSON.stringify(await component());
 		expect(rendered).toContain('"tag":"BroadcastFeed"');
 		expect(rendered).toContain(`"canManage":${session.canManageBroadcast}`);
@@ -1127,7 +1138,7 @@ test("dashboard renders verified SSR identity without redundant identity request
 		);
 	}
 	const dashboard = readUiSource(
-		new URL("../identity/server/sr-dashboard.tsx", import.meta.url),
+		new URL("../../features/identity/server/sr-dashboard.tsx", import.meta.url),
 		"utf8",
 	);
 	for (const token of [
@@ -1141,7 +1152,10 @@ test("dashboard renders verified SSR identity without redundant identity request
 
 test("SSR session reads remain backend-authoritative, no-store and fail closed on revocation/storage failure", async () => {
 	const text = readUiSource(
-		new URL("../identity/server/server-session.ts", import.meta.url),
+		new URL(
+			"../../features/identity/server/server-session.ts",
+			import.meta.url,
+		),
 		"utf8",
 	);
 	const source = ts.createSourceFile(
@@ -1213,7 +1227,7 @@ test("location preset restores Dorm Hall and custom selection preserves the exis
 		let point = { centerLat: -6.9, centerLng: 107.6 };
 		const handler = compile<() => void>(
 			jsxCallback(
-				"../events/event-location-picker.tsx",
+				"../../features/events/event-location-picker.tsx",
 				"onChange",
 				"setCustom",
 			),
@@ -1239,7 +1253,11 @@ test("location preset restores Dorm Hall and custom selection preserves the exis
 test("keyboard map selection uses wrapped center coordinates", () => {
 	let selected: unknown;
 	const handler = compile<() => void>(
-		jsxCallback("../events/event-location-map.tsx", "onClick", "getCenter"),
+		jsxCallback(
+			"../../features/events/event-location-map.tsx",
+			"onClick",
+			"getCenter",
+		),
 		{
 			map: { getCenter: () => ({ wrap: () => ({ lat: -6.97, lng: 107.62 }) }) },
 			onChange: (point: unknown) => {
@@ -1262,11 +1280,19 @@ test("map zoom controls invoke Leaflet zoom in and out and tolerate a loading ma
 		},
 	};
 	const zoomIn = compile<() => void>(
-		jsxCallback("../events/event-location-map.tsx", "onClick", "zoomIn"),
+		jsxCallback(
+			"../../features/events/event-location-map.tsx",
+			"onClick",
+			"zoomIn",
+		),
 		{ map },
 	);
 	const zoomOut = compile<() => void>(
-		jsxCallback("../events/event-location-map.tsx", "onClick", "zoomOut"),
+		jsxCallback(
+			"../../features/events/event-location-map.tsx",
+			"onClick",
+			"zoomOut",
+		),
 		{ map },
 	);
 	zoomOut();
@@ -1275,7 +1301,11 @@ test("map zoom controls invoke Leaflet zoom in and out and tolerate a loading ma
 	expect(zoom).toBe(18);
 	for (const action of ["zoomIn", "zoomOut"]) {
 		const withoutMap = compile<() => void>(
-			jsxCallback("../events/event-location-map.tsx", "onClick", action),
+			jsxCallback(
+				"../../features/events/event-location-map.tsx",
+				"onClick",
+				action,
+			),
 			{ map: null },
 		);
 		expect(withoutMap).not.toThrow();
@@ -1287,7 +1317,7 @@ test("dashboard shortcuts follow verified SR, HCO, and SUPERADMIN capabilities",
 		for (const canManageInternalEvents of [false, true]) {
 			for (const isSuperadmin of [false, true]) {
 				const component = serverComponent(
-					"../identity/server/sr-dashboard.tsx",
+					"../../features/identity/server/sr-dashboard.tsx",
 					{
 						...jsxScope,
 						getSrSession: async () => ({
@@ -1472,7 +1502,10 @@ test("event form native validation reveals collapsed settings and identifies the
 			closest: () => details,
 		};
 		const validate = compile<(event: { preventDefault: () => void }) => void>(
-			jsxCallback("../events/form/event-form.tsx", "onInvalidCapture"),
+			jsxCallback(
+				"../../features/events/form/event-form.tsx",
+				"onInvalidCapture",
+			),
 			{
 				formRef: {
 					current: { querySelector: () => (hasField ? field : null) },
@@ -1505,9 +1538,9 @@ test("event form native validation reveals collapsed settings and identifies the
 
 test("event location changes cannot modify the submitted snapshot while saving", () => {
 	const source = ts.createSourceFile(
-		"../events/form/event-form.tsx",
+		"../../features/events/form/event-form.tsx",
 		readUiSource(
-			new URL("../events/form/event-form.tsx", import.meta.url),
+			new URL("../../features/events/form/event-form.tsx", import.meta.url),
 			"utf8",
 		),
 		ts.ScriptTarget.Latest,

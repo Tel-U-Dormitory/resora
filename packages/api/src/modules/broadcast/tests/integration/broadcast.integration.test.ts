@@ -7,13 +7,13 @@ import { officialDepartments, seedOrganization } from "@resora/db/organization";
 import { sql } from "drizzle-orm";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { appRouter } from "../../routers";
+import { appRouter } from "../../../../routers";
 import {
 	archiveBroadcast,
 	createBroadcast,
 	listBroadcasts,
 	updateBroadcast,
-} from "./broadcast.service";
+} from "../../broadcast.service";
 
 function scratchTarget(value: string) {
 	const url = new URL(value);
@@ -122,7 +122,7 @@ async function expectFailure(
 			);
 			const migrationsFolder = resolve(
 				import.meta.dir,
-				"../../../../db/src/migrations",
+				"../../../../../../db/src/migrations",
 			);
 			await migrate(db, { migrationsFolder });
 			const applied = await db.$client.query(

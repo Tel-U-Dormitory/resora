@@ -21,17 +21,24 @@ import { assignSyntheticSrTenure } from "@resora/db/sr-tenure.fixture";
 import { eq, sql } from "drizzle-orm";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import { getTableConfig } from "drizzle-orm/pg-core";
-import * as service from "../../application/internal-events";
-import { eventDraftSchema } from "../../contracts/attendance";
-import { appRouter } from "../../routers";
-import { manualInsert } from "../attendance/manual-attendance";
-import { exportCsv, ownHistory, recap } from "../attendance/reporting";
-import { getActiveSrDirectory } from "../identity/identity.public";
+import { eventDraftSchema } from "../../../../contracts/attendance";
+import { manualInsert } from "../../../../modules/attendance/manual-attendance";
+import {
+	exportCsv,
+	ownHistory,
+	recap,
+} from "../../../../modules/attendance/reporting";
+import {
+	deletedDraftHistory,
+	eventAuditHistory,
+} from "../../../../modules/events/event-audit";
+import { getActiveSrDirectory } from "../../../../modules/identity/identity.public";
 import {
 	localProvisioningTarget,
 	verifyLocalProvisioningDatabase,
-} from "../identity/provisioning/sr-provisioning";
-import { deletedDraftHistory, eventAuditHistory } from "./event-audit";
+} from "../../../../modules/identity/provisioning/sr-provisioning";
+import { appRouter } from "../../../../routers";
+import * as service from "../..";
 
 const target = process.env.RESORA_EVENT_ADMIN_TEST_DB_URL;
 // Opt-in, loopback, purpose-specific disposable database only; never any application env fallback.
@@ -241,7 +248,7 @@ const target = process.env.RESORA_EVENT_ADMIN_TEST_DB_URL;
 				readMigrationFiles({
 					migrationsFolder: resolve(
 						import.meta.dir,
-						"../../../../db/src/migrations",
+						"../../../../../../db/src/migrations",
 					),
 				}).map((m) => m.hash),
 			);

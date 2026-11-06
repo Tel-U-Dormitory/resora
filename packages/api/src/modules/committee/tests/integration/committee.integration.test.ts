@@ -7,13 +7,13 @@ import { createDb, type Database } from "@resora/db";
 import { seedOrganization } from "@resora/db/organization";
 import { sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { appRouter } from "../../routers";
+import { appRouter } from "../../../../routers";
 import {
 	eventAssignment,
 	filterRecapParticipants,
-} from "../attendance/attendance.contracts";
-import { signChallenge } from "../attendance/check-in/qr";
-import { addMembers, createCommittee } from "./committee.service";
+} from "../../../attendance/attendance.contracts";
+import { signChallenge } from "../../../attendance/check-in/qr";
+import { addMembers, createCommittee } from "../../committee.service";
 
 function scratchTarget(value: string) {
 	const url = new URL(value);
@@ -112,9 +112,12 @@ async function expectFailure(
 			});
 			const migrationsFolder = resolve(
 				import.meta.dir,
-				"../../../../db/src/migrations",
+				"../../../../../../db/src/migrations",
 			);
-			const temporaryBase = resolve(import.meta.dir, "../../../../../tmp");
+			const temporaryBase = resolve(
+				import.meta.dir,
+				"../../../../../../../tmp",
+			);
 			mkdirSync(temporaryBase, { recursive: true });
 			const prior = mkdtempSync(
 				resolve(temporaryBase, "committee-migrations-"),

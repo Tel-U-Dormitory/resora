@@ -23,18 +23,18 @@ import {
 import { assignSyntheticSrTenure } from "@resora/db/sr-tenure.fixture";
 import { and, eq, inArray } from "drizzle-orm";
 import { readMigrationFiles } from "drizzle-orm/migrator";
-import { createApp } from "../../../../../apps/server/src/app";
-import * as service from "../../application/internal-events";
-import { eventDraftSchema } from "../../contracts/attendance";
+import { createApp } from "../../../../../../../apps/server/src/app";
+import { eventDraftSchema } from "../../../../contracts/attendance";
 import {
 	signChallenge,
 	verifySessionChallenge,
-} from "../attendance/check-in/qr";
-import { getActiveSrDirectory } from "../identity/identity.public";
+} from "../../../../modules/attendance/check-in/qr";
+import { getActiveSrDirectory } from "../../../../modules/identity/identity.public";
 import {
 	localProvisioningTarget,
 	verifyLocalProvisioningDatabase,
-} from "../identity/provisioning/sr-provisioning";
+} from "../../../../modules/identity/provisioning/sr-provisioning";
+import * as service from "../..";
 
 // Await Drizzle thenables directly: Bun's promise matcher can stall after deferred errors.
 async function rejects(operation: PromiseLike<unknown>, code?: string) {
@@ -258,7 +258,7 @@ const target = process.env.RESORA_IDENTITY_TEST_DB_URL;
 				readMigrationFiles({
 					migrationsFolder: resolve(
 						import.meta.dir,
-						"../../../../db/src/migrations",
+						"../../../../../../db/src/migrations",
 					),
 				}).length,
 			);

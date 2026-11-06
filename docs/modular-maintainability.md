@@ -46,3 +46,17 @@ No route, tRPC contract or user workflow changed. Existing source/callback tests
 follow the composed components rather than relying on one monolithic source file.
 Verification: 113 frontend tests passed; web typecheck, boundary checks and production
 Next.js build passed. Manual browser/UAT was not requested or performed.
+
+## Phase 4 result
+
+All API integration suites are under their owning capability's tests/integration;
+cross-domain Event/Attendance workflow suites are under application/internal-events/tests.
+The large Event workflow and Attendance reporting doubles live in adjacent fixtures.
+Mixed frontend workflow tests live in src/tests/workflows. Small unit tests remain
+colocated. Architecture checks exempt test support from production ownership rules
+and explicitly reject production imports of test support (negative fixtures included).
+Root script paths and migration-path resolution follow the moved files.
+Verification: 452 offline tests passed (58 files); API/web types and boundary checks
+passed. Six guarded PostgreSQL suites passed 81 tests / 732 assertions against an
+isolated loopback-only PostgreSQL 17 container with synthetic data. Other opt-in
+integration suites were relocated and typechecked, but not executed in this follow-up.

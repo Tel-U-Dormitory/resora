@@ -18,13 +18,13 @@ import {
 import { srTenureStatus } from "@resora/db/sr-tenure";
 import { eq, sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { appRouter } from "../../../routers";
+import { appRouter } from "../../../../../routers";
 import {
 	getActiveSrCandidate,
 	getActiveSrDirectory,
 	getCheckInSr,
-} from "../identity.public";
-import { createPeriodSchema } from "./account-period.schema";
+} from "../../../identity.public";
+import { createPeriodSchema } from "../../account-period.schema";
 
 const url = process.env.RESORA_ADMIN_LIFECYCLE_TEST_DB_URL;
 
@@ -105,7 +105,7 @@ test("lifecycle scratch guard and calendar-date validation", () => {
 			await migrate(db, {
 				migrationsFolder: resolve(
 					import.meta.dir,
-					"../../../../../db/src/migrations",
+					"../../../../../../../db/src/migrations",
 				),
 			});
 			await seedOrganization(db);

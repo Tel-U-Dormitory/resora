@@ -20,15 +20,15 @@ import {
 } from "@resora/db/schema/identity";
 import { assignSyntheticSrTenure } from "@resora/db/sr-tenure.fixture";
 import { eq, inArray, like } from "drizzle-orm";
-import { createApp } from "../../../../../../apps/server/src/app";
-import { prepareCredentials } from "./provisioning-credentials";
-import { csvColumns, encodeCsv, readCsv } from "./provisioning-csv";
+import { createApp } from "../../../../../../../../apps/server/src/app";
+import { prepareCredentials } from "../../provisioning-credentials";
+import { csvColumns, encodeCsv, readCsv } from "../../provisioning-csv";
 import {
 	localProvisioningTarget,
 	type ProvisioningOptions,
 	provisionSrAccounts,
 	verifyLocalProvisioningDatabase,
-} from "./sr-provisioning";
+} from "../../sr-provisioning";
 
 const testUrl = process.env.RESORA_IDENTITY_TEST_DB_URL;
 // Await DB work before invoking matchers: Bun's rejects.toThrow can block pg I/O.
@@ -98,7 +98,7 @@ async function rejected(operation: Promise<unknown>, code: string) {
 		};
 		const prefix = `synthetic-provision-${randomUUID()}`;
 		let buildingId: string;
-		const projectRoot = resolve(import.meta.dir, "../../../../../..");
+		const projectRoot = resolve(import.meta.dir, "../../../../../../../..");
 		const inputPath = resolve(projectRoot, "tmp", `${prefix}.csv`);
 		const cli = async (apply: boolean) => {
 			const result = await promisify(execFile)(

@@ -21,24 +21,24 @@ import {
 } from "@resora/db/schema/identity";
 import { assignSyntheticSrTenure } from "@resora/db/sr-tenure.fixture";
 import { eq, sql } from "drizzle-orm";
-import { eventDraftSchema } from "../../../contracts/attendance";
-import { appRouter } from "../../../routers";
-import { signChallenge } from "../../attendance/check-in/qr";
-import { getActiveSrDirectory } from "../identity.public";
-import { prepareCredentials } from "./provisioning-credentials";
-import { readCsv } from "./provisioning-csv";
+import { eventDraftSchema } from "../../../../../contracts/attendance";
+import { appRouter } from "../../../../../routers";
+import { signChallenge } from "../../../../attendance/check-in/qr";
+import { getActiveSrDirectory } from "../../../identity.public";
+import { prepareCredentials } from "../../provisioning-credentials";
+import { readCsv } from "../../provisioning-csv";
 import {
 	localProvisioningTarget,
 	verifyLocalProvisioningDatabase,
-} from "./sr-provisioning";
+} from "../../sr-provisioning";
 import {
 	type BootstrapTarget,
 	bootstrapSystemAdmin,
 	verifyBootstrapDatabase,
-} from "./system-admin-bootstrap";
+} from "../../system-admin-bootstrap";
 
 const url = process.env.RESORA_IDENTITY_TEST_DB_URL;
-const root = resolve(import.meta.dir, "../../../../../..");
+const root = resolve(import.meta.dir, "../../../../../../../..");
 (url ? describe : describe.skip)(
 	"SA-01/02/03 on guarded disposable PostgreSQL",
 	() => {
@@ -245,7 +245,10 @@ const root = resolve(import.meta.dir, "../../../../../..");
 			adminInitialPassword = password;
 			expect(password.length).toBeGreaterThanOrEqual(24);
 			const status = JSON.parse(
-				await readFile(resolve(credentialPath, "../../status.json"), "utf8"),
+				await readFile(
+					resolve(credentialPath, "../../../../status.json"),
+					"utf8",
+				),
 			);
 			expect(status.state).toBe("COMMITTED");
 			expect(

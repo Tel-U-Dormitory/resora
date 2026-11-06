@@ -162,12 +162,16 @@ function explicitSqlTables(path: string, source: string) {
 	visit(file);
 	return result;
 }
+function isTestSource(path: string) {
+	return /\.test\.tsx?$/.test(path) || /\/tests\//.test(path);
+}
+
 export function violations(sources: SourceMap) {
 	const errors = new Set<string>();
 	const graph = new Map<string, Set<string>>();
 	const links = new Map<string, string[]>();
 	for (const [path, source] of sources) {
-		if (/\.test\.tsx?$/.test(path)) continue;
+		if (isTestSource(path)) continue;
 		const from = domain(path);
 		const application = path.startsWith("packages/api/src/application/");
 		for (const table of explicitSqlTables(path, source)) {
@@ -179,6 +183,8 @@ export function violations(sources: SourceMap) {
 		for (const item of imports(path, source)) {
 			const to = target(path, item.specifier, sources);
 			if (item.runtime && to) links.set(path, [...(links.get(path) ?? []), to]);
+			if (to && isTestSource(to))
+				errors.add(`${path} -> ${to}: production import of test support`);
 			const other = to ? domain(to) : null;
 			if (other && from !== other) {
 				if (!/\.(public|contracts)\.ts$/.test(to ?? ""))
@@ -236,7 +242,7 @@ export function violations(sources: SourceMap) {
 	}
 	for (const [entry, source] of sources) {
 		if (
-			/\.test\.tsx?$/.test(entry) ||
+			isTestSource(entry) ||
 			!(entry.startsWith("apps/web/src/") || entry.endsWith(".contracts.ts"))
 		)
 			continue;

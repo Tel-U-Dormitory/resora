@@ -93,7 +93,7 @@ test("type-only references are safe and frontend feature boundaries reject priva
 			new Map([
 				[
 					"apps/web/src/features/broadcast/view.tsx",
-					'import "../identity/login-form";',
+					'import "../identity/auth/login-form";',
 				],
 				["apps/web/src/features/identity/auth/login-form.tsx", ""],
 			]),
@@ -150,5 +150,34 @@ test("root verification scripts reference existing files after module moves", ()
 		)) {
 			expect(existsSync(resolve(root, match[0]))).toBe(true);
 		}
+	}
+});
+
+test("test fixtures may cross owners but production cannot import test code", () => {
+	const fixture =
+		"packages/api/src/application/internal-events/tests/fixtures/event-workflow.ts";
+	const sources = new Map([
+		[fixture, 'import "@resora/db/schema/attendance";'],
+		["packages/db/src/schema/attendance.ts", ""],
+	]);
+	expect(violations(sources)).toEqual([]);
+	for (const specifier of [
+		"../tests/fixtures/event-workflow",
+		"../tests/sample.test",
+	]) {
+		const target = specifier.endsWith(".test")
+			? "packages/api/src/application/internal-events/tests/sample.test.ts"
+			: fixture;
+		const check = new Map([
+			...sources,
+			[target, ""],
+			[
+				"packages/api/src/application/internal-events/live/run.ts",
+				`import "${specifier}";`,
+			],
+		]);
+		expect(violations(check).join()).toContain(
+			"production import of test support",
+		);
 	}
 });

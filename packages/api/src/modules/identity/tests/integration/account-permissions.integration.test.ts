@@ -7,9 +7,9 @@ import { seedOrganization } from "@resora/db/organization";
 import { sql } from "drizzle-orm";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { appRouter } from "../../routers";
-import { manualInsert } from "../attendance/manual-attendance";
-import { setAccountPermission } from "./account-permissions";
+import { appRouter } from "../../../../routers";
+import { manualInsert } from "../../../attendance/manual-attendance";
+import { setAccountPermission } from "../../account-permissions";
 
 export function permissionScratchTarget(value: string) {
 	const url = new URL(value);
@@ -111,7 +111,7 @@ const target = process.env.RESORA_PERMISSION_TEST_DB_URL;
 			);
 			const migrationsFolder = resolve(
 				import.meta.dir,
-				"../../../../db/src/migrations",
+				"../../../../../../db/src/migrations",
 			);
 			await migrate(db, { migrationsFolder });
 			const history = await db.$client.query(
