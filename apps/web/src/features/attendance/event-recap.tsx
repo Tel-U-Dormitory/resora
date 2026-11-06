@@ -5,7 +5,7 @@ import {
 	filterRecapParticipants,
 	type RecapFilters,
 	recapFilterOptions,
-} from "@resora/api/modules/attendance/reporting-context";
+} from "@resora/api/modules/attendance/attendance.contracts";
 import type { AppRouter } from "@resora/api/routers/index";
 import { DateTimePicker } from "@resora/ui/components/date-time-picker";
 import { Input } from "@resora/ui/components/input";
@@ -24,15 +24,15 @@ import {
 	trpc,
 	trpcClient,
 } from "@/utils/trpc";
-import { refreshAttendanceQueries } from "./attendance-queries";
 import {
 	eventErrorMessage,
 	formatEventTime,
 	parseWibDateTimeInput,
 	StatusBadge,
 	toWibDateTimeInput,
-} from "./event-ui";
-import { participantPage } from "./participant-list";
+} from "../../components/event-feedback";
+import { refreshAttendanceQueries } from "../../utils/internal-event-queries";
+import { participantPage } from "../../utils/participant-page";
 
 type Participant =
 	inferRouterOutputs<AppRouter>["attendance"]["recap"]["participants"][number];

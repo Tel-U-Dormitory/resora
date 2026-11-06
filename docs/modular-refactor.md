@@ -1,0 +1,152 @@
+> Historical execution record for the first refactor. Current file locations and follow-up verification: [maintainability phases](modular-maintainability.md) and [architecture](architecture.md).
+
+# Modular monolith refactor — execution record
+
+Date: 2026-11-06. Scope authorized in the refactor chat: all phases, local commits
+on `refactor/architecture-modular-monolith`; no push, deployment or remote migration.
+
+## Phase 0 — baseline and constraints
+
+The starting implementation has Identity (including Accounts/Provisioning),
+internal Events, Committee, Attendance (including Check-in/Reporting), and Broadcast.
+The folders are not yet enforceable module boundaries. API wildcard exports expose
+private files; frontend imports backend helpers. Broadcast and audit reporting join
+Auth's user table. Event workflows query both Event and Attendance persistence.
+
+Business baseline to preserve:
+
+- Existing tRPC namespaces, schemas, DTOs, errors, permissions and routes.
+- Exactly one attendance session per internal event, enforced by the deferred
+  `check_internal_event_session` trigger. Creation/deletion and closure stay atomic.
+- Committee can be reused by events; committee titles do not grant system access.
+- Invitation snapshots, including the existing restricted SUPERADMIN advanced-edit
+  exception. No automatic synchronization, external participant flow or new session model.
+- Live permission checks and lock order: Committee (when needed), Event, Session,
+  Identity, then attendance record/grant locks as required by the existing operation.
+- Repeatable-read report snapshots, duplicate-safe QR insertion, immutable original
+  attendance fields and append-only audits.
+
+Historical PRD phase sections are not new approvals. Later explicit permission and
+advanced-edit decisions continue to apply. Existing business ambiguities are not
+resolved by this structural refactor.
+
+Initial test attempt: 416 passed, 6 failed due to sandbox loopback restrictions and
+Node absent from PATH. Verified repeat with bundled Node and permitted loopback: **442 pass, 0 fail**
+across 54 files (`bun --no-env-file scripts/test-offline.ts`). Integration suites require
+separately guarded local PostgreSQL; offline doubles do not prove SQL lock scheduling.
+
+## Phase sequence
+
+0. Inspect and record baseline.
+1. Accept technical design while freezing business behavior.
+2. Add executable boundary checks and regression protection.
+3. Establish schema ownership without changing physical SQL or migration history.
+4. Pilot Broadcast and Identity display-name contracts.
+5. Consolidate Identity submodules and public operations.
+6. Separate Event/Committee ownership and application orchestration.
+7. Route Attendance through owned Event contracts; preserve transactions/reports.
+8. Enforce frontend exports, close exceptions, verify and update documentation.
+
+Each phase runs unit tests before its local commit and the next phase. Verification
+results and any remaining limits are recorded below; implementation is not release.
+
+## Phase 1 — accepted technical design
+
+ADR 0006 defines five domains, trusted server contracts, browser contracts,
+application coordination and unchanged physical database constraints. Focused
+baseline: 71 tests passed (Event editing, Check-in, Reporting), 0 failed.
+
+## Phase 2 — boundary guard
+
+Added TypeScript-AST import checks, browser dependency traversal, domain table
+ownership checks, negative fixtures, and CI invocation. Initial 28 exact transitional
+exceptions must shrink to zero. Unit verification: 27 passed, 0 failed.
+
+## Phase 3 — physical schema compatibility
+
+Recorded table ownership and retained physical SQL, FKs, triggers and migration
+history unchanged. No migration/backfill is necessary for structural isolation.
+Migration/schema unit verification: 31 passed, 0 failed with local subprocess access.
+
+## Phase 4 — Broadcast pilot
+
+Broadcast now composes historical author names through one batched Identity
+contract per page; no foreign-table join or active-account filter. Detail uses
+repeatable read for composed data. Browser validation has an explicit contracts
+entry. Verification: 17 unit tests plus 1 display-name batch test passed; API
+typecheck passed. One table-access exception removed.
+
+## Phase 5 — Identity capabilities
+
+Accounts and Provisioning now reside inside Identity. Server CLIs use a guarded
+public provisioning entry and router composition uses a public transport entry.
+Verification: 86 passed, 60 database integration cases skipped without opt-in,
+0 failed; API/server typechecks passed. Relative migration fixture paths updated.
+
+## Phase 6 — Events, Committee and workflow composition
+
+Moved mixed workflows to application/internal-events.ts and the compatibility
+router to transport. All its persistence is executed through Event/Attendance
+public operations; domain tables never leave their owner. Committee labels have
+a browser contract. Accounts/Check-in imports and all affected test paths were
+updated. Event audit names use a batch Identity read. Event detail composition
+uses repeatable read. Original lock/transaction ordering retained.
+
+Verification: 45 domain tests passed; API typecheck passed. Full offline run had
+445 pass and one CI-script expectation failure after adding the architecture gate;
+updated that expected gate, then all 49 tests in the affected suites passed.
+Remaining 14 boundary exceptions are Attendance/FE work for phases 7–8.
+
+## Phase 7 — Attendance consumers
+
+Attendance/check-in/manual/reporting now obtain Event facts through public
+operations. Recap composes ordered invitation snapshots with Attendance records;
+own history paginates Event invitations then batch-reads sessions/records within
+repeatable read. Audit operator names use batched Identity reads. Unit doubles
+were updated for separate owned queries while retaining workflow assertions.
+
+Verification: 47 focused unit tests, API typecheck, and **81 real PostgreSQL
+integration tests across six suites passed**, including QR locks, Event admin,
+Committee, Broadcast, permission revoke/write races and account lifecycle. Initial
+Docker NAT was refused by the existing host/port guard; reran on a dedicated
+loopback-bound synthetic container without changing the guard. No application
+database was used. Six remaining exceptions are frontend imports only.
+
+## Phase 8 — frontend, enforcement and final verification
+
+Frontend Event UI/roster/location code now lives in `features/events`; Attendance
+retains scanner/history/recap. Each feature exposes client `public.ts`; Identity
+also exposes SSR `server.ts`. Routes compose those entries. Shared display helpers,
+pagination and query invalidation have actual cross-feature consumers. API wildcard
+exports are closed; browser schemas/helpers use explicit contracts paths. Load-test
+provisioning uses the Identity public CLI contract and root script paths are verified.
+
+Removed the transitional exception mechanism entirely. CI checks private imports,
+backend/frontend cycles, imported foreign tables, explicit SQL/relational foreign
+table access and transitive browser/server dependencies. Negative fixtures and a
+repository-wide unit assertion enforce the boundary policy. Dynamic SQL still needs
+review; no static checker proves arbitrary generated SQL safe.
+
+Final verification:
+
+- Offline unit/HTTP/CLI suites: **449 passed, 0 failed**, 56 files.
+- Load-test tooling unit suites: **35 passed, 0 failed**, no remote load traffic.
+- Fresh synthetic PostgreSQL integration repeat: **81 passed, 0 failed**, six suites.
+- API, server and web TypeScript checks passed. Architecture-tool strict typecheck
+  passed using the installed TypeScript CLI (`--ignoreConfig` for explicit files).
+- Repository Biome check passed; architecture check passed with **no exceptions**.
+- Production Next.js frontend build and tsdown backend build passed locally.
+- Migration files, dependency lockfile and environment configuration are unchanged.
+  The physical schema and application data were not modified. Only dedicated
+  ephemeral synthetic databases were migrated for integration verification.
+
+The frontend build was verified after moving UI and closing API exports. Subsequent
+changes were backend audit read transactions, CLI/test entry exports, script path
+checks, documentation and unit fixtures; backend build/typechecks and integration
+were rerun for these changes. Sandbox subprocess restrictions required local test
+execution outside the sandbox; target guards were retained.
+
+All phases have local commits on the requested branch. No push, remote database
+mutation or deployment was performed. Manual browser/device UAT, production migration
+execution (none required here), real load testing and release sign-off were not run.
+This is implemented and CLI-tested architecture work, not a release approval.

@@ -228,3 +228,19 @@ export async function getSrMemberIdentities(
 		.innerJoin(srProfiles, eq(srProfiles.userId, user.id))
 		.where(inArray(user.id, userIds));
 }
+
+// Trusted server read contract for already-authorized audit/Broadcast consumers.
+// Include inactive/archived accounts: historical author names remain readable.
+export async function getUserDisplayNames(
+	db: Database | DatabaseTransaction,
+	userIds: readonly string[],
+): Promise<Map<string, string>> {
+	if (!userIds.length) return new Map();
+	const rows = await db
+		.select({ userId: user.id, name: user.name })
+		.from(user)
+		.where(inArray(user.id, [...new Set(userIds)]));
+	return new Map(rows.map((row) => [row.userId, row.name]));
+}
+
+export type { ActiveIdentity, ActiveSrIdentity } from "@resora/auth/sr-access";

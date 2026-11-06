@@ -27,7 +27,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { getSidebarGroups, isSidebarLinkActive } from "@/config/navigation";
-import UserMenu from "@/features/identity/user-menu";
+import { UserMenu } from "@/features/identity/public";
 
 const icons = {
 	dashboard: LayoutDashboard,

@@ -18,14 +18,14 @@ import { flushSync } from "react-dom";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { attendanceQueryKeys, queryClient, trpc } from "@/utils/trpc";
-import { refreshAttendanceQueries } from "./attendance-queries";
+import { formatEventTime } from "../../components/event-feedback";
+import { refreshAttendanceQueries } from "../../utils/internal-event-queries";
 import { acquireLocation, freshPosition } from "./check-in-location";
 import {
 	releaseCamera,
 	type ScannerDiagnostic,
 	scannerErrorMessage,
 } from "./check-in-ui";
-import { formatEventTime } from "./event-ui";
 
 export default function CheckInScanner() {
 	const mutation = useMutation({

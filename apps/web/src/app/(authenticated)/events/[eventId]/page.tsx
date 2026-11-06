@@ -1,4 +1,4 @@
-import EventDetail from "@/features/attendance/event-detail";
+import { EventDetail } from "@/features/events/public";
 export default async function EventPage({
 	params,
 }: {

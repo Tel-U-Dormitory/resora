@@ -5,7 +5,7 @@ import {
 	type BootstrapTarget,
 	bootstrapSystemAdmin,
 	validateBootstrapTarget,
-} from "@resora/api/modules/provisioning/system-admin-bootstrap";
+} from "@resora/api/modules/identity/identity-provisioning.public";
 import { createDb, type Database } from "@resora/db";
 
 // No Varlock/services import, DATABASE_URL/PROD_* fallback or startup invocation.

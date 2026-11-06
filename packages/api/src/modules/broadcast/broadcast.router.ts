@@ -5,7 +5,7 @@ import {
 	broadcastIdSchema,
 	listBroadcastsSchema,
 	updateBroadcastSchema,
-} from "./broadcast.schema";
+} from "./broadcast.contracts";
 import {
 	archiveBroadcast,
 	broadcastDetail,

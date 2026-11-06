@@ -55,7 +55,11 @@ function queryFor(table: unknown) {
 const db = {
 	$client: { totalCount: 1, idleCount: 0, waitingCount: 3 },
 	select: () => ({ from: queryFor }),
-	transaction: () => {
+	transaction: async (
+		run: (tx: Database) => Promise<unknown>,
+		options?: { accessMode?: string },
+	) => {
+		if (options?.accessMode === "read only") return run(db);
 		writes++;
 		throw new Error("Unexpected offline database write");
 	},

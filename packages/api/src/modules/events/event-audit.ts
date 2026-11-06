@@ -1,20 +1,22 @@
 import type { ActiveIdentity } from "@resora/auth/sr-access";
-import type { Database } from "@resora/db";
+import type { Database, DatabaseTransaction } from "@resora/db";
 import type { RosterCriteria } from "@resora/db/schema/attendance";
 import {
 	eventAuditLogs,
 	eventDeletionAudits,
 	events,
 } from "@resora/db/schema/attendance";
-import { user } from "@resora/db/schema/auth";
 import { TRPCError } from "@trpc/server";
 import { desc, eq } from "drizzle-orm";
 import type { z } from "zod";
 import {
 	administrativeHistorySchema,
 	eventAuditHistorySchema,
-} from "../attendance/attendance.schema";
-import { hasSuperadminPrivilege } from "../identity/identity.public";
+} from "../../contracts/attendance";
+import {
+	getUserDisplayNames,
+	hasSuperadminPrivilege,
+} from "../identity/identity.public";
 
 type AuditState = typeof eventAuditLogs.$inferSelect.beforeState;
 type AuditValue = string | number | null;
@@ -88,8 +90,8 @@ export function administrativeChanges(before: AuditState, after: AuditState) {
 	return { changes, participants };
 }
 
-export async function eventAuditHistory(
-	db: Database,
+async function readeventAuditHistory(
+	db: Database | DatabaseTransaction,
 	identity: ActiveIdentity,
 	input: z.input<typeof eventAuditHistorySchema>,
 ) {
@@ -105,29 +107,35 @@ export async function eventAuditHistory(
 		.select({
 			id: eventAuditLogs.id,
 			action: eventAuditLogs.action,
-			operator: user.name,
+			actorUserId: eventAuditLogs.actorUserId,
 			createdAt: eventAuditLogs.createdAt,
 			reason: eventAuditLogs.reason,
 			before: eventAuditLogs.beforeState,
 			after: eventAuditLogs.afterState,
 		})
 		.from(eventAuditLogs)
-		.innerJoin(user, eq(user.id, eventAuditLogs.actorUserId))
 		.where(eq(eventAuditLogs.eventId, eventId))
 		.orderBy(desc(eventAuditLogs.createdAt), desc(eventAuditLogs.id))
 		.limit(limit + 1)
 		.offset(offset);
+	const names = await getUserDisplayNames(
+		db,
+		rows.map((row) => row.actorUserId),
+	);
 	return {
 		hasMore: rows.length > limit,
-		items: rows.slice(0, limit).map(({ before, after, ...row }) => ({
-			...row,
-			...administrativeChanges(before, after),
-		})),
+		items: rows
+			.slice(0, limit)
+			.map(({ before, after, actorUserId, ...row }) => ({
+				...row,
+				operator: names.get(actorUserId) ?? "",
+				...administrativeChanges(before, after),
+			})),
 	};
 }
 
-export async function deletedDraftHistory(
-	db: Database,
+async function readdeletedDraftHistory(
+	db: Database | DatabaseTransaction,
 	identity: ActiveIdentity,
 	input: z.input<typeof administrativeHistorySchema>,
 ) {
@@ -138,23 +146,53 @@ export async function deletedDraftHistory(
 		.select({
 			id: eventDeletionAudits.id,
 			eventId: eventDeletionAudits.eventId,
-			operator: user.name,
+			actorUserId: eventDeletionAudits.actorUserId,
 			reason: eventDeletionAudits.reason,
 			createdAt: eventDeletionAudits.createdAt,
 			snapshot: eventDeletionAudits.eventSnapshot,
 		})
 		.from(eventDeletionAudits)
-		.innerJoin(user, eq(user.id, eventDeletionAudits.actorUserId))
 		.orderBy(desc(eventDeletionAudits.createdAt), desc(eventDeletionAudits.id))
 		.limit(limit + 1)
 		.offset(offset);
+	const names = await getUserDisplayNames(
+		db,
+		rows.map((row) => row.actorUserId),
+	);
 	return {
 		hasMore: rows.length > limit,
-		items: rows.slice(0, limit).map(({ snapshot, ...row }) => ({
+		items: rows.slice(0, limit).map(({ snapshot, actorUserId, ...row }) => ({
 			...row,
+			operator: names.get(actorUserId) ?? "",
 			title: snapshot.title,
 			startsAt: snapshot.startsAt,
 			endsAt: snapshot.endsAt,
 		})),
 	};
+}
+
+export async function eventAuditHistory(
+	db: Database,
+	identity: ActiveIdentity,
+	input: z.input<typeof eventAuditHistorySchema>,
+) {
+	if (!hasSuperadminPrivilege(identity))
+		throw new TRPCError({ code: "FORBIDDEN" });
+	return db.transaction((tx) => readeventAuditHistory(tx, identity, input), {
+		isolationLevel: "repeatable read",
+		accessMode: "read only",
+	});
+}
+
+export async function deletedDraftHistory(
+	db: Database,
+	identity: ActiveIdentity,
+	input: z.input<typeof administrativeHistorySchema>,
+) {
+	if (!hasSuperadminPrivilege(identity))
+		throw new TRPCError({ code: "FORBIDDEN" });
+	return db.transaction((tx) => readdeletedDraftHistory(tx, identity, input), {
+		isolationLevel: "repeatable read",
+		accessMode: "read only",
+	});
 }

@@ -6,13 +6,13 @@ import {
 	canManageBroadcast,
 	canReadBroadcast,
 } from "../identity/identity-policy";
-import { broadcastRouter } from "./broadcast.router";
 import {
 	broadcastFieldsSchema,
 	broadcastIdSchema,
 	listBroadcastsSchema,
 	updateBroadcastSchema,
-} from "./broadcast.schema";
+} from "./broadcast.contracts";
+import { broadcastRouter } from "./broadcast.router";
 import {
 	createBroadcast,
 	isBroadcastActive,

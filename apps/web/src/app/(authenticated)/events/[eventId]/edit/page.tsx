@@ -1,4 +1,4 @@
-import EventForm from "@/features/attendance/event-form";
+import { EventForm } from "@/features/events/public";
 export default async function EditEventPage({
 	params,
 }: {

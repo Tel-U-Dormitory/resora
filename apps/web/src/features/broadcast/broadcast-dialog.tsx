@@ -15,7 +15,10 @@ import { type RefObject, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { queryClient, trpc, trpcClient } from "@/utils/trpc";
-import { formatEventTime, toWibDateTimeInput } from "../attendance/event-ui";
+import {
+	formatEventTime,
+	toWibDateTimeInput,
+} from "../../components/event-feedback";
 import {
 	type Broadcast,
 	type BroadcastAction,
