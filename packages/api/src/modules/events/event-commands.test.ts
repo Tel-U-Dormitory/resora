@@ -17,7 +17,9 @@ function deletionTarget(
 				// biome-ignore lint/suspicious/noThenProperty: Drizzle queries are awaitable.
 				then: (resolve: (rows: unknown[]) => unknown) =>
 					Promise.resolve(
-						selection ? [{ hasReferences }] : [{ status, visibility }],
+						selection && "hasReferences" in selection
+							? [{ hasReferences }]
+							: [{ status, visibility }],
 					).then(resolve),
 			};
 			return q;

@@ -1,38 +1,11 @@
 import type { Database, DatabaseTransaction } from "@resora/db";
-import {
-	attendanceAuditLogs,
-	attendanceRecords,
-	attendanceSessions,
-	qrChallenges,
-} from "@resora/db/schema/attendance";
+import { attendanceSessions, qrChallenges } from "@resora/db/schema/attendance";
+import { TRPCError } from "@trpc/server";
 import { and, eq, sql } from "drizzle-orm";
-import type { EventDraft } from "../../contracts/attendance";
+import type { EventDraft } from "../../../contracts/attendance";
+import type { SessionFact } from "../session.types";
 
 type Db = Database | DatabaseTransaction;
-
-import type { SessionFact } from "./session.types";
-
-export type { SessionFact } from "./session.types";
-
-import { TRPCError } from "@trpc/server";
-export async function lockInternalSession(
-	db: Db,
-	eventId: string,
-): Promise<SessionFact[]> {
-	return await db
-		.select()
-		.from(attendanceSessions)
-		.where(eq(attendanceSessions.internalEventId, eventId))
-		.for("update");
-}
-
-export async function recordExistsForSession(db: Db, sessionId: string) {
-	return await db
-		.select({ id: attendanceRecords.id })
-		.from(attendanceRecords)
-		.where(eq(attendanceRecords.sessionId, sessionId))
-		.limit(1);
-}
 
 export async function configureSession(
 	db: Db,
@@ -42,15 +15,6 @@ export async function configureSession(
 	await db
 		.update(attendanceSessions)
 		.set(configuration)
-		.where(eq(attendanceSessions.id, sessionId));
-}
-
-export async function sessionHasDeletionReferences(db: Db, sessionId: string) {
-	return await db
-		.select({
-			hasReferences: sql<boolean>`EXISTS (SELECT 1 FROM ${attendanceRecords} WHERE ${attendanceRecords.sessionId} = ${sessionId}) OR EXISTS (SELECT 1 FROM ${qrChallenges} WHERE ${qrChallenges.sessionId} = ${sessionId}) OR EXISTS (SELECT 1 FROM ${attendanceAuditLogs} WHERE ${attendanceAuditLogs.sessionId} = ${sessionId})`,
-		})
-		.from(attendanceSessions)
 		.where(eq(attendanceSessions.id, sessionId));
 }
 
@@ -79,16 +43,6 @@ export async function configureInternalSession(
 	await db
 		.update(attendanceSessions)
 		.set(configuration)
-		.where(eq(attendanceSessions.internalEventId, eventId));
-}
-
-export async function readInternalSession(
-	db: Db,
-	eventId: string,
-): Promise<SessionFact[]> {
-	return await db
-		.select()
-		.from(attendanceSessions)
 		.where(eq(attendanceSessions.internalEventId, eventId));
 }
 
@@ -125,18 +79,6 @@ export async function issueSessionChallenge(
 		expiresAt: new Date(now.getTime() + session.qrTtlMinutes * 60_000),
 		issuedByUserId: actorUserId,
 	});
-}
-
-export async function currentChallenge(db: Db, sessionId: string) {
-	return await db
-		.select()
-		.from(qrChallenges)
-		.where(
-			and(
-				eq(qrChallenges.sessionId, sessionId),
-				eq(qrChallenges.isCurrent, true),
-			),
-		);
 }
 
 export async function revokeSessionChallenge(

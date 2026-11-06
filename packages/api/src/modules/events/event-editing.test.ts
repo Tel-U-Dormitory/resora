@@ -177,7 +177,11 @@ function fixture() {
 							: selection?.event
 								? [{ event: state.event, session: state.session }]
 								: [state.event];
-					if (table === "events" && selection?.visibility) {
+					if (
+						table === "events" &&
+						selection?.visibility &&
+						!selection?.rosterCriteria
+					) {
 						const visible = params.includes("PUBLISHED")
 							? state.event.status === "PUBLISHED" &&
 								state.event.visibility === "VISIBLE" &&

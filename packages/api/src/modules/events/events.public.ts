@@ -1,15 +1,14 @@
-// Trusted server operations. Application workflows enforce resource authorization,
-// Event -> Session -> live Identity lock ordering and atomic commit/rollback.
+// Server-only domain operations; writes share the caller transaction and resource authorization.
 
-export { deletedDraftHistory, eventAuditHistory } from "./event-audit";
+export { sameRoster, visibilityActions } from "./event.policy";
 export type {
 	EventEditAuditState,
 	EventFact,
 	InvitationFact,
 	RosterCriteria,
-} from "./event-operations";
+} from "./event.types";
+export { deletedDraftHistory, eventAuditHistory } from "./event-audit";
 export {
-	addInvitationSnapshots,
 	amendPublishedConfiguration,
 	amendPublishedDetails,
 	appendEventAudit,
@@ -18,21 +17,26 @@ export {
 	createInternalDraft,
 	deleteUnusedDraft,
 	editPublishedMetadata,
+	publishInternalDraft,
+	recordDraftDeletion,
+	replaceDraftDetails,
+} from "./event-commands";
+export {
 	eventHasDeletionReferences,
 	eventOrganizationHint,
-	invitationForUser,
-	invitationIds,
-	invitationSnapshots,
 	listInvitedEvents,
 	listManagedEvents,
 	lockEventForCheckIn,
 	lockEventForManagement,
-	ownInvitedEventHistory,
-	publishInternalDraft,
 	readEvent,
-	recordDraftDeletion,
+} from "./event-queries";
+export {
+	addInvitationSnapshots,
+	invitationForUser,
+	invitationIds,
+	invitationSnapshots,
+	ownInvitedEventHistory,
 	removeInvitationsBeforeAttendance,
-	replaceDraftDetails,
 	reportInvitationSnapshots,
-} from "./event-operations";
+} from "./invitation-operations";
 export { resolveCommitteeRoster, resolveRoster } from "./roster";

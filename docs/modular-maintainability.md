@@ -27,3 +27,12 @@ checks its owner state/evidence, and session activation locks/revalidates its ow
 state. Authorization and cross-domain atomicity remain application responsibilities.
 Verification: 71 existing workflow tests plus 2 negative command tests passed; API
 typecheck and architecture checks passed. No SQL/migration or business-rule changes.
+
+## Phase 2 result
+
+Replaced the 820-line application implementation with six cohesive workflow files
+and one explicit entry. Event queries, commands and invitation operations are
+separate; Attendance session queries/commands have a capability folder. Pure roster
+comparison/visibility policy lives in Events. Public fact reads use explicit column
+projections so later schema additions do not silently become DTO fields.
+Verification: 64 workflow/command/audit tests passed, API types and boundaries passed.
