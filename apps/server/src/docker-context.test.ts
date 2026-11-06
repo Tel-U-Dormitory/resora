@@ -169,6 +169,7 @@ test("permanent CI/CD scopes PR validation and staging-only publication safely",
 	) as { scripts: Record<string, string> };
 	expect(scripts["verify:pr"]?.split(" && ")).toEqual([
 		"pnpm --filter web exec next typegen",
+		"pnpm run check:architecture",
 		"pnpm run lint",
 		"pnpm run check-types",
 		"pnpm run test:offline",

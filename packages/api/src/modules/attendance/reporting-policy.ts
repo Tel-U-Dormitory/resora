@@ -1,10 +1,10 @@
 import { TRPCError } from "@trpc/server";
-import { classifyTiming, type TimingClass } from "../check-in/check-in-policy";
 import {
 	eventAssignment,
 	type OrganizationSnapshot,
 	type ReportingContext,
-} from "./reporting-context";
+} from "./attendance.contracts";
+import { classifyTiming, type TimingClass } from "./check-in/check-in-policy";
 
 export function presence(hasRecord: boolean, eventStatus: string) {
 	return hasRecord

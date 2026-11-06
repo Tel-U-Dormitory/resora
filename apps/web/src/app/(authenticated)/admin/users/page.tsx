@@ -1,5 +1,4 @@
-import AccountList from "@/features/identity/account-list";
-import DatabaseBackup from "@/features/identity/database-backup";
+import { AccountList, DatabaseBackup } from "@/features/identity/public";
 
 export default function AccountListPage() {
 	return (

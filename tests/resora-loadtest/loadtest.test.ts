@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { runInNewContext } from "node:vm";
-import { checkInSchema } from "../../packages/api/src/modules/attendance/attendance.schema";
+import { checkInSchema } from "../../packages/api/src/contracts/attendance";
 
 // Execute the k6 script with offline runtime/HTTP/HTML doubles. No real credentials or network.
 function fixture(overrides: Record<string, string> = {}, malformed = false) {

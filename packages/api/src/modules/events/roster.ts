@@ -1,6 +1,6 @@
-import type { RosterCriteria } from "@resora/db/schema/attendance";
 import type { getCommitteeRoster } from "../committee/committee.public";
 import type { SrCandidate } from "../identity/identity.public";
+import type { RosterCriteria } from "./event.types";
 
 export function resolveCommitteeRoster(
 	candidates: readonly SrCandidate[],

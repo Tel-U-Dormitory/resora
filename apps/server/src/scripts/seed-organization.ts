@@ -1,7 +1,7 @@
 import {
 	localProvisioningTarget,
 	verifyLocalProvisioningDatabase,
-} from "@resora/api/modules/provisioning/sr-provisioning";
+} from "@resora/api/modules/identity/identity-provisioning.public";
 import { createDb, type Database } from "@resora/db";
 import {
 	OrganizationConflictError,
