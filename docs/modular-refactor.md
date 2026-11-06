@@ -59,3 +59,9 @@ baseline: 71 tests passed (Event editing, Check-in, Reporting), 0 failed.
 Added TypeScript-AST import checks, browser dependency traversal, domain table
 ownership checks, negative fixtures, and CI invocation. Initial 28 exact transitional
 exceptions must shrink to zero. Unit verification: 27 passed, 0 failed.
+
+## Phase 3 — physical schema compatibility
+
+Recorded table ownership and retained physical SQL, FKs, triggers and migration
+history unchanged. No migration/backfill is necessary for structural isolation.
+Migration/schema unit verification: 31 passed, 0 failed with local subprocess access.
