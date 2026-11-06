@@ -65,3 +65,11 @@ exceptions must shrink to zero. Unit verification: 27 passed, 0 failed.
 Recorded table ownership and retained physical SQL, FKs, triggers and migration
 history unchanged. No migration/backfill is necessary for structural isolation.
 Migration/schema unit verification: 31 passed, 0 failed with local subprocess access.
+
+## Phase 4 — Broadcast pilot
+
+Broadcast now composes historical author names through one batched Identity
+contract per page; no foreign-table join or active-account filter. Detail uses
+repeatable read for composed data. Browser validation has an explicit contracts
+entry. Verification: 17 unit tests plus 1 display-name batch test passed; API
+typecheck passed. One table-access exception removed.

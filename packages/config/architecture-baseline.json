@@ -15,7 +15,6 @@
   "packages/api/src/modules/attendance/reporting.ts -> packages/db/src/schema/attendance.ts#eventParticipants: foreign table access",
   "packages/api/src/modules/attendance/reporting.ts -> packages/db/src/schema/attendance.ts#events: foreign table access",
   "packages/api/src/modules/attendance/reporting.ts -> packages/db/src/schema/auth.ts#user: foreign table access",
-  "packages/api/src/modules/broadcast/broadcast.service.ts -> packages/db/src/schema/auth.ts#user: foreign table access",
   "packages/api/src/modules/check-in/check-in.ts -> packages/db/src/schema/attendance.ts#eventParticipants: foreign table access",
   "packages/api/src/modules/check-in/check-in.ts -> packages/db/src/schema/attendance.ts#events: foreign table access",
   "packages/api/src/modules/check-in/qr.ts -> packages/db/src/schema/attendance.ts#events: foreign table access",

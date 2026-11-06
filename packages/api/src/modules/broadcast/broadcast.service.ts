@@ -1,6 +1,5 @@
 import type { ActiveIdentity } from "@resora/auth/sr-access";
 import type { Database, DatabaseTransaction } from "@resora/db";
-import { user } from "@resora/db/schema/auth";
 import { broadcasts } from "@resora/db/schema/broadcast";
 import { TRPCError } from "@trpc/server";
 import {
@@ -20,12 +19,13 @@ import {
 	canManageBroadcast,
 	canReadBroadcast,
 	getLiveOperationalIdentity,
+	getUserDisplayNames,
 	hasSuperadminPrivilege,
 } from "../identity/identity.public";
 import type {
 	broadcastFieldsSchema,
 	listBroadcastsSchema,
-} from "./broadcast.schema";
+} from "./broadcast.contracts";
 
 const sevenDays = 7 * 24 * 60 * 60 * 1000;
 const fields = {
@@ -33,7 +33,6 @@ const fields = {
 	title: broadcasts.title,
 	content: broadcasts.content,
 	linkUrl: broadcasts.linkUrl,
-	creatorName: user.name,
 	publishedAt: broadcasts.publishedAt,
 	expiresAt: broadcasts.expiresAt,
 	archivedAt: broadcasts.archivedAt,
@@ -133,7 +132,6 @@ export async function listBroadcasts(
 			const rows = await tx
 				.select({ ...fields, createdByUserId: broadcasts.createdByUserId })
 				.from(broadcasts)
-				.innerJoin(user, eq(user.id, broadcasts.createdByUserId))
 				.where(filter)
 				.orderBy(desc(broadcasts.publishedAt), desc(broadcasts.id))
 				.limit(input.limit)
@@ -142,8 +140,18 @@ export async function listBroadcasts(
 				.select({ count: count() })
 				.from(broadcasts)
 				.where(filter);
+			const names = await getUserDisplayNames(
+				tx,
+				rows.map((row) => row.createdByUserId),
+			);
 			return {
-				items: rows.map((row) => dto(row, live, now)),
+				items: rows.map((row) =>
+					dto(
+						{ ...row, creatorName: names.get(row.createdByUserId)! },
+						live,
+						now,
+					),
+				),
 				total: total?.count ?? 0,
 			};
 		},
@@ -161,19 +169,26 @@ export async function broadcastDetail(
 	broadcastId: string,
 ) {
 	authorize(identity);
-	return db.transaction(async (tx) => {
-		const live = await getLiveOperationalIdentity(tx, identity.userId);
-		authorize(live);
-		if (!live) fail("BROADCAST_ACCESS_DENIED", "FORBIDDEN");
-		const now = await databaseTime(tx);
-		const [row] = await tx
-			.select({ ...fields, createdByUserId: broadcasts.createdByUserId })
-			.from(broadcasts)
-			.innerJoin(user, eq(user.id, broadcasts.createdByUserId))
-			.where(eq(broadcasts.id, broadcastId));
-		if (!row) fail("BROADCAST_NOT_FOUND", "NOT_FOUND");
-		return dto(row, live, now);
-	});
+	return db.transaction(
+		async (tx) => {
+			const live = await getLiveOperationalIdentity(tx, identity.userId);
+			authorize(live);
+			if (!live) fail("BROADCAST_ACCESS_DENIED", "FORBIDDEN");
+			const now = await databaseTime(tx);
+			const [row] = await tx
+				.select({ ...fields, createdByUserId: broadcasts.createdByUserId })
+				.from(broadcasts)
+				.where(eq(broadcasts.id, broadcastId));
+			if (!row) fail("BROADCAST_NOT_FOUND", "NOT_FOUND");
+			const names = await getUserDisplayNames(tx, [row.createdByUserId]);
+			return dto(
+				{ ...row, creatorName: names.get(row.createdByUserId)! },
+				live,
+				now,
+			);
+		},
+		{ isolationLevel: "repeatable read" },
+	);
 }
 export function resolveBroadcastExpiry(
 	value: string | undefined,

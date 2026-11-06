@@ -1,4 +1,4 @@
-import { broadcastFieldsSchema } from "@resora/api/modules/broadcast/broadcast.schema";
+import { broadcastFieldsSchema } from "@resora/api/modules/broadcast/broadcast.contracts";
 import { TRPCClientError } from "@trpc/client";
 import type { trpcClient } from "@/utils/trpc";
 import {
