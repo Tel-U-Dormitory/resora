@@ -1,5 +1,7 @@
 # RESORA — Technical Architecture & Repository Standards
 
+> **2026-11-06 modular refactor:** [ADR 0006](decisions/0006-modular-monolith.md) governs current module ownership and public contracts. Earlier phase folder listings are historical. Business behavior is unchanged; see [execution record](modular-refactor.md).
+
 **Document type:** System-wide Technical Architecture  
 **Version:** 0.3.1 — folder convention clarified 2026-10-11  
 **Owner:** RnD engineering, subject to PM approval for consequential scope, data and deployment changes  

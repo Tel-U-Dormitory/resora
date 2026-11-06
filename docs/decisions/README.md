@@ -9,3 +9,5 @@ Records include `Accepted`, `Proposed`, and `Deferred` decisions. `Accepted` mea
 | [0003](0003-event-qr-attendance.md) | Composable SR roster, session-bound QR and geofencing | Accepted behavior; event/context binding TBD, schema/protocol Proposed |
 | [0004](0004-pilot-scope-and-governance.md) | MVP NEED-001 and deadline | Accepted target with UAT requirements |
 | [0005](0005-deployment-and-integrations.md) | VPS/Docker and deferred institutional integrations | Planned / Deferred |
+
+| [0006](0006-modular-monolith.md) | Enforced modular monolith; unchanged business behavior | Accepted direction |

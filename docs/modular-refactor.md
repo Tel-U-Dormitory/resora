@@ -47,3 +47,9 @@ separately guarded local PostgreSQL; offline doubles do not prove SQL lock sched
 
 Each phase runs unit tests before its local commit and the next phase. Verification
 results and any remaining limits are recorded below; implementation is not release.
+
+## Phase 1 — accepted technical design
+
+ADR 0006 defines five domains, trusted server contracts, browser contracts,
+application coordination and unchanged physical database constraints. Focused
+baseline: 71 tests passed (Event editing, Check-in, Reporting), 0 failed.
