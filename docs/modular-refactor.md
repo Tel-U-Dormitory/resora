@@ -53,3 +53,9 @@ results and any remaining limits are recorded below; implementation is not relea
 ADR 0006 defines five domains, trusted server contracts, browser contracts,
 application coordination and unchanged physical database constraints. Focused
 baseline: 71 tests passed (Event editing, Check-in, Reporting), 0 failed.
+
+## Phase 2 — boundary guard
+
+Added TypeScript-AST import checks, browser dependency traversal, domain table
+ownership checks, negative fixtures, and CI invocation. Initial 28 exact transitional
+exceptions must shrink to zero. Unit verification: 27 passed, 0 failed.

@@ -44,10 +44,11 @@
 		"test:check-in": "bun --no-env-file test packages/api/src/modules/check-in/check-in.test.ts packages/api/src/modules/attendance/attendance.test.ts",
 		"test:offline": "bun --no-env-file scripts/test-offline.ts",
 		"test:loadtest": "bun --no-env-file test tests/resora-loadtest/loadtest.test.ts tests/resora-loadtest/provision-dev.test.ts",
-		"verify:pr": "pnpm --filter web exec next typegen && pnpm run lint && pnpm run check-types && pnpm run test:offline && pnpm run test:loadtest && pnpm run build",
+		"verify:pr": "pnpm --filter web exec next typegen && pnpm run check:architecture && pnpm run lint && pnpm run check-types && pnpm run test:offline && pnpm run test:loadtest && pnpm run build",
 		"lint": "biome check .",
 		"check": "biome check --write .",
-		"test:backup": "bun --no-env-file test apps/server/src/database-backup.test.ts packages/db/scripts/download-backup.integration.test.ts"
+		"test:backup": "bun --no-env-file test apps/server/src/database-backup.test.ts packages/db/scripts/download-backup.integration.test.ts",
+		"check:architecture": "bun --no-env-file scripts/check-architecture.ts"
 	},
 	"dependencies": {
 		"zod": "catalog:"
