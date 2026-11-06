@@ -1,11 +1,8 @@
 import { createHmac, hkdfSync, timingSafeEqual } from "node:crypto";
 import type { Database, DatabaseTransaction } from "@resora/db";
-import {
-	attendanceSessions,
-	events,
-	qrChallenges,
-} from "@resora/db/schema/attendance";
+import { attendanceSessions, qrChallenges } from "@resora/db/schema/attendance";
 import { eq } from "drizzle-orm";
+import { readEvent } from "../../events/events.public";
 
 function signature(secret: string, payload: string) {
 	if (secret.length < 32)
@@ -53,19 +50,19 @@ export async function verifySessionChallenge(
 		.select({
 			challenge: qrChallenges,
 			session: attendanceSessions,
-			event: events,
 		})
 		.from(qrChallenges)
 		.innerJoin(
 			attendanceSessions,
 			eq(attendanceSessions.id, qrChallenges.sessionId),
 		)
-		.innerJoin(events, eq(events.id, attendanceSessions.internalEventId))
 		.where(eq(qrChallenges.id, id));
+	if (!row) return null;
+	const [event] = await readEvent(db, row.session.internalEventId);
 	if (
-		!row ||
+		!event ||
 		row.session.id !== input.sessionId ||
-		row.event.status !== "PUBLISHED" ||
+		event.status !== "PUBLISHED" ||
 		row.session.status !== "ACTIVE" ||
 		!row.challenge.isCurrent ||
 		row.challenge.revokedAt ||
@@ -75,9 +72,9 @@ export async function verifySessionChallenge(
 		return null;
 	return {
 		sessionId: row.session.id,
-		internalEventId: row.event.id,
+		internalEventId: event.id,
 		challengeId: row.challenge.id,
-		startsAt: row.event.startsAt,
+		startsAt: event.startsAt,
 		centerLat: row.session.centerLat,
 		centerLng: row.session.centerLng,
 		geofenceRadiusM: row.session.geofenceRadiusM,

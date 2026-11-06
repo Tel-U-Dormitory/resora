@@ -4,13 +4,5 @@
   "apps/web/src/features/broadcast/broadcast-dialog.tsx -> apps/web/src/features/attendance/event-ui.tsx: private feature import",
   "apps/web/src/features/broadcast/broadcast-feed.tsx -> apps/web/src/features/attendance/event-ui.tsx: private feature import",
   "apps/web/src/features/broadcast/broadcast-ui.ts -> apps/web/src/features/attendance/event-ui.tsx: private feature import",
-  "apps/web/src/features/identity/sr-dashboard.tsx -> apps/web/src/features/broadcast/broadcast-feed.tsx: private feature import",
-  "packages/api/src/modules/attendance/check-in/check-in.ts -> packages/db/src/schema/attendance.ts#eventParticipants: foreign table access",
-  "packages/api/src/modules/attendance/check-in/check-in.ts -> packages/db/src/schema/attendance.ts#events: foreign table access",
-  "packages/api/src/modules/attendance/check-in/qr.ts -> packages/db/src/schema/attendance.ts#events: foreign table access",
-  "packages/api/src/modules/attendance/manual-attendance.ts -> packages/db/src/schema/attendance.ts#eventParticipants: foreign table access",
-  "packages/api/src/modules/attendance/manual-attendance.ts -> packages/db/src/schema/attendance.ts#events: foreign table access",
-  "packages/api/src/modules/attendance/reporting.ts -> packages/db/src/schema/attendance.ts#eventParticipants: foreign table access",
-  "packages/api/src/modules/attendance/reporting.ts -> packages/db/src/schema/attendance.ts#events: foreign table access",
-  "packages/api/src/modules/attendance/reporting.ts -> packages/db/src/schema/auth.ts#user: foreign table access"
+  "apps/web/src/features/identity/sr-dashboard.tsx -> apps/web/src/features/broadcast/broadcast-feed.tsx: private feature import"
 ]

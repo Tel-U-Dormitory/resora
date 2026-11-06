@@ -7,8 +7,8 @@ import type { Database } from "@resora/db";
 import { attendanceRecords } from "@resora/db/schema/attendance";
 import { getTableName } from "drizzle-orm";
 import { getTableConfig } from "drizzle-orm/pg-core";
-import { appRouter } from "../../../routers";
 import { checkInSchema } from "../../../contracts/attendance";
+import { appRouter } from "../../../routers";
 import { getActiveSrDirectory } from "../../identity/identity.public";
 import { checkIn } from "./check-in";
 import {

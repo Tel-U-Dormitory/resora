@@ -25,11 +25,14 @@ export {
 	invitationSnapshots,
 	listInvitedEvents,
 	listManagedEvents,
+	lockEventForCheckIn,
 	lockEventForManagement,
+	ownInvitedEventHistory,
 	publishInternalDraft,
 	readEvent,
 	recordDraftDeletion,
 	removeInvitationsBeforeAttendance,
 	replaceDraftDetails,
+	reportInvitationSnapshots,
 } from "./event-operations";
 export { resolveCommitteeRoster, resolveRoster } from "./roster";

@@ -7,7 +7,6 @@ import type { Database } from "@resora/db";
 import { attendanceAuditLogs } from "@resora/db/schema/attendance";
 import { getTableName, type SQL } from "drizzle-orm";
 import { getTableConfig, PgDialect } from "drizzle-orm/pg-core";
-import { appRouter } from "../../routers";
 import {
 	eventDraftSchema,
 	manualCorrectSchema,
@@ -15,6 +14,7 @@ import {
 	ownHistorySchema,
 	rosterSchema,
 } from "../../contracts/attendance";
+import { appRouter } from "../../routers";
 import { manualCorrect, manualInsert } from "./manual-attendance";
 import { auditHistory, exportCsv, ownHistory, recap } from "./reporting";
 import {
@@ -220,7 +220,7 @@ function fixture() {
 	};
 	const event = {
 		organizationContext: undefined as "SR" | "COMMITTEE" | undefined,
-		committeeName: null as string | null,
+		snapshotCommitteeName: null as string | null,
 		id: randomUUID(),
 		title: "Synthetic",
 		status: "PUBLISHED",
@@ -318,9 +318,24 @@ function fixture() {
 				// biome-ignore lint/suspicious/noThenProperty: Drizzle queries are awaitable; this mirrors their test contract.
 				then: (resolve: (rows: unknown[]) => unknown) => {
 					let rows: unknown[] = [];
+					const reports = state.reports as {
+						participant?: Record<string, unknown>;
+						record?: Record<string, unknown> | null;
+						event?: typeof event;
+					}[];
+					if (table === "user")
+						rows = [
+							...new Set([
+								identity.userId,
+								...state.audits.map((a) => a.actorUserId),
+							]),
+						].map((userId) => ({ userId, name: "Synthetic HCO" }));
 					if (table === "events")
 						rows = selection?.event ? [{ event, session }] : [event];
-					if (table === "attendance_sessions") rows = [session];
+					if (table === "attendance_sessions")
+						rows = selection?.session
+							? reports.map((row) => ({ session, record: row.record ?? null }))
+							: [session];
 					if (table === "qr_challenges") rows = state.qr ? [state.qr] : [];
 					if (table === "system_privileges" && state.superadmin)
 						rows = [{ userId: identity.userId }];
@@ -330,9 +345,23 @@ function fixture() {
 							: state.record
 								? [state.record]
 								: [];
+					if (
+						table === "attendance_records" &&
+						selection?.userId &&
+						selection?.attendanceAt
+					)
+						rows = reports
+							.filter((row) => row.record)
+							.map((row) => ({
+								...row.record,
+								userId: row.participant?.userId ?? row.record?.userId,
+							}));
 					if (table === "event_participants")
-						rows =
-							joined || selection?.participant
+						rows = selection?.nim
+							? reports
+									.filter((row) => row.participant)
+									.map((row) => row.participant!)
+							: joined || selection?.participant
 								? state.reports
 								: state.invited
 									? [{ userId: "synthetic-target" }]
@@ -631,7 +660,7 @@ test("recap starts at historical snapshots including missing records; origin/GPS
 test("Phase 4 recap exposes historical committee snapshots, nullable guests and unchanged global lifecycle counts", async () => {
 	const f = fixture();
 	f.event.organizationContext = "COMMITTEE";
-	f.event.committeeName = "Historical Welday";
+	f.event.snapshotCommitteeName = "Historical Welday";
 	const participant = {
 		userId: "one",
 		nim: "0001",

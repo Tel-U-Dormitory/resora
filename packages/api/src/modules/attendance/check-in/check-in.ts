@@ -3,13 +3,15 @@ import type { Database } from "@resora/db";
 import {
 	attendanceRecords,
 	attendanceSessions,
-	eventParticipants,
-	events,
 	qrChallenges,
 } from "@resora/db/schema/attendance";
 import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
 import type { CheckInInput } from "../../../contracts/attendance";
+import {
+	invitationForUser,
+	lockEventForCheckIn,
+} from "../../events/events.public";
 import {
 	canAccessPersonalSr,
 	getCheckInSr,
@@ -46,11 +48,7 @@ export async function checkIn(
 		if (!binding) denied("INVALID_QR");
 		// Shared locks allow independent check-ins, but block administrative state/QR
 		// changes through lockedEvent(). Keep event -> session order; never upgrade here.
-		const [event] = await tx
-			.select()
-			.from(events)
-			.where(eq(events.id, binding.eventId))
-			.for("share");
+		const [event] = await lockEventForCheckIn(tx, binding.eventId);
 		const [session] = await tx
 			.select()
 			.from(attendanceSessions)
@@ -64,15 +62,7 @@ export async function checkIn(
 			denied("SESSION_INACTIVE");
 		// Re-read/lock live eligibility through Identity's public interface, not cached client claims.
 		if (!(await getCheckInSr(tx, identity.userId))) denied("NOT_ELIGIBLE");
-		const [invitation] = await tx
-			.select({ userId: eventParticipants.userId })
-			.from(eventParticipants)
-			.where(
-				and(
-					eq(eventParticipants.eventId, event.id),
-					eq(eventParticipants.userId, identity.userId),
-				),
-			);
+		const [invitation] = await invitationForUser(tx, event.id, identity.userId);
 		if (!invitation) denied("NOT_INVITED");
 		const now = new Date(); // After lock waits; never a client timestamp or scheduled-end cutoff.
 		const verified = await verifySessionChallenge(

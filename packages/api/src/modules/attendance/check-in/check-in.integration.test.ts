@@ -21,8 +21,8 @@ import {
 import { assignSyntheticSrTenure } from "@resora/db/sr-tenure.fixture";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { readMigrationFiles } from "drizzle-orm/migrator";
-import { eventDraftSchema } from "../../../contracts/attendance";
 import * as service from "../../../application/internal-events";
+import { eventDraftSchema } from "../../../contracts/attendance";
 import {
 	localProvisioningTarget,
 	verifyLocalProvisioningDatabase,

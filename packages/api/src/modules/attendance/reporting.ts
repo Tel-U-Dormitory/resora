@@ -4,20 +4,26 @@ import {
 	attendanceAuditLogs,
 	attendanceRecords,
 	attendanceSessions,
-	eventParticipants,
-	events,
 } from "@resora/db/schema/attendance";
-import { user } from "@resora/db/schema/auth";
 import { TRPCError } from "@trpc/server";
-import { and, asc, desc, eq, ne } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import type { z } from "zod";
+import {
+	auditHistorySchema,
+	ownHistorySchema,
+} from "../../contracts/attendance";
+import {
+	ownInvitedEventHistory,
+	readEvent,
+	reportInvitationSnapshots,
+} from "../events/events.public";
 import {
 	canAccessPersonalSr,
 	canManageInternalEvent,
 	canManageManualAttendance,
+	getUserDisplayNames,
 	isValidSrAssignment,
 } from "../identity/identity.public";
-import { auditHistorySchema, ownHistorySchema } from "../../contracts/attendance";
 import {
 	filterRecapParticipants,
 	type RecapFilters,
@@ -30,17 +36,6 @@ const recordFields = {
 	timingClass: attendanceRecords.timingClass,
 	source: attendanceRecords.source,
 };
-const snapshotFields = {
-	userId: eventParticipants.userId,
-	nim: eventParticipants.nim,
-	name: eventParticipants.name,
-	departmentCode: eventParticipants.departmentCode,
-	positionCode: eventParticipants.positionCode,
-	buildingCode: eventParticipants.buildingCode,
-	buildingName: eventParticipants.buildingName,
-	committeeDivision: eventParticipants.committeeDivision,
-	committeePosition: eventParticipants.committeePosition,
-};
 
 export async function recap(
 	db: Database,
@@ -52,45 +47,44 @@ export async function recap(
 	// The context and participant report share one MVCC snapshot even if close/correct races a read.
 	return db.transaction(
 		async (tx) => {
-			const [context] = await tx
+			const [event] = await readEvent(tx, eventId);
+			const [session] = await tx
 				.select({
-					event: {
-						id: events.id,
-						title: events.title,
-						status: events.status,
-						startsAt: events.startsAt,
-						closedAt: events.closedAt,
-						organizationContext: events.organizationContext,
-						committeeName: events.snapshotCommitteeName,
-					},
-					session: {
-						id: attendanceSessions.id,
-						lateGraceMinutes: attendanceSessions.lateGraceMinutes,
-					},
+					id: attendanceSessions.id,
+					lateGraceMinutes: attendanceSessions.lateGraceMinutes,
 				})
-				.from(events)
-				.innerJoin(
-					attendanceSessions,
-					eq(attendanceSessions.internalEventId, events.id),
-				)
-				.where(eq(events.id, eventId));
+				.from(attendanceSessions)
+				.where(eq(attendanceSessions.internalEventId, eventId));
+			const context =
+				event && session
+					? {
+							event: {
+								id: event.id,
+								title: event.title,
+								status: event.status,
+								startsAt: event.startsAt,
+								closedAt: event.closedAt,
+								organizationContext: event.organizationContext,
+								committeeName: event.snapshotCommitteeName,
+							},
+							session,
+						}
+					: null;
 			if (!context || context.event.status === "DRAFT")
 				throw new TRPCError({
 					code: "NOT_FOUND",
 					message: "RECAP_UNAVAILABLE",
 				});
-			const rows = await tx
-				.select({ participant: snapshotFields, record: recordFields })
-				.from(eventParticipants)
-				.leftJoin(
-					attendanceRecords,
-					and(
-						eq(attendanceRecords.sessionId, context.session.id),
-						eq(attendanceRecords.userId, eventParticipants.userId),
-					),
-				)
-				.where(eq(eventParticipants.eventId, eventId))
-				.orderBy(asc(eventParticipants.nim), asc(eventParticipants.userId));
+			const invitations = await reportInvitationSnapshots(tx, eventId);
+			const records = await tx
+				.select({ userId: attendanceRecords.userId, ...recordFields })
+				.from(attendanceRecords)
+				.where(eq(attendanceRecords.sessionId, context.session.id));
+			const byUser = new Map(records.map((record) => [record.userId, record]));
+			const rows = invitations.map((participant) => ({
+				participant,
+				record: byUser.get(participant.userId) ?? null,
+			}));
 			const participants = rows.map(({ participant, record }) => ({
 				...participant,
 				committeeDivision: participant.committeeDivision ?? null,
@@ -164,47 +158,56 @@ export async function ownHistory(
 	)
 		throw new TRPCError({ code: "FORBIDDEN" });
 	const { limit, offset } = ownHistorySchema.parse(input);
-	const rows = await db
-		.select({
-			event: {
-				id: events.id,
-				title: events.title,
-				status: events.status,
-				startsAt: events.startsAt,
-				endsAt: events.endsAt,
-			},
-			grace: attendanceSessions.lateGraceMinutes,
-			record: recordFields,
-		})
-		.from(eventParticipants)
-		.innerJoin(events, eq(events.id, eventParticipants.eventId))
-		.innerJoin(
-			attendanceSessions,
-			eq(attendanceSessions.internalEventId, events.id),
-		)
-		.leftJoin(
-			attendanceRecords,
-			and(
-				eq(attendanceRecords.sessionId, attendanceSessions.id),
-				eq(attendanceRecords.userId, eventParticipants.userId),
-			),
-		)
-		.where(
-			and(
-				eq(eventParticipants.userId, identity.userId),
-				ne(events.status, "DRAFT"),
-			),
-		)
-		.orderBy(desc(events.startsAt), desc(events.id))
-		.limit(limit + 1)
-		.offset(offset);
-	return {
-		items: rows.slice(0, limit).map(({ event, grace, record }) => ({
-			event,
-			...reportAttendance(record, event.status, event.startsAt, grace),
-		})),
-		nextOffset: rows.length > limit ? offset + limit : null,
-	};
+	return db.transaction(
+		async (tx) => {
+			const events = await ownInvitedEventHistory(
+				tx,
+				identity.userId,
+				limit + 1,
+				offset,
+			);
+			const eventIds = events.map((row) => row.event.id);
+			const attendance = eventIds.length
+				? await tx
+						.select({
+							session: {
+								internalEventId: attendanceSessions.internalEventId,
+								lateGraceMinutes: attendanceSessions.lateGraceMinutes,
+							},
+							record: recordFields,
+						})
+						.from(attendanceSessions)
+						.leftJoin(
+							attendanceRecords,
+							and(
+								eq(attendanceRecords.sessionId, attendanceSessions.id),
+								eq(attendanceRecords.userId, identity.userId),
+							),
+						)
+						.where(inArray(attendanceSessions.internalEventId, eventIds))
+				: [];
+			const byEvent = new Map(
+				attendance.map((row) => [row.session.internalEventId, row]),
+			);
+			const rows = events.map(({ event }) => {
+				const data = byEvent.get(event.id);
+				if (!data) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+				return {
+					event,
+					grace: data.session.lateGraceMinutes,
+					record: data.record,
+				};
+			});
+			return {
+				items: rows.slice(0, limit).map(({ event, grace, record }) => ({
+					event,
+					...reportAttendance(record, event.status, event.startsAt, grace),
+				})),
+				nextOffset: rows.length > limit ? offset + limit : null,
+			};
+		},
+		{ isolationLevel: "repeatable read", accessMode: "read only" },
+	);
 }
 
 export async function auditHistory(
@@ -219,14 +222,13 @@ export async function auditHistory(
 		.select({
 			id: attendanceAuditLogs.id,
 			action: attendanceAuditLogs.action,
-			operator: user.name,
+			actorUserId: attendanceAuditLogs.actorUserId,
 			createdAt: attendanceAuditLogs.createdAt,
 			reason: attendanceAuditLogs.reason,
 			before: attendanceAuditLogs.beforeState,
 			after: attendanceAuditLogs.afterState,
 		})
 		.from(attendanceAuditLogs)
-		.innerJoin(user, eq(user.id, attendanceAuditLogs.actorUserId))
 		.innerJoin(
 			attendanceSessions,
 			eq(attendanceSessions.id, attendanceAuditLogs.sessionId),
@@ -240,12 +242,16 @@ export async function auditHistory(
 		.orderBy(desc(attendanceAuditLogs.createdAt), desc(attendanceAuditLogs.id))
 		.limit(data.limit + 1)
 		.offset(data.offset);
+	const names = await getUserDisplayNames(
+		db,
+		rows.map((row) => row.actorUserId),
+	);
 	// Deliberate projection, not arbitrary JSON/raw record disclosure.
 	return {
 		items: rows.slice(0, data.limit).map((row) => ({
 			id: row.id,
 			action: row.action,
-			operator: row.operator,
+			operator: names.get(row.actorUserId) ?? "",
 			createdAt: row.createdAt,
 			reason: row.reason,
 			before: row.before

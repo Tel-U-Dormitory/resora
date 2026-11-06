@@ -7,7 +7,7 @@ import {
 	events,
 	type RosterCriteria,
 } from "@resora/db/schema/attendance";
-import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import type { EventDraft, EventListInput } from "../../contracts/attendance";
 import type { SrCandidate } from "../identity/identity.public";
 
@@ -315,4 +315,56 @@ export async function closePublishedEvent(db: Db, eventId: string, now: Date) {
 		.update(events)
 		.set({ status: "CLOSED", closedAt: now })
 		.where(eq(events.id, eventId));
+}
+
+// Attendance calls these after checking its own operator scope. Lock order is
+// Event -> Session -> live Identity; these reads do not grant mutation authority.
+export async function lockEventForCheckIn(db: Db, eventId: string) {
+	return await db
+		.select()
+		.from(events)
+		.where(eq(events.id, eventId))
+		.for("share");
+}
+export async function reportInvitationSnapshots(db: Db, eventId: string) {
+	return await db
+		.select({
+			userId: eventParticipants.userId,
+			nim: eventParticipants.nim,
+			name: eventParticipants.name,
+			departmentCode: eventParticipants.departmentCode,
+			positionCode: eventParticipants.positionCode,
+			buildingCode: eventParticipants.buildingCode,
+			buildingName: eventParticipants.buildingName,
+			committeeDivision: eventParticipants.committeeDivision,
+			committeePosition: eventParticipants.committeePosition,
+		})
+		.from(eventParticipants)
+		.where(eq(eventParticipants.eventId, eventId))
+		.orderBy(asc(eventParticipants.nim), asc(eventParticipants.userId));
+}
+export async function ownInvitedEventHistory(
+	db: Db,
+	userId: string,
+	limit: number,
+	offset: number,
+) {
+	return await db
+		.select({
+			event: {
+				id: events.id,
+				title: events.title,
+				status: events.status,
+				startsAt: events.startsAt,
+				endsAt: events.endsAt,
+			},
+		})
+		.from(eventParticipants)
+		.innerJoin(events, eq(events.id, eventParticipants.eventId))
+		.where(
+			and(eq(eventParticipants.userId, userId), ne(events.status, "DRAFT")),
+		)
+		.orderBy(desc(events.startsAt), desc(events.id))
+		.limit(limit)
+		.offset(offset);
 }

@@ -94,3 +94,18 @@ Verification: 45 domain tests passed; API typecheck passed. Full offline run had
 445 pass and one CI-script expectation failure after adding the architecture gate;
 updated that expected gate, then all 49 tests in the affected suites passed.
 Remaining 14 boundary exceptions are Attendance/FE work for phases 7–8.
+
+## Phase 7 — Attendance consumers
+
+Attendance/check-in/manual/reporting now obtain Event facts through public
+operations. Recap composes ordered invitation snapshots with Attendance records;
+own history paginates Event invitations then batch-reads sessions/records within
+repeatable read. Audit operator names use batched Identity reads. Unit doubles
+were updated for separate owned queries while retaining workflow assertions.
+
+Verification: 47 focused unit tests, API typecheck, and **81 real PostgreSQL
+integration tests across six suites passed**, including QR locks, Event admin,
+Committee, Broadcast, permission revoke/write races and account lifecycle. Initial
+Docker NAT was refused by the existing host/port guard; reran on a dedicated
+loopback-bound synthetic container without changing the guard. No application
+database was used. Six remaining exceptions are frontend imports only.

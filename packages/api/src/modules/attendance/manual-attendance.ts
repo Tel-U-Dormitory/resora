@@ -4,18 +4,23 @@ import {
 	attendanceAuditLogs,
 	attendanceRecords,
 	attendanceSessions,
-	eventParticipants,
-	events,
 } from "@resora/db/schema/attendance";
 import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
 import type { z } from "zod";
 import {
+	manualCorrectSchema,
+	manualInsertSchema,
+} from "../../contracts/attendance";
+import {
+	invitationForUser,
+	lockEventForManagement,
+} from "../events/events.public";
+import {
 	canManageManualAttendance,
 	getActiveSrCandidate,
 	getLiveOperationalIdentity,
 } from "../identity/identity.public";
-import { manualCorrectSchema, manualInsertSchema } from "../../contracts/attendance";
 import {
 	auditState,
 	classifyTiming,
@@ -39,11 +44,7 @@ async function lockContext(
 	identity: ActiveIdentity,
 	eventId: string,
 ) {
-	const [event] = await tx
-		.select()
-		.from(events)
-		.where(eq(events.id, eventId))
-		.for("update");
+	const [event] = await lockEventForManagement(tx, eventId);
 	if (!event) throw new TRPCError({ code: "NOT_FOUND" });
 	const [session] = await tx
 		.select()
@@ -67,15 +68,7 @@ async function requireInvitation(
 	eventId: string,
 	userId: string,
 ) {
-	const [invitation] = await tx
-		.select({ userId: eventParticipants.userId })
-		.from(eventParticipants)
-		.where(
-			and(
-				eq(eventParticipants.eventId, eventId),
-				eq(eventParticipants.userId, userId),
-			),
-		);
+	const [invitation] = await invitationForUser(tx, eventId, userId);
 	if (!invitation)
 		throw new TRPCError({ code: "FORBIDDEN", message: "NOT_INVITED" });
 }
