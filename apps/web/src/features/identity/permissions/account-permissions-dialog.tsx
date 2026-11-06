@@ -8,7 +8,7 @@ import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { queryErrorMessage } from "@/utils/request-error";
 import { queryClient, trpc, trpcClient } from "@/utils/trpc";
-import { AccountModal } from "./account-modal";
+import { AccountModal } from "../accounts/account-modal";
 
 function permissionError(error: unknown) {
 	if (error instanceof TRPCClientError) {

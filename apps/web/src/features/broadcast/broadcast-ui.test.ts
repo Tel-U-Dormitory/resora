@@ -612,7 +612,7 @@ test("expiry/ownership conflict refreshes authoritative data without optimistic 
 
 test("B2 uses session capability and preserves SSR guards, dashboard shortcuts and plain text boundaries", () => {
 	const dashboard = readFileSync(
-		new URL("../identity/sr-dashboard.tsx", import.meta.url),
+		new URL("../identity/server/sr-dashboard.tsx", import.meta.url),
 		"utf8",
 	);
 	expect(dashboard).toContain(

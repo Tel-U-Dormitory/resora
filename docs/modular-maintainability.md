@@ -36,3 +36,13 @@ separate; Attendance session queries/commands have a capability folder. Pure ros
 comparison/visibility policy lives in Events. Public fact reads use explicit column
 projections so later schema additions do not silently become DTO fields.
 Verification: 64 workflow/command/audit tests passed, API types and boundaries passed.
+
+## Phase 3 result
+
+Identity UI is grouped into auth, accounts, permissions, periods, profile and server
+capabilities behind its existing public/server entries. Event form/detail now compose
+focused model, roster, schedule, session, invitation and administration components.
+No route, tRPC contract or user workflow changed. Existing source/callback tests
+follow the composed components rather than relying on one monolithic source file.
+Verification: 113 frontend tests passed; web typecheck, boundary checks and production
+Next.js build passed. Manual browser/UAT was not requested or performed.

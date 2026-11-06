@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { queryErrorMessage } from "@/utils/request-error";
 import { queryClient, trpc } from "@/utils/trpc";
-import PasswordChangeForm from "./password-change-form";
+import PasswordChangeForm from "../auth/password-change-form";
 
 const themes = [
 	{ value: "light", label: "Terang", icon: Sun },

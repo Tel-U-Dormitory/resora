@@ -131,7 +131,7 @@ function fixture(file = "./account-permissions-dialog.tsx") {
 			__esModule: true,
 			default: "AccountPasswordReset",
 		},
-		"./account-permissions-dialog": {
+		"../permissions/account-permissions-dialog": {
 			__esModule: true,
 			default: "AccountPermissionsDialog",
 		},
@@ -149,6 +149,8 @@ function fixture(file = "./account-permissions-dialog.tsx") {
 		TooltipTrigger: "TooltipTrigger",
 		TooltipContent: "TooltipContent",
 	};
+	mocks["../accounts/account-modal"] = mocks["./account-modal"];
+
 	const js = ts.transpileModule(
 		readFileSync(new URL(file, import.meta.url), "utf8"),
 		{
@@ -227,7 +229,7 @@ function submit(tree: Element) {
 }
 
 test("account action preserves edit/archive/password reset and opens a target-keyed permission dialog", () => {
-	const f = fixture("./account-actions.tsx");
+	const f = fixture("../accounts/account-actions.tsx");
 	const render = () => f.render({ account });
 	let tree = render();
 	expect(nodes(tree).some((item) => item.type === "AccountPasswordReset")).toBe(

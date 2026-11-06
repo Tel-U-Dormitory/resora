@@ -95,7 +95,7 @@ test("type-only references are safe and frontend feature boundaries reject priva
 					"apps/web/src/features/broadcast/view.tsx",
 					'import "../identity/login-form";',
 				],
-				["apps/web/src/features/identity/login-form.tsx", ""],
+				["apps/web/src/features/identity/auth/login-form.tsx", ""],
 			]),
 		).join(),
 	).toContain("private feature import");

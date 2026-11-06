@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { queryErrorMessage } from "@/utils/request-error";
 import { queryClient, trpc, trpcClient } from "@/utils/trpc";
-import { AccountModal } from "./account-modal";
+import { AccountModal } from "../accounts/account-modal";
 
 export default function AccountPeriodManager({
 	selected,

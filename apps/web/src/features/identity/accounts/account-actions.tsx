@@ -15,9 +15,9 @@ import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { queryErrorMessage } from "@/utils/request-error";
 import { queryClient, trpc, trpcClient } from "@/utils/trpc";
+import AccountPermissionsDialog from "../permissions/account-permissions-dialog";
 import { AccountModal } from "./account-modal";
 import AccountPasswordReset from "./account-password-reset";
-import AccountPermissionsDialog from "./account-permissions-dialog";
 
 type ManagedAccount = Awaited<
 	ReturnType<typeof trpcClient.identity.accountSnapshot.query>

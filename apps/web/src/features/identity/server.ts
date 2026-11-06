@@ -1,2 +1,2 @@
-export { getSrSession } from "./server-session";
-export { default as SrDashboard } from "./sr-dashboard";
+export { getSrSession } from "./server/server-session";
+export { default as SrDashboard } from "./server/sr-dashboard";
