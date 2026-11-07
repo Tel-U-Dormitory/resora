@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import CommitteeDetail from "@/features/committee/committee-detail";
+import { CommitteeDetail } from "@/features/committee/public";
 
 export default async function CommitteePage({
 	params,

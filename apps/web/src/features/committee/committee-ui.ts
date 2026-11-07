@@ -1,4 +1,4 @@
-import { committeePositionLabels as positionLabels } from "@resora/api/modules/committee/committee-positions";
+import { committeePositionLabels as positionLabels } from "@resora/api/modules/committee/committee.contracts";
 export const committeePositionLabels: Record<string, string> = positionLabels;
 
 export function committeeError(error: unknown) {

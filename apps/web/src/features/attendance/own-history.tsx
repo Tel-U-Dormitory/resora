@@ -18,7 +18,7 @@ import {
 	eventErrorMessage,
 	formatEventSchedule,
 	StatusBadge,
-} from "./event-ui";
+} from "../../components/event-feedback";
 
 const checkInFormatter = new Intl.DateTimeFormat("id-ID", {
 	timeStyle: "short",

@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { trpc } from "@/utils/trpc";
-import { formatEventTime } from "../attendance/event-ui";
+import { formatEventTime } from "../../components/event-feedback";
 import { BroadcastDialog } from "./broadcast-dialog";
 import {
 	type BroadcastAction,

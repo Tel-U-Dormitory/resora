@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { MAX_GPS_ACCURACY_M as backendAccuracy } from "@resora/api/modules/check-in/check-in-policy";
 import { TRPCClientError } from "@trpc/client";
 import QrScanner from "qr-scanner";
 import * as jsxRuntime from "react/jsx-runtime";
 import ts from "typescript";
+import { MAX_GPS_ACCURACY_M as backendAccuracy } from "../../../../../packages/api/src/modules/attendance/check-in/check-in-policy";
 import {
 	acquireLocation,
 	freshPosition,
@@ -414,10 +414,14 @@ function scannerFixture(realCameraLifecycle = false) {
 		"@/utils/trpc": {
 			trpc: { attendance: { checkIn: { mutationOptions: () => ({}) } } },
 		},
-		"./attendance-queries": { refreshAttendanceQueries: async () => {} },
+		"../../utils/internal-event-queries": {
+			refreshAttendanceQueries: async () => {},
+		},
 		"./check-in-location": { acquireLocation, freshPosition },
 		"./check-in-ui": { releaseCamera, scannerErrorMessage },
-		"./event-ui": { formatEventTime: (value: string) => value },
+		"../../components/event-feedback": {
+			formatEventTime: (value: string) => value,
+		},
 	};
 	const source = readFileSync(
 		new URL("./check-in-scanner.tsx", import.meta.url),

@@ -4,7 +4,7 @@ import { TRPCClientError } from "@trpc/client";
 import * as jsxRuntime from "react/jsx-runtime";
 import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
-import { formatEventTime } from "../attendance/event-ui";
+import { formatEventTime } from "../../components/event-feedback";
 import * as broadcastUi from "./broadcast-ui";
 
 const item: broadcastUi.Broadcast = {
@@ -115,7 +115,7 @@ function fixture(file: string) {
 			},
 		},
 		"./broadcast-ui": broadcastUi,
-		"../attendance/event-ui": {
+		"../../components/event-feedback": {
 			formatEventTime,
 			toWibDateTimeInput: (value: string) =>
 				new Date(new Date(value).getTime() + 7 * 3600000)
@@ -612,7 +612,7 @@ test("expiry/ownership conflict refreshes authoritative data without optimistic 
 
 test("B2 uses session capability and preserves SSR guards, dashboard shortcuts and plain text boundaries", () => {
 	const dashboard = readFileSync(
-		new URL("../identity/sr-dashboard.tsx", import.meta.url),
+		new URL("../identity/server/sr-dashboard.tsx", import.meta.url),
 		"utf8",
 	);
 	expect(dashboard).toContain(

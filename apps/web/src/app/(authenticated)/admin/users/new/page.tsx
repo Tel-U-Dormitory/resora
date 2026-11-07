@@ -1,4 +1,4 @@
-import AccountCreateForm from "@/features/identity/account-create-form";
+import { AccountCreateForm } from "@/features/identity/public";
 
 export default function AccountCreatePage() {
 	return <AccountCreateForm />;

@@ -2,17 +2,15 @@ import { createHash, randomBytes } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import {
+	BootstrapError,
 	type InitialCredential,
-	prepareCredentials,
-} from "../../packages/api/src/modules/provisioning/provisioning-credentials";
-import {
 	maxCsvBytes,
 	ProvisioningError,
 	parseSrCsv,
+	prepareCredentials,
+	provisionSrAccounts,
 	type SrImportRow,
-} from "../../packages/api/src/modules/provisioning/provisioning-csv";
-import { provisionSrAccounts } from "../../packages/api/src/modules/provisioning/sr-provisioning";
-import { BootstrapError } from "../../packages/api/src/modules/provisioning/system-admin-bootstrap";
+} from "../../packages/api/src/modules/identity/identity-provisioning.public";
 import { createDb, type Database } from "../../packages/db/src/index";
 
 const projectRoot = resolve(import.meta.dir, "../..");

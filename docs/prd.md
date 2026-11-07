@@ -16,6 +16,12 @@
 
 **Administrator lifecycle update approved (2026-10-19):** Instant cached account search, audited SR password reset with mandatory rotation after reset, period membership/renewal and access expiry with preserved history are approved. Dedicated SYSTEM_ADMIN is exempt from SR tenure expiry. See [module requirements](modules/need-001/prd.md#approved-administrator-account-lifecycle-update-2026-10-19).
 
+> **2026-11-06 structural refactor:** [ADR 0006](decisions/0006-modular-monolith.md)
+> separates module ownership without changing approved business rules, public API,
+> Committee–Event cardinality, participant eligibility, snapshot/advanced-edit rules,
+> or exactly-one-session behavior. External participants and expanded dynamic rosters
+> are separate future product decisions, not delivered by this refactor.
+
 ## 1. Product overview and objectives
 
 RESORA is an integrated digital platform for operations and services related to the Telkom University dormitory and Senior Residents (SR). Its candidate domains include internal SR attendance, student activities, inspections, resident services, SR performance, inventory, content/CoD, feedback, and analytics. Public landing pages, content delivery, and management interfaces may use distinct subdomains within the same product; final hostnames remain undecided.

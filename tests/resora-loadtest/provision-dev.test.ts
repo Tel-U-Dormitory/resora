@@ -8,12 +8,12 @@ import {
 	encodeCsv,
 	ProvisioningError,
 	readCsv,
-} from "../../packages/api/src/modules/provisioning/provisioning-csv";
+} from "../../packages/api/src/modules/identity/provisioning/provisioning-csv";
 import {
 	localProvisioningTarget,
 	provisionSrAccounts,
-} from "../../packages/api/src/modules/provisioning/sr-provisioning";
-import { BootstrapError } from "../../packages/api/src/modules/provisioning/system-admin-bootstrap";
+} from "../../packages/api/src/modules/identity/provisioning/sr-provisioning";
+import { BootstrapError } from "../../packages/api/src/modules/identity/provisioning/system-admin-bootstrap";
 import type { Database } from "../../packages/db/src/index";
 import { getPoolConfig } from "../../packages/db/src/pool-config";
 import { account, user } from "../../packages/db/src/schema/auth";

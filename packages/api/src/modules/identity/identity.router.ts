@@ -15,37 +15,37 @@ import { z } from "zod";
 
 import { protectedProcedure, publicProcedure, router } from "../../index";
 import {
-	accountReferences,
-	createAccount,
-	listAccounts,
-	maintainAccount,
-	resetAccountPassword,
-} from "../accounts/account-admin";
-import {
-	archiveAccountSchema,
-	createAccountSchema,
-	listAccountsSchema,
-	resetAccountPasswordSchema,
-	updateAccountSchema,
-} from "../accounts/account-admin.schema";
-import {
-	assignPeriod,
-	createPeriod,
-	extendPeriod,
-	listPeriods,
-} from "../accounts/account-period";
-import {
-	assignPeriodSchema,
-	createPeriodSchema,
-	extendPeriodSchema,
-} from "../accounts/account-period.schema";
-import {
 	accountPermissions,
 	accountPermissionsSchema,
 	getPermissionCatalog,
 	setAccountPermission,
 	setAccountPermissionSchema,
 } from "./account-permissions";
+import {
+	accountReferences,
+	createAccount,
+	listAccounts,
+	maintainAccount,
+	resetAccountPassword,
+} from "./accounts/account-admin";
+import {
+	archiveAccountSchema,
+	createAccountSchema,
+	listAccountsSchema,
+	resetAccountPasswordSchema,
+	updateAccountSchema,
+} from "./accounts/account-admin.schema";
+import {
+	assignPeriod,
+	createPeriod,
+	extendPeriod,
+	listPeriods,
+} from "./accounts/account-period";
+import {
+	assignPeriodSchema,
+	createPeriodSchema,
+	extendPeriodSchema,
+} from "./accounts/account-period.schema";
 import { canManageManualAttendance } from "./identity.public";
 import {
 	canManageBroadcast,
