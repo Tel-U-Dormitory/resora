@@ -2,21 +2,31 @@ name: CD — Publish Images
 
 on:
   push:
-    branches: [staging]
+    branches: [staging, main]
 
 permissions:
   contents: read
-  packages: write
 
-# Serialize publication; a newer staging push does not cancel an in-flight pair.
+# Serialize each branch through deployment; retain up to 100 pending runs.
 concurrency:
-  group: ghcr-publish-staging
+  group: ghcr-publish-${{ github.ref_name }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
+  quality:
+    uses: ./.github/workflows/ci.yml
+
   publish:
+    needs: quality
+    permissions:
+      contents: read
+      packages: write
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    outputs:
+      server_digest: ${{ steps.server.outputs.digest }}
+      web_digest: ${{ steps.web.outputs.digest }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -30,6 +40,7 @@ jobs:
       # Both builds use synthetic templates via BuildKit secret mounts.
       # No production env, database, migration, or deployment is needed.
       - name: Build and publish server
+        id: server
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -46,6 +57,7 @@ jobs:
             web_env=apps/web/.env.example
             server_env=apps/server/.env.example
       - name: Build and publish web
+        id: web
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -65,3 +77,35 @@ jobs:
           secret-files: |
             web_env=apps/web/.env.example
             server_env=apps/server/.env.example
+
+  deploy:
+    needs: publish
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      # Environment-scoped vars are available after entering the environment.
+      # Do not put CD_ENABLED at job level: environment vars are unavailable there.
+      - name: Deployment disabled
+        if: vars.CD_ENABLED != 'true'
+        run: echo 'Production deployment disabled; no SSH connection will be made.'
+      - uses: actions/checkout@v6
+        if: vars.CD_ENABLED == 'true'
+        with:
+          persist-credentials: false
+      - name: Deploy exact published pair
+        if: vars.CD_ENABLED == 'true'
+        shell: bash
+        env:
+          VPS_HOST: ${{ vars.VPS_HOST }}
+          VPS_PORT: ${{ vars.VPS_PORT }}
+          VPS_USER: ${{ vars.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ vars.VPS_DEPLOY_PATH }}
+          VPS_KNOWN_HOSTS: ${{ vars.VPS_KNOWN_HOSTS }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          SERVER_DIGEST: ${{ needs.publish.outputs.server_digest }}
+          WEB_DIGEST: ${{ needs.publish.outputs.web_digest }}
+        run: bash scripts/deploy-prod-ssh.sh

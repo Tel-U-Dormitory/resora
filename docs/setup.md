@@ -574,8 +574,8 @@ secret mounts. The frontend and backend runtime users are non-root (`node`).
   encode password characters. Session Pooler on 5432 supports IPv4-only persistent
   backends; direct connection requires working IPv6 or the applicable IPv4 option.
   No automatic fallback. Do not copy workstation Development credentials to production.
-- Compose pins `BETTER_AUTH_URL=https://telkomdormitory.com`,
-  `CORS_ORIGIN=https://telkomdormitory.com`, `NODE_ENV=production`, and
+- Compose pins `BETTER_AUTH_URL=https://resora.telkomdormitory.com`,
+  `CORS_ORIGIN=https://resora.telkomdormitory.com`, `NODE_ENV=production`, and
   `DATABASE_BACKUP_ENABLED=false`. Wildcard DNS grants no wildcard auth/CORS support.
 - Phase 3: set `AUTH_PROXY_SECRET` privately in server.env and the matching NPM
   location header (section 10). It is required by persistent production startup,
@@ -596,7 +596,7 @@ and transferring reviewed images; build resource needs on the VPS are unverified
 
 ### Nginx Proxy Manager (operator setup; not executed)
 
-Use a Proxy Host for `telkomdormitory.com`, scheme `http`, forward hostname
+Use a Proxy Host for `resora.telkomdormitory.com`, scheme `http`, forward hostname
 `resora-prod-web`, forward port `3001`. Enable WebSocket support if needed and
 configure a valid TLS certificate and Force SSL. The existing NPM container must
 already join `resora-proxy`. Do not proxy directly to the backend or publish app
@@ -689,7 +689,7 @@ inspection. Neither format is used for this auth decision.
    Do not reuse the auth signing secret, put it in web/build env, commit it, paste
    it into tickets, or enable request-header logging. Protect NPM config/database
    backups because its configuration contains this credential.
-2. In the `telkomdormitory.com` Proxy Host, create/configure Custom Location `/api/auth/`,
+2. In the `resora.telkomdormitory.com` Proxy Host, create/configure Custom Location `/api/auth/`,
    scheme `http`, hostname `resora-prod-web`, port `3001`. In **that location's**
    Advanced configuration, set the following, substituting the private secret:
 
@@ -771,168 +771,198 @@ before clearing the go-live gate. No VPS/NPM settings have been changed here.
   remains pending PM review and approved operator execution.
 
 
-## 11. Permanent CI/CD and artifact promotion (configured; remote runs unverified)
+## 11. CI/CD production (Phase 2; implementation local, activation pending)
 
-Branch flow is `feature/fix → dev → staging → main`. Integration checks are
-automatic, publication is automatic on staging pushes, and all deployment remains
-manual. No workflow has `workflow_dispatch` or a deployment step.
+PM approved rebuilding production images from `main` and treating an approved
+merge as authorization for automatic deployment. This supersedes the old policy
+of manually promoting the identical staging images/digests. Staging UAT and PR
+review remain release gates; staging deployment remains manual. RESORA uses
+`https://resora.telkomdormitory.com`; the apex domain is reserved for the dormitory
+landing page. These instructions do not execute a deployment or migration.
 
-| Workflow | Trigger | Token permissions |
+### Workflow and permissions
+
+| Workflow | Trigger | Result |
 | --- | --- | --- |
-| `CI — Code Quality` (`ci.yml`) | PR targeting `dev`, `staging`, `main` | `contents: read` |
-| `CI — Docker Build` (`docker-verify.yml`) | PR targeting `staging` only | `contents: read` |
-| `CD — Publish Images` (`docker-publish.yml`) | Push to `staging` only | `contents: read`, `packages: write` |
+| `CI — Code Quality` | PR to dev/staging/main, or reusable `workflow_call` | Frozen install, Next typegen, architecture checks, lint, typecheck, offline tests, offline load-test harness, application build |
+| `CI — Docker Build` | PR to staging | Read-only verification builds; no registry login |
+| `CD — Publish Images` | Push staging/main | Reuse Code Quality for the exact push SHA, then publish server and web |
+| `deploy` job in the publish workflow | Successful pair on main only | Enter production environment; connect to VPS only when `CD_ENABLED=true` |
 
-Code Quality retains pinned pnpm, Node 24/Bun 1.3.13, frozen dependency install,
-Varlock codegen and synthetic env. After installation it runs the same local gate:
+Only `publish` has `packages: write`; other jobs have `contents: read`. Publishing
+uses the built-in `GITHUB_TOKEN`; no production env/database credentials enter
+builds. FE/BE use synthetic BuildKit secret templates, linux/amd64, SHA tags and
+OCI revision labels. Job outputs carry both build digests directly to deployment.
+A partial publication cannot trigger deploy. Reruns may change SHA tags; deployment
+uses digest references. A run already deployed cannot deploy again; use a new
+reviewed push or explicit rollback.
 
-```bash
-pnpm install --frozen-lockfile
-pnpm run verify:pr
-```
+Publication/deployment is serialized per branch with `cancel-in-progress: false`
+and `queue: max` (up to 100 pending runs; scheduling order is not a commit-order
+guarantee). The VPS rejects run numbers no newer than the last successful run,
+including after a manual rollback. Renaming/recreating the publishing workflow
+may reset its run numbering: disable CD and review state before such a change.
+See [GitHub concurrency](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency).
 
-`verify:pr` stops at the first failure, in order: Next type generation → `lint` →
-workspace typecheck → `test:offline` → `test:loadtest` → web/server production build.
-For isolated verification, use the nonfunctional environment values in `ci.yml`;
-no Docker, Supabase credentials or database integration target is required.
-`test:offline` discovers sorted, unique `.test.ts`/`.test.tsx` files under `apps/`
-and `packages/` through Git, including new nonignored tests. It excludes integration
-tests and generated/dependency/scratch paths, disables Bun dotenv loading and
-propagates test failures (an empty discovery also fails). Keep new database tests
-named `.integration.test.ts[x]` and opt-in against a verified disposable target.
-`test:loadtest` runs only the two offline harnesses under `tests/resora-loadtest/`;
-it never invokes k6 or generates live traffic. Biome honors Git ignore rules;
-the API TypeScript project includes `src`, not local scratch scripts.
+`CD_ENABLED` is intentionally checked at **step level**, after the job enters the
+environment: environment-level variables are not available for job scheduling.
+Absent/false means no checkout, SSH key use, archive upload, or VPS connection.
+The environment must restrict deployments to main. Protect main with required
+Code Quality, PR review and restricted bypass/direct pushes; staging also requires
+Docker Build. Select real check names from Actions, not only workflow names.
 
-Application builds on PRs to main are quality checks,
-not new container images. Docker PR verification uses default PR integration merge
-checkout, Buildx and `push: false` for both existing Dockerfiles; it never logs in
-to a registry. The PR event is `pull_request`, not `pull_request_target`.
+### PM setup (manual)
 
-After required PR checks and review, merging `dev → staging` triggers publication.
-Any direct push to staging also triggers it, so branch protection must restrict
-those pushes. The Ubuntu GitHub-hosted runner builds both `linux/amd64` images,
-logs in with built-in `GITHUB_TOKEN`, and tags each with that staging push's full
-`github.sha` (no latest tag):
+Environment `production`:
 
-- `ghcr.io/tel-u-dormitory/resora-web:<full-staging-commit-sha>`
-- `ghcr.io/tel-u-dormitory/resora-server:<full-staging-commit-sha>`
+| Kind | Name | Value |
+| --- | --- | --- |
+| Secret | `VPS_SSH_KEY` | Dedicated deployment private key |
+| Variable | `VPS_HOST` | VPS IP or DNS hostname, without scheme/user/port |
+| Variable | `VPS_PORT` | SSH port |
+| Variable | `VPS_USER` | Deployment account, e.g. resora-deploy |
+| Variable | `VPS_DEPLOY_PATH` | Existing absolute path, e.g. /opt/resora; letters/digits/slash/underscore/hyphen only |
+| Variable | `VPS_KNOWN_HOSTS` | Complete known_hosts line verified against provider-console host fingerprint |
+| Variable | `CD_ENABLED` | Keep false through setup, baseline adoption and review |
 
-Both carry OCI source/revision labels. Any failed build/push fails the workflow;
-there is no ignored build failure. A fixed staging publication concurrency group
-serializes runs with `cancel-in-progress: false`, so a newer push does not cancel
-an in-flight image pair. GitHub can replace an older pending run with a newer one;
-not every intermediate commit is guaranteed a publication. Always check the
-successful run's exact SHA instead of assuming the latest branch head is ready.
+The deploy account needs Bash, Docker Compose with `--wait`,
+`--wait-timeout`, `--no-env-resolution`, `--no-path-resolution`, coreutils, tar,
+flock, curl, Docker access, and write access to deployment root. Docker access
+is effectively root privilege. Private GHCR packages need an operator-managed
+classic PAT with read:packages, saved using `docker login --password-stdin` as
+that account; authorize organization SSO when required. Renew it before expiry.
+Never put that token in Compose or copy the workflow GITHUB_TOKEN to the VPS.
+Verify package Actions access allows this repository to publish both packages.
 
-Buildx uses separate `gha` cache scopes for server and web. Only staging publication
-exports cache; PRs only import it, subject to GitHub's branch access restrictions.
-No cache is exported to GHCR. This is build acceleration, not artifact promotion;
-publication still builds the actual staging commit. See [Docker GHA cache docs](https://docs.docker.com/build/cache/backends/gha/).
+Runtime input files stay at `<root>/.private/production/{web,server}.env`, directory
+0700, files 0600 owned by the deploy account. Copy approved existing production
+values; do not rotate signing/proxy secrets just to enable CD. `AUTH_PROXY_SECRET`
+must match NPM, origins must be the RESORA subdomain, and schema must already be
+compatible. No migration, seed, restore or provisioning runs during deployment.
+The ingress token previously exposed during setup must be rotated in NPM and
+backend in a separately supervised operation before CD activation; do not record
+its value here. Re-bootstrap/update recovery snapshots after credential rotation
+so rollback does not restore a revoked credential.
 
-BuildKit secret-files mount only `apps/web/.env.example` and
-`apps/server/.env.example` at the existing secret IDs. Their synthetic validation
-values are not production credentials. `.dockerignore` excludes these templates
-from COPY alongside all other env value files; schema files remain included.
-Only the three non-secret production web routing values are build args. No
-production Supabase, Better Auth or proxy credential is required at build time.
-The production runtime secret remains required only when starting the backend.
+Verify network `resora-proxy`, existing NPM route/alias `resora-prod-web:3001`, TLS,
+DNS registration/verification and the section 10 client-IP headers. Do not expose
+backend ports or replace NPM. HTTPS checks use normal DNS and certificate checks,
+never `--resolve` or `-k`. The apex need not serve RESORA.
 
-Production Compose requires `RESORA_IMAGE_TAG` with no default/latest fallback.
-Both services share that tag, use their explicit GHCR names, and have
-`pull_policy: always`; deploy using the pull/no-build commands in section 9.
-Existing build stanzas remain for explicitly requested validation on a sufficiently
-provisioned development/build host, never the 1 GB VPS. For an unpushed local
-validation tag, provide synthetic runtime env files on that build-only host and run:
+### Adopt the existing healthy stack before enabling CD
+
+1. Keep `CD_ENABLED=false`. Upload the reviewed `scripts/deploy-prod.sh` to a
+   deploy-user-readable location such as `/opt/resora/deploy-prod.sh`, using the
+   verified SSH host key. Do not deploy new containers in this step.
+2. Confirm the live project is `resora-prod`, with healthy containers named
+   `resora-prod-web-1` and `resora-prod-server-1`. Inspect labels for the actual
+   standalone Compose path. Do not adopt a different stack or a multi-file
+   deployment without reviewing its effective configuration.
+3. Ensure the deploy user can traverse/read the existing Compose directory, its
+   Compose file, any interpolation `.env`, and synthetic `apps/*/.env.example`.
+   If needed, an administrator grants read/traverse on those specific files;
+   never recursively loosen permissions on production secrets.
+4. Verify persistent runtime input files match the approved live configuration.
+   Bootstrap freezes the source Compose interpolation and snapshots these runtime
+   files locally. Do not edit original Compose or runtime inputs during adoption.
+5. Record the live SHA and both RepoDigests with `docker inspect` / `docker image
+   inspect`. Run the command below with the actual values. Digests are registry
+   references, not assumed to equal image IDs on every image format.
 
 ```sh
-export RESORA_IMAGE_TAG=local-validation
-docker compose -f docker-compose.prod.yml build server
-docker compose -f docker-compose.prod.yml build web
+# On VPS as deployment user; replace placeholders before execution.
+bash /opt/resora/deploy-prod.sh bootstrap /opt/resora \
+  /opt/resora/resora-prod '<live-full-sha>' \
+  'sha256:<live-web-digest>' 'sha256:<live-server-digest>' 0
+bash /opt/resora/deploy-prod.sh status /opt/resora
 ```
 
-Do not publish such tags as production commit images. Development Compose is unchanged.
+Bootstrap verifies the live standalone source path, tag/SHA, both digest-resolved
+image IDs, container health, HTTPS `/` and `/trpc/healthCheck`. It snapshots config
+and runtime files and writes initial state; it does **not** recreate containers.
+The deployment user must already have both digest-addressed images locally.
+Bootstrap refuses existing state. If it fails, keep CD disabled and resolve the
+specific discrepancy rather than deleting state or forcing adoption.
 
-For private GHCR packages, the VPS operator must first authenticate privately to
-`ghcr.io` using an account/token permitted to read those packages (and required
-organization SSO authorization, if applicable). Do not copy the workflow's
-short-lived GITHUB_TOKEN to the VPS, put a PAT in Compose, or put credentials on a
-command line. Public packages may be pulled anonymously; package visibility and
-organization publishing/access policy must be verified by PM. OCI source labels
-help associate packages with this repository; existing packages may still require
-explicit Actions repository access.
+### Rollout, recovery and manual rollback
 
-Use only a successful run where **both** images exist for the same SHA. Publishing
-two packages is not transactional: failure of the later build/push can leave just
-one package updated. Rerun/review publication before deployment rather than mixing
-SHA tags. Commit tags are immutable-style names, not registry-enforced immutability;
-a rerun can replace a tag, and floating base images can yield different digests.
-Record the published digests when approving a release. Preserve the prior approved
-SHA for an operator-reviewed rollback. No automatic deployment or rollback exists.
+The runner sends only Compose, the deployment script and two synthetic templates;
+no Git checkout or build happens on VPS. Upload uses verified SSH, a temporary key
+file deleted on exit, and no shell interpolation of unvalidated inputs. Receiver
+holds `.upload.lock`; all host deploy/bootstrap/rollback commands share
+`.deploy.lock` via flock. Locks fail fast. Do not bypass them with direct Compose
+commands during CD transactions.
 
-Actual GitHub-hosted execution, registry publication/pull, organization permissions,
-package visibility and host rollout remain unverified locally. This task did not
-trigger a remote run. After merge, staging pushes trigger publication automatically;
-host deployment still needs separate authorization.
-Phase 3 NPM client-IP/TLS/UAT gates still apply. Image sizes and runtime memory
-remain production capacity considerations; this workflow moves build work off VPS.
+The host checks baseline drift, local fallback images and a conservative free-space
+floor of 6 GiB before pulling. This floor is an estimate for current image sizes,
+not a guarantee against disk exhaustion. Both images are pulled by digest before
+container replacement. Each release saves its own Compose, digest override and
+SHA; runtime env snapshots are under `.private/releases/<release>/production`,
+0600, linked locally from the release directory. Build templates remain synthetic.
+These private snapshots must never be uploaded as workflow artifacts/backups to
+unapproved destinations. Env changes affect the next release; rollback restores
+its recorded env too. External NPM/DB changes are not reverted.
 
+Rollout uses project `resora-prod`, `up -d --no-build --pull never --wait` with
+180-second health timeout, followed by image-ID checks and HTTPS checks requiring
+200 on `/` and `/trpc/healthCheck`. These are liveness/routing checks, not proof of
+login, database readiness, UAT, or schema compatibility. There can be brief downtime
+and mixed FE/BE versions during recreate: adjacent releases must be compatible.
 
-### Manual staging and production promotion
+Current/previous/watermark are committed together through one atomic state-file
+rename only after success. Failure after rollout starts restores the current
+release, checks health/HTTPS, and still fails the Actions run. Failed recovery
+keeps a `pending` marker and blocks new changes. SIGTERM/INT trigger recovery;
+SIGKILL/reboot leaves the marker for recovery before the next deploy/rollback.
+`status` reports the marker without changing containers. The SSH receiver ignores
+HUP and writes host-side `deploy-<run>.log` so a disconnected client does not break
+rollout output; the process may finish after Actions ends. Check state before retry.
 
-1. Feature/fix PRs target `dev` and pass Code Quality/review. The `dev → staging`
-   PR must pass both Code Quality and Docker Build before merge.
-2. In GitHub Actions, open the successful **CD — Publish Images** run for the
-   staging push. Read the full commit SHA from that run's associated commit (the
-   build steps' tags use exactly `github.sha`) and record both image digests from
-   the build summaries. Confirm both packages have that SHA before using either.
-3. An authorized operator pulls that pair and deploys manually to the developer's
-   home staging server, using separate staging runtime secrets/origins. The staging
-   hostname, TLS/ingress and host configuration remain PM/operator setup; this task
-   does not create a staging deployment or assume the production hostname is safe
-   there. Production Compose pins production origins, so it must not be used
-   unchanged as staging runtime configuration. The images themselves remain unchanged.
-4. Run staging UAT and record approval together with the tested image SHA **and both
-   digests**, staging source commit, successful publication run, and tested scope.
-   Only after UAT approval open the `staging → main` PR and require Code Quality
-   plus review. Confirm that the approved staging source/content is what the PR
-   promotes; additional changes/conflicts require another staged verification.
-5. After main review/merge and separate production approval, use the **recorded
-   staging image SHA**, not `git rev-parse HEAD` on main. Merge/squash/rebase can give
-   main a different SHA. No Docker verification or publication workflow runs for
-   PRs/pushes to main. Pull the existing pair on VPS; do not rebuild:
+```sh
+# Read status; does not recreate services.
+bash /opt/resora/deploy-prod.sh status /opt/resora
+# Separately authorized manual rollback; no pull/build/migration.
+bash /opt/resora/deploy-prod.sh rollback /opt/resora
+```
 
-   ```sh
-   export RESORA_IMAGE_TAG='<approved-full-staging-image-sha>'
-   docker compose -f docker-compose.prod.yml config --quiet
-   docker compose -f docker-compose.prod.yml pull
-   # Compare both pulled repo digests with the approved staging record.
-   docker compose -f docker-compose.prod.yml up -d --no-build --pull never --wait
-   docker compose -f docker-compose.prod.yml ps
-   ```
+Rollback swaps current/previous while keeping the highest successful workflow
+number. A subsequent retry of an older/equal run is rejected. If a pending marker
+exists, rollback first recovers current, then attempts the requested previous
+release. Without a previous release, it stops. If recovery fails, inspect local
+logs privately and resolve missing images/configuration before proceeding.
 
-   The same SHA/digests must be used at staging and production. A rerun can replace
-   a SHA tag: if its digests differ from the approved record, stop instead of
-   silently deploying changed artifacts. Retain the prior approved pair for a
-   separately authorized rollback. No automatic promotion/deployment is configured.
+### Activation, retention and acceptance
 
-### Branch protection (PM applies manually)
+After local/PR checks, merge with CD disabled and verify quality/publication succeed
+and deploy reports disabled. Adopt the baseline, verify same-origin API/auth and
+approved NPM/schema/UAT gates, then set `CD_ENABLED=true`. This changes permission
+for a future main push; changing the variable alone does not dispatch a run.
+Disabling it prevents later runs, not a remote transaction already in progress.
+No SSH, GitHub settings change, release, migration or live rollback was performed
+by local implementation verification.
 
-| Target PR | Required status checks |
-| --- | --- |
-| `dev` | `CI — Code Quality` |
-| `staging` | `CI — Code Quality`, `CI — Docker Build` |
-| `main` | `CI — Code Quality` |
+Cleanup is deliberately manual. Retain current and previous release directories,
+their private env snapshots, all referenced FE/BE digest images, and any pending
+candidate. Under the SAME `.deploy.lock`, review image references and remove only
+explicit superseded RESORA images with `docker image rm` without force. Then remove
+only corresponding unprotected release/env directories and old host logs. Do not
+prune NPM, volumes, or global unused images. `image prune -a` can remove a tagged
+rollback image not referenced by a container. Keep private GHCR release digests
+available as well; Docker layer sharing means advertised sizes are not additive.
 
-The quality and Docker jobs have explicit names matching this table. After the
-first actual workflow runs, choose the corresponding **job status checks** in
-GitHub Branch Protection/Rulesets; workflow display names alone are not settings.
-Require a PR and reviewer approval before merge, restrict direct pushes to these
-branches, and disallow force pushes/deletion as appropriate to repository policy.
-Configure strict/up-to-date checks if that is the team's integration requirement.
-No repository settings/rulesets were changed by this implementation. Required
-checks/review settings are necessary because `push: staging` cannot distinguish a
-reviewed merge from a direct push. UAT approval remains a manual release gate.
+Before calling CD released: demonstrate real main quality/pair publishing, disabled
+and staging non-deployment, host lock contention, healthy rollout, failed-candidate
+rollback, client disconnect recovery and retained-image rollback on an approved
+non-production environment; supervise the first production rollout. CLI mock tests
+do not establish real GitHub permissions, registry behavior or VPS recovery.
+
+Local verification (2026-11-09, rebased onto current dev): 469 offline tests passed across 59 files, including
+21 Docker/CD contract and mocked deployment tests. Backend `tsc --noEmit`, repository
+Biome, architecture checks, Bash syntax and `git diff --check` passed. Real Compose validated candidate,
+frozen baseline and digest overrides using synthetic runtime files. HTTP fixtures
+required permission to bind local loopback outside the sandbox. Local Bun was
+1.4.3; CI remains pinned to 1.3.13. No image build, remote Actions run, VPS access,
+database operation or production rollout/rollback was performed during this work.
 
 ### Password recovery (SMTP and manual fallback)
 
