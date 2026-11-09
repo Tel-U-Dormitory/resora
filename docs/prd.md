@@ -22,6 +22,8 @@
 > or exactly-one-session behavior. External participants and expanded dynamic rosters
 > are separate future product decisions, not delivered by this refactor.
 
+**PM-approved release policy (2026-11-09):** After staging UAT and required PR review, merge to `main` authorizes automatic production deployment when the production CD gate is enabled and exact-commit CI plus both image publications succeed. Production uses the main-built pair rather than promoting identical staging artifacts. RESORA lives at `resora.telkomdormitory.com`; the apex remains reserved for the dormitory landing page. Brief recreate downtime is accepted, with current and one previous healthy release retained for recovery. Initial CD activation and readiness verification remain manual; database migrations and external-system configuration changes require separate authorization.
+
 ## 1. Product overview and objectives
 
 RESORA is an integrated digital platform for operations and services related to the Telkom University dormitory and Senior Residents (SR). Its candidate domains include internal SR attendance, student activities, inspections, resident services, SR performance, inventory, content/CoD, feedback, and analytics. Public landing pages, content delivery, and management interfaces may use distinct subdomains within the same product; final hostnames remain undecided.
