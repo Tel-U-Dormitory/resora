@@ -13,3 +13,9 @@ Retain Docker images/Compose for **web and server**, with pnpm installation, Bun
 Need authorized manual/import source of truth, secure credentials, domain/TLS, reverse proxy, secret rotation, Supabase backup/restore verification (separate local-volume backup if local PostgreSQL is used), production observability and rollback. No production credentials/data committed to Git.
 
 **Synchronization (2026-10-10):** external Supabase and pnpm/Docker configuration are implemented, while VPS deployment remains planned. No migrations/deployment are authorized by this document. [Verification limitations](../pnpm-migration.md) include the final Docker repeat blocked by host disk space.
+
+## Amendment: PM-approved production CD (2026-11-09)
+
+RESORA uses `resora.telkomdormitory.com`; the apex is reserved for the dormitory landing page. Production was reported running by the operator; this amendment implements CD locally and does not claim remote activation. Main merge is the approved ongoing deployment trigger after exact-SHA Code Quality and both image publications. Main rebuilds its own image pair, superseding manual promotion of identical staging artifacts. Staging UAT/review remain required; staging deployment is manual. Production environment `CD_ENABLED` remains false until baseline adoption and go-live checks.
+
+Use existing GHCR/Compose/NPM architecture with digest references, verified SSH, branch-scoped queued concurrency, host flock, private release/env snapshots, atomic state and checked rollback. No Watchtower, deployment service, runtime build, automatic migration or global image prune. Retain current/previous image pairs; cleanup is operator-reviewed. The exposed ingress credential must be rotated under separate supervision before activation. See [current CD runbook](../setup.md#11-cicd-production-phase-2-implementation-local-activation-pending); older manual-only/deployment-pending statements above are historical.
