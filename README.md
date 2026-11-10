@@ -2,6 +2,14 @@
 
 This existing monorepo was created with Better-T-Stack 3.44.3 (`bts.jsonc`). Phase 1 uses Supabase Development PostgreSQL through Express and Drizzle; Better Auth remains the authentication provider. No Supabase Auth or frontend database client is used. See [setup and the corrected scaffold command](docs/setup.md).
 
+The current implementation follows an enforced modular monolith with Identity,
+Events, Committee, Attendance and Broadcast. See [current architecture](docs/architecture.md),
+[data ownership](docs/module-data-ownership.md) and [ADR 0006](docs/decisions/0006-modular-monolith.md).
+Run `pnpm check:architecture` to verify boundaries. The structural refactor preserves
+existing business behavior and requires no new database migration. See the
+[folder/test conventions and phase evidence](docs/modular-maintainability.md) for the
+latest cleanup; small unit tests remain colocated and integration/fixtures have dedicated folders.
+
 ## Features
 
 - **TypeScript** - For type safety and improved developer experience

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
-import { getSrSession } from "@/features/identity/server-session";
+import { getSrSession } from "@/features/identity/server";
 export default async function AuthenticatedLayout({
 	children,
 }: {

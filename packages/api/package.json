@@ -3,7 +3,17 @@
 	"type": "module",
 	"exports": {
 		".": "./src/index.ts",
-		"./*": "./src/*.ts"
+		"./context": "./src/context.ts",
+		"./routers/index": "./src/routers/index.ts",
+		"./modules/identity/identity.public": "./src/modules/identity/identity.public.ts",
+		"./modules/identity/identity-provisioning.public": "./src/modules/identity/identity-provisioning.public.ts",
+		"./modules/attendance/attendance.public": "./src/modules/attendance/attendance.public.ts",
+		"./modules/events/events.public": "./src/modules/events/events.public.ts",
+		"./modules/committee/committee.public": "./src/modules/committee/committee.public.ts",
+		"./modules/broadcast/broadcast.public": "./src/modules/broadcast/broadcast.public.ts",
+		"./modules/attendance/attendance.contracts": "./src/modules/attendance/attendance.contracts.ts",
+		"./modules/broadcast/broadcast.contracts": "./src/modules/broadcast/broadcast.contracts.ts",
+		"./modules/committee/committee.contracts": "./src/modules/committee/committee.contracts.ts"
 	},
 	"scripts": {
 		"check-types": "tsc --noEmit"

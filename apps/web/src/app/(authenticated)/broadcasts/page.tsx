@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
-import BroadcastFeed from "@/features/broadcast/broadcast-feed";
-import { getSrSession } from "@/features/identity/server-session";
+import { BroadcastFeed } from "@/features/broadcast/public";
+import { getSrSession } from "@/features/identity/server";
 
 export default async function BroadcastsPage() {
 	const session = await getSrSession();

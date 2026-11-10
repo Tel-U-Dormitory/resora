@@ -87,10 +87,10 @@ test("production isolates ingress, database and runtime credentials", () => {
 	});
 	expect(config.services.web.environment.SERVER_URL).toBe("http://server:3000");
 	expect(config.services.server.environment.CORS_ORIGIN).toBe(
-		"https://telkomdormitory.com",
+		"https://resora.telkomdormitory.com",
 	);
 	expect(config.services.server.environment.BETTER_AUTH_URL).toBe(
-		"https://telkomdormitory.com",
+		"https://resora.telkomdormitory.com",
 	);
 	expect(config.services.server.environment.DATABASE_BACKUP_ENABLED).toBe(
 		"false",
@@ -101,7 +101,7 @@ test("production isolates ingress, database and runtime credentials", () => {
 		expect(readFileSync(new URL(file, root), "utf8")).toContain("USER node");
 });
 
-test("permanent CI/CD scopes PR validation and staging-only publication safely", () => {
+test("CI gates both publications; only main can enter gated production deployment", () => {
 	type Step = {
 		uses?: string;
 		run?: string;
@@ -110,12 +110,21 @@ test("permanent CI/CD scopes PR validation and staging-only publication safely",
 	};
 	type Workflow = {
 		name: string;
-		on: Record<string, { branches: string[] }>;
+		on: Record<string, { branches: string[] } | null>;
 		permissions: Record<string, string>;
-		concurrency?: { group: string; "cancel-in-progress": boolean };
+		concurrency?: {
+			group: string;
+			"cancel-in-progress": boolean;
+			queue?: string;
+		};
 		jobs: Record<
 			string,
 			{
+				uses?: string;
+				needs?: string;
+				if?: string;
+				environment?: string;
+				outputs?: Record<string, string>;
 				name?: string;
 				"runs-on": string;
 				permissions?: Record<string, string>;
@@ -134,30 +143,52 @@ test("permanent CI/CD scopes PR validation and staging-only publication safely",
 	expect(verify.name).toBe("CI — Docker Build");
 	expect(publish.name).toBe("CD — Publish Images");
 	expect(quality.on).toEqual({
+		workflow_call: null,
 		pull_request: { branches: ["dev", "staging", "main"] },
 	});
 	expect(verify.on).toEqual({ pull_request: { branches: ["staging"] } });
-	expect(publish.on).toEqual({ push: { branches: ["staging"] } });
+	expect(publish.on).toEqual({ push: { branches: ["staging", "main"] } });
 	expect(publish.concurrency).toEqual({
-		group: "ghcr-publish-staging",
+		// biome-ignore lint/suspicious/noTemplateCurlyInString: Literal Actions expression.
+		group: "ghcr-publish-${{ github.ref_name }}",
 		"cancel-in-progress": false,
+		queue: "max",
 	});
 	for (const workflow of [quality, verify, publish]) {
 		const secretReferences = [
 			...JSON.stringify(workflow).matchAll(/secrets\.([A-Z_]+)/g),
 		].map((match) => match[1]);
 		expect(secretReferences).toEqual(
-			workflow === publish ? ["GITHUB_TOKEN"] : [],
+			workflow === publish ? ["GITHUB_TOKEN", "VPS_SSH_KEY"] : [],
 		);
-		expect(workflow.permissions).toEqual(
-			workflow === publish
-				? { contents: "read", packages: "write" }
-				: { contents: "read" },
-		);
+		expect(workflow.permissions).toEqual({ contents: "read" });
 		for (const job of Object.values(workflow.jobs)) {
-			expect(job["runs-on"]).toBe("ubuntu-latest");
-			expect(job.permissions).toBeUndefined();
+			if (!job.uses) expect(job["runs-on"]).toBe("ubuntu-latest");
 		}
+	}
+	expect(publish.jobs.quality?.uses).toBe("./.github/workflows/ci.yml");
+	expect(publish.jobs.publish?.needs).toBe("quality");
+	expect(publish.jobs.publish?.permissions).toEqual({
+		contents: "read",
+		packages: "write",
+	});
+	expect(publish.jobs.publish?.outputs).toEqual({
+		// biome-ignore lint/suspicious/noTemplateCurlyInString: Literal Actions expression.
+		server_digest: "${{ steps.server.outputs.digest }}",
+		// biome-ignore lint/suspicious/noTemplateCurlyInString: Literal Actions expression.
+		web_digest: "${{ steps.web.outputs.digest }}",
+	});
+	const deploy = publish.jobs.deploy;
+	expect(deploy?.needs).toBe("publish");
+	expect(deploy?.if).toBe("github.ref == 'refs/heads/main'");
+	expect(deploy?.environment).toBe("production");
+	expect(deploy?.permissions).toEqual({ contents: "read" });
+	for (const step of deploy?.steps ?? []) {
+		if (step.uses || step.run === "bash scripts/deploy-prod-ssh.sh")
+			expect((step as Step & { if: string }).if).toBe(
+				"vars.CD_ENABLED == 'true'",
+			);
+		expect(step["continue-on-error"]).not.toBe(true);
 	}
 	const qualityJob = Object.values(quality.jobs)[0];
 	expect(qualityJob?.name).toBe("CI — Code Quality");
@@ -169,6 +200,7 @@ test("permanent CI/CD scopes PR validation and staging-only publication safely",
 	) as { scripts: Record<string, string> };
 	expect(scripts["verify:pr"]?.split(" && ")).toEqual([
 		"pnpm --filter web exec next typegen",
+		"pnpm run check:architecture",
 		"pnpm run lint",
 		"pnpm run check-types",
 		"pnpm run test:offline",
@@ -187,8 +219,11 @@ test("permanent CI/CD scopes PR validation and staging-only publication safely",
 	// biome-ignore lint/suspicious/noTemplateCurlyInString: Literal GitHub Actions expression.
 	const shaExpression = "${{ github.sha }}";
 	for (const workflow of [verify, publish]) {
-		const steps = Object.values(workflow.jobs).flatMap((job) => job.steps);
-		expect(steps.some((step) => step.run !== undefined)).toBe(false);
+		const steps = Object.values(workflow.jobs).flatMap(
+			(job) => job.steps ?? [],
+		);
+		if (workflow === verify)
+			expect(steps.some((step) => step.run !== undefined)).toBe(false);
 		expect(
 			steps.filter((step) => step.uses?.startsWith("docker/login-action@")),
 		).toHaveLength(workflow === publish ? 1 : 0);

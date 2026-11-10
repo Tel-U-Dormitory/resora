@@ -2,14 +2,12 @@ import { randomBytes } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import {
+	localProvisioningTarget,
 	maxCsvBytes,
 	ProvisioningError,
-} from "@resora/api/modules/provisioning/provisioning-csv";
-import {
-	localProvisioningTarget,
 	provisionSrAccounts,
 	verifyLocalProvisioningDatabase,
-} from "@resora/api/modules/provisioning/sr-provisioning";
+} from "@resora/api/modules/identity/identity-provisioning.public";
 import { createDb, type Database } from "@resora/db";
 
 // Deliberately no Varlock/services import or DATABASE_URL fallback: local scratch only.

@@ -59,8 +59,8 @@ services:
       - .private/production/server.env
     environment:
       NODE_ENV: production
-      BETTER_AUTH_URL: https://telkomdormitory.com
-      CORS_ORIGIN: https://telkomdormitory.com
+      BETTER_AUTH_URL: https://resora.telkomdormitory.com
+      CORS_ORIGIN: https://resora.telkomdormitory.com
       DATABASE_BACKUP_ENABLED: "false"
     healthcheck:
       test: ["CMD", "bun", "-e", "fetch('http://127.0.0.1:3000/').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]

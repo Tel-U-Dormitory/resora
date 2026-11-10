@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
-import LoginForm from "@/features/identity/login-form";
-import { getSrSession } from "@/features/identity/server-session";
+import { LoginForm } from "@/features/identity/public";
+import { getSrSession } from "@/features/identity/server";
 
 export default async function LoginPage({
 	searchParams,
