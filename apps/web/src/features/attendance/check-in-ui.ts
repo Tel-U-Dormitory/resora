@@ -41,6 +41,8 @@ const messages: Record<string, string> = {
 		"Sesi telah berakhir atau akun tidak lagi eligible. Silakan masuk kembali.",
 	SERVER_FAILED:
 		"Koneksi atau layanan tidak tersedia. Coba lagi; catatan kehadiran yang sudah tersimpan tidak akan ditimpa.",
+	CHECK_IN_UNCONFIRMED:
+		"Belum dapat memastikan kehadiran karena koneksi atau layanan terputus. Coba verifikasi lagi; kehadiran yang sudah tersimpan tidak akan dicatat dua kali.",
 };
 
 export type ScannerDiagnostic =
@@ -56,6 +58,10 @@ export type ScannerDiagnostic =
 	| "QR_CALLBACK_IGNORED"
 	| "WAITING_GPS"
 	| "SUBMITTING"
+	| "GPS_READY"
+	| "SERVER_CONFIRMED"
+	| "SCAN_STALLED"
+	| "SLOW_SCAN"
 	| "BACKGROUND"
 	| "FOREGROUND"
 	| "STOPPED";

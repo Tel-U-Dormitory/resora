@@ -5,6 +5,7 @@ import QrScanner from "qr-scanner";
 import * as jsxRuntime from "react/jsx-runtime";
 import ts from "typescript";
 import { MAX_GPS_ACCURACY_M as backendAccuracy } from "../../../../../packages/api/src/modules/attendance/check-in/check-in-policy";
+import { scanRegion } from "./check-in-camera";
 import {
 	acquireLocation,
 	freshPosition,
@@ -260,6 +261,14 @@ function elements(node: unknown): Element[] {
 // Execute the actual scanner component with offline hooks, media and transport
 // doubles, following the existing Broadcast/Committee JSX harness convention.
 function scannerFixture(realCameraLifecycle = false) {
+	let clock = Date.now();
+	class Clock extends Date {
+		static now() {
+			return clock;
+		}
+	}
+	const healthChecks = new Map<number, () => void>();
+	let healthId = 0;
 	const gps = gpsFixture();
 	const hooks: unknown[] = [];
 	let cursor = 0;
@@ -280,6 +289,8 @@ function scannerFixture(realCameraLifecycle = false) {
 	let failure: unknown;
 	let holdRequest: Promise<void> | undefined;
 	let holdCamera: Promise<void> | undefined;
+	let holdRefresh: Promise<void> | undefined;
+	let onSuccess: (() => void | Promise<void>) | undefined;
 	let imageResult: Promise<{ data: string }> = Promise.resolve({ data: token });
 	const images: File[] = [];
 	let pickerClicks = 0;
@@ -301,6 +312,7 @@ function scannerFixture(realCameraLifecycle = false) {
 				attendanceAt: new Date().toISOString(),
 				timingClass: "ON_TIME",
 			};
+			await onSuccess?.();
 		},
 	};
 	class Scanner {
@@ -318,12 +330,21 @@ function scannerFixture(realCameraLifecycle = false) {
 		stream?: MediaStream;
 		stops = 0;
 		destroys = 0;
+		options: {
+			maxScansPerSecond?: number;
+			calculateScanRegion?: (video: HTMLVideoElement) => QrScanner.ScanRegion;
+		};
 		constructor(
 			video: HTMLVideoElement,
 			decode: (result: { data: string }) => void,
-			options: { onDecodeError: (cause: Error | string) => void },
+			options: {
+				onDecodeError: (cause: Error | string) => void;
+				maxScansPerSecond?: number;
+				calculateScanRegion?: (video: HTMLVideoElement) => QrScanner.ScanRegion;
+			},
 		) {
 			this.$video = video;
+			this.options = options;
 			decoders.push(decode);
 			decodeErrors.push(options.onDecodeError);
 			cameras.push(this);
@@ -392,15 +413,21 @@ function scannerFixture(realCameraLifecycle = false) {
 					},
 				];
 			},
-			useEffect: (run: () => () => void) => {
+			useEffect: (run: () => (() => void) | undefined) => {
 				const index = cursor++;
 				if (!(index in hooks)) {
 					hooks[index] = true;
-					cleanups.push(run());
+					const cleanup = run();
+					if (cleanup) cleanups.push(cleanup);
 				}
 			},
 		},
-		"@tanstack/react-query": { useMutation: () => mutation },
+		"@tanstack/react-query": {
+			useMutation: (options: { onSuccess: () => void | Promise<void> }) => {
+				onSuccess = options.onSuccess;
+				return mutation;
+			},
+		},
 		"@trpc/client": { TRPCClientError },
 		"qr-scanner": { __esModule: true, default: Scanner },
 		"@resora/ui/components/action-dialog": { ActionDialog: "ActionDialog" },
@@ -427,9 +454,10 @@ function scannerFixture(realCameraLifecycle = false) {
 			trpc: { attendance: { checkIn: { mutationOptions: () => ({}) } } },
 		},
 		"../../utils/internal-event-queries": {
-			refreshAttendanceQueries: async () => {},
+			refreshAttendanceQueries: async () => holdRefresh,
 		},
 		"./check-in-location": { acquireLocation, freshPosition },
+		"./check-in-camera": { scanRegion },
 		"./check-in-ui": { releaseCamera, scannerErrorMessage },
 		"../../components/event-feedback": {
 			formatEventTime: (value: string) => value,
@@ -454,6 +482,9 @@ function scannerFixture(realCameraLifecycle = false) {
 		"window",
 		"document",
 		"console",
+		"setInterval",
+		"clearInterval",
+		"Date",
 		js,
 	)(
 		(name: string) => {
@@ -465,6 +496,12 @@ function scannerFixture(realCameraLifecycle = false) {
 		{ isSecureContext: true },
 		document,
 		{ info: (...args: unknown[]) => logs.push(args) },
+		(run: () => void) => {
+			healthChecks.set(++healthId, run);
+			return healthId;
+		},
+		(id: number) => healthChecks.delete(id),
+		Clock,
 	);
 	const render = () => {
 		cursor = 0;
@@ -480,6 +517,13 @@ function scannerFixture(realCameraLifecycle = false) {
 				videoHeight: 480,
 				paused: false,
 				ended: false,
+				currentTime: 0,
+				getBoundingClientRect: () => ({
+					left: 0,
+					top: 0,
+					width: 320,
+					height: 600,
+				}),
 				removeEventListener: () => {},
 			} as unknown as HTMLVideoElement);
 		(video?.props.ref as { current: unknown }).current = videos.get(video?.key);
@@ -513,6 +557,11 @@ function scannerFixture(realCameraLifecycle = false) {
 		logs,
 		document,
 		visibilityListeners,
+		healthChecks,
+		advance: (ms: number) => {
+			clock += ms;
+			for (const run of [...healthChecks.values()]) run();
+		},
 		images,
 		pickerClicks: () => pickerClicks,
 		setImageResult: (value: Promise<{ data: string }>) => {
@@ -539,6 +588,9 @@ function scannerFixture(realCameraLifecycle = false) {
 		},
 		holdRequest: (value: Promise<void>) => {
 			holdRequest = value;
+		},
+		holdRefresh: (value: Promise<void>) => {
+			holdRefresh = value;
 		},
 		holdCamera: (value: Promise<void>) => {
 			holdCamera = value;
@@ -832,7 +884,7 @@ test("normal empty frames stay quiet; manual restart replaces decoder, ignores s
 				.some(
 					(item) =>
 						item.props.children ===
-						"QR terbaca. Menunggu akurasi GPS maksimal 40 m (hingga 20 detik)…",
+						"QR terbaca, memverifikasi kehadiran… Menunggu lokasi (hingga 20 detik).",
 				),
 		).toBe(true);
 		expect(
@@ -862,6 +914,7 @@ test("normal empty frames stay quiet; manual restart replaces decoder, ignores s
 			expect(entry[0]).toBe("[ATTENDANCE_SCANNER]");
 			expect(Object.keys(entry[1] as object).sort()).toEqual([
 				"attempt",
+				"elapsedMs",
 				"event",
 			]);
 		}
@@ -1593,6 +1646,217 @@ test("gallery GPS denial records no attendance and retries location without deco
 		expect(f.requests).toHaveLength(1);
 		expect(f.cameras).toHaveLength(0);
 	} finally {
+		f.unmount();
+	}
+});
+
+test("scan covers the full visible preview in portrait and landscape, including outside the focus box", () => {
+	for (const [width, height, viewport, expected] of [
+		[
+			1280,
+			720,
+			{ left: 0, top: 0, width: 320, height: 600 },
+			{ x: 448, y: 0, width: 384, height: 720 },
+		],
+		[
+			720,
+			1280,
+			{ left: 20, top: 30, width: 320, height: 600 },
+			{ x: 19, y: 0, width: 683, height: 1280 },
+		],
+		[
+			1280,
+			720,
+			{ left: 0, top: 0, width: 600, height: 320 },
+			{ x: 0, y: 19, width: 1280, height: 683 },
+		],
+	] as const) {
+		const region = scanRegion({
+			videoWidth: width,
+			videoHeight: height,
+			getBoundingClientRect: () => viewport,
+		} as HTMLVideoElement);
+		expect(region).toMatchObject(expected);
+		expect(region.downScaledWidth).toBeLessThanOrEqual(640);
+		expect(region.downScaledHeight).toBeLessThanOrEqual(640);
+	}
+});
+
+test("frozen preview recovers once automatically, then offers manual recovery without reload", async () => {
+	const f = scannerFixture();
+	try {
+		await f.button("Buka kamera dan lokasi")();
+		expect(f.cameras[0].options.maxScansPerSecond).toBe(10);
+		expect(
+			f.cameras[0].options.calculateScanRegion?.(f.cameras[0].$video),
+		).toMatchObject({ x: 192, y: 0, width: 256, height: 480 });
+		f.advance(3000);
+		await flush();
+		expect(f.cameras).toHaveLength(2);
+		expect(f.cameras[0].destroys).toBeGreaterThan(0);
+		expect(f.healthChecks.size).toBe(1);
+		f.advance(3000);
+		await flush();
+		expect(f.cameras).toHaveLength(2);
+		await f.button("Mulai ulang pemindaian")();
+		expect(f.cameras).toHaveLength(3);
+		f.unmount();
+		expect(f.healthChecks.size).toBe(0);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("healthy empty frames show a three-second hint without restarting the camera", async () => {
+	const f = scannerFixture();
+	try {
+		await f.button("Buka kamera dan lokasi")();
+		for (let i = 1; i <= 6; i++) {
+			f.cameras[0].$video.currentTime = i;
+			f.decodeErrors[0](QrScanner.NO_QR_CODE_FOUND);
+			f.advance(1000);
+		}
+		expect(f.cameras).toHaveLength(1);
+		expect(f.button("Mulai ulang pemindaian")).toBeFunction();
+		expect(
+			f.logs.filter((entry) => JSON.stringify(entry).includes("SLOW_SCAN")),
+		).toHaveLength(1);
+		expect(
+			f.logs.some((entry) => JSON.stringify(entry).includes("SCAN_STALLED")),
+		).toBe(false);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("decoder silence recovers even if the camera keeps producing frames", async () => {
+	const f = scannerFixture();
+	try {
+		await f.button("Buka kamera dan lokasi")();
+		for (let i = 1; i <= 5; i++) {
+			f.cameras[0].$video.currentTime = i;
+			f.advance(1000);
+		}
+		await flush();
+		expect(f.cameras).toHaveLength(2);
+		expect(f.requests).toHaveLength(0);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("background pause and resume reset health deadlines without a competing camera loop", async () => {
+	const f = scannerFixture();
+	try {
+		await f.button("Buka kamera dan lokasi")();
+		f.document.hidden = true;
+		for (const run of f.visibilityListeners) run();
+		f.advance(10000);
+		expect(f.cameras).toHaveLength(1);
+		f.document.hidden = false;
+		for (const run of f.visibilityListeners) run();
+		f.advance(1000);
+		expect(f.cameras).toHaveLength(1);
+		f.cameras[0].$video.currentTime = 1;
+		f.decodeErrors[0](QrScanner.NO_QR_CODE_FOUND);
+		f.advance(1000);
+		expect(f.cameras).toHaveLength(1);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("QR acknowledgement is immediate, remains locked beyond two seconds and success waits for server", async () => {
+	const f = scannerFixture();
+	try {
+		let release = () => {};
+		f.holdRequest(
+			new Promise<void>((resolve) => {
+				release = resolve;
+			}),
+		);
+		await f.button("Buka kamera dan lokasi")();
+		f.decoders[0]({ data: token });
+		expect(f.healthChecks.size).toBe(0);
+		expect(
+			f
+				.render()
+				.some(
+					(item) =>
+						typeof item.props.children === "string" &&
+						item.props.children.startsWith("QR terbaca, memverifikasi"),
+				),
+		).toBe(true);
+		expect(f.successes).toHaveLength(0);
+		f.watches[0].success(position());
+		await flush();
+		f.advance(10000);
+		for (let i = 0; i < 20; i++) f.decoders[0]({ data: token });
+		expect(f.requests).toHaveLength(1);
+		expect(f.successes).toHaveLength(0);
+		expect(f.cameras).toHaveLength(1);
+		release();
+		await flush();
+		expect(f.successes).toHaveLength(1);
+		expect(
+			f.logs.some((entry) =>
+				JSON.stringify(entry).includes("SERVER_CONFIRMED"),
+			),
+		).toBe(true);
+		for (const entry of f.logs)
+			expect(
+				(entry[1] as { elapsedMs: number }).elapsedMs,
+			).toBeGreaterThanOrEqual(0);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("lost server response stays unconfirmed and retries current location without reopening camera", async () => {
+	const f = scannerFixture();
+	try {
+		f.setFailure(new TypeError("private network details"));
+		await f.button("Buka kamera dan lokasi")();
+		f.decoders[0]({ data: token });
+		f.watches[0].success(position());
+		await flush();
+		expect(
+			f.render().find((item) => item.type === "ActionDialog")?.props.title,
+		).toBe("Status kehadiran belum terkonfirmasi");
+		expect(f.successes).toHaveLength(0);
+		f.setFailure(undefined);
+		await f.button("Coba verifikasi lagi")();
+		f.watches[1].success(position());
+		await flush();
+		expect(f.requests).toHaveLength(2);
+		expect(f.requests[1].qrToken).toBe(token);
+		expect(f.cameras).toHaveLength(1);
+		expect(f.successes).toHaveLength(1);
+		expect(JSON.stringify(f.logs)).not.toContain("private network details");
+	} finally {
+		f.unmount();
+	}
+});
+
+test("confirmed attendance is displayed without waiting for recap and history refetch", async () => {
+	const f = scannerFixture();
+	let release = () => {};
+	try {
+		f.holdRefresh(
+			new Promise<void>((resolve) => {
+				release = resolve;
+			}),
+		);
+		await f.button("Buka kamera dan lokasi")();
+		f.decoders[0]({ data: token });
+		f.watches[0].success(position());
+		await flush();
+		expect(f.successes).toHaveLength(1);
+		expect(
+			f.render().find((item) => item.type === "ActionDialog")?.props.title,
+		).toBe("Check-in berhasil");
+	} finally {
+		release();
 		f.unmount();
 	}
 });
