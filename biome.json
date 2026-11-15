@@ -9,6 +9,8 @@
 		"ignoreUnknown": false,
 		"includes": [
 			"**",
+			"!.agent/skills",
+			"!.codex/skills",
 			"!.private",
 			"!tmp",
 			"!temp",
