@@ -1094,6 +1094,13 @@ lint/typecheck/offline-tests/loadtest/build gates. `pnpm lint` is read-only; `pn
 automatically formats files. API package exports expose only approved public paths.
 Use Node 24 on PATH for Next/Drizzle child processes and Bun for tests.
 
+Biome excludes `.agent/skills/**` and `.codex/skills/**`: these directories contain
+copied agent guidance, third-party example components, and optional standalone
+tools, not application source or workspace packages. Validate skill metadata and
+any changed helper scripts separately. Application code, repository scripts,
+architecture checks, typechecks, offline tests, and builds retain their existing
+quality gates; adding a skill does not authorize executing its tools.
+
 The refactor requires no new database migration or environment variable. Existing
 opt-in PostgreSQL suites still require their dedicated empty/migrated scratch targets.
 Never substitute application DATABASE_URL. Guards validate actual server host/port;
