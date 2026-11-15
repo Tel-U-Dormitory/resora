@@ -8,6 +8,7 @@ import {
 	ArrowLeft,
 	Camera,
 	CheckCircle2,
+	ImagePlus,
 	LoaderCircle,
 	ScanLine,
 } from "lucide-react";
@@ -36,6 +37,8 @@ export default function CheckInScanner() {
 			),
 	});
 	const video = useRef<HTMLVideoElement>(null);
+	const imageInput = useRef<HTMLInputElement>(null);
+	const inputMethod = useRef<"camera" | "image">("camera");
 	const scanner = useRef<QrScanner | null>(null);
 	const [cameraAttempt, setCameraAttempt] = useState(0);
 	const busy = useRef(false);
@@ -58,6 +61,7 @@ export default function CheckInScanner() {
 		| "starting"
 		| "restarting"
 		| "camera"
+		| "reading-image"
 		| "locating"
 		| "submitting"
 		| "result"
@@ -243,6 +247,7 @@ export default function CheckInScanner() {
 			(!restart && startingCamera.current)
 		)
 			return;
+		inputMethod.current = "camera";
 		startingCamera.current = restart ? "restarting" : "starting";
 		const attempt = ++generation.current;
 		diagnostics.current = new Set();
@@ -331,6 +336,7 @@ export default function CheckInScanner() {
 	const processing =
 		phase === "starting" ||
 		phase === "restarting" ||
+		phase === "reading-image" ||
 		phase === "locating" ||
 		phase === "submitting";
 	const scannerOpen =
@@ -356,6 +362,41 @@ export default function CheckInScanner() {
 		setGpsStatus("");
 		stopCamera();
 		setPhase("idle");
+	};
+	const openImagePicker = () => {
+		if (busy.current || mutation.isPending || startingCamera.current) return;
+		stop();
+		inputMethod.current = "image";
+		imageInput.current?.click();
+	};
+	const scanImage = async (file: File | undefined) => {
+		if (!file || busy.current || mutation.isPending || startingCamera.current)
+			return;
+		stop();
+		inputMethod.current = "image";
+		const attempt = generation.current;
+		busy.current = true;
+		mutation.reset();
+		setError("");
+		setPhase("reading-image");
+		try {
+			if (!window.isSecureContext) return showError("HTTPS_REQUIRED");
+			if (!file.type.startsWith("image/") || file.size === 0)
+				return showError("IMAGE_INVALID");
+			if (file.size > 10 * 1024 * 1024) return showError("IMAGE_TOO_LARGE");
+			const { default: Scanner } = await import("qr-scanner");
+			if (generation.current !== attempt) return;
+			const result = await Scanner.scanImage(file, {
+				returnDetailedScanResult: true,
+			});
+			if (generation.current !== attempt) return;
+			busy.current = false;
+			await processQr(result.data, attempt);
+		} catch {
+			if (generation.current === attempt) showError("IMAGE_SCAN_FAILED");
+		} finally {
+			if (generation.current === attempt) busy.current = false;
+		}
 	};
 	return (
 		<section className="mx-auto max-w-lg space-y-4">
@@ -435,17 +476,19 @@ export default function CheckInScanner() {
 						role="status"
 						className="rounded-full bg-black/50 px-4 py-2 text-center text-xs"
 					>
-						{phase === "camera"
-							? "Arahkan kamera ke QR Code kegiatan"
-							: phase === "locating"
-								? "QR terbaca. Menunggu akurasi GPS maksimal 40 m (hingga 20 detik)…"
-								: phase === "submitting"
-									? "Menyimpan kehadiran…"
-									: phase === "starting"
-										? "Menyiapkan kamera…"
-										: phase === "restarting"
-											? "Memulai ulang pemindaian…"
-											: "Buka kamera untuk scan kehadiran"}
+						{phase === "reading-image"
+							? "Membaca QR dari gambar…"
+							: phase === "camera"
+								? "Arahkan kamera ke QR Code kegiatan"
+								: phase === "locating"
+									? "QR terbaca. Menunggu akurasi GPS maksimal 40 m (hingga 20 detik)…"
+									: phase === "submitting"
+										? "Menyimpan kehadiran…"
+										: phase === "starting"
+											? "Menyiapkan kamera…"
+											: phase === "restarting"
+												? "Memulai ulang pemindaian…"
+												: "Buka kamera atau pilih gambar QR"}
 					</p>
 					{phase === "camera" && gpsStatus && gpsStatus !== "ready" && (
 						<p role="status" className="text-center text-sm">
@@ -474,6 +517,7 @@ export default function CheckInScanner() {
 					<Button
 						size="icon"
 						disabled={
+							phase === "reading-image" ||
 							phase === "locating" ||
 							phase === "submitting" ||
 							mutation.isPending
@@ -499,17 +543,42 @@ export default function CheckInScanner() {
 									? "Ketuk untuk menghentikan kamera dan lokasi"
 									: "Ketuk untuk membuka kamera dan lokasi"}
 					</span>
+					<input
+						ref={imageInput}
+						type="file"
+						accept="image/*"
+						aria-label="Pilih gambar QR dari galeri atau Files"
+						className="hidden"
+						onChange={(event) => {
+							const file = event.currentTarget.files?.[0];
+							event.currentTarget.value = "";
+							void scanImage(file);
+						}}
+					/>
+					<Button
+						onClick={openImagePicker}
+						disabled={processing || mutation.isPending}
+						aria-describedby="scan-privacy scan-image-help"
+						className="min-h-11 bg-white/10 text-white hover:bg-white/20"
+					>
+						<ImagePlus aria-hidden="true" />
+						Pilih gambar QR
+					</Button>
+					<p id="scan-image-help" className="text-center text-white/80 text-xs">
+						Galeri atau Files, maksimal 10 MB. Gambar dibaca di perangkat.
+					</p>
 				</div>
 			</div>
 			<p
 				id="scan-privacy"
 				className="px-2 text-muted-foreground text-xs leading-relaxed"
 			>
-				Kamera dan izin lokasi dimulai saat Anda menekan Buka Kamera. GPS
-				diambil hingga 20 detik per percobaan dan dihentikan setelah lokasi
-				valid atau scanner ditutup. Lokasi dikirim dan disimpan bersama
-				kehadiran hanya ketika check-in. RESORA tidak melacak lokasi secara
-				terus-menerus.
+				Kamera dan izin lokasi dimulai saat Anda menekan Buka Kamera. Untuk
+				gambar, izin lokasi diminta setelah QR terbaca; gambar tidak dikirim
+				atau disimpan di server. GPS diambil hingga 20 detik per percobaan dan
+				dihentikan setelah lokasi valid atau scanner ditutup. Lokasi dikirim dan
+				disimpan bersama kehadiran hanya ketika check-in. RESORA tidak melacak
+				lokasi secara terus-menerus.
 			</p>
 			<ActionDialog
 				open={phase === "error" || phase === "result"}
@@ -525,7 +594,10 @@ export default function CheckInScanner() {
 				}
 				onRetry={
 					phase === "error" && !qrToken.current
-						? () => startCamera()
+						? () => {
+								if (inputMethod.current === "image") openImagePicker();
+								else void startCamera();
+							}
 						: undefined
 				}
 			>

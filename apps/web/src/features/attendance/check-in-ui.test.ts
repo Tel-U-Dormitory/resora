@@ -280,6 +280,9 @@ function scannerFixture(realCameraLifecycle = false) {
 	let failure: unknown;
 	let holdRequest: Promise<void> | undefined;
 	let holdCamera: Promise<void> | undefined;
+	let imageResult: Promise<{ data: string }> = Promise.resolve({ data: token });
+	const images: File[] = [];
+	let pickerClicks = 0;
 	const cameras: Scanner[] = [];
 	const videos = new Map<string | null | undefined, HTMLVideoElement>();
 	const mutation = {
@@ -302,6 +305,10 @@ function scannerFixture(realCameraLifecycle = false) {
 	};
 	class Scanner {
 		static NO_QR_CODE_FOUND = QrScanner.NO_QR_CODE_FOUND;
+		static scanImage(file: File) {
+			images.push(file);
+			return imageResult;
+		}
 		$video: HTMLVideoElement;
 		_active = false;
 		_paused = false;
@@ -402,9 +409,14 @@ function scannerFixture(realCameraLifecycle = false) {
 			buttonVariants: () => "",
 		},
 		"lucide-react": Object.fromEntries(
-			["ArrowLeft", "Camera", "CheckCircle2", "LoaderCircle", "ScanLine"].map(
-				(name) => [name, name],
-			),
+			[
+				"ArrowLeft",
+				"Camera",
+				"CheckCircle2",
+				"ImagePlus",
+				"LoaderCircle",
+				"ScanLine",
+			].map((name) => [name, name]),
 		),
 		"next/link": { default: "Link" },
 		sonner: {
@@ -471,13 +483,20 @@ function scannerFixture(realCameraLifecycle = false) {
 				removeEventListener: () => {},
 			} as unknown as HTMLVideoElement);
 		(video?.props.ref as { current: unknown }).current = videos.get(video?.key);
+		const input = tree.find((item) => item.type === "input");
+		(input?.props.ref as { current: unknown }).current = {
+			click: () => pickerClicks++,
+		};
 		return tree;
 	};
 	const button = (label: string) => {
 		const found = render().find(
 			(item) =>
 				item.type === "Button" &&
-				(item.props["aria-label"] === label || item.props.children === label),
+				(item.props["aria-label"] === label ||
+					item.props.children === label ||
+					(Array.isArray(item.props.children) &&
+						item.props.children.includes(label))),
 		);
 		if (!found) throw new Error(`Button missing: ${label}`);
 		return found.props.onClick as () => Promise<void>;
@@ -494,6 +513,20 @@ function scannerFixture(realCameraLifecycle = false) {
 		logs,
 		document,
 		visibilityListeners,
+		images,
+		pickerClicks: () => pickerClicks,
+		setImageResult: (value: Promise<{ data: string }>) => {
+			imageResult = value;
+		},
+		chooseImage: (file?: File) => {
+			const input = render().find((item) => item.type === "input");
+			if (!input) throw new Error("Image input missing");
+			const target = { files: file ? [file] : [], value: "selected-image" };
+			(input.props.onChange as (event: unknown) => void)({
+				currentTarget: target,
+			});
+			return target;
+		},
 		videoEvent: (name: string) => {
 			const video = render().find((item) => item.type === "video");
 			if (!video) throw new Error("Video missing");
@@ -1421,5 +1454,145 @@ test("backend QR expiry/revocation after GPS wait discards token and requires a 
 		} finally {
 			f.unmount();
 		}
+	}
+});
+
+test("gallery reads locally, waits for live GPS and submits the same check-in payload without the image", async () => {
+	const f = scannerFixture();
+	try {
+		const file = new File(["synthetic image"], "qr.png", { type: "image/png" });
+		await f.button("Pilih gambar QR")();
+		expect(f.pickerClicks()).toBe(1);
+		expect(f.cameras).toHaveLength(0);
+		expect(f.chooseImage(file).value).toBe("");
+		await flush();
+		expect(f.images).toEqual([file]);
+		expect(f.requests).toHaveLength(0);
+		expect(f.watches).toHaveLength(1);
+		f.watches[0].success(position());
+		await flush();
+		expect(f.requests).toEqual([
+			{
+				qrToken: token,
+				location: { latitude: -6.97, longitude: 107.63, accuracyMeters: 10 },
+			},
+		]);
+		expect(f.successes).toHaveLength(1);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("gallery rejects empty, non-image and oversized files without GPS or network and retries the picker", async () => {
+	for (const file of [
+		new File([], "empty.png", { type: "image/png" }),
+		new File(["text"], "qr.txt", { type: "text/plain" }),
+		new File([new Uint8Array(10 * 1024 * 1024 + 1)], "large.png", {
+			type: "image/png",
+		}),
+	]) {
+		const f = scannerFixture();
+		try {
+			f.chooseImage(file);
+			await flush();
+			expect(f.images).toHaveLength(0);
+			expect(f.watches).toHaveLength(0);
+			expect(f.requests).toHaveLength(0);
+			const dialog = f.render().find((item) => item.type === "ActionDialog");
+			if (!dialog) throw new Error("Result dialog missing");
+			expect(dialog?.props.open).toBe(true);
+			(dialog.props.onRetry as () => void)();
+			expect(f.pickerClicks()).toBe(1);
+		} finally {
+			f.unmount();
+		}
+	}
+});
+
+test("gallery handles unreadable images and invalid QR without requesting location", async () => {
+	for (const invalidQr of [false, true]) {
+		const f = scannerFixture();
+		try {
+			f.setImageResult(
+				invalidQr
+					? Promise.resolve({ data: "foreign-qr" })
+					: Promise.resolve().then(() => {
+							throw new Error("decode failed");
+						}),
+			);
+			f.chooseImage(new File(["synthetic"], "qr.png", { type: "image/png" }));
+			await flush();
+			expect(f.watches).toHaveLength(0);
+			expect(f.requests).toHaveLength(0);
+			expect(
+				f.render().find((item) => item.type === "ActionDialog")?.props.open,
+			).toBe(true);
+		} finally {
+			f.unmount();
+		}
+	}
+});
+
+test("gallery replaces camera safely, ignores duplicate input and discards decoding after unmount", async () => {
+	const f = scannerFixture();
+	try {
+		await f.button("Buka kamera dan lokasi")();
+		await f.button("Pilih gambar QR")();
+		expect(f.cameras[0].destroys).toBeGreaterThan(0);
+		expect(f.cleared).toEqual([1]);
+		let resolveImage = (_value: { data: string }) => {};
+		f.setImageResult(
+			new Promise((resolve) => {
+				resolveImage = resolve;
+			}),
+		);
+		const file = new File(["synthetic"], "qr.png", { type: "image/png" });
+		f.chooseImage(file);
+		f.chooseImage(file);
+		await flush();
+		expect(f.images).toHaveLength(1);
+		f.decoders[0]({ data: token });
+		f.unmount();
+		resolveImage({ data: token });
+		await flush();
+		expect(f.watches).toHaveLength(1);
+		expect(f.requests).toHaveLength(0);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("cancelled gallery selection does not start decoding, GPS or camera", async () => {
+	const f = scannerFixture();
+	try {
+		await f.button("Pilih gambar QR")();
+		f.chooseImage();
+		await flush();
+		expect(f.images).toHaveLength(0);
+		expect(f.watches).toHaveLength(0);
+		expect(f.cameras).toHaveLength(0);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("gallery GPS denial records no attendance and retries location without decoding again", async () => {
+	const f = scannerFixture();
+	try {
+		f.chooseImage(new File(["synthetic"], "qr.png", { type: "image/png" }));
+		await flush();
+		f.watches[0].failure({ code: 1 } as GeolocationPositionError);
+		await flush();
+		expect(f.requests).toHaveLength(0);
+		expect(f.successes).toHaveLength(0);
+		const retry = f.button("Perbarui Lokasi")();
+		f.watches[1].success(position());
+		await retry;
+		await flush();
+		expect(f.images).toHaveLength(1);
+		expect(f.requests).toHaveLength(1);
+		expect(f.cameras).toHaveLength(0);
+	} finally {
+		f.unmount();
 	}
 });

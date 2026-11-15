@@ -250,3 +250,12 @@ Manual UAT pending:
 6. Check Tab/Shift+Tab containment, Escape/backdrop dismissal when idle, disabled dismissal while submitting, focus return, accessible action names/tooltips, 44px targets, narrow mobile screens, 200% zoom, dark theme and reduced-motion preference. Verify clipboard behavior in the target HTTPS/browser context.
 
 Staging UAT for edit/archive depends on separately authorizing/applying the new audit constraint migration. No remote application or release is claimed by these automated results.
+
+## Gallery / Files QR scan (2026-11-16)
+
+- Select a QR image without camera permission: decode locally, acquire current device GPS, submit only token/location through the existing check-in API and show the confirmed result.
+- Reject empty/non-image files and files over 10 MB before decoding; unreadable images or images without QR offer another file selection. A decoded foreign QR does not request GPS or submit attendance.
+- Switching from a running camera to the picker releases the camera and old GPS watcher; old decoder callbacks cannot submit attendance. Cancelled file selection starts no processing. Reset the file input so the same image can be selected again.
+- Disable competing input during decoding/submission and ignore duplicate file events. Late decoding after unmount must not acquire GPS or submit attendance. Existing GPS retries and server QR/session/eligibility/duplicate checks remain in force.
+
+Verification: offline component tests exercise the selection handler with scanner/media/transport doubles, alongside existing camera/GPS regressions. Actual image decoding, native gallery/Files selection, supported device image formats, and Safari/iPhone/Android UAT remain manual verification items; no device compatibility or performance claim is made by these tests.

@@ -2,6 +2,11 @@ import type QrScanner from "qr-scanner";
 
 const gpsHelp = "Hubungi KADEP HCO untuk pencatatan kehadiran secara manual.";
 const messages: Record<string, string> = {
+	IMAGE_INVALID: "Pilih file gambar yang tidak kosong dari galeri atau Files.",
+	IMAGE_TOO_LARGE:
+		"Ukuran gambar maksimal 10 MB. Pilih gambar yang lebih kecil.",
+	IMAGE_SCAN_FAILED:
+		"Gambar tidak dapat dibaca atau QR tidak ditemukan. Pilih gambar QR yang jelas dalam format JPG atau PNG, atau gunakan kamera.",
 	INVALID_QR:
 		"QR tidak valid. Gunakan QR kehadiran RESORA yang ditampilkan HCO.",
 	QR_EXPIRED: "QR telah kedaluwarsa. Minta HCO menampilkan QR baru.",
