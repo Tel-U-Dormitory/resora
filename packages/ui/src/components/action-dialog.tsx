@@ -21,7 +21,7 @@ export function ActionDialog({
 		<Dialog.Root open={open} onOpenChange={onOpenChange}>
 			<Dialog.Portal>
 				<Dialog.Backdrop className="fixed inset-0 z-50 bg-black/60 transition-opacity data-ending-style:opacity-0 data-starting-style:opacity-0" />
-				<Dialog.Popup className="fixed top-1/2 left-1/2 z-50 w-[calc(100%_-_2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-popover p-6 text-popover-foreground shadow-xl">
+				<Dialog.Popup className="fixed top-1/2 left-1/2 z-50 max-h-[calc(100dvh-2rem)] w-[calc(100%_-_2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-border bg-popover p-6 text-popover-foreground shadow-xl">
 					<Dialog.Title className="mb-3 font-semibold text-lg">
 						{title}
 					</Dialog.Title>

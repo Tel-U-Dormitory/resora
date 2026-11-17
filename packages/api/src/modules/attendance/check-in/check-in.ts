@@ -8,6 +8,7 @@ import {
 import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
 import type { CheckInInput } from "../../../contracts/attendance";
+import { AttendanceLocationError } from "../../../contracts/attendance-diagnostics";
 import {
 	invitationForUser,
 	lockEventForCheckIn,
@@ -17,7 +18,11 @@ import {
 	getCheckInSr,
 	isValidSrAssignment,
 } from "../../identity/identity.public";
-import { classifyTiming, locationFailure } from "./check-in-policy";
+import {
+	classifyTiming,
+	haversineMeters,
+	locationFailure,
+} from "./check-in-policy";
 import { parseChallenge, verifySessionChallenge } from "./qr";
 
 function denied(message: string): never {
@@ -86,7 +91,24 @@ export async function checkIn(
 			{ latitude: verified.centerLat, longitude: verified.centerLng },
 			verified.geofenceRadiusM,
 		);
-		if (failure) denied(failure);
+		if (failure) {
+			throw new TRPCError({
+				code: "FORBIDDEN",
+				message: failure,
+				cause:
+					failure === "GPS_INACCURATE" || failure === "OUTSIDE_GEOFENCE"
+						? new AttendanceLocationError({
+								code: failure,
+								distanceMeters: haversineMeters(input.location, {
+									latitude: verified.centerLat,
+									longitude: verified.centerLng,
+								}),
+								radiusMeters: verified.geofenceRadiusM,
+								accuracyMeters: input.location.accuracyMeters,
+							})
+						: undefined,
+			});
+		}
 		// Explicit DTOs: never return GPS, raw token, recorder or internal challenge metadata.
 		const fields = {
 			attendanceAt: attendanceRecords.attendanceAt,

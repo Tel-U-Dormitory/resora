@@ -20,11 +20,12 @@ const messages: Record<string, string> = {
 	PASSWORD_CHANGE_REQUIRED:
 		"Ganti password terlebih dahulu untuk melakukan check-in.",
 	GPS_DENIED: `Izin lokasi ditolak. Aktifkan lokasi untuk RESORA melalui pengaturan browser/perangkat, lalu coba Perbarui Lokasi atau buka kamera kembali. ${gpsHelp}`,
+	GPS_INTERRUPTED: `Pengambilan lokasi terhenti setelah berpindah aplikasi. Kembali ke RESORA dan pilih Perbarui Lokasi. ${gpsHelp}`,
 	GPS_TIMEOUT: `Pengambilan lokasi terlalu lama. Pilih Perbarui Lokasi di tempat dengan sinyal lebih baik. ${gpsHelp}`,
 	GPS_UNAVAILABLE: `Lokasi tidak tersedia. ${gpsHelp}`,
 	INVALID_LOCATION: `Lokasi yang diterima tidak valid. ${gpsHelp}`,
 	GPS_INACCURATE: `Akurasi GPS belum mencapai 40 meter. Coba Perbarui Lokasi di area terbuka. ${gpsHelp}`,
-	OUTSIDE_GEOFENCE: `Lokasi Anda di luar radius event. ${gpsHelp}`,
+	OUTSIDE_GEOFENCE: `Titik lokasi perangkat terdeteksi di luar radius event. Jika Anda sudah di lokasi, pilih Perbarui Lokasi untuk mencoba lagi tanpa scan ulang. ${gpsHelp}`,
 	HTTPS_REQUIRED:
 		"Kamera dan lokasi memerlukan koneksi aman. Gunakan alamat HTTPS RESORA.",
 	CAMERA_DENIED:
@@ -67,7 +68,11 @@ export type ScannerDiagnostic =
 	| "STOPPED";
 
 export function scannerErrorMessage(code: string) {
-	return messages[code] ?? messages.SERVER_FAILED;
+	return messages[scannerDiagnosticCode(code)] ?? messages.SERVER_FAILED;
+}
+
+export function scannerDiagnosticCode(code: string) {
+	return Object.hasOwn(messages, code) ? code : "SERVER_FAILED";
 }
 
 export type CameraHandle = Pick<QrScanner, "stop" | "destroy" | "$video">;

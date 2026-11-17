@@ -6,6 +6,7 @@ import * as jsxRuntime from "react/jsx-runtime";
 import ts from "typescript";
 import { MAX_GPS_ACCURACY_M as backendAccuracy } from "../../../../../packages/api/src/modules/attendance/check-in/check-in-policy";
 import { scanRegion } from "./check-in-camera";
+import { locationDiagnosisText } from "./check-in-diagnostics";
 import {
 	acquireLocation,
 	freshPosition,
@@ -16,6 +17,7 @@ import {
 import {
 	type CameraHandle,
 	releaseCamera,
+	scannerDiagnosticCode,
 	scannerErrorMessage,
 } from "./check-in-ui";
 
@@ -119,7 +121,7 @@ test("poor/stale GPS readings and transient errors retry until valid; late callb
 	f.watches[0].success(position(5, Date.now() - GPS_FRESH_MS - 1));
 	f.watches[0].failure({ code: 2 } as GeolocationPositionError);
 	expect(f.cleared).toEqual([]);
-	const valid = position(20);
+	const valid = position(10);
 	f.watches[0].success(valid);
 	f.watches[0].success(position(1));
 	f.watches[0].failure({ code: 1 } as GeolocationPositionError);
@@ -458,7 +460,12 @@ function scannerFixture(realCameraLifecycle = false) {
 		},
 		"./check-in-location": { acquireLocation, freshPosition },
 		"./check-in-camera": { scanRegion },
-		"./check-in-ui": { releaseCamera, scannerErrorMessage },
+		"./check-in-ui": {
+			releaseCamera,
+			scannerDiagnosticCode,
+			scannerErrorMessage,
+		},
+		"./check-in-diagnostics": { locationDiagnosisText },
 		"../../components/event-feedback": {
 			formatEventTime: (value: string) => value,
 		},
@@ -1308,7 +1315,7 @@ test.each([false, true])(
 				f.logs.some((entry) => JSON.stringify(entry).includes("FOREGROUND")),
 			).toBe(true);
 			expect(f.requests).toHaveLength(0);
-			f.watches[1].success(position());
+			f.watches.at(-1)?.success(position());
 			await flush();
 			f.decoders[1]({ data: token });
 			await flush();
@@ -1344,7 +1351,7 @@ test("Buka Kamera starts GPS immediately without blocking decoding; a pending lo
 		expect(f.requests).toHaveLength(0);
 		f.watches[0].success(position(70));
 		expect(f.requests).toHaveLength(0);
-		f.watches[0].success(position(20));
+		f.watches[0].success(position(10));
 		await flush();
 		expect(f.requests).toHaveLength(1);
 		expect(f.requests[0].qrToken).toBe(token);
@@ -1484,7 +1491,7 @@ test("cancel/reopen and unmount suppress old GPS/scanner callbacks, pending resu
 });
 
 test("backend QR expiry/revocation after GPS wait discards token and requires a new scan", async () => {
-	for (const code of ["QR_EXPIRED", "QR_REVOKED", "OUTSIDE_GEOFENCE"]) {
+	for (const code of ["QR_EXPIRED", "QR_REVOKED"]) {
 		const f = scannerFixture();
 		try {
 			f.setFailure(new TRPCClientError(code));
@@ -1858,5 +1865,243 @@ test("confirmed attendance is displayed without waiting for recap and history re
 	} finally {
 		release();
 		f.unmount();
+	}
+});
+
+test("GPS selects the most accurate fresh reading during settling and clears both timers", async () => {
+	const originalSet = globalThis.setTimeout;
+	const originalClear = globalThis.clearTimeout;
+	const timers = new Map<number, { run: () => void; ms: number }>();
+	let id = 0;
+	try {
+		globalThis.setTimeout = ((run: () => void, ms: number) => {
+			timers.set(++id, { run, ms });
+			return id;
+		}) as unknown as typeof setTimeout;
+		globalThis.clearTimeout = ((key: number) => {
+			timers.delete(key);
+		}) as unknown as typeof clearTimeout;
+		const f = gpsFixture();
+		const promise = acquireLocation(f.geo, new AbortController().signal);
+		f.watches[0].success(position(38));
+		expect(f.cleared).toHaveLength(0);
+		const best = position(15);
+		f.watches[0].success(best);
+		f.watches[0].success(position(30));
+		const settle = [...timers.values()].find((timer) => timer.ms === 3000);
+		expect(settle).toBeDefined();
+		settle?.run();
+		expect(await promise).toBe(best);
+		expect(f.cleared).toEqual([1]);
+		expect(timers.size).toBe(0);
+	} finally {
+		globalThis.setTimeout = originalSet;
+		globalThis.clearTimeout = originalClear;
+	}
+});
+
+test("GPS cancellation during settling discards the candidate and clears all timers", async () => {
+	const f = gpsFixture();
+	const controller = new AbortController();
+	const promise = acquireLocation(f.geo, controller.signal);
+	f.watches[0].success(position(35));
+	controller.abort();
+	await expect(promise).rejects.toThrow("GPS_CANCELLED");
+	expect(f.cleared).toEqual([1]);
+});
+
+test("foreground recovery replaces pending GPS once, ignores hidden/stale callbacks and preserves decoded QR", async () => {
+	const f = scannerFixture();
+	try {
+		await f.button("Buka kamera dan lokasi")();
+		f.decoders[0]({ data: token });
+		f.document.hidden = true;
+		for (const run of f.visibilityListeners) run();
+		f.watches[0].success(position());
+		await flush();
+		expect(f.requests).toHaveLength(0);
+		expect(f.cleared).toContain(1);
+		f.document.hidden = false;
+		for (const run of f.visibilityListeners) run();
+		for (const run of f.visibilityListeners) run(); // Duplicate events cannot add watchers.
+		expect(f.watches).toHaveLength(2);
+		f.watches[0].success(position());
+		await flush();
+		expect(f.requests).toHaveLength(0);
+		f.watches[1].success(position());
+		await flush();
+		expect(f.requests).toHaveLength(1);
+		expect(f.cameras).toHaveLength(1);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("repeated background interruptions require explicit location retry instead of looping", async () => {
+	const f = scannerFixture();
+	try {
+		await f.button("Buka kamera dan lokasi")();
+		f.decoders[0]({ data: token });
+		for (let i = 0; i < 2; i++) {
+			f.document.hidden = true;
+			for (const run of f.visibilityListeners) run();
+			f.document.hidden = false;
+			for (const run of f.visibilityListeners) run();
+		}
+		await flush();
+		expect(f.watches).toHaveLength(2);
+		expect(f.requests).toHaveLength(0);
+		await f.button("Perbarui Lokasi")();
+		f.watches[2].success(position());
+		await flush();
+		expect(f.requests).toHaveLength(1);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("out-of-radius response permits fresh location retry without rescanning and still rejects revoked QR", async () => {
+	const f = scannerFixture();
+	try {
+		f.setFailure(new TRPCClientError("OUTSIDE_GEOFENCE"));
+		await f.button("Buka kamera dan lokasi")();
+		f.decoders[0]({ data: token });
+		f.watches[0].success(position());
+		await flush();
+		expect(f.successes).toHaveLength(0);
+		expect(f.button("Perbarui Lokasi")).toBeFunction();
+		f.setFailure(new TRPCClientError("QR_REVOKED"));
+		await f.button("Perbarui Lokasi")();
+		f.watches[1].success(position());
+		await flush();
+		expect(f.requests).toHaveLength(2);
+		expect(f.cameras).toHaveLength(1);
+		expect(f.successes).toHaveLength(0);
+		expect(
+			f.render().find((item) => item.type === "ActionDialog")?.props.onRetry,
+		).toBeFunction();
+	} finally {
+		f.unmount();
+	}
+});
+
+test("copyable location diagnosis excludes coordinates, QR, identifiers and unknown exception text", () => {
+	const diagnosis = locationDiagnosisText({
+		code: "OUTSIDE_GEOFENCE",
+		accuracyMeters: 13,
+		distanceMeters: 36,
+		radiusMeters: 20,
+		sampleAgeMs: 100,
+		acquisitionMs: 3000,
+		latitude: 12,
+		qrToken: token,
+		userId: "private-user",
+	} as Parameters<typeof locationDiagnosisText>[0]);
+	expect(diagnosis).toContain("OUTSIDE_GEOFENCE");
+	expect(diagnosis).toContain("36");
+	for (const secret of ["latitude", token, "private-user"])
+		expect(diagnosis).not.toContain(secret);
+	expect(
+		locationDiagnosisText({
+			code: "private-exception-token",
+			accuracyMeters: Number.NaN,
+		}),
+	).toBe("Diagnosis lokasi RESORA\nKode: SERVER_FAILED");
+	expect(scannerErrorMessage("constructor")).toBe(
+		scannerErrorMessage("SERVER_FAILED"),
+	);
+});
+
+test("radius diagnostic is available inside the error dialog before dismissing it", async () => {
+	const f = scannerFixture();
+	try {
+		const failure = new TRPCClientError("OUTSIDE_GEOFENCE");
+		Object.defineProperty(failure, "data", {
+			value: {
+				code: "FORBIDDEN",
+				attendanceLocation: {
+					code: "OUTSIDE_GEOFENCE",
+					distanceMeters: 36,
+					radiusMeters: 20,
+					accuracyMeters: 13,
+				},
+			},
+		});
+		f.setFailure(failure);
+		await f.button("Buka kamera dan lokasi")();
+		f.decoders[0]({ data: token });
+		f.watches[0].success(position());
+		await flush();
+		const text = f.render().find((item) => item.type === "textarea")
+			?.props.value;
+		expect(text).toContain("OUTSIDE_GEOFENCE");
+		expect(text).toContain("Jarak menurut server (m): 36");
+		expect(text).not.toContain(token);
+		await f.button("Salin diagnosis")(); // No Clipboard API still allows manual text selection.
+		expect(
+			f
+				.render()
+				.some(
+					(item) =>
+						item.props.children ===
+						"Pilih teks diagnosis dan salin secara manual.",
+				),
+		).toBe(true);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("GPS diagnostics report numeric accuracy for rejected samples without exposing coordinates", async () => {
+	const f = gpsFixture();
+	const controller = new AbortController();
+	const readings: unknown[] = [];
+	const promise = acquireLocation(
+		f.geo,
+		controller.signal,
+		undefined,
+		(reading) => readings.push(reading),
+	);
+	f.watches[0].success(position(150));
+	expect(readings).toHaveLength(1);
+	expect(Object.keys(readings[0] as object).sort()).toEqual([
+		"accuracyMeters",
+		"sampleAgeMs",
+	]);
+	expect((readings[0] as { accuracyMeters: number }).accuracyMeters).toBe(150);
+	controller.abort();
+	await expect(promise).rejects.toThrow("GPS_CANCELLED");
+});
+
+test("a stale best candidate cannot replace a fresher reading at the acquisition deadline", async () => {
+	const originalSet = globalThis.setTimeout;
+	const originalClear = globalThis.clearTimeout;
+	const originalNow = Date.now;
+	let clock = originalNow();
+	const timers = new Map<number, { run: () => void; ms: number }>();
+	let id = 0;
+	try {
+		Date.now = () => clock;
+		globalThis.setTimeout = ((run: () => void, ms: number) => {
+			timers.set(++id, { run, ms });
+			return id;
+		}) as unknown as typeof setTimeout;
+		globalThis.clearTimeout = ((key: number) =>
+			timers.delete(key)) as unknown as typeof clearTimeout;
+		const f = gpsFixture();
+		const promise = acquireLocation(f.geo, new AbortController().signal);
+		f.watches[0].success(position(20));
+		clock += 11000;
+		[...timers.values()].find((timer) => timer.ms === 3000)?.run();
+		expect(f.cleared).toHaveLength(0);
+		const fresh = position(35);
+		f.watches[0].success(fresh);
+		clock += 9000;
+		[...timers.values()].find((timer) => timer.ms === GPS_WINDOW_MS)?.run();
+		expect(await promise).toBe(fresh);
+	} finally {
+		Date.now = originalNow;
+		globalThis.setTimeout = originalSet;
+		globalThis.clearTimeout = originalClear;
 	}
 });
