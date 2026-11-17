@@ -33,6 +33,10 @@ export function acquireLocation(
 	geolocation: Geolocation | undefined,
 	signal: AbortSignal,
 	visibility?: LocationVisibility,
+	onReading?: (reading: {
+		accuracyMeters: number;
+		sampleAgeMs: number;
+	}) => void,
 ) {
 	return new Promise<GeolocationPosition>((resolve, reject) => {
 		if (signal.aborted) return reject(new Error("GPS_CANCELLED"));
@@ -82,6 +86,17 @@ export function acquireLocation(
 					(position) => {
 						if (finished || attempt !== generation || visibility?.hidden)
 							return;
+						if (
+							Number.isFinite(position.coords.accuracy) &&
+							position.coords.accuracy > 0 &&
+							Number.isFinite(position.timestamp) &&
+							position.timestamp >= 0 &&
+							position.timestamp <= Date.now()
+						)
+							onReading?.({
+								accuracyMeters: position.coords.accuracy,
+								sampleAgeMs: Date.now() - position.timestamp,
+							});
 						if (!freshPosition(position)) {
 							failure = "GPS_INACCURATE";
 							return;

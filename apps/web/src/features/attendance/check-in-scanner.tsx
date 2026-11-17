@@ -22,10 +22,15 @@ import { attendanceQueryKeys, queryClient, trpc } from "@/utils/trpc";
 import { formatEventTime } from "../../components/event-feedback";
 import { refreshAttendanceQueries } from "../../utils/internal-event-queries";
 import { scanRegion } from "./check-in-camera";
+import {
+	type LocationDiagnosis,
+	locationDiagnosisText,
+} from "./check-in-diagnostics";
 import { acquireLocation, freshPosition } from "./check-in-location";
 import {
 	releaseCamera,
 	type ScannerDiagnostic,
+	scannerDiagnosticCode,
 	scannerErrorMessage,
 } from "./check-in-ui";
 
@@ -78,6 +83,10 @@ export default function CheckInScanner() {
 	>("idle");
 	const [error, setError] = useState("");
 	const [locationError, setLocationError] = useState(false);
+	const [locationDiagnosis, setLocationDiagnosis] = useState<LocationDiagnosis>(
+		{ code: "IDLE" },
+	);
+	const [copyStatus, setCopyStatus] = useState("");
 	const updateRegion = useCallback(() => {
 		if (video.current) Object.assign(region.current, scanRegion(video.current));
 	}, []);
@@ -171,6 +180,10 @@ export default function CheckInScanner() {
 		};
 	}, [report, updateRegion]);
 	const showError = (code: string) => {
+		setLocationDiagnosis((previous) => ({
+			...previous,
+			code: scannerDiagnosticCode(code),
+		}));
 		stopCamera();
 		gps.current?.controller.abort();
 		if (
@@ -190,6 +203,9 @@ export default function CheckInScanner() {
 		setPhase("error");
 	};
 	const prepareLocation = (attempt: number) => {
+		const startedAt = Date.now();
+		setCopyStatus("");
+		setLocationDiagnosis({ code: "GPS_ACQUIRING" });
 		gps.current?.controller.abort();
 		const task: NonNullable<typeof gps.current> = {
 			controller: new AbortController(),
@@ -202,10 +218,26 @@ export default function CheckInScanner() {
 			navigator.geolocation,
 			task.controller.signal,
 			document,
+			(reading) => {
+				if (generation.current === attempt && gps.current === task)
+					setLocationDiagnosis((previous) => ({ ...previous, ...reading }));
+			},
 		)
 			.then((position) => {
 				if (generation.current !== attempt || gps.current !== task) return null;
+				if (document.hidden) {
+					task.error = "GPS_INTERRUPTED";
+					setLocationDiagnosis({ code: task.error });
+					setGpsStatus(task.error);
+					return null;
+				}
 				task.position = position;
+				setLocationDiagnosis({
+					code: "GPS_READY",
+					accuracyMeters: position.coords.accuracy,
+					sampleAgeMs: Math.max(0, Date.now() - position.timestamp),
+					acquisitionMs: Math.max(0, Date.now() - startedAt),
+				});
 				report("GPS_READY", attempt);
 				setGpsStatus("ready");
 				return position;
@@ -213,6 +245,11 @@ export default function CheckInScanner() {
 			.catch((cause: unknown) => {
 				if (generation.current !== attempt || gps.current !== task) return null;
 				task.error = cause instanceof Error ? cause.message : "GPS_UNAVAILABLE";
+				setLocationDiagnosis((previous) => ({
+					...previous,
+					code: scannerDiagnosticCode(task.error ?? "GPS_UNAVAILABLE"),
+					acquisitionMs: Math.max(0, Date.now() - startedAt),
+				}));
 				setGpsStatus(task.error);
 				return null;
 			})
@@ -255,6 +292,11 @@ export default function CheckInScanner() {
 			if (!position || !freshPosition(position))
 				throw new Error(task.error ?? "GPS_TIMEOUT");
 			setPhase("submitting");
+			setLocationDiagnosis((previous) => ({
+				...previous,
+				code: "SUBMITTING",
+				sampleAgeMs: Math.max(0, Date.now() - position.timestamp),
+			}));
 			report("SUBMITTING", attempt);
 			await mutation.mutateAsync({
 				qrToken: token,
@@ -265,6 +307,10 @@ export default function CheckInScanner() {
 				},
 			});
 			if (generation.current === attempt) {
+				setLocationDiagnosis((previous) => ({
+					...previous,
+					code: "SERVER_CONFIRMED",
+				}));
 				report("SERVER_CONFIRMED", attempt);
 				qrToken.current = null;
 				gps.current = null;
@@ -274,6 +320,14 @@ export default function CheckInScanner() {
 		} catch (cause) {
 			if (generation.current !== attempt) return;
 			if (cause instanceof TRPCClientError) {
+				const details = cause.data?.attendanceLocation;
+				if (details)
+					setLocationDiagnosis((previous) => ({
+						...previous,
+						distanceMeters: details.distanceMeters,
+						radiusMeters: details.radiusMeters,
+						accuracyMeters: details.accuracyMeters,
+					}));
 				const code = cause.data?.code;
 				if (code === "UNAUTHORIZED") showError("SESSION_EXPIRED");
 				else if (code === "BAD_REQUEST") showError("INVALID_LOCATION");
@@ -467,6 +521,8 @@ export default function CheckInScanner() {
 			? "Hentikan kamera dan lokasi"
 			: "Buka kamera dan lokasi";
 	const stop = () => {
+		setLocationDiagnosis({ code: "IDLE" });
+		setCopyStatus("");
 		report("STOPPED");
 		generation.current++;
 		busy.current = false;
@@ -517,6 +573,52 @@ export default function CheckInScanner() {
 			if (generation.current === attempt) busy.current = false;
 		}
 	};
+	const diagnosisPanel = (
+		<details className="rounded-xl border border-border p-3 text-sm">
+			<summary className="cursor-pointer py-2 font-medium">
+				Diagnosis lokasi
+			</summary>
+			<p className="my-2 text-muted-foreground text-xs">
+				Untuk pemeriksaan kendala perangkat. Tidak memuat koordinat mentah,
+				token QR, atau data akun. Angka jarak/akurasi server dibulatkan ke atas.
+			</p>
+			<textarea
+				readOnly
+				aria-label="Hasil diagnosis lokasi"
+				value={locationDiagnosisText(locationDiagnosis)}
+				rows={7}
+				className="w-full rounded-md border border-border p-2 text-base"
+			/>
+			<Button
+				className="mt-2 min-h-11"
+				onClick={async () => {
+					try {
+						if (!navigator.clipboard?.writeText) {
+							setCopyStatus("Pilih teks diagnosis dan salin secara manual.");
+							return;
+						}
+						await navigator.clipboard.writeText(
+							locationDiagnosisText(locationDiagnosis),
+						);
+						setCopyStatus(
+							"Diagnosis disalin. Tambahkan model perangkat, versi iOS dan browser saat melaporkan.",
+						);
+					} catch {
+						setCopyStatus(
+							"Tidak dapat menyalin otomatis. Pilih teks diagnosis dan salin secara manual.",
+						);
+					}
+				}}
+			>
+				Salin diagnosis
+			</Button>
+			{copyStatus && (
+				<p role="status" className="mt-2">
+					{copyStatus}
+				</p>
+			)}
+		</details>
+	);
 	return (
 		<section className="mx-auto max-w-lg space-y-4">
 			<div className="relative isolate flex min-h-[min(72dvh,44rem)] flex-col overflow-hidden rounded-3xl bg-slate-950 text-white shadow-xl">
@@ -712,6 +814,7 @@ export default function CheckInScanner() {
 				disimpan bersama kehadiran hanya ketika check-in. RESORA tidak melacak
 				lokasi secara terus-menerus.
 			</p>
+			{phase !== "error" && phase !== "result" && diagnosisPanel}
 			<ActionDialog
 				open={phase === "error" || phase === "result"}
 				onOpenChange={(open) => {
@@ -771,6 +874,7 @@ export default function CheckInScanner() {
 						</>
 					)
 				)}
+				{diagnosisPanel}
 			</ActionDialog>
 		</section>
 	);

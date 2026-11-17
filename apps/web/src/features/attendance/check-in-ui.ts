@@ -68,7 +68,11 @@ export type ScannerDiagnostic =
 	| "STOPPED";
 
 export function scannerErrorMessage(code: string) {
-	return messages[code] ?? messages.SERVER_FAILED;
+	return messages[scannerDiagnosticCode(code)] ?? messages.SERVER_FAILED;
+}
+
+export function scannerDiagnosticCode(code: string) {
+	return Object.hasOwn(messages, code) ? code : "SERVER_FAILED";
 }
 
 export type CameraHandle = Pick<QrScanner, "stop" | "destroy" | "$video">;
