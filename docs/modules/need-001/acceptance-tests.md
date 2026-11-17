@@ -250,3 +250,18 @@ Manual UAT pending:
 6. Check Tab/Shift+Tab containment, Escape/backdrop dismissal when idle, disabled dismissal while submitting, focus return, accessible action names/tooltips, 44px targets, narrow mobile screens, 200% zoom, dark theme and reduced-motion preference. Verify clipboard behavior in the target HTTPS/browser context.
 
 Staging UAT for edit/archive depends on separately authorizing/applying the new audit constraint migration. No remote application or release is claimed by these automated results.
+
+## Gallery / Files QR scan (2026-11-16)
+
+- Select a QR image without camera permission: decode locally, acquire current device GPS, submit only token/location through the existing check-in API and show the confirmed result.
+- Reject empty/non-image files and files over 10 MB before decoding; unreadable images or images without QR offer another file selection. A decoded foreign QR does not request GPS or submit attendance.
+- Switching from a running camera to the picker releases the camera and old GPS watcher; old decoder callbacks cannot submit attendance. Cancelled file selection starts no processing. Reset the file input so the same image can be selected again.
+- Disable competing input during decoding/submission and ignore duplicate file events. Late decoding after unmount must not acquire GPS or submit attendance. Existing GPS retries and server QR/session/eligibility/duplicate checks remain in force.
+
+Verification: offline component tests exercise the selection handler with scanner/media/transport doubles, alongside existing camera/GPS regressions. Actual image decoding, native gallery/Files selection, supported device image formats, and Safari/iPhone/Android UAT remain manual verification items; no device compatibility or performance claim is made by these tests.
+
+## Responsive self-scan and recovery (2026-11-16)
+
+Offline checks cover: full-visible-preview object-cover mapping in portrait/landscape, including pixels outside the decorative focus box; 10-scan/second configuration; one automatic recovery of frozen video or a silent decoder; bounded retries/manual recovery; healthy empty frames receiving a three-second hint without restarts; hidden/foreground grace; immediate QR acknowledgement and no competing submissions even after two seconds; server-only success; unconfirmed-response retry without a new camera; cleanup and existing camera/gallery/GPS/lifecycle regressions. Component tests use controlled media/decoder/clock/transport doubles and do not benchmark actual decoding.
+
+Manual UAT remains required on real Safari/iPhone and Android: first permission and repeated scans, portrait/landscape and resizing, switching apps, frozen/ended streams, slow/offline network, GPS failure, gallery interoperability and one-record retry after a lost response. Record startup, camera-ready-to-decode, GPS and request timings separately. Demonstrate at least 95% of clear in-frame QR decodes below three seconds once ready on the agreed device/lighting/QR test set; define that set before measuring. CLI tests/build alone do not demonstrate this performance target or resolve all reported iPhone failures.
