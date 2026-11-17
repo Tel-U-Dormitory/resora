@@ -77,6 +77,7 @@ export default function CheckInScanner() {
 		| "error"
 	>("idle");
 	const [error, setError] = useState("");
+	const [locationError, setLocationError] = useState(false);
 	const updateRegion = useCallback(() => {
 		if (video.current) Object.assign(region.current, scanRegion(video.current));
 	}, []);
@@ -150,6 +151,10 @@ export default function CheckInScanner() {
 		const onVisibility = () => {
 			if (!scanner.current || busy.current) return;
 			heartbeat.current.frameAt = heartbeat.current.decodedAt = Date.now();
+			if (document.hidden && gps.current && !gps.current.pending) {
+				gps.current = null;
+				setGpsStatus("");
+			}
 			// qr-scanner owns pause/resume; do not start a second frame loop here.
 			report(document.hidden ? "BACKGROUND" : "FOREGROUND");
 		};
@@ -171,10 +176,16 @@ export default function CheckInScanner() {
 		if (
 			!code.startsWith("GPS_") &&
 			code !== "INVALID_LOCATION" &&
-			code !== "CHECK_IN_UNCONFIRMED"
+			code !== "CHECK_IN_UNCONFIRMED" &&
+			code !== "OUTSIDE_GEOFENCE"
 		)
 			qrToken.current = null;
 		setUnconfirmed((previous) => previous || code === "CHECK_IN_UNCONFIRMED");
+		setLocationError(
+			code.startsWith("GPS_") ||
+				code === "OUTSIDE_GEOFENCE" ||
+				code === "INVALID_LOCATION",
+		);
 		setError(scannerErrorMessage(code));
 		setPhase("error");
 	};
@@ -190,6 +201,7 @@ export default function CheckInScanner() {
 		task.promise = acquireLocation(
 			navigator.geolocation,
 			task.controller.signal,
+			document,
 		)
 			.then((position) => {
 				if (generation.current !== attempt || gps.current !== task) return null;
@@ -726,6 +738,14 @@ export default function CheckInScanner() {
 				{phase === "error" ? (
 					<>
 						<p role="alert">{error}</p>
+						{locationError && (
+							<p>
+								Jika menggunakan iPhone: buka Pengaturan → Privasi &amp;
+								Keamanan → Layanan Lokasi. Izinkan lokasi untuk browser dan
+								aktifkan Lokasi Tepat (Precise Location) jika tersedia. Izinkan
+								juga lokasi pada pengaturan situs RESORA, lalu perbarui lokasi.
+							</p>
+						)}
 						{qrToken.current && (
 							<Button
 								onClick={() => {

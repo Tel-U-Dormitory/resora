@@ -1308,7 +1308,7 @@ test.each([false, true])(
 				f.logs.some((entry) => JSON.stringify(entry).includes("FOREGROUND")),
 			).toBe(true);
 			expect(f.requests).toHaveLength(0);
-			f.watches[1].success(position());
+			f.watches.at(-1)?.success(position());
 			await flush();
 			f.decoders[1]({ data: token });
 			await flush();
@@ -1484,7 +1484,7 @@ test("cancel/reopen and unmount suppress old GPS/scanner callbacks, pending resu
 });
 
 test("backend QR expiry/revocation after GPS wait discards token and requires a new scan", async () => {
-	for (const code of ["QR_EXPIRED", "QR_REVOKED", "OUTSIDE_GEOFENCE"]) {
+	for (const code of ["QR_EXPIRED", "QR_REVOKED"]) {
 		const f = scannerFixture();
 		try {
 			f.setFailure(new TRPCClientError(code));
@@ -1901,4 +1901,79 @@ test("GPS cancellation during settling discards the candidate and clears all tim
 	controller.abort();
 	await expect(promise).rejects.toThrow("GPS_CANCELLED");
 	expect(f.cleared).toEqual([1]);
+});
+
+test("foreground recovery replaces pending GPS once, ignores hidden/stale callbacks and preserves decoded QR", async () => {
+	const f = scannerFixture();
+	try {
+		await f.button("Buka kamera dan lokasi")();
+		f.decoders[0]({ data: token });
+		f.document.hidden = true;
+		for (const run of f.visibilityListeners) run();
+		f.watches[0].success(position());
+		await flush();
+		expect(f.requests).toHaveLength(0);
+		expect(f.cleared).toContain(1);
+		f.document.hidden = false;
+		for (const run of f.visibilityListeners) run();
+		for (const run of f.visibilityListeners) run(); // Duplicate events cannot add watchers.
+		expect(f.watches).toHaveLength(2);
+		f.watches[0].success(position());
+		await flush();
+		expect(f.requests).toHaveLength(0);
+		f.watches[1].success(position());
+		await flush();
+		expect(f.requests).toHaveLength(1);
+		expect(f.cameras).toHaveLength(1);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("repeated background interruptions require explicit location retry instead of looping", async () => {
+	const f = scannerFixture();
+	try {
+		await f.button("Buka kamera dan lokasi")();
+		f.decoders[0]({ data: token });
+		for (let i = 0; i < 2; i++) {
+			f.document.hidden = true;
+			for (const run of f.visibilityListeners) run();
+			f.document.hidden = false;
+			for (const run of f.visibilityListeners) run();
+		}
+		await flush();
+		expect(f.watches).toHaveLength(2);
+		expect(f.requests).toHaveLength(0);
+		await f.button("Perbarui Lokasi")();
+		f.watches[2].success(position());
+		await flush();
+		expect(f.requests).toHaveLength(1);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("out-of-radius response permits fresh location retry without rescanning and still rejects revoked QR", async () => {
+	const f = scannerFixture();
+	try {
+		f.setFailure(new TRPCClientError("OUTSIDE_GEOFENCE"));
+		await f.button("Buka kamera dan lokasi")();
+		f.decoders[0]({ data: token });
+		f.watches[0].success(position());
+		await flush();
+		expect(f.successes).toHaveLength(0);
+		expect(f.button("Perbarui Lokasi")).toBeFunction();
+		f.setFailure(new TRPCClientError("QR_REVOKED"));
+		await f.button("Perbarui Lokasi")();
+		f.watches[1].success(position());
+		await flush();
+		expect(f.requests).toHaveLength(2);
+		expect(f.cameras).toHaveLength(1);
+		expect(f.successes).toHaveLength(0);
+		expect(
+			f.render().find((item) => item.type === "ActionDialog")?.props.onRetry,
+		).toBeFunction();
+	} finally {
+		f.unmount();
+	}
 });
