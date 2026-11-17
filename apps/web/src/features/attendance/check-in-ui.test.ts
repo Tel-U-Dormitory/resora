@@ -119,7 +119,7 @@ test("poor/stale GPS readings and transient errors retry until valid; late callb
 	f.watches[0].success(position(5, Date.now() - GPS_FRESH_MS - 1));
 	f.watches[0].failure({ code: 2 } as GeolocationPositionError);
 	expect(f.cleared).toEqual([]);
-	const valid = position(20);
+	const valid = position(10);
 	f.watches[0].success(valid);
 	f.watches[0].success(position(1));
 	f.watches[0].failure({ code: 1 } as GeolocationPositionError);
@@ -1344,7 +1344,7 @@ test("Buka Kamera starts GPS immediately without blocking decoding; a pending lo
 		expect(f.requests).toHaveLength(0);
 		f.watches[0].success(position(70));
 		expect(f.requests).toHaveLength(0);
-		f.watches[0].success(position(20));
+		f.watches[0].success(position(10));
 		await flush();
 		expect(f.requests).toHaveLength(1);
 		expect(f.requests[0].qrToken).toBe(token);
@@ -1859,4 +1859,46 @@ test("confirmed attendance is displayed without waiting for recap and history re
 		release();
 		f.unmount();
 	}
+});
+
+test("GPS selects the most accurate fresh reading during settling and clears both timers", async () => {
+	const originalSet = globalThis.setTimeout;
+	const originalClear = globalThis.clearTimeout;
+	const timers = new Map<number, { run: () => void; ms: number }>();
+	let id = 0;
+	try {
+		globalThis.setTimeout = ((run: () => void, ms: number) => {
+			timers.set(++id, { run, ms });
+			return id;
+		}) as unknown as typeof setTimeout;
+		globalThis.clearTimeout = ((key: number) => {
+			timers.delete(key);
+		}) as unknown as typeof clearTimeout;
+		const f = gpsFixture();
+		const promise = acquireLocation(f.geo, new AbortController().signal);
+		f.watches[0].success(position(38));
+		expect(f.cleared).toHaveLength(0);
+		const best = position(15);
+		f.watches[0].success(best);
+		f.watches[0].success(position(30));
+		const settle = [...timers.values()].find((timer) => timer.ms === 3000);
+		expect(settle).toBeDefined();
+		settle?.run();
+		expect(await promise).toBe(best);
+		expect(f.cleared).toEqual([1]);
+		expect(timers.size).toBe(0);
+	} finally {
+		globalThis.setTimeout = originalSet;
+		globalThis.clearTimeout = originalClear;
+	}
+});
+
+test("GPS cancellation during settling discards the candidate and clears all timers", async () => {
+	const f = gpsFixture();
+	const controller = new AbortController();
+	const promise = acquireLocation(f.geo, controller.signal);
+	f.watches[0].success(position(35));
+	controller.abort();
+	await expect(promise).rejects.toThrow("GPS_CANCELLED");
+	expect(f.cleared).toEqual([1]);
 });
