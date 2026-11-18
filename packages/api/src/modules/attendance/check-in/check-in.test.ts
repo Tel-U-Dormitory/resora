@@ -503,3 +503,31 @@ test("record schema/migration is additive, unique, numeric and immutable-origin 
 	expect(sql).toContain("NEW.recorded_at IS DISTINCT FROM OLD.recorded_at");
 	expect(sql).toContain("NEW.source IS DISTINCT FROM OLD.source");
 });
+
+test("location rejection exposes numeric diagnosis only after invitation and QR checks, without writing attendance", async () => {
+	const { AttendanceLocationError, attendanceLocationDiagnostic } =
+		await import("../../../contracts/attendance-diagnostics");
+	for (const invited of [false, true]) {
+		const f = fixture();
+		f.state.invited = invited;
+		f.input.location.longitude = 0.001;
+		try {
+			await checkIn(f.db, f.identity, f.secret, f.input);
+			throw new Error("Expected check-in rejection");
+		} catch (error) {
+			expect((error as Error).message).toBe(
+				invited ? "OUTSIDE_GEOFENCE" : "NOT_INVITED",
+			);
+			const cause = (error as { cause?: unknown }).cause;
+			expect(cause instanceof AttendanceLocationError).toBe(invited);
+			if (invited)
+				expect(attendanceLocationDiagnostic(cause)).toEqual({
+					code: "OUTSIDE_GEOFENCE",
+					distanceMeters: 112,
+					radiusMeters: 20,
+					accuracyMeters: 20,
+				});
+		}
+		expect(f.state.writes).toHaveLength(0);
+	}
+});

@@ -5,6 +5,8 @@ import QrScanner from "qr-scanner";
 import * as jsxRuntime from "react/jsx-runtime";
 import ts from "typescript";
 import { MAX_GPS_ACCURACY_M as backendAccuracy } from "../../../../../packages/api/src/modules/attendance/check-in/check-in-policy";
+import { scanRegion } from "./check-in-camera";
+import { locationDiagnosisText } from "./check-in-diagnostics";
 import {
 	acquireLocation,
 	freshPosition,
@@ -15,6 +17,7 @@ import {
 import {
 	type CameraHandle,
 	releaseCamera,
+	scannerDiagnosticCode,
 	scannerErrorMessage,
 } from "./check-in-ui";
 
@@ -118,7 +121,7 @@ test("poor/stale GPS readings and transient errors retry until valid; late callb
 	f.watches[0].success(position(5, Date.now() - GPS_FRESH_MS - 1));
 	f.watches[0].failure({ code: 2 } as GeolocationPositionError);
 	expect(f.cleared).toEqual([]);
-	const valid = position(20);
+	const valid = position(10);
 	f.watches[0].success(valid);
 	f.watches[0].success(position(1));
 	f.watches[0].failure({ code: 1 } as GeolocationPositionError);
@@ -260,6 +263,14 @@ function elements(node: unknown): Element[] {
 // Execute the actual scanner component with offline hooks, media and transport
 // doubles, following the existing Broadcast/Committee JSX harness convention.
 function scannerFixture(realCameraLifecycle = false) {
+	let clock = Date.now();
+	class Clock extends Date {
+		static now() {
+			return clock;
+		}
+	}
+	const healthChecks = new Map<number, () => void>();
+	let healthId = 0;
 	const gps = gpsFixture();
 	const hooks: unknown[] = [];
 	let cursor = 0;
@@ -280,6 +291,11 @@ function scannerFixture(realCameraLifecycle = false) {
 	let failure: unknown;
 	let holdRequest: Promise<void> | undefined;
 	let holdCamera: Promise<void> | undefined;
+	let holdRefresh: Promise<void> | undefined;
+	let onSuccess: (() => void | Promise<void>) | undefined;
+	let imageResult: Promise<{ data: string }> = Promise.resolve({ data: token });
+	const images: File[] = [];
+	let pickerClicks = 0;
 	const cameras: Scanner[] = [];
 	const videos = new Map<string | null | undefined, HTMLVideoElement>();
 	const mutation = {
@@ -298,10 +314,15 @@ function scannerFixture(realCameraLifecycle = false) {
 				attendanceAt: new Date().toISOString(),
 				timingClass: "ON_TIME",
 			};
+			await onSuccess?.();
 		},
 	};
 	class Scanner {
 		static NO_QR_CODE_FOUND = QrScanner.NO_QR_CODE_FOUND;
+		static scanImage(file: File) {
+			images.push(file);
+			return imageResult;
+		}
 		$video: HTMLVideoElement;
 		_active = false;
 		_paused = false;
@@ -311,12 +332,21 @@ function scannerFixture(realCameraLifecycle = false) {
 		stream?: MediaStream;
 		stops = 0;
 		destroys = 0;
+		options: {
+			maxScansPerSecond?: number;
+			calculateScanRegion?: (video: HTMLVideoElement) => QrScanner.ScanRegion;
+		};
 		constructor(
 			video: HTMLVideoElement,
 			decode: (result: { data: string }) => void,
-			options: { onDecodeError: (cause: Error | string) => void },
+			options: {
+				onDecodeError: (cause: Error | string) => void;
+				maxScansPerSecond?: number;
+				calculateScanRegion?: (video: HTMLVideoElement) => QrScanner.ScanRegion;
+			},
 		) {
 			this.$video = video;
+			this.options = options;
 			decoders.push(decode);
 			decodeErrors.push(options.onDecodeError);
 			cameras.push(this);
@@ -385,15 +415,21 @@ function scannerFixture(realCameraLifecycle = false) {
 					},
 				];
 			},
-			useEffect: (run: () => () => void) => {
+			useEffect: (run: () => (() => void) | undefined) => {
 				const index = cursor++;
 				if (!(index in hooks)) {
 					hooks[index] = true;
-					cleanups.push(run());
+					const cleanup = run();
+					if (cleanup) cleanups.push(cleanup);
 				}
 			},
 		},
-		"@tanstack/react-query": { useMutation: () => mutation },
+		"@tanstack/react-query": {
+			useMutation: (options: { onSuccess: () => void | Promise<void> }) => {
+				onSuccess = options.onSuccess;
+				return mutation;
+			},
+		},
 		"@trpc/client": { TRPCClientError },
 		"qr-scanner": { __esModule: true, default: Scanner },
 		"@resora/ui/components/action-dialog": { ActionDialog: "ActionDialog" },
@@ -402,9 +438,14 @@ function scannerFixture(realCameraLifecycle = false) {
 			buttonVariants: () => "",
 		},
 		"lucide-react": Object.fromEntries(
-			["ArrowLeft", "Camera", "CheckCircle2", "LoaderCircle", "ScanLine"].map(
-				(name) => [name, name],
-			),
+			[
+				"ArrowLeft",
+				"Camera",
+				"CheckCircle2",
+				"ImagePlus",
+				"LoaderCircle",
+				"ScanLine",
+			].map((name) => [name, name]),
 		),
 		"next/link": { default: "Link" },
 		sonner: {
@@ -415,10 +456,16 @@ function scannerFixture(realCameraLifecycle = false) {
 			trpc: { attendance: { checkIn: { mutationOptions: () => ({}) } } },
 		},
 		"../../utils/internal-event-queries": {
-			refreshAttendanceQueries: async () => {},
+			refreshAttendanceQueries: async () => holdRefresh,
 		},
 		"./check-in-location": { acquireLocation, freshPosition },
-		"./check-in-ui": { releaseCamera, scannerErrorMessage },
+		"./check-in-camera": { scanRegion },
+		"./check-in-ui": {
+			releaseCamera,
+			scannerDiagnosticCode,
+			scannerErrorMessage,
+		},
+		"./check-in-diagnostics": { locationDiagnosisText },
 		"../../components/event-feedback": {
 			formatEventTime: (value: string) => value,
 		},
@@ -442,6 +489,9 @@ function scannerFixture(realCameraLifecycle = false) {
 		"window",
 		"document",
 		"console",
+		"setInterval",
+		"clearInterval",
+		"Date",
 		js,
 	)(
 		(name: string) => {
@@ -453,6 +503,12 @@ function scannerFixture(realCameraLifecycle = false) {
 		{ isSecureContext: true },
 		document,
 		{ info: (...args: unknown[]) => logs.push(args) },
+		(run: () => void) => {
+			healthChecks.set(++healthId, run);
+			return healthId;
+		},
+		(id: number) => healthChecks.delete(id),
+		Clock,
 	);
 	const render = () => {
 		cursor = 0;
@@ -468,16 +524,30 @@ function scannerFixture(realCameraLifecycle = false) {
 				videoHeight: 480,
 				paused: false,
 				ended: false,
+				currentTime: 0,
+				getBoundingClientRect: () => ({
+					left: 0,
+					top: 0,
+					width: 320,
+					height: 600,
+				}),
 				removeEventListener: () => {},
 			} as unknown as HTMLVideoElement);
 		(video?.props.ref as { current: unknown }).current = videos.get(video?.key);
+		const input = tree.find((item) => item.type === "input");
+		(input?.props.ref as { current: unknown }).current = {
+			click: () => pickerClicks++,
+		};
 		return tree;
 	};
 	const button = (label: string) => {
 		const found = render().find(
 			(item) =>
 				item.type === "Button" &&
-				(item.props["aria-label"] === label || item.props.children === label),
+				(item.props["aria-label"] === label ||
+					item.props.children === label ||
+					(Array.isArray(item.props.children) &&
+						item.props.children.includes(label))),
 		);
 		if (!found) throw new Error(`Button missing: ${label}`);
 		return found.props.onClick as () => Promise<void>;
@@ -494,6 +564,25 @@ function scannerFixture(realCameraLifecycle = false) {
 		logs,
 		document,
 		visibilityListeners,
+		healthChecks,
+		advance: (ms: number) => {
+			clock += ms;
+			for (const run of [...healthChecks.values()]) run();
+		},
+		images,
+		pickerClicks: () => pickerClicks,
+		setImageResult: (value: Promise<{ data: string }>) => {
+			imageResult = value;
+		},
+		chooseImage: (file?: File) => {
+			const input = render().find((item) => item.type === "input");
+			if (!input) throw new Error("Image input missing");
+			const target = { files: file ? [file] : [], value: "selected-image" };
+			(input.props.onChange as (event: unknown) => void)({
+				currentTarget: target,
+			});
+			return target;
+		},
 		videoEvent: (name: string) => {
 			const video = render().find((item) => item.type === "video");
 			if (!video) throw new Error("Video missing");
@@ -506,6 +595,9 @@ function scannerFixture(realCameraLifecycle = false) {
 		},
 		holdRequest: (value: Promise<void>) => {
 			holdRequest = value;
+		},
+		holdRefresh: (value: Promise<void>) => {
+			holdRefresh = value;
 		},
 		holdCamera: (value: Promise<void>) => {
 			holdCamera = value;
@@ -799,7 +891,7 @@ test("normal empty frames stay quiet; manual restart replaces decoder, ignores s
 				.some(
 					(item) =>
 						item.props.children ===
-						"QR terbaca. Menunggu akurasi GPS maksimal 40 m (hingga 20 detik)…",
+						"QR terbaca, memverifikasi kehadiran… Menunggu lokasi (hingga 20 detik).",
 				),
 		).toBe(true);
 		expect(
@@ -829,6 +921,7 @@ test("normal empty frames stay quiet; manual restart replaces decoder, ignores s
 			expect(entry[0]).toBe("[ATTENDANCE_SCANNER]");
 			expect(Object.keys(entry[1] as object).sort()).toEqual([
 				"attempt",
+				"elapsedMs",
 				"event",
 			]);
 		}
@@ -1222,7 +1315,7 @@ test.each([false, true])(
 				f.logs.some((entry) => JSON.stringify(entry).includes("FOREGROUND")),
 			).toBe(true);
 			expect(f.requests).toHaveLength(0);
-			f.watches[1].success(position());
+			f.watches.at(-1)?.success(position());
 			await flush();
 			f.decoders[1]({ data: token });
 			await flush();
@@ -1258,7 +1351,7 @@ test("Buka Kamera starts GPS immediately without blocking decoding; a pending lo
 		expect(f.requests).toHaveLength(0);
 		f.watches[0].success(position(70));
 		expect(f.requests).toHaveLength(0);
-		f.watches[0].success(position(20));
+		f.watches[0].success(position(10));
 		await flush();
 		expect(f.requests).toHaveLength(1);
 		expect(f.requests[0].qrToken).toBe(token);
@@ -1398,7 +1491,7 @@ test("cancel/reopen and unmount suppress old GPS/scanner callbacks, pending resu
 });
 
 test("backend QR expiry/revocation after GPS wait discards token and requires a new scan", async () => {
-	for (const code of ["QR_EXPIRED", "QR_REVOKED", "OUTSIDE_GEOFENCE"]) {
+	for (const code of ["QR_EXPIRED", "QR_REVOKED"]) {
 		const f = scannerFixture();
 		try {
 			f.setFailure(new TRPCClientError(code));
@@ -1421,5 +1514,594 @@ test("backend QR expiry/revocation after GPS wait discards token and requires a 
 		} finally {
 			f.unmount();
 		}
+	}
+});
+
+test("gallery reads locally, waits for live GPS and submits the same check-in payload without the image", async () => {
+	const f = scannerFixture();
+	try {
+		const file = new File(["synthetic image"], "qr.png", { type: "image/png" });
+		await f.button("Pilih gambar QR")();
+		expect(f.pickerClicks()).toBe(1);
+		expect(f.cameras).toHaveLength(0);
+		expect(f.chooseImage(file).value).toBe("");
+		await flush();
+		expect(f.images).toEqual([file]);
+		expect(f.requests).toHaveLength(0);
+		expect(f.watches).toHaveLength(1);
+		f.watches[0].success(position());
+		await flush();
+		expect(f.requests).toEqual([
+			{
+				qrToken: token,
+				location: { latitude: -6.97, longitude: 107.63, accuracyMeters: 10 },
+			},
+		]);
+		expect(f.successes).toHaveLength(1);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("gallery rejects empty, non-image and oversized files without GPS or network and retries the picker", async () => {
+	for (const file of [
+		new File([], "empty.png", { type: "image/png" }),
+		new File(["text"], "qr.txt", { type: "text/plain" }),
+		new File([new Uint8Array(10 * 1024 * 1024 + 1)], "large.png", {
+			type: "image/png",
+		}),
+	]) {
+		const f = scannerFixture();
+		try {
+			f.chooseImage(file);
+			await flush();
+			expect(f.images).toHaveLength(0);
+			expect(f.watches).toHaveLength(0);
+			expect(f.requests).toHaveLength(0);
+			const dialog = f.render().find((item) => item.type === "ActionDialog");
+			if (!dialog) throw new Error("Result dialog missing");
+			expect(dialog?.props.open).toBe(true);
+			(dialog.props.onRetry as () => void)();
+			expect(f.pickerClicks()).toBe(1);
+		} finally {
+			f.unmount();
+		}
+	}
+});
+
+test("gallery handles unreadable images and invalid QR without requesting location", async () => {
+	for (const invalidQr of [false, true]) {
+		const f = scannerFixture();
+		try {
+			f.setImageResult(
+				invalidQr
+					? Promise.resolve({ data: "foreign-qr" })
+					: Promise.resolve().then(() => {
+							throw new Error("decode failed");
+						}),
+			);
+			f.chooseImage(new File(["synthetic"], "qr.png", { type: "image/png" }));
+			await flush();
+			expect(f.watches).toHaveLength(0);
+			expect(f.requests).toHaveLength(0);
+			expect(
+				f.render().find((item) => item.type === "ActionDialog")?.props.open,
+			).toBe(true);
+		} finally {
+			f.unmount();
+		}
+	}
+});
+
+test("gallery replaces camera safely, ignores duplicate input and discards decoding after unmount", async () => {
+	const f = scannerFixture();
+	try {
+		await f.button("Buka kamera dan lokasi")();
+		await f.button("Pilih gambar QR")();
+		expect(f.cameras[0].destroys).toBeGreaterThan(0);
+		expect(f.cleared).toEqual([1]);
+		let resolveImage = (_value: { data: string }) => {};
+		f.setImageResult(
+			new Promise((resolve) => {
+				resolveImage = resolve;
+			}),
+		);
+		const file = new File(["synthetic"], "qr.png", { type: "image/png" });
+		f.chooseImage(file);
+		f.chooseImage(file);
+		await flush();
+		expect(f.images).toHaveLength(1);
+		f.decoders[0]({ data: token });
+		f.unmount();
+		resolveImage({ data: token });
+		await flush();
+		expect(f.watches).toHaveLength(1);
+		expect(f.requests).toHaveLength(0);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("cancelled gallery selection does not start decoding, GPS or camera", async () => {
+	const f = scannerFixture();
+	try {
+		await f.button("Pilih gambar QR")();
+		f.chooseImage();
+		await flush();
+		expect(f.images).toHaveLength(0);
+		expect(f.watches).toHaveLength(0);
+		expect(f.cameras).toHaveLength(0);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("gallery GPS denial records no attendance and retries location without decoding again", async () => {
+	const f = scannerFixture();
+	try {
+		f.chooseImage(new File(["synthetic"], "qr.png", { type: "image/png" }));
+		await flush();
+		f.watches[0].failure({ code: 1 } as GeolocationPositionError);
+		await flush();
+		expect(f.requests).toHaveLength(0);
+		expect(f.successes).toHaveLength(0);
+		const retry = f.button("Perbarui Lokasi")();
+		f.watches[1].success(position());
+		await retry;
+		await flush();
+		expect(f.images).toHaveLength(1);
+		expect(f.requests).toHaveLength(1);
+		expect(f.cameras).toHaveLength(0);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("scan covers the full visible preview in portrait and landscape, including outside the focus box", () => {
+	for (const [width, height, viewport, expected] of [
+		[
+			1280,
+			720,
+			{ left: 0, top: 0, width: 320, height: 600 },
+			{ x: 448, y: 0, width: 384, height: 720 },
+		],
+		[
+			720,
+			1280,
+			{ left: 20, top: 30, width: 320, height: 600 },
+			{ x: 19, y: 0, width: 683, height: 1280 },
+		],
+		[
+			1280,
+			720,
+			{ left: 0, top: 0, width: 600, height: 320 },
+			{ x: 0, y: 19, width: 1280, height: 683 },
+		],
+	] as const) {
+		const region = scanRegion({
+			videoWidth: width,
+			videoHeight: height,
+			getBoundingClientRect: () => viewport,
+		} as HTMLVideoElement);
+		expect(region).toMatchObject(expected);
+		expect(region.downScaledWidth).toBeLessThanOrEqual(640);
+		expect(region.downScaledHeight).toBeLessThanOrEqual(640);
+	}
+});
+
+test("frozen preview recovers once automatically, then offers manual recovery without reload", async () => {
+	const f = scannerFixture();
+	try {
+		await f.button("Buka kamera dan lokasi")();
+		expect(f.cameras[0].options.maxScansPerSecond).toBe(10);
+		expect(
+			f.cameras[0].options.calculateScanRegion?.(f.cameras[0].$video),
+		).toMatchObject({ x: 192, y: 0, width: 256, height: 480 });
+		f.advance(3000);
+		await flush();
+		expect(f.cameras).toHaveLength(2);
+		expect(f.cameras[0].destroys).toBeGreaterThan(0);
+		expect(f.healthChecks.size).toBe(1);
+		f.advance(3000);
+		await flush();
+		expect(f.cameras).toHaveLength(2);
+		await f.button("Mulai ulang pemindaian")();
+		expect(f.cameras).toHaveLength(3);
+		f.unmount();
+		expect(f.healthChecks.size).toBe(0);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("healthy empty frames show a three-second hint without restarting the camera", async () => {
+	const f = scannerFixture();
+	try {
+		await f.button("Buka kamera dan lokasi")();
+		for (let i = 1; i <= 6; i++) {
+			f.cameras[0].$video.currentTime = i;
+			f.decodeErrors[0](QrScanner.NO_QR_CODE_FOUND);
+			f.advance(1000);
+		}
+		expect(f.cameras).toHaveLength(1);
+		expect(f.button("Mulai ulang pemindaian")).toBeFunction();
+		expect(
+			f.logs.filter((entry) => JSON.stringify(entry).includes("SLOW_SCAN")),
+		).toHaveLength(1);
+		expect(
+			f.logs.some((entry) => JSON.stringify(entry).includes("SCAN_STALLED")),
+		).toBe(false);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("decoder silence recovers even if the camera keeps producing frames", async () => {
+	const f = scannerFixture();
+	try {
+		await f.button("Buka kamera dan lokasi")();
+		for (let i = 1; i <= 5; i++) {
+			f.cameras[0].$video.currentTime = i;
+			f.advance(1000);
+		}
+		await flush();
+		expect(f.cameras).toHaveLength(2);
+		expect(f.requests).toHaveLength(0);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("background pause and resume reset health deadlines without a competing camera loop", async () => {
+	const f = scannerFixture();
+	try {
+		await f.button("Buka kamera dan lokasi")();
+		f.document.hidden = true;
+		for (const run of f.visibilityListeners) run();
+		f.advance(10000);
+		expect(f.cameras).toHaveLength(1);
+		f.document.hidden = false;
+		for (const run of f.visibilityListeners) run();
+		f.advance(1000);
+		expect(f.cameras).toHaveLength(1);
+		f.cameras[0].$video.currentTime = 1;
+		f.decodeErrors[0](QrScanner.NO_QR_CODE_FOUND);
+		f.advance(1000);
+		expect(f.cameras).toHaveLength(1);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("QR acknowledgement is immediate, remains locked beyond two seconds and success waits for server", async () => {
+	const f = scannerFixture();
+	try {
+		let release = () => {};
+		f.holdRequest(
+			new Promise<void>((resolve) => {
+				release = resolve;
+			}),
+		);
+		await f.button("Buka kamera dan lokasi")();
+		f.decoders[0]({ data: token });
+		expect(f.healthChecks.size).toBe(0);
+		expect(
+			f
+				.render()
+				.some(
+					(item) =>
+						typeof item.props.children === "string" &&
+						item.props.children.startsWith("QR terbaca, memverifikasi"),
+				),
+		).toBe(true);
+		expect(f.successes).toHaveLength(0);
+		f.watches[0].success(position());
+		await flush();
+		f.advance(10000);
+		for (let i = 0; i < 20; i++) f.decoders[0]({ data: token });
+		expect(f.requests).toHaveLength(1);
+		expect(f.successes).toHaveLength(0);
+		expect(f.cameras).toHaveLength(1);
+		release();
+		await flush();
+		expect(f.successes).toHaveLength(1);
+		expect(
+			f.logs.some((entry) =>
+				JSON.stringify(entry).includes("SERVER_CONFIRMED"),
+			),
+		).toBe(true);
+		for (const entry of f.logs)
+			expect(
+				(entry[1] as { elapsedMs: number }).elapsedMs,
+			).toBeGreaterThanOrEqual(0);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("lost server response stays unconfirmed and retries current location without reopening camera", async () => {
+	const f = scannerFixture();
+	try {
+		f.setFailure(new TypeError("private network details"));
+		await f.button("Buka kamera dan lokasi")();
+		f.decoders[0]({ data: token });
+		f.watches[0].success(position());
+		await flush();
+		expect(
+			f.render().find((item) => item.type === "ActionDialog")?.props.title,
+		).toBe("Status kehadiran belum terkonfirmasi");
+		expect(f.successes).toHaveLength(0);
+		f.setFailure(undefined);
+		await f.button("Coba verifikasi lagi")();
+		f.watches[1].success(position());
+		await flush();
+		expect(f.requests).toHaveLength(2);
+		expect(f.requests[1].qrToken).toBe(token);
+		expect(f.cameras).toHaveLength(1);
+		expect(f.successes).toHaveLength(1);
+		expect(JSON.stringify(f.logs)).not.toContain("private network details");
+	} finally {
+		f.unmount();
+	}
+});
+
+test("confirmed attendance is displayed without waiting for recap and history refetch", async () => {
+	const f = scannerFixture();
+	let release = () => {};
+	try {
+		f.holdRefresh(
+			new Promise<void>((resolve) => {
+				release = resolve;
+			}),
+		);
+		await f.button("Buka kamera dan lokasi")();
+		f.decoders[0]({ data: token });
+		f.watches[0].success(position());
+		await flush();
+		expect(f.successes).toHaveLength(1);
+		expect(
+			f.render().find((item) => item.type === "ActionDialog")?.props.title,
+		).toBe("Check-in berhasil");
+	} finally {
+		release();
+		f.unmount();
+	}
+});
+
+test("GPS selects the most accurate fresh reading during settling and clears both timers", async () => {
+	const originalSet = globalThis.setTimeout;
+	const originalClear = globalThis.clearTimeout;
+	const timers = new Map<number, { run: () => void; ms: number }>();
+	let id = 0;
+	try {
+		globalThis.setTimeout = ((run: () => void, ms: number) => {
+			timers.set(++id, { run, ms });
+			return id;
+		}) as unknown as typeof setTimeout;
+		globalThis.clearTimeout = ((key: number) => {
+			timers.delete(key);
+		}) as unknown as typeof clearTimeout;
+		const f = gpsFixture();
+		const promise = acquireLocation(f.geo, new AbortController().signal);
+		f.watches[0].success(position(38));
+		expect(f.cleared).toHaveLength(0);
+		const best = position(15);
+		f.watches[0].success(best);
+		f.watches[0].success(position(30));
+		const settle = [...timers.values()].find((timer) => timer.ms === 3000);
+		expect(settle).toBeDefined();
+		settle?.run();
+		expect(await promise).toBe(best);
+		expect(f.cleared).toEqual([1]);
+		expect(timers.size).toBe(0);
+	} finally {
+		globalThis.setTimeout = originalSet;
+		globalThis.clearTimeout = originalClear;
+	}
+});
+
+test("GPS cancellation during settling discards the candidate and clears all timers", async () => {
+	const f = gpsFixture();
+	const controller = new AbortController();
+	const promise = acquireLocation(f.geo, controller.signal);
+	f.watches[0].success(position(35));
+	controller.abort();
+	await expect(promise).rejects.toThrow("GPS_CANCELLED");
+	expect(f.cleared).toEqual([1]);
+});
+
+test("foreground recovery replaces pending GPS once, ignores hidden/stale callbacks and preserves decoded QR", async () => {
+	const f = scannerFixture();
+	try {
+		await f.button("Buka kamera dan lokasi")();
+		f.decoders[0]({ data: token });
+		f.document.hidden = true;
+		for (const run of f.visibilityListeners) run();
+		f.watches[0].success(position());
+		await flush();
+		expect(f.requests).toHaveLength(0);
+		expect(f.cleared).toContain(1);
+		f.document.hidden = false;
+		for (const run of f.visibilityListeners) run();
+		for (const run of f.visibilityListeners) run(); // Duplicate events cannot add watchers.
+		expect(f.watches).toHaveLength(2);
+		f.watches[0].success(position());
+		await flush();
+		expect(f.requests).toHaveLength(0);
+		f.watches[1].success(position());
+		await flush();
+		expect(f.requests).toHaveLength(1);
+		expect(f.cameras).toHaveLength(1);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("repeated background interruptions require explicit location retry instead of looping", async () => {
+	const f = scannerFixture();
+	try {
+		await f.button("Buka kamera dan lokasi")();
+		f.decoders[0]({ data: token });
+		for (let i = 0; i < 2; i++) {
+			f.document.hidden = true;
+			for (const run of f.visibilityListeners) run();
+			f.document.hidden = false;
+			for (const run of f.visibilityListeners) run();
+		}
+		await flush();
+		expect(f.watches).toHaveLength(2);
+		expect(f.requests).toHaveLength(0);
+		await f.button("Perbarui Lokasi")();
+		f.watches[2].success(position());
+		await flush();
+		expect(f.requests).toHaveLength(1);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("out-of-radius response permits fresh location retry without rescanning and still rejects revoked QR", async () => {
+	const f = scannerFixture();
+	try {
+		f.setFailure(new TRPCClientError("OUTSIDE_GEOFENCE"));
+		await f.button("Buka kamera dan lokasi")();
+		f.decoders[0]({ data: token });
+		f.watches[0].success(position());
+		await flush();
+		expect(f.successes).toHaveLength(0);
+		expect(f.button("Perbarui Lokasi")).toBeFunction();
+		f.setFailure(new TRPCClientError("QR_REVOKED"));
+		await f.button("Perbarui Lokasi")();
+		f.watches[1].success(position());
+		await flush();
+		expect(f.requests).toHaveLength(2);
+		expect(f.cameras).toHaveLength(1);
+		expect(f.successes).toHaveLength(0);
+		expect(
+			f.render().find((item) => item.type === "ActionDialog")?.props.onRetry,
+		).toBeFunction();
+	} finally {
+		f.unmount();
+	}
+});
+
+test("copyable location diagnosis excludes coordinates, QR, identifiers and unknown exception text", () => {
+	const diagnosis = locationDiagnosisText({
+		code: "OUTSIDE_GEOFENCE",
+		accuracyMeters: 13,
+		distanceMeters: 36,
+		radiusMeters: 20,
+		sampleAgeMs: 100,
+		acquisitionMs: 3000,
+		latitude: 12,
+		qrToken: token,
+		userId: "private-user",
+	} as Parameters<typeof locationDiagnosisText>[0]);
+	expect(diagnosis).toContain("OUTSIDE_GEOFENCE");
+	expect(diagnosis).toContain("36");
+	for (const secret of ["latitude", token, "private-user"])
+		expect(diagnosis).not.toContain(secret);
+	expect(
+		locationDiagnosisText({
+			code: "private-exception-token",
+			accuracyMeters: Number.NaN,
+		}),
+	).toBe("Diagnosis lokasi RESORA\nKode: SERVER_FAILED");
+	expect(scannerErrorMessage("constructor")).toBe(
+		scannerErrorMessage("SERVER_FAILED"),
+	);
+});
+
+test("radius diagnostic is available inside the error dialog before dismissing it", async () => {
+	const f = scannerFixture();
+	try {
+		const failure = new TRPCClientError("OUTSIDE_GEOFENCE");
+		Object.defineProperty(failure, "data", {
+			value: {
+				code: "FORBIDDEN",
+				attendanceLocation: {
+					code: "OUTSIDE_GEOFENCE",
+					distanceMeters: 36,
+					radiusMeters: 20,
+					accuracyMeters: 13,
+				},
+			},
+		});
+		f.setFailure(failure);
+		await f.button("Buka kamera dan lokasi")();
+		f.decoders[0]({ data: token });
+		f.watches[0].success(position());
+		await flush();
+		const text = f.render().find((item) => item.type === "textarea")
+			?.props.value;
+		expect(text).toContain("OUTSIDE_GEOFENCE");
+		expect(text).toContain("Jarak menurut server (m): 36");
+		expect(text).not.toContain(token);
+		await f.button("Salin diagnosis")(); // No Clipboard API still allows manual text selection.
+		expect(
+			f
+				.render()
+				.some(
+					(item) =>
+						item.props.children ===
+						"Pilih teks diagnosis dan salin secara manual.",
+				),
+		).toBe(true);
+	} finally {
+		f.unmount();
+	}
+});
+
+test("GPS diagnostics report numeric accuracy for rejected samples without exposing coordinates", async () => {
+	const f = gpsFixture();
+	const controller = new AbortController();
+	const readings: unknown[] = [];
+	const promise = acquireLocation(
+		f.geo,
+		controller.signal,
+		undefined,
+		(reading) => readings.push(reading),
+	);
+	f.watches[0].success(position(150));
+	expect(readings).toHaveLength(1);
+	expect(Object.keys(readings[0] as object).sort()).toEqual([
+		"accuracyMeters",
+		"sampleAgeMs",
+	]);
+	expect((readings[0] as { accuracyMeters: number }).accuracyMeters).toBe(150);
+	controller.abort();
+	await expect(promise).rejects.toThrow("GPS_CANCELLED");
+});
+
+test("a stale best candidate cannot replace a fresher reading at the acquisition deadline", async () => {
+	const originalSet = globalThis.setTimeout;
+	const originalClear = globalThis.clearTimeout;
+	const originalNow = Date.now;
+	let clock = originalNow();
+	const timers = new Map<number, { run: () => void; ms: number }>();
+	let id = 0;
+	try {
+		Date.now = () => clock;
+		globalThis.setTimeout = ((run: () => void, ms: number) => {
+			timers.set(++id, { run, ms });
+			return id;
+		}) as unknown as typeof setTimeout;
+		globalThis.clearTimeout = ((key: number) =>
+			timers.delete(key)) as unknown as typeof clearTimeout;
+		const f = gpsFixture();
+		const promise = acquireLocation(f.geo, new AbortController().signal);
+		f.watches[0].success(position(20));
+		clock += 11000;
+		[...timers.values()].find((timer) => timer.ms === 3000)?.run();
+		expect(f.cleared).toHaveLength(0);
+		const fresh = position(35);
+		f.watches[0].success(fresh);
+		clock += 9000;
+		[...timers.values()].find((timer) => timer.ms === GPS_WINDOW_MS)?.run();
+		expect(await promise).toBe(fresh);
+	} finally {
+		Date.now = originalNow;
+		globalThis.setTimeout = originalSet;
+		globalThis.clearTimeout = originalClear;
 	}
 });

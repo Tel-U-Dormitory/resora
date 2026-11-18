@@ -8,6 +8,7 @@ import {
 	ArrowLeft,
 	Camera,
 	CheckCircle2,
+	ImagePlus,
 	LoaderCircle,
 	ScanLine,
 } from "lucide-react";
@@ -20,22 +21,38 @@ import { cn } from "@/lib/utils";
 import { attendanceQueryKeys, queryClient, trpc } from "@/utils/trpc";
 import { formatEventTime } from "../../components/event-feedback";
 import { refreshAttendanceQueries } from "../../utils/internal-event-queries";
+import { scanRegion } from "./check-in-camera";
+import {
+	type LocationDiagnosis,
+	locationDiagnosisText,
+} from "./check-in-diagnostics";
 import { acquireLocation, freshPosition } from "./check-in-location";
 import {
 	releaseCamera,
 	type ScannerDiagnostic,
+	scannerDiagnosticCode,
 	scannerErrorMessage,
 } from "./check-in-ui";
 
 export default function CheckInScanner() {
 	const mutation = useMutation({
 		...trpc.attendance.checkIn.mutationOptions(),
-		onSuccess: () =>
-			refreshAttendanceQueries(queryClient, attendanceQueryKeys).catch(
+		onSuccess: () => {
+			void refreshAttendanceQueries(queryClient, attendanceQueryKeys).catch(
 				() => {},
-			),
+			);
+		},
 	});
 	const video = useRef<HTMLVideoElement>(null);
+	const region = useRef<QrScanner.ScanRegion>({});
+	const healthTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+	const heartbeat = useRef({ frameAt: 0, decodedAt: 0, videoTime: 0 });
+	const recovered = useRef(false);
+	const attemptStarted = useRef(Date.now());
+	const [slowScan, setSlowScan] = useState(false);
+	const [unconfirmed, setUnconfirmed] = useState(false);
+	const imageInput = useRef<HTMLInputElement>(null);
+	const inputMethod = useRef<"camera" | "image">("camera");
 	const scanner = useRef<QrScanner | null>(null);
 	const [cameraAttempt, setCameraAttempt] = useState(0);
 	const busy = useRef(false);
@@ -58,23 +75,40 @@ export default function CheckInScanner() {
 		| "starting"
 		| "restarting"
 		| "camera"
+		| "reading-image"
 		| "locating"
 		| "submitting"
 		| "result"
 		| "error"
 	>("idle");
 	const [error, setError] = useState("");
+	const [locationError, setLocationError] = useState(false);
+	const [locationDiagnosis, setLocationDiagnosis] = useState<LocationDiagnosis>(
+		{ code: "IDLE" },
+	);
+	const [copyStatus, setCopyStatus] = useState("");
+	const updateRegion = useCallback(() => {
+		if (video.current) Object.assign(region.current, scanRegion(video.current));
+	}, []);
+	// Layout changes can resize the visible camera preview.
+	useEffect(updateRegion);
 	const report = useCallback(
 		(event: ScannerDiagnostic, attempt = generation.current) => {
 			if (attempt !== generation.current || diagnostics.current.has(event))
 				return;
 			diagnostics.current.add(event);
 			// Fixed fields/codes only, at most once per code per camera attempt.
-			console.info("[ATTENDANCE_SCANNER]", { event, attempt });
+			console.info("[ATTENDANCE_SCANNER]", {
+				event,
+				attempt,
+				elapsedMs: Math.max(0, Date.now() - attemptStarted.current),
+			});
 		},
 		[],
 	);
 	const stopCamera = () => {
+		if (healthTimer.current !== null) clearInterval(healthTimer.current);
+		healthTimer.current = null;
 		cameraListeners.current?.();
 		cameraListeners.current = null;
 		releaseCamera(scanner.current, null, true);
@@ -120,30 +154,58 @@ export default function CheckInScanner() {
 		}
 	};
 	useEffect(() => {
+		// Warm the module without opening the camera or requesting location.
+		void import("qr-scanner").catch(() => {});
+		window.addEventListener?.("resize", updateRegion);
 		const onVisibility = () => {
 			if (!scanner.current || busy.current) return;
+			heartbeat.current.frameAt = heartbeat.current.decodedAt = Date.now();
+			if (document.hidden && gps.current && !gps.current.pending) {
+				gps.current = null;
+				setGpsStatus("");
+			}
 			// qr-scanner owns pause/resume; do not start a second frame loop here.
 			report(document.hidden ? "BACKGROUND" : "FOREGROUND");
 		};
 		document.addEventListener("visibilitychange", onVisibility);
 		return () => {
+			if (healthTimer.current !== null) clearInterval(healthTimer.current);
 			generation.current++;
 			document.removeEventListener("visibilitychange", onVisibility);
+			window.removeEventListener?.("resize", updateRegion);
 			cameraListeners.current?.();
 			gps.current?.controller.abort();
 			qrToken.current = null;
 			releaseCamera(scanner.current, null, true);
 		};
-	}, [report]);
+	}, [report, updateRegion]);
 	const showError = (code: string) => {
+		setLocationDiagnosis((previous) => ({
+			...previous,
+			code: scannerDiagnosticCode(code),
+		}));
 		stopCamera();
 		gps.current?.controller.abort();
-		if (!code.startsWith("GPS_") && code !== "INVALID_LOCATION")
+		if (
+			!code.startsWith("GPS_") &&
+			code !== "INVALID_LOCATION" &&
+			code !== "CHECK_IN_UNCONFIRMED" &&
+			code !== "OUTSIDE_GEOFENCE"
+		)
 			qrToken.current = null;
+		setUnconfirmed((previous) => previous || code === "CHECK_IN_UNCONFIRMED");
+		setLocationError(
+			code.startsWith("GPS_") ||
+				code === "OUTSIDE_GEOFENCE" ||
+				code === "INVALID_LOCATION",
+		);
 		setError(scannerErrorMessage(code));
 		setPhase("error");
 	};
 	const prepareLocation = (attempt: number) => {
+		const startedAt = Date.now();
+		setCopyStatus("");
+		setLocationDiagnosis({ code: "GPS_ACQUIRING" });
 		gps.current?.controller.abort();
 		const task: NonNullable<typeof gps.current> = {
 			controller: new AbortController(),
@@ -155,16 +217,39 @@ export default function CheckInScanner() {
 		task.promise = acquireLocation(
 			navigator.geolocation,
 			task.controller.signal,
+			document,
+			(reading) => {
+				if (generation.current === attempt && gps.current === task)
+					setLocationDiagnosis((previous) => ({ ...previous, ...reading }));
+			},
 		)
 			.then((position) => {
 				if (generation.current !== attempt || gps.current !== task) return null;
+				if (document.hidden) {
+					task.error = "GPS_INTERRUPTED";
+					setLocationDiagnosis({ code: task.error });
+					setGpsStatus(task.error);
+					return null;
+				}
 				task.position = position;
+				setLocationDiagnosis({
+					code: "GPS_READY",
+					accuracyMeters: position.coords.accuracy,
+					sampleAgeMs: Math.max(0, Date.now() - position.timestamp),
+					acquisitionMs: Math.max(0, Date.now() - startedAt),
+				});
+				report("GPS_READY", attempt);
 				setGpsStatus("ready");
 				return position;
 			})
 			.catch((cause: unknown) => {
 				if (generation.current !== attempt || gps.current !== task) return null;
 				task.error = cause instanceof Error ? cause.message : "GPS_UNAVAILABLE";
+				setLocationDiagnosis((previous) => ({
+					...previous,
+					code: scannerDiagnosticCode(task.error ?? "GPS_UNAVAILABLE"),
+					acquisitionMs: Math.max(0, Date.now() - startedAt),
+				}));
 				setGpsStatus(task.error);
 				return null;
 			})
@@ -188,6 +273,10 @@ export default function CheckInScanner() {
 			}
 			qrToken.current = token;
 			setPhase("locating");
+			// This acknowledges decoding only; attendance still waits for the server.
+			try {
+				if (!retryLocation) navigator.vibrate?.(40);
+			} catch {}
 			let task = gps.current;
 			if (
 				retryLocation ||
@@ -203,6 +292,11 @@ export default function CheckInScanner() {
 			if (!position || !freshPosition(position))
 				throw new Error(task.error ?? "GPS_TIMEOUT");
 			setPhase("submitting");
+			setLocationDiagnosis((previous) => ({
+				...previous,
+				code: "SUBMITTING",
+				sampleAgeMs: Math.max(0, Date.now() - position.timestamp),
+			}));
 			report("SUBMITTING", attempt);
 			await mutation.mutateAsync({
 				qrToken: token,
@@ -213,6 +307,11 @@ export default function CheckInScanner() {
 				},
 			});
 			if (generation.current === attempt) {
+				setLocationDiagnosis((previous) => ({
+					...previous,
+					code: "SERVER_CONFIRMED",
+				}));
+				report("SERVER_CONFIRMED", attempt);
 				qrToken.current = null;
 				gps.current = null;
 				setPhase("result");
@@ -220,22 +319,37 @@ export default function CheckInScanner() {
 			}
 		} catch (cause) {
 			if (generation.current !== attempt) return;
-			if (cause instanceof TRPCClientError)
-				showError(
-					cause.data?.code === "UNAUTHORIZED"
-						? "SESSION_EXPIRED"
-						: cause.data?.code === "BAD_REQUEST"
-							? "INVALID_LOCATION"
-							: cause.message,
-				);
-			else if (cause instanceof Error && cause.message.startsWith("GPS_"))
+			if (cause instanceof TRPCClientError) {
+				const details = cause.data?.attendanceLocation;
+				if (details)
+					setLocationDiagnosis((previous) => ({
+						...previous,
+						distanceMeters: details.distanceMeters,
+						radiusMeters: details.radiusMeters,
+						accuracyMeters: details.accuracyMeters,
+					}));
+				const code = cause.data?.code;
+				if (code === "UNAUTHORIZED") showError("SESSION_EXPIRED");
+				else if (code === "BAD_REQUEST") showError("INVALID_LOCATION");
+				else if (
+					code === "INTERNAL_SERVER_ERROR" ||
+					(!code &&
+						scannerErrorMessage(cause.message) ===
+							scannerErrorMessage("SERVER_FAILED"))
+				)
+					showError("CHECK_IN_UNCONFIRMED");
+				else showError(cause.message);
+			} else if (cause instanceof Error && cause.message.startsWith("GPS_"))
 				showError(cause.message);
-			else showError("SERVER_FAILED");
+			else showError("CHECK_IN_UNCONFIRMED");
 		} finally {
 			if (generation.current === attempt) busy.current = false;
 		}
 	};
-	const startCamera = async (restart = false) => {
+	const startCamera = async (
+		restart = false,
+		automatic = false,
+	): Promise<void> => {
 		if (
 			busy.current ||
 			mutation.isPending ||
@@ -243,6 +357,11 @@ export default function CheckInScanner() {
 			(!restart && startingCamera.current)
 		)
 			return;
+		inputMethod.current = "camera";
+		if (!automatic) recovered.current = false;
+		attemptStarted.current = Date.now();
+		setSlowScan(false);
+		setUnconfirmed(false);
 		startingCamera.current = restart ? "restarting" : "starting";
 		const attempt = ++generation.current;
 		diagnostics.current = new Set();
@@ -286,10 +405,15 @@ export default function CheckInScanner() {
 				{
 					preferredCamera: "environment",
 					returnDetailedScanResult: true,
-					maxScansPerSecond: 5,
+					maxScansPerSecond: 10,
+					calculateScanRegion: (element) => {
+						region.current = scanRegion(element);
+						return region.current;
+					},
 					onDecodeError: (cause) => {
 						if (generation.current !== attempt || decoded || busy.current)
 							return;
+						heartbeat.current.decodedAt = Date.now();
 						const message = cause instanceof Error ? cause.message : cause;
 						// The native BarcodeDetector path prefixes even a normal empty frame.
 						if (
@@ -314,6 +438,56 @@ export default function CheckInScanner() {
 			else if (!decoded) {
 				setPhase("camera");
 				inspectVideo(activeScanner.$video, attempt);
+				const stream = activeScanner.$video.srcObject;
+				if (stream && "getVideoTracks" in stream) {
+					const track = stream.getVideoTracks()[0];
+					// Optional ideals keep working cameras usable when constraints are unsupported.
+					void track
+						?.applyConstraints({
+							width: { ideal: 1280 },
+							height: { ideal: 720 },
+							frameRate: { ideal: 15 },
+						})
+						.catch(() => {});
+				}
+				const readyAt = Date.now();
+				heartbeat.current = {
+					frameAt: readyAt,
+					decodedAt: readyAt,
+					videoTime: activeScanner.$video.currentTime,
+				};
+				let hintShown = false;
+				healthTimer.current = setInterval(() => {
+					if (
+						attempt !== generation.current ||
+						busy.current ||
+						startingCamera.current
+					)
+						return;
+					const now = Date.now();
+					const health = heartbeat.current;
+					if (document.hidden) {
+						health.frameAt = health.decodedAt = now;
+						return;
+					}
+					if (activeScanner.$video.currentTime !== health.videoTime) {
+						health.videoTime = activeScanner.$video.currentTime;
+						health.frameAt = now;
+					}
+					if (now - readyAt >= 3000 && !hintShown) {
+						hintShown = true;
+						setSlowScan(true);
+						report("SLOW_SCAN", attempt);
+					}
+					if (now - health.frameAt < 3000 && now - health.decodedAt < 5000)
+						return;
+					report("SCAN_STALLED", attempt);
+					setCameraIssue("VIDEO_NOT_READY");
+					if (!recovered.current) {
+						recovered.current = true;
+						void startCamera(true, true);
+					}
+				}, 1000);
 			}
 		} catch (cause) {
 			if (generation.current === attempt) {
@@ -331,6 +505,7 @@ export default function CheckInScanner() {
 	const processing =
 		phase === "starting" ||
 		phase === "restarting" ||
+		phase === "reading-image" ||
 		phase === "locating" ||
 		phase === "submitting";
 	const scannerOpen =
@@ -346,6 +521,8 @@ export default function CheckInScanner() {
 			? "Hentikan kamera dan lokasi"
 			: "Buka kamera dan lokasi";
 	const stop = () => {
+		setLocationDiagnosis({ code: "IDLE" });
+		setCopyStatus("");
 		report("STOPPED");
 		generation.current++;
 		busy.current = false;
@@ -353,10 +530,95 @@ export default function CheckInScanner() {
 		gps.current?.controller.abort();
 		gps.current = null;
 		qrToken.current = null;
+		setSlowScan(false);
+		setUnconfirmed(false);
 		setGpsStatus("");
 		stopCamera();
 		setPhase("idle");
 	};
+	const openImagePicker = () => {
+		if (busy.current || mutation.isPending || startingCamera.current) return;
+		stop();
+		inputMethod.current = "image";
+		imageInput.current?.click();
+	};
+	const scanImage = async (file: File | undefined) => {
+		if (!file || busy.current || mutation.isPending || startingCamera.current)
+			return;
+		stop();
+		inputMethod.current = "image";
+		const attempt = generation.current;
+		attemptStarted.current = Date.now();
+		diagnostics.current = new Set();
+		busy.current = true;
+		mutation.reset();
+		setError("");
+		setPhase("reading-image");
+		try {
+			if (!window.isSecureContext) return showError("HTTPS_REQUIRED");
+			if (!file.type.startsWith("image/") || file.size === 0)
+				return showError("IMAGE_INVALID");
+			if (file.size > 10 * 1024 * 1024) return showError("IMAGE_TOO_LARGE");
+			const { default: Scanner } = await import("qr-scanner");
+			if (generation.current !== attempt) return;
+			const result = await Scanner.scanImage(file, {
+				returnDetailedScanResult: true,
+			});
+			if (generation.current !== attempt) return;
+			busy.current = false;
+			await processQr(result.data, attempt);
+		} catch {
+			if (generation.current === attempt) showError("IMAGE_SCAN_FAILED");
+		} finally {
+			if (generation.current === attempt) busy.current = false;
+		}
+	};
+	const diagnosisPanel = (
+		<details className="rounded-xl border border-border p-3 text-sm">
+			<summary className="cursor-pointer py-2 font-medium">
+				Diagnosis lokasi
+			</summary>
+			<p className="my-2 text-muted-foreground text-xs">
+				Untuk pemeriksaan kendala perangkat. Tidak memuat koordinat mentah,
+				token QR, atau data akun. Angka jarak/akurasi server dibulatkan ke atas.
+			</p>
+			<textarea
+				readOnly
+				aria-label="Hasil diagnosis lokasi"
+				value={locationDiagnosisText(locationDiagnosis)}
+				rows={7}
+				className="w-full rounded-md border border-border p-2 text-base"
+			/>
+			<Button
+				className="mt-2 min-h-11"
+				onClick={async () => {
+					try {
+						if (!navigator.clipboard?.writeText) {
+							setCopyStatus("Pilih teks diagnosis dan salin secara manual.");
+							return;
+						}
+						await navigator.clipboard.writeText(
+							locationDiagnosisText(locationDiagnosis),
+						);
+						setCopyStatus(
+							"Diagnosis disalin. Tambahkan model perangkat, versi iOS dan browser saat melaporkan.",
+						);
+					} catch {
+						setCopyStatus(
+							"Tidak dapat menyalin otomatis. Pilih teks diagnosis dan salin secara manual.",
+						);
+					}
+				}}
+			>
+				Salin diagnosis
+			</Button>
+			{copyStatus && (
+				<p role="status" className="mt-2">
+					{copyStatus}
+				</p>
+			)}
+		</details>
+	);
 	return (
 		<section className="mx-auto max-w-lg space-y-4">
 			<div className="relative isolate flex min-h-[min(72dvh,44rem)] flex-col overflow-hidden rounded-3xl bg-slate-950 text-white shadow-xl">
@@ -435,18 +697,33 @@ export default function CheckInScanner() {
 						role="status"
 						className="rounded-full bg-black/50 px-4 py-2 text-center text-xs"
 					>
-						{phase === "camera"
-							? "Arahkan kamera ke QR Code kegiatan"
-							: phase === "locating"
-								? "QR terbaca. Menunggu akurasi GPS maksimal 40 m (hingga 20 detik)…"
-								: phase === "submitting"
-									? "Menyimpan kehadiran…"
-									: phase === "starting"
-										? "Menyiapkan kamera…"
-										: phase === "restarting"
-											? "Memulai ulang pemindaian…"
-											: "Buka kamera untuk scan kehadiran"}
+						{phase === "reading-image"
+							? "Membaca QR dari gambar…"
+							: phase === "camera"
+								? "Arahkan kamera ke QR Code kegiatan"
+								: phase === "locating"
+									? "QR terbaca, memverifikasi kehadiran… Menunggu lokasi (hingga 20 detik)."
+									: phase === "submitting"
+										? "QR terbaca, memverifikasi kehadiran… Menunggu konfirmasi server."
+										: phase === "starting"
+											? "Menyiapkan kamera…"
+											: phase === "restarting"
+												? "Memulai ulang pemindaian…"
+												: "Buka kamera atau pilih gambar QR"}
 					</p>
+					{phase === "camera" && slowScan && (
+						<div className="flex flex-col items-center gap-3">
+							<p role="status" className="text-center text-sm">
+								QR belum terbaca. Pastikan QR terlihat utuh dan cukup terang,
+								atau pilih gambar dari galeri.
+							</p>
+							{!restartCamera && (
+								<Button onClick={() => startCamera(true)}>
+									Mulai ulang pemindaian
+								</Button>
+							)}
+						</div>
+					)}
 					{phase === "camera" && gpsStatus && gpsStatus !== "ready" && (
 						<p role="status" className="text-center text-sm">
 							{gpsStatus === "locating"
@@ -474,6 +751,7 @@ export default function CheckInScanner() {
 					<Button
 						size="icon"
 						disabled={
+							phase === "reading-image" ||
 							phase === "locating" ||
 							phase === "submitting" ||
 							mutation.isPending
@@ -499,18 +777,44 @@ export default function CheckInScanner() {
 									? "Ketuk untuk menghentikan kamera dan lokasi"
 									: "Ketuk untuk membuka kamera dan lokasi"}
 					</span>
+					<input
+						ref={imageInput}
+						type="file"
+						accept="image/*"
+						aria-label="Pilih gambar QR dari galeri atau Files"
+						className="hidden"
+						onChange={(event) => {
+							const file = event.currentTarget.files?.[0];
+							event.currentTarget.value = "";
+							void scanImage(file);
+						}}
+					/>
+					<Button
+						onClick={openImagePicker}
+						disabled={processing || mutation.isPending}
+						aria-describedby="scan-privacy scan-image-help"
+						className="min-h-11 bg-white/10 text-white hover:bg-white/20"
+					>
+						<ImagePlus aria-hidden="true" />
+						Pilih gambar QR
+					</Button>
+					<p id="scan-image-help" className="text-center text-white/80 text-xs">
+						Galeri atau Files, maksimal 10 MB. Gambar dibaca di perangkat.
+					</p>
 				</div>
 			</div>
 			<p
 				id="scan-privacy"
 				className="px-2 text-muted-foreground text-xs leading-relaxed"
 			>
-				Kamera dan izin lokasi dimulai saat Anda menekan Buka Kamera. GPS
-				diambil hingga 20 detik per percobaan dan dihentikan setelah lokasi
-				valid atau scanner ditutup. Lokasi dikirim dan disimpan bersama
-				kehadiran hanya ketika check-in. RESORA tidak melacak lokasi secara
-				terus-menerus.
+				Kamera dan izin lokasi dimulai saat Anda menekan Buka Kamera. Untuk
+				gambar, izin lokasi diminta setelah QR terbaca; gambar tidak dikirim
+				atau disimpan di server. GPS diambil hingga 20 detik per percobaan dan
+				dihentikan setelah lokasi valid atau scanner ditutup. Lokasi dikirim dan
+				disimpan bersama kehadiran hanya ketika check-in. RESORA tidak melacak
+				lokasi secara terus-menerus.
 			</p>
+			{phase !== "error" && phase !== "result" && diagnosisPanel}
 			<ActionDialog
 				open={phase === "error" || phase === "result"}
 				onOpenChange={(open) => {
@@ -518,20 +822,33 @@ export default function CheckInScanner() {
 				}}
 				title={
 					phase === "error"
-						? "Kehadiran belum tercatat"
+						? unconfirmed
+							? "Status kehadiran belum terkonfirmasi"
+							: "Kehadiran belum tercatat"
 						: mutation.data?.status === "ALREADY_CHECKED_IN"
 							? "Anda sudah melakukan check-in"
 							: "Check-in berhasil"
 				}
 				onRetry={
 					phase === "error" && !qrToken.current
-						? () => startCamera()
+						? () => {
+								if (inputMethod.current === "image") openImagePicker();
+								else void startCamera();
+							}
 						: undefined
 				}
 			>
 				{phase === "error" ? (
 					<>
 						<p role="alert">{error}</p>
+						{locationError && (
+							<p>
+								Jika menggunakan iPhone: buka Pengaturan → Privasi &amp;
+								Keamanan → Layanan Lokasi. Izinkan lokasi untuk browser dan
+								aktifkan Lokasi Tepat (Precise Location) jika tersedia. Izinkan
+								juga lokasi pada pengaturan situs RESORA, lalu perbarui lokasi.
+							</p>
+						)}
 						{qrToken.current && (
 							<Button
 								onClick={() => {
@@ -539,7 +856,7 @@ export default function CheckInScanner() {
 									if (token) void processQr(token, generation.current, true);
 								}}
 							>
-								Perbarui Lokasi
+								{unconfirmed ? "Coba verifikasi lagi" : "Perbarui Lokasi"}
 							</Button>
 						)}
 					</>
@@ -557,6 +874,7 @@ export default function CheckInScanner() {
 						</>
 					)
 				)}
+				{diagnosisPanel}
 			</ActionDialog>
 		</section>
 	);

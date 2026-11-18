@@ -2,6 +2,11 @@ import type QrScanner from "qr-scanner";
 
 const gpsHelp = "Hubungi KADEP HCO untuk pencatatan kehadiran secara manual.";
 const messages: Record<string, string> = {
+	IMAGE_INVALID: "Pilih file gambar yang tidak kosong dari galeri atau Files.",
+	IMAGE_TOO_LARGE:
+		"Ukuran gambar maksimal 10 MB. Pilih gambar yang lebih kecil.",
+	IMAGE_SCAN_FAILED:
+		"Gambar tidak dapat dibaca atau QR tidak ditemukan. Pilih gambar QR yang jelas dalam format JPG atau PNG, atau gunakan kamera.",
 	INVALID_QR:
 		"QR tidak valid. Gunakan QR kehadiran RESORA yang ditampilkan HCO.",
 	QR_EXPIRED: "QR telah kedaluwarsa. Minta HCO menampilkan QR baru.",
@@ -15,11 +20,12 @@ const messages: Record<string, string> = {
 	PASSWORD_CHANGE_REQUIRED:
 		"Ganti password terlebih dahulu untuk melakukan check-in.",
 	GPS_DENIED: `Izin lokasi ditolak. Aktifkan lokasi untuk RESORA melalui pengaturan browser/perangkat, lalu coba Perbarui Lokasi atau buka kamera kembali. ${gpsHelp}`,
+	GPS_INTERRUPTED: `Pengambilan lokasi terhenti setelah berpindah aplikasi. Kembali ke RESORA dan pilih Perbarui Lokasi. ${gpsHelp}`,
 	GPS_TIMEOUT: `Pengambilan lokasi terlalu lama. Pilih Perbarui Lokasi di tempat dengan sinyal lebih baik. ${gpsHelp}`,
 	GPS_UNAVAILABLE: `Lokasi tidak tersedia. ${gpsHelp}`,
 	INVALID_LOCATION: `Lokasi yang diterima tidak valid. ${gpsHelp}`,
 	GPS_INACCURATE: `Akurasi GPS belum mencapai 40 meter. Coba Perbarui Lokasi di area terbuka. ${gpsHelp}`,
-	OUTSIDE_GEOFENCE: `Lokasi Anda di luar radius event. ${gpsHelp}`,
+	OUTSIDE_GEOFENCE: `Titik lokasi perangkat terdeteksi di luar radius event. Jika Anda sudah di lokasi, pilih Perbarui Lokasi untuk mencoba lagi tanpa scan ulang. ${gpsHelp}`,
 	HTTPS_REQUIRED:
 		"Kamera dan lokasi memerlukan koneksi aman. Gunakan alamat HTTPS RESORA.",
 	CAMERA_DENIED:
@@ -36,6 +42,8 @@ const messages: Record<string, string> = {
 		"Sesi telah berakhir atau akun tidak lagi eligible. Silakan masuk kembali.",
 	SERVER_FAILED:
 		"Koneksi atau layanan tidak tersedia. Coba lagi; catatan kehadiran yang sudah tersimpan tidak akan ditimpa.",
+	CHECK_IN_UNCONFIRMED:
+		"Belum dapat memastikan kehadiran karena koneksi atau layanan terputus. Coba verifikasi lagi; kehadiran yang sudah tersimpan tidak akan dicatat dua kali.",
 };
 
 export type ScannerDiagnostic =
@@ -51,12 +59,20 @@ export type ScannerDiagnostic =
 	| "QR_CALLBACK_IGNORED"
 	| "WAITING_GPS"
 	| "SUBMITTING"
+	| "GPS_READY"
+	| "SERVER_CONFIRMED"
+	| "SCAN_STALLED"
+	| "SLOW_SCAN"
 	| "BACKGROUND"
 	| "FOREGROUND"
 	| "STOPPED";
 
 export function scannerErrorMessage(code: string) {
-	return messages[code] ?? messages.SERVER_FAILED;
+	return messages[scannerDiagnosticCode(code)] ?? messages.SERVER_FAILED;
+}
+
+export function scannerDiagnosticCode(code: string) {
+	return Object.hasOwn(messages, code) ? code : "SERVER_FAILED";
 }
 
 export type CameraHandle = Pick<QrScanner, "stop" | "destroy" | "$video">;
