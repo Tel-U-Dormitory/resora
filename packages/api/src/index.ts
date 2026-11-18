@@ -5,16 +5,24 @@ import {
 import { initTRPC, TRPCError } from "@trpc/server";
 
 import type { Context } from "./context";
+import { attendanceLocationDiagnostic } from "./contracts/attendance-diagnostics";
 
 export const t = initTRPC.context<Context>().create({
-	errorFormatter({ shape, error }) {
+	errorFormatter({ shape, error, path }) {
 		return {
 			...shape,
 			message:
 				error.code === "INTERNAL_SERVER_ERROR"
 					? "Request could not be completed"
 					: shape.message,
-			data: { ...shape.data, stack: undefined },
+			data: {
+				...shape.data,
+				stack: undefined,
+				attendanceLocation:
+					path === "attendance.checkIn" && error.code === "FORBIDDEN"
+						? attendanceLocationDiagnostic(error.cause)
+						: null,
+			},
 		};
 	},
 });
