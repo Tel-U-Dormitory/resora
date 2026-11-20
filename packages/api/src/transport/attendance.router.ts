@@ -16,6 +16,7 @@ import {
 	manualCorrectSchema,
 	manualInsertSchema,
 	ownHistorySchema,
+	pointsRecapSchema,
 	setScoringModeSchema,
 } from "../contracts/attendance";
 import { protectedProcedure, router } from "../index";
@@ -26,6 +27,7 @@ import {
 	manualCorrect,
 	manualInsert,
 	ownHistory,
+	pointsRecap,
 	recap,
 } from "../modules/attendance/attendance.public";
 import {
@@ -34,6 +36,9 @@ import {
 } from "../modules/events/events.public";
 
 export const attendanceRouter = router({
+	pointsRecap: protectedProcedure
+		.input(pointsRecapSchema)
+		.query(({ ctx, input }) => pointsRecap(ctx.db, ctx.identity, input)),
 	setScoringMode: protectedProcedure
 		.input(setScoringModeSchema)
 		.mutation(({ ctx, input }) =>

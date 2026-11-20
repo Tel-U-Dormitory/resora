@@ -91,6 +91,7 @@ export const setScoringModeSchema = eventIdSchema.extend({
 	reason: reasonSchema,
 });
 export type SetScoringModeInput = z.infer<typeof setScoringModeSchema>;
+export const pointsRecapSchema = z.object({ periodId: z.uuid() }).strict();
 export const visibilitySchema = z.enum(["VISIBLE", "HIDDEN", "ARCHIVED"]);
 export const eventListSchema = z
 	.object({

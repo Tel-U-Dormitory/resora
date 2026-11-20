@@ -4,11 +4,48 @@ import {
 	eventParticipants,
 	events,
 } from "@resora/db/schema/attendance";
-import { and, desc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, lt, ne, or, sql } from "drizzle-orm";
 import type { EventListInput } from "../../contracts/attendance";
 import type { EventFact } from "./event.types";
 
 type Db = Database | DatabaseTransaction;
+
+export async function closedEventsForScoring(
+	db: Db,
+	startsOn: string,
+	endsOn: string,
+) {
+	return db
+		.select({
+			eventId: events.id,
+			title: events.title,
+			startsAt: events.startsAt,
+			closedAt: events.closedAt,
+			scoringMode: events.attendanceScoringMode,
+			organizationContext: events.organizationContext,
+			committeeName: events.snapshotCommitteeName,
+			rosterCriteria: events.rosterCriteria,
+		})
+		.from(events)
+		.where(
+			and(
+				eq(events.status, "CLOSED"),
+				or(
+					eq(events.attendanceScoringMode, "INCLUDED"),
+					isNull(events.attendanceScoringMode),
+				),
+				gte(
+					events.startsAt,
+					sql`(${startsOn}::date::timestamp AT TIME ZONE 'Asia/Jakarta')`,
+				),
+				lt(
+					events.startsAt,
+					sql`((${endsOn}::date + 1)::timestamp AT TIME ZONE 'Asia/Jakarta')`,
+				),
+			),
+		)
+		.orderBy(asc(events.startsAt), asc(events.id));
+}
 
 export const eventFactFields = {
 	id: events.id,

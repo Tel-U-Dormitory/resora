@@ -4,6 +4,7 @@
 export { checkIn } from "./check-in/check-in";
 export { signChallenge, verifySessionChallenge } from "./check-in/qr";
 export { manualCorrect, manualInsert } from "./manual-attendance";
+export { pointsRecap } from "./points-recap";
 export { auditHistory, exportCsv, ownHistory, recap } from "./reporting";
 export type { SessionFact } from "./session.types";
 export {

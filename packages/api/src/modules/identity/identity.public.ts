@@ -10,13 +10,15 @@ import {
 	buildings,
 	departments,
 	positions,
+	srPeriodMemberships,
+	srPeriods,
 	srProfiles,
 	systemPrivileges,
 	userPermissionGrants,
 	userProfiles,
 } from "@resora/db/schema/identity";
 import { srTenureStatus } from "@resora/db/sr-tenure";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { canManageInternalAttendanceManually } from "./identity-policy";
 import { eligibleForManualGrant } from "./permission-catalog";
 
@@ -110,6 +112,57 @@ export async function getActiveSrDirectory(
 		),
 		invalidAssignmentCount,
 	};
+}
+
+// Read-only counterpart for consistent reports; write authorization still uses live locks.
+export async function readOperationalIdentity(
+	db: Database | DatabaseTransaction,
+	userId: string,
+) {
+	const identity = await getActiveIdentity(db, userId);
+	if (!identity || requiresPasswordChange(identity)) return null;
+	if (
+		identity.actor === "SR" &&
+		!(await readActiveSrDirectory(db, false, userId)).candidates.length
+	)
+		return null;
+	return identity;
+}
+
+// Trusted report queries: callers authorize access; historical membership is not an active directory.
+export async function readSrPeriod(
+	db: Database | DatabaseTransaction,
+	periodId: string,
+) {
+	const [period] = await db
+		.select({
+			id: srPeriods.id,
+			name: srPeriods.name,
+			startsOn: srPeriods.startsOn,
+			endsOn: srPeriods.endsOn,
+		})
+		.from(srPeriods)
+		.where(eq(srPeriods.id, periodId));
+	return period ?? null;
+}
+
+export async function readSrPeriodRoster(
+	db: Database | DatabaseTransaction,
+	periodId: string,
+) {
+	return db
+		.select({ userId: user.id, nim: user.username, name: user.name })
+		.from(srPeriodMemberships)
+		.innerJoin(srProfiles, eq(srProfiles.userId, srPeriodMemberships.userId))
+		.innerJoin(userProfiles, eq(userProfiles.userId, srProfiles.userId))
+		.innerJoin(user, eq(user.id, srProfiles.userId))
+		.where(
+			and(
+				eq(srPeriodMemberships.periodId, periodId),
+				eq(userProfiles.actor, "SR"),
+			),
+		)
+		.orderBy(asc(user.username), asc(user.id));
 }
 
 // Lock only the target's live identity/assignment/reference rows during check-in.
