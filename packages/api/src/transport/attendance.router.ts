@@ -16,6 +16,7 @@ import {
 	manualCorrectSchema,
 	manualInsertSchema,
 	ownHistorySchema,
+	setScoringModeSchema,
 } from "../contracts/attendance";
 import { protectedProcedure, router } from "../index";
 import {
@@ -33,6 +34,11 @@ import {
 } from "../modules/events/events.public";
 
 export const attendanceRouter = router({
+	setScoringMode: protectedProcedure
+		.input(setScoringModeSchema)
+		.mutation(({ ctx, input }) =>
+			attendance.setScoringMode(ctx.db, ctx.identity, input),
+		),
 	eventAuditHistory: protectedProcedure
 		.input(eventAuditHistorySchema)
 		.query(({ ctx, input }) => eventAuditHistory(ctx.db, ctx.identity, input)),

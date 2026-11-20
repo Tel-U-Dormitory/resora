@@ -141,6 +141,12 @@ If location access is denied, inaccurate, or out of range, there is no automatic
 
 The **official NEED-001 FR set** is `FR-086` (recap) and `FR-119–FR-130` (event, audience builder, snapshot, QR, check-in, geofence, manual, audit and CSV). Detailed scenarios: [NEED-001 PRD](modules/need-001/prd.md) and [acceptance tests](modules/need-001/acceptance-tests.md).
 
+#### Attendance point classification — approved F1
+
+Each existing event has one nullable scoring mode: NULL (**Belum diklasifikasikan**), `INCLUDED` (**Masukkan dalam penilaian**) or `EXCLUDED` (**Tidak dihitung dalam penilaian**). No event categories, automatic classification/backfill or calculated totals are introduced. Only eligible structural HCO KADEP and legitimate SUPERADMIN may classify PUBLISHED/CLOSED events with a mandatory reason; HCO SEKDEP/ANGGOTA and explicit manual-attendance grants do not authorize this action. Historical events may be classified without reopening them. Actual changes are audited; repeated identical updates add no audit. Event-detail controls follow the backend capability. Existing event visibility, invitations, QR, attendance and snapshots retain their current behavior.
+
+Future F2 calculation will consider only INCLUDED events: candidate maximum 10 points for an all-eligible-SR audience without exclusion, otherwise candidate maximum 6 for a subset. This determination must use stored roster/participant context, never the current SR account count. EXCLUDED and unclassified events are not automatically scored. Calculation and cross-event exports remain outside F1. PM approval of the new migration is required separately before any shared-database application; device UAT and release approval remain pending.
+
 ### 6.2 NEED-007 — Adaptif activity registration and attendance
 
 Adaptif configures the event registration form with a **positive maximum capacity** or **unlimited** capacity. A successful registration immediately establishes attendance eligibility **while not cancelled**; there is **no confirmation/approval step required** for eligibility. When a limited-capacity event is full, new registrations are **rejected automatically**, not accepted into an implicit waitlist. A cancellation releases a slot for new applicants **if registration is still open**. Concurrent requests must not exceed capacity.

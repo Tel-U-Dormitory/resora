@@ -9,4 +9,5 @@ export {
 	publishEvent,
 } from "./lifecycle";
 export { getEvent, getRosterDirectory, listEvents } from "./queries";
+export { setScoringMode } from "./scoring";
 export { activateSession, changeQr, getQr } from "./sessions";

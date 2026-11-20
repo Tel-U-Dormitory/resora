@@ -23,6 +23,7 @@ export const eventFactFields = {
 	organizationContext: events.organizationContext,
 	committeeId: events.committeeId,
 	snapshotCommitteeName: events.snapshotCommitteeName,
+	attendanceScoringMode: events.attendanceScoringMode,
 	publishedAt: events.publishedAt,
 	closedAt: events.closedAt,
 	createdAt: events.createdAt,

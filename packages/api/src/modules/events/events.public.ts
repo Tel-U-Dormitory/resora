@@ -12,6 +12,7 @@ export {
 	amendPublishedConfiguration,
 	amendPublishedDetails,
 	appendEventAudit,
+	changeAttendanceScoringMode,
 	changeVisibility,
 	closePublishedEvent,
 	createInternalDraft,

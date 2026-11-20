@@ -25,6 +25,7 @@ export {
 	canAccessPersonalSr,
 	canManageBroadcast,
 	canManageCommittee,
+	canManageEventScoring,
 	canManageInternalAttendanceManually,
 	canManageInternalEvent,
 	canReadBroadcast,

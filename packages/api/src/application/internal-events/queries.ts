@@ -13,6 +13,7 @@ import * as eventOperations from "../../modules/events/events.public";
 import { visibilityActions } from "../../modules/events/events.public";
 import {
 	canAccessPersonalSr,
+	canManageEventScoring,
 	canManageInternalEvent,
 	getActiveSrDirectory,
 	hasSuperadminPrivilege,
@@ -78,6 +79,8 @@ export async function readEventDetail(
 			(canManage && row.event.committeeId && row.event.status === "DRAFT"
 				? (await getCommitteeRoster(db, row.event.committeeId)).name
 				: null),
+		canManageScoringMode:
+			canManageEventScoring(identity) && row.event.status !== "DRAFT",
 		administration: hasSuperadminPrivilege(identity)
 			? {
 					visibilityActions: visibilityActions(row.event, row.session),

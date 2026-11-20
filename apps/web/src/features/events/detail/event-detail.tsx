@@ -20,6 +20,7 @@ import { AdministrationPanel } from "./administration-panel";
 import { createDetailView, useEventDetail } from "./detail-model";
 import { InvitationsPanel } from "./invitations-panel";
 import { MetadataPanel } from "./metadata-panel";
+import { ScoringPanel } from "./scoring-panel";
 import { SessionPanel } from "./session-panel";
 export default function EventDetail({ eventId }: { eventId: string }) {
 	const state = useEventDetail(eventId);
@@ -60,6 +61,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 		revoke,
 		reissue,
 		metadata,
+		scoring,
 		visibility,
 		deleteDraft,
 		error,
@@ -146,6 +148,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 					revoke,
 					reissue,
 					metadata,
+					scoring,
 					visibility,
 					deleteDraft,
 				].some((mutation) => mutation.isPending) && (
@@ -276,6 +279,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 				</Link>
 			)}
 			{administration && <AdministrationPanel view={view} />}
+			{event.status !== "DRAFT" && <ScoringPanel key={eventId} view={view} />}
 			{canManage && event.status === "PUBLISHED" && (
 				<>
 					<div className="grid items-stretch gap-6 xl:grid-cols-2">
