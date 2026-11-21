@@ -28,6 +28,7 @@ export type RosterCriteria = {
 	exclude: string[];
 };
 export type EventVisibility = "VISIBLE" | "HIDDEN" | "ARCHIVED";
+export type AttendanceScoringMode = "INCLUDED" | "EXCLUDED";
 export const events = pgTable(
 	"events",
 	{
@@ -45,6 +46,9 @@ export const events = pgTable(
 			.$type<EventVisibility>()
 			.notNull()
 			.default("VISIBLE"),
+		attendanceScoringMode: text(
+			"attendance_scoring_mode",
+		).$type<AttendanceScoringMode>(),
 		startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
 		endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
 		rosterCriteria: jsonb("roster_criteria").$type<RosterCriteria>().notNull(),
@@ -75,6 +79,10 @@ export const events = pgTable(
 		),
 		index("events_committee_idx").on(t.committeeId),
 		check("events_title_nonblank", sql`length(btrim(${t.title})) > 0`),
+		check(
+			"events_attendance_scoring_mode",
+			sql`${t.attendanceScoringMode} IN ('INCLUDED', 'EXCLUDED')`,
+		),
 		check(
 			"events_visibility",
 			sql`${t.visibility} IN ('VISIBLE', 'HIDDEN', 'ARCHIVED')`,
@@ -316,14 +324,23 @@ export const eventAuditLogs = pgTable(
 				| "EVENT_UNHIDDEN"
 				| "EVENT_ARCHIVED"
 				| "EVENT_RESTORED"
+				| "ATTENDANCE_SCORING_MODE_CHANGED"
 			>()
 			.notNull(),
 		reason: text("reason").notNull(),
 		beforeState: jsonb("before_state")
-			.$type<EventEditAuditState | { visibility: EventVisibility }>()
+			.$type<
+				| EventEditAuditState
+				| { visibility: EventVisibility }
+				| { attendanceScoringMode: AttendanceScoringMode | null }
+			>()
 			.notNull(),
 		afterState: jsonb("after_state")
-			.$type<EventEditAuditState | { visibility: EventVisibility }>()
+			.$type<
+				| EventEditAuditState
+				| { visibility: EventVisibility }
+				| { attendanceScoringMode: AttendanceScoringMode | null }
+			>()
 			.notNull(),
 		createdAt: timestamp("created_at", { withTimezone: true })
 			.defaultNow()
@@ -334,7 +351,7 @@ export const eventAuditLogs = pgTable(
 		check("event_audit_logs_reason", sql`length(btrim(${t.reason})) > 0`),
 		check(
 			"event_audit_logs_action",
-			sql`${t.action} IN ('PUBLISHED_CONFIGURATION_EDITED', 'PUBLISHED_DETAILS_EDITED', 'CLOSED_METADATA_EDITED', 'EVENT_HIDDEN', 'EVENT_UNHIDDEN', 'EVENT_ARCHIVED', 'EVENT_RESTORED')`,
+			sql`${t.action} IN ('PUBLISHED_CONFIGURATION_EDITED', 'PUBLISHED_DETAILS_EDITED', 'CLOSED_METADATA_EDITED', 'EVENT_HIDDEN', 'EVENT_UNHIDDEN', 'EVENT_ARCHIVED', 'EVENT_RESTORED', 'ATTENDANCE_SCORING_MODE_CHANGED')`,
 		),
 		check(
 			"event_audit_logs_states",

@@ -63,6 +63,7 @@ export function useEventDetail(eventId: string) {
 	const revoke = useMutation(trpc.attendance.revokeQr.mutationOptions());
 	const reissue = useMutation(trpc.attendance.reissueQr.mutationOptions());
 	const metadata = useMutation(trpc.attendance.editMetadata.mutationOptions());
+	const scoring = useMutation(trpc.attendance.setScoringMode.mutationOptions());
 	const visibility = useMutation(
 		trpc.attendance.setVisibility.mutationOptions(),
 	);
@@ -147,6 +148,7 @@ export function useEventDetail(eventId: string) {
 		revoke,
 		reissue,
 		metadata,
+		scoring,
 		visibility,
 		deleteDraft,
 		administrativeAction,
@@ -201,6 +203,7 @@ export function createDetailView(
 		revoke.isPending ||
 		reissue.isPending ||
 		metadata.isPending ||
+		state.scoring.isPending ||
 		visibility.isPending ||
 		deleteDraft.isPending;
 	const expiry = qr.data?.expiresAt

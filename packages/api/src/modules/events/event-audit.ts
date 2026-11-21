@@ -29,7 +29,13 @@ export function administrativeChanges(before: AuditState, after: AuditState) {
 		if (previous !== next)
 			changes.push({ field, before: previous, after: next });
 	};
-	if ("visibility" in before && "visibility" in after) {
+	if ("attendanceScoringMode" in before && "attendanceScoringMode" in after) {
+		add(
+			"attendanceScoringMode",
+			before.attendanceScoringMode,
+			after.attendanceScoringMode,
+		);
+	} else if ("visibility" in before && "visibility" in after) {
 		add("visibility", before.visibility, after.visibility);
 	} else if ("title" in before && "title" in after) {
 		for (const field of ["title", "description", "startsAt", "endsAt"] as const)

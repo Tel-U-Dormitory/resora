@@ -85,6 +85,12 @@ export const checkInSchema = z
 export type CheckInInput = z.infer<typeof checkInSchema>;
 
 const reasonSchema = z.string().trim().min(1).max(2000);
+export const attendanceScoringModeSchema = z.enum(["INCLUDED", "EXCLUDED"]);
+export const setScoringModeSchema = eventIdSchema.extend({
+	scoringMode: attendanceScoringModeSchema,
+});
+export type SetScoringModeInput = z.infer<typeof setScoringModeSchema>;
+export const pointsRecapSchema = z.object({ periodId: z.uuid() }).strict();
 export const visibilitySchema = z.enum(["VISIBLE", "HIDDEN", "ARCHIVED"]);
 export const eventListSchema = z
 	.object({

@@ -1,4 +1,8 @@
 import { EventList } from "@/features/events/public";
-export default function EventsPage() {
-	return <EventList />;
+import { getSrSession } from "@/features/identity/server";
+export default async function EventsPage() {
+	const session = await getSrSession();
+	return (
+		<EventList canManageScoring={session?.canManageEventScoring ?? false} />
+	);
 }

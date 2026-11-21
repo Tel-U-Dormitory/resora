@@ -16,6 +16,17 @@ import {
 
 type Db = Database | DatabaseTransaction;
 
+export async function changeAttendanceScoringMode(
+	db: Db,
+	eventId: string,
+	attendanceScoringMode: NonNullable<EventFact["attendanceScoringMode"]>,
+) {
+	await db
+		.update(events)
+		.set({ attendanceScoringMode })
+		.where(eq(events.id, eventId));
+}
+
 export async function amendPublishedConfiguration(
 	db: Db,
 	eventId: string,
