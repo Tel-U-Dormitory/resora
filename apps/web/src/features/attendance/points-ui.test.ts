@@ -300,6 +300,28 @@ test("matrix uses F2 summaries, locale numbers, distinct headers and explicit nu
 	const f = fixture();
 	f.select("period-a");
 	let tree = f.render();
+	expect(
+		nodes(tree)
+			.filter((node) => node.type === "th" && node.props.scope === "col")
+			.map((node) => text(node.children))
+			.slice(-7),
+	).toEqual([
+		"Jumlah Hadir",
+		"Jumlah Tidak Hadir",
+		"Jumlah Event",
+		"Total Poin",
+		"Maksimal Poin",
+		"Belum Dinilai",
+		"Status Rekap",
+	]);
+	const body = nodes(tree).find((node) => node.type === "tbody");
+	const firstRow = nodes(body).find((node) => node.type === "tr");
+	expect(
+		nodes(firstRow)
+			.filter((node) => node.type === "td")
+			.map((node) => text(node.children))
+			.slice(-7),
+	).toEqual(["1", "1", "2", "14,2", "16", "1", "Belum lengkap"]);
 	expect(text(tree)).toContain("14,2");
 	expect(text(tree)).toContain("4,2");
 	expect(text(tree)).toContain("Belum dinilai");

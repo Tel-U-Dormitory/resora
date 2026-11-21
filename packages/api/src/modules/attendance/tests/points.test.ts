@@ -630,6 +630,24 @@ test("CSV preserves all matrix states, decimal 4.2, distinct duplicate event col
 	const csv = pointsCsv(report);
 	const rows = csvRows(csv);
 	expect(rows).toHaveLength(17);
+	expect(rows[0]?.slice(-7)).toEqual([
+		"Jumlah Hadir",
+		"Jumlah Tidak Hadir",
+		"Jumlah Event",
+		"Total Poin",
+		"Maksimal Poin",
+		"Belum Dinilai",
+		"Status Rekap",
+	]);
+	expect(rows[1]?.slice(-7)).toEqual([
+		"1",
+		"1",
+		"2",
+		"4.2",
+		"16",
+		"1",
+		"Belum lengkap",
+	]);
 	expect(new Set(rows[0]?.slice(4, 8)).size).toBe(4);
 	expect(rows[1]?.slice(4, 8)).toEqual(["4.2", "Belum dinilai", "0", "—"]);
 	expect(rows[1]?.slice(-7)).toEqual(
