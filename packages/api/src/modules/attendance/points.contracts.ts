@@ -13,15 +13,18 @@ export const pointsStatusLabels = {
 	PARTIAL: "Belum lengkap",
 } as const;
 
-export function pointsSummaryValues(row: {
-	attendedCount: number;
-	eventCount: number;
-	absentCount: number;
-	totalPoints: number;
-	maximumPossiblePoints: number;
-	unclassifiedCount: number;
-	scoringStatus: keyof typeof pointsStatusLabels;
-}) {
+export function pointsSummaryValues(
+	row: {
+		attendedCount: number;
+		eventCount: number;
+		absentCount: number;
+		totalPoints: number;
+		maximumPossiblePoints: number;
+		unclassifiedCount: number;
+		scoringStatus: keyof typeof pointsStatusLabels;
+	},
+	hasSelectedEvents = true,
+) {
 	return [
 		row.attendedCount,
 		row.absentCount,
@@ -29,7 +32,9 @@ export function pointsSummaryValues(row: {
 		row.totalPoints,
 		row.maximumPossiblePoints,
 		row.unclassifiedCount,
-		pointsStatusLabels[row.scoringStatus],
+		hasSelectedEvents
+			? pointsStatusLabels[row.scoringStatus]
+			: "Tanpa event penilaian",
 	];
 }
 

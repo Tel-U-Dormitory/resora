@@ -24,7 +24,7 @@ export function pointsCsv(report: Awaited<ReturnType<typeof pointsRecap>>) {
 			row.currentDepartmentCode,
 			row.currentBuildingName ?? row.currentBuildingCode,
 			...row.events.map(pointsCellValue),
-			...pointsSummaryValues(row),
+			...pointsSummaryValues(row, report.events.length > 0),
 		];
 		lines.push(
 			values

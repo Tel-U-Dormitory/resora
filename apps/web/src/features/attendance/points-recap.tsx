@@ -6,6 +6,7 @@ import {
 	pointsSummaryLabels,
 	pointsSummaryValues,
 } from "@resora/api/modules/attendance/points.contracts";
+import { Checkbox } from "@resora/ui/components/checkbox";
 import { Input } from "@resora/ui/components/input";
 import { Select } from "@resora/ui/components/select";
 import { useQuery } from "@tanstack/react-query";
@@ -28,6 +29,12 @@ const identityColumns = [
 export default function PointsRecap() {
 	const [periodId, setPeriodId] = useState("");
 	const [search, setSearch] = useState("");
+	const [appliedEventIds, setAppliedEventIds] = useState<string[] | undefined>(
+		undefined,
+	);
+	// null means the server-defined default selection; [] deliberately selects nothing.
+	const [draftEventIds, setDraftEventIds] = useState<string[] | null>(null);
+	const [showArchived, setShowArchived] = useState(false);
 	const [page, setPage] = useState(1);
 	const [exporting, setExporting] = useState(false);
 	const [feedback, setFeedback] = useState("");
@@ -39,13 +46,37 @@ export default function PointsRecap() {
 		meta: { errorHandledLocally: true },
 	});
 	const recap = useQuery({
-		...trpc.attendance.pointsRecap.queryOptions({ periodId }),
+		...trpc.attendance.pointsRecap.queryOptions({
+			periodId,
+			...(appliedEventIds === undefined
+				? {}
+				: { selectedEventIds: appliedEventIds }),
+		}),
 		enabled: Boolean(periodId),
 		retry: false,
 		meta: { errorHandledLocally: true },
 	});
 	const report =
-		!recap.error && recap.data?.period.id === periodId ? recap.data : undefined;
+		!recap.error &&
+		recap.data?.period.id === periodId &&
+		(appliedEventIds === undefined ||
+			JSON.stringify([...appliedEventIds].sort()) ===
+				JSON.stringify(recap.data.events.map((event) => event.eventId).sort()))
+			? recap.data
+			: undefined;
+	const availableEvents =
+		recap.data?.period.id === periodId ? recap.data.availableEvents : [];
+	const draftIds =
+		draftEventIds ??
+		availableEvents
+			.filter((event) => event.visibility !== "ARCHIVED")
+			.map((event) => event.eventId);
+	const selectedIds = new Set(draftIds);
+	const appliedIds =
+		report?.events.map((event) => event.eventId) ?? appliedEventIds ?? [];
+	const unapplied =
+		JSON.stringify([...draftIds].sort()) !==
+		JSON.stringify([...appliedIds].sort());
 	const visible = participantPage(
 		(report?.participants ?? []).map((row) => ({ ...row, nim: row.nim ?? "" })),
 		search,
@@ -103,6 +134,9 @@ export default function PointsRecap() {
 									onChange={(event) => {
 										if (exportLock.current) return;
 										setPeriodId(event.target.value);
+										setAppliedEventIds(undefined);
+										setDraftEventIds(null);
+										setShowArchived(false);
 										setSearch("");
 										setPage(1);
 										setError("");
@@ -138,6 +172,9 @@ export default function PointsRecap() {
 										const csv =
 											await trpcClient.attendance.exportPointsCsv.query({
 												periodId,
+												selectedEventIds: report.events.map(
+													(event) => event.eventId,
+												),
 											});
 										url = URL.createObjectURL(
 											new Blob([csv.content], {
@@ -169,6 +206,121 @@ export default function PointsRecap() {
 							</Button>
 						</CardContent>
 					</Card>
+					{periodId && (
+						<Card>
+							<CardContent className="space-y-4">
+								<fieldset className="min-w-0 space-y-3" disabled={exporting}>
+									<legend className="font-semibold">
+										Filter Event Penilaian
+									</legend>
+									<label
+										className="flex min-h-11 cursor-pointer items-center gap-3 text-sm"
+										htmlFor="points-show-archived"
+									>
+										<Checkbox
+											id="points-show-archived"
+											checked={showArchived}
+											onCheckedChange={(checked) => setShowArchived(checked)}
+										/>
+										Tampilkan event yang diarsipkan
+									</label>
+									<div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
+										{availableEvents
+											.filter(
+												(event) =>
+													showArchived || event.visibility !== "ARCHIVED",
+											)
+											.map((event) => (
+												<label
+													key={event.eventId}
+													htmlFor={`points-event-${event.eventId}`}
+													className="flex min-h-11 cursor-pointer items-start gap-3 rounded-md p-2 text-sm hover:bg-muted"
+												>
+													<Checkbox
+														id={`points-event-${event.eventId}`}
+														checked={selectedIds.has(event.eventId)}
+														onCheckedChange={(checked) =>
+															setDraftEventIds(
+																checked
+																	? [...new Set([...draftIds, event.eventId])]
+																	: draftIds.filter(
+																			(id) => id !== event.eventId,
+																		),
+															)
+														}
+													/>
+													<span className="min-w-0 break-words">
+														<span className="block">
+															{pointsEventHeading(event)}
+														</span>
+														<span className="text-muted-foreground text-xs">
+															{event.scoringMode === null
+																? "Belum diklasifikasikan"
+																: "INCLUDED"}
+															{event.visibility === "ARCHIVED"
+																? " ? Diarsipkan"
+																: ""}
+														</span>
+													</span>
+												</label>
+											))}
+										{availableEvents.length === 0 && (
+											<p className="p-2 text-muted-foreground text-sm">
+												{recap.isFetching
+													? "Memuat pilihan event?"
+													: recap.error
+														? "Pilihan event belum dapat dimuat. Reset default lalu terapkan kembali."
+														: "Tidak ada event yang memenuhi syarat pada periode ini."}
+											</p>
+										)}
+									</div>
+									<p role="status" className="text-muted-foreground text-sm">
+										{draftIds.length} event dipilih.{" "}
+										{unapplied
+											? "Pilihan belum diterapkan; matrix dan CSV masih memakai filter yang diterapkan."
+											: "Pilihan sesuai dengan rekap."}
+									</p>
+									<div className="flex flex-wrap gap-2">
+										<Button
+											variant="outline"
+											onClick={() => setDraftEventIds(null)}
+											disabled={exporting}
+										>
+											Reset default
+										</Button>
+										<Button
+											variant="outline"
+											onClick={() => setDraftEventIds([])}
+											disabled={exporting}
+										>
+											Kosongkan
+										</Button>
+										<Button
+											disabled={exporting || recap.isFetching}
+											onClick={() => {
+												if (exportLock.current) return;
+												const nextIds =
+													draftEventIds === null
+														? undefined
+														: [...draftEventIds].sort();
+												if (
+													JSON.stringify(nextIds) ===
+													JSON.stringify(appliedEventIds)
+												)
+													void recap.refetch();
+												setAppliedEventIds(nextIds);
+												setPage(1);
+												setFeedback("");
+												setError("");
+											}}
+										>
+											Terapkan Filter
+										</Button>
+									</div>
+								</fieldset>
+							</CardContent>
+						</Card>
+					)}
 					{error && (
 						<p role="alert" className="text-destructive text-sm">
 							{error}
@@ -227,8 +379,11 @@ export default function PointsRecap() {
 								)}
 								{report.events.length === 0 && (
 									<p>
-										Belum ada event CLOSED yang memenuhi penilaian pada periode
-										ini.
+										{appliedEventIds?.length === 0
+											? "Tidak ada event dipilih."
+											: "Belum ada event CLOSED yang memenuhi filter pada periode ini."}{" "}
+										Angka nol menunjukkan tidak ada event yang dihitung, bukan
+										penilaian final.
 									</p>
 								)}
 							</div>
@@ -329,7 +484,10 @@ export default function PointsRecap() {
 																</td>
 															);
 														})}
-														{pointsSummaryValues(row).map((value, index) => (
+														{pointsSummaryValues(
+															row,
+															report.events.length > 0,
+														).map((value, index) => (
 															<td
 																key={pointsSummaryLabels[index]}
 																className={`p-3 tabular-nums ${row.scoringStatus === "PARTIAL" ? "text-warning" : ""}`}
