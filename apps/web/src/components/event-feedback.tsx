@@ -57,10 +57,12 @@ export function parseWibDateTimeInput(value: string) {
 
 export function eventErrorMessage(error: unknown) {
 	if (error instanceof TRPCClientError) {
+		if (error.message === "POINTS_EVENT_SELECTION_INVALID")
+			return "Pilihan event tidak lagi tersedia untuk periode ini. Gunakan Reset default lalu Terapkan Filter, atau perbaiki pilihan event.";
 		if (error.message === "SCORING_MODE_REQUIRES_PUBLISHED_EVENT")
 			return "Penilaian kehadiran dapat diatur setelah event dipublikasikan.";
 		if (error.message === "SCORING_MODE_INPUT_INVALID")
-			return "Pilih penilaian kehadiran yang valid dan isi alasan perubahan.";
+			return "Pilih penilaian kehadiran yang valid.";
 		if (error.message === "EVENT_COMMITTEE_UNAVAILABLE")
 			return "Kepanitiaan tidak tersedia. Pilih kembali kepanitiaan yang valid.";
 		if (error.message === "EVENT_ORGANIZATION_FROZEN")
