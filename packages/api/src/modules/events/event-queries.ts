@@ -22,6 +22,7 @@ export async function closedEventsForScoring(
 			startsAt: events.startsAt,
 			closedAt: events.closedAt,
 			scoringMode: events.attendanceScoringMode,
+			visibility: events.visibility,
 			organizationContext: events.organizationContext,
 			committeeName: events.snapshotCommitteeName,
 			rosterCriteria: events.rosterCriteria,

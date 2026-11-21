@@ -90,7 +90,18 @@ export const setScoringModeSchema = eventIdSchema.extend({
 	scoringMode: attendanceScoringModeSchema,
 });
 export type SetScoringModeInput = z.infer<typeof setScoringModeSchema>;
-export const pointsRecapSchema = z.object({ periodId: z.uuid() }).strict();
+export const pointsRecapSchema = z
+	.object({
+		periodId: z.uuid(),
+		selectedEventIds: z
+			.array(z.uuid())
+			.max(1000)
+			.refine((ids) => new Set(ids).size === ids.length, {
+				message: "POINTS_EVENT_SELECTION_INVALID",
+			})
+			.optional(),
+	})
+	.strict();
 export const visibilitySchema = z.enum(["VISIBLE", "HIDDEN", "ARCHIVED"]);
 export const eventListSchema = z
 	.object({

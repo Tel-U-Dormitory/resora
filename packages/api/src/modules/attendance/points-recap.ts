@@ -160,7 +160,7 @@ export async function pointsRecap(
 ) {
 	if (!canReadAttendancePoints(identity))
 		throw new TRPCError({ code: "FORBIDDEN" });
-	const { periodId } = pointsRecapSchema.parse(input);
+	const { periodId, selectedEventIds } = pointsRecapSchema.parse(input);
 	return db.transaction(
 		async (tx) => {
 			if (
@@ -173,10 +173,23 @@ export async function pointsRecap(
 			if (!period)
 				throw new TRPCError({ code: "NOT_FOUND", message: "PERIOD_NOT_FOUND" });
 			const roster = await readSrPeriodRoster(tx, periodId);
-			const events = await closedEventsForScoring(
+			const eligibleEvents = await closedEventsForScoring(
 				tx,
 				period.startsOn,
 				period.endsOn,
+			);
+			const eligibleIds = new Set(eligibleEvents.map((event) => event.eventId));
+			if (selectedEventIds?.some((id) => !eligibleIds.has(id)))
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "POINTS_EVENT_SELECTION_INVALID",
+				});
+			const selectedIds =
+				selectedEventIds === undefined ? null : new Set(selectedEventIds);
+			const events = eligibleEvents.filter((event) =>
+				selectedIds === null
+					? event.visibility !== "ARCHIVED"
+					: selectedIds.has(event.eventId),
 			);
 			const eventIds = events.map((row) => row.eventId);
 			const userIds = roster.map((row) => row.userId);
@@ -212,6 +225,15 @@ export async function pointsRecap(
 					: [];
 			return {
 				period: { ...period, timeZone: "Asia/Jakarta" as const },
+				availableEvents: eligibleEvents.map(
+					({ eventId, title, startsAt, scoringMode, visibility }) => ({
+						eventId,
+						title,
+						startsAt,
+						scoringMode,
+						visibility,
+					}),
+				),
 				...aggregateAttendancePoints(events, roster, invitations, attendance),
 			};
 		},
