@@ -35,6 +35,7 @@ function load(file: string, modules: Record<string, unknown>) {
 				Card: "Card",
 				CardContent: "CardContent",
 				Select: "Select",
+				Checkbox: "Checkbox",
 				Input: "Input",
 				default: "Link",
 			},
@@ -79,6 +80,36 @@ function report(periodId = "period-a", count = 16) {
 				scoringMode: null,
 			},
 		],
+		availableEvents: [
+			{
+				eventId: "event-a",
+				title: "Same title",
+				startsAt: "2026-01-01T17:00:00Z",
+				scoringMode: "INCLUDED",
+				visibility: "VISIBLE",
+			},
+			{
+				eventId: "event-b",
+				title: "Same title",
+				startsAt: "2026-01-01T17:00:00Z",
+				scoringMode: null,
+				visibility: "HIDDEN",
+			},
+			{
+				eventId: "event-c",
+				title: "Archived event",
+				startsAt: "2026-01-02T17:00:00Z",
+				scoringMode: "INCLUDED",
+				visibility: "ARCHIVED",
+			},
+			{
+				eventId: "event-d",
+				title: "Archived unclassified",
+				startsAt: "2026-01-03T17:00:00Z",
+				scoringMode: null,
+				visibility: "ARCHIVED",
+			},
+		],
 		participants: Array.from({ length: count }, (_, i) => ({
 			userId: `sr-${i}`,
 			nim: `000${i}`,
@@ -116,7 +147,7 @@ function fixture() {
 	const lock = { current: false };
 	const queries: {
 		kind: string;
-		input?: { periodId: string };
+		input?: { periodId: string; selectedEventIds?: string[] };
 		enabled?: boolean;
 	}[] = [];
 	let retries = 0;
@@ -230,6 +261,7 @@ function fixture() {
 				default: "Link",
 				Input: "Input",
 				Select: "Select",
+				Checkbox: "Checkbox",
 				Button: "Button",
 				Card: "Card",
 				CardContent: "CardContent",
@@ -352,7 +384,7 @@ test("matrix uses F2 summaries, locale numbers, distinct headers and explicit nu
 	});
 	tree = f.render();
 	expect(text(tree)).toContain("0000");
-	expect(f.state[2]).toBe(1);
+	expect(f.state[5]).toBe(1);
 	f.select("period-b");
 	tree = f.render();
 	expect(f.queries.find((q) => q.kind === "recap")?.input).toEqual({
@@ -387,16 +419,18 @@ test("recap loading, permission errors, empty roster/events and no search result
 	expect(text(tree)).toContain("Tidak ada SR yang sesuai pencarian");
 });
 
-test("export uses only periodId and server filename, ignores search/page, blocks duplicate downloads and cleans URL", async () => {
+test("export uses the applied event IDs and server filename, ignores search/page, blocks duplicate downloads and cleans URL", async () => {
 	const f = fixture();
 	f.select("period-a");
 	f.state[1] = "00015";
-	f.state[2] = 2;
+	f.state[5] = 2;
 	const button = f.button(f.render(), "Export CSV Semua SR");
 	const click = button.props.onClick as () => Promise<void>;
 	const saving = click();
 	await click();
-	expect(f.requests).toEqual([{ periodId: "period-a" }]);
+	expect(f.requests).toEqual([
+		{ periodId: "period-a", selectedEventIds: ["event-a", "event-b"] },
+	]);
 	expect(f.button(f.render(), "Menyiapkan CSV…").props.disabled).toBe(true);
 	f.select("period-b");
 	expect(f.state[0]).toBe("period-a");
@@ -433,8 +467,11 @@ test("direct route and event-list entry use backend session capability, never st
 	for (const [session, expected] of [
 		[null, "/login?reason=session"],
 		[{ requiresPasswordChange: true }, "/change-password"],
-		[{ canManageEventScoring: false }, "/dashboard"],
-		[{ canManageEventScoring: true }, null],
+		[
+			{ canReadAttendancePoints: false, canManageEventScoring: true },
+			"/dashboard",
+		],
+		[{ canReadAttendancePoints: true, canManageEventScoring: false }, null],
 	] as const) {
 		const module = load("../../app/(authenticated)/events/points/page.tsx", {
 			"next/navigation": {
@@ -463,11 +500,142 @@ test("direct route and event-list entry use backend session capability, never st
 			trpc: { attendance: { list: { queryOptions: () => ({}) } } },
 		},
 	});
-	const list = module.default as (props: { canManageScoring: boolean }) => Node;
-	expect(text(list({ canManageScoring: true }))).toContain(
-		"Rekap Poin Kehadiran",
-	);
-	expect(text(list({ canManageScoring: false }))).not.toContain(
+	const list = module.default as (props: { canReadPoints: boolean }) => Node;
+	expect(text(list({ canReadPoints: true }))).toContain("Rekap Poin Kehadiran");
+	expect(text(list({ canReadPoints: false }))).not.toContain(
 		"Rekap Poin Kehadiran",
 	);
 });
+
+function checkbox(tree: Node, id: string, checked: boolean) {
+	const node = nodes(tree).find(
+		(node) => node.type === "Checkbox" && node.props.id === id,
+	);
+	if (!node) throw Error(`Checkbox missing: ${id}`);
+	(node.props.onCheckedChange as (checked: boolean) => void)(checked);
+}
+function recapInput(f: ReturnType<typeof fixture>) {
+	return f.queries.find((q) => q.kind === "recap")?.input;
+}
+
+test("event filter keeps draft choices separate, reveals archives without selecting and applies canonical IDs", async () => {
+	const f = fixture();
+	f.select("period-a");
+	let tree = f.render();
+	expect(text(tree)).toContain("Filter Event Penilaian");
+	expect(recapInput(f)).toEqual({ periodId: "period-a" });
+	expect(
+		nodes(tree).filter(
+			(n) => n.type === "Checkbox" && n.props.checked === true,
+		),
+	).toHaveLength(2);
+	expect(text(tree)).not.toContain("Archived event");
+	checkbox(tree, "points-show-archived", true);
+	tree = f.render();
+	expect(text(tree)).toContain("Archived event");
+	expect(
+		nodes(tree).find((n) => n.props.id === "points-event-event-c")?.props
+			.checked,
+	).toBe(false);
+	checkbox(tree, "points-event-event-c", true);
+	tree = f.render();
+	checkbox(tree, "points-event-event-a", false);
+	tree = f.render();
+	expect(recapInput(f)).toEqual({ periodId: "period-a" });
+	expect(text(tree)).toContain("Pilihan belum diterapkan");
+	const downloading = (
+		f.button(tree, "Export CSV Semua SR").props.onClick as () => Promise<void>
+	)();
+	expect(f.requests).toEqual([
+		{ periodId: "period-a", selectedEventIds: ["event-a", "event-b"] },
+	]);
+	f.pending.resolve({ content: "synthetic CSV", filename: "synthetic.csv" });
+	await downloading;
+	tree = f.render();
+	(f.button(tree, "Terapkan Filter").props.onClick as () => void)();
+	tree = f.render();
+	expect(recapInput(f)).toEqual({
+		periodId: "period-a",
+		selectedEventIds: ["event-b", "event-c"],
+	});
+	expect(nodes(tree).some((n) => n.type === "table")).toBe(false); // Reject a stale response for the prior applied selection.
+	f.recap.data.events = [
+		requiredNode(f.recap.data.events[1]),
+		{ ...requiredNode(f.recap.data.events[0]), eventId: "event-c" },
+	];
+	tree = f.render();
+	expect(nodes(tree).some((n) => n.type === "table")).toBe(true);
+	const selectedExport = (
+		f.button(tree, "Export CSV Semua SR").props.onClick as () => Promise<void>
+	)();
+	await selectedExport;
+	expect(f.requests.at(-1)).toEqual({
+		periodId: "period-a",
+		selectedEventIds: ["event-b", "event-c"],
+	});
+});
+
+test("reset/empty selections apply explicitly, preserve SR rows, refresh and reset on period changes", () => {
+	const f = fixture();
+	f.select("period-a");
+	let tree = f.render();
+	(f.button(tree, "Kosongkan").props.onClick as () => void)();
+	tree = f.render();
+	expect(recapInput(f)).toEqual({ periodId: "period-a" });
+	(f.button(tree, "Terapkan Filter").props.onClick as () => void)();
+	tree = f.render();
+	expect(recapInput(f)).toEqual({ periodId: "period-a", selectedEventIds: [] });
+	f.recap.data.events = [];
+	tree = f.render();
+	expect(text(tree)).toContain("Tidak ada event dipilih.");
+	expect(text(tree)).toContain("bukan penilaian final");
+	expect(
+		nodes(tree).filter((n) => n.type === "th" && n.props.scope === "row"),
+	).toHaveLength(15);
+	expect(text(tree)).toContain("Tanpa event penilaian");
+	(f.button(tree, "Perbarui rekap").props.onClick as () => void)();
+	tree = f.render();
+	expect(recapInput(f)).toEqual({ periodId: "period-a", selectedEventIds: [] });
+	(f.button(tree, "Reset default").props.onClick as () => void)();
+	tree = f.render();
+	expect(recapInput(f)).toEqual({ periodId: "period-a", selectedEventIds: [] });
+	(f.button(tree, "Terapkan Filter").props.onClick as () => void)();
+	tree = f.render();
+	expect(recapInput(f)).toEqual({ periodId: "period-a" });
+	f.select("period-b");
+	tree = f.render();
+	expect(recapInput(f)).toEqual({ periodId: "period-b" });
+	expect(f.state[3]).toBe(null);
+	expect(f.state[4]).toBe(false);
+	expect(nodes(tree).some((n) => n.type === "table")).toBe(false);
+});
+
+test("ineligible-selection errors retain draft and block export; reset/apply can recover without silent fallback", () => {
+	const f = fixture();
+	f.select("period-a");
+	let tree = f.render();
+	checkbox(tree, "points-event-event-b", false);
+	tree = f.render();
+	(f.button(tree, "Terapkan Filter").props.onClick as () => void)();
+	f.recap.error = Error("event became ineligible");
+	tree = f.render();
+	expect(text(tree)).toContain("safe error");
+	expect(f.button(tree, "Export CSV Semua SR").props.disabled).toBe(true);
+	expect(recapInput(f)).toEqual({
+		periodId: "period-a",
+		selectedEventIds: ["event-a"],
+	});
+	expect(f.state[3]).toEqual(["event-a"]);
+	(f.button(tree, "Reset default").props.onClick as () => void)();
+	tree = f.render();
+	(f.button(tree, "Terapkan Filter").props.onClick as () => void)();
+	tree = f.render();
+	expect(recapInput(f)).toEqual({ periodId: "period-a" });
+	(f.button(tree, "Terapkan Filter").props.onClick as () => void)();
+	expect(f.observed().retries).toBe(1);
+});
+
+function requiredNode<T>(value: T | undefined): T {
+	if (value === undefined) throw Error("FIXTURE_VALUE_REQUIRED");
+	return value;
+}

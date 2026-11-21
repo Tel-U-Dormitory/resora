@@ -6,6 +6,6 @@ export default async function PointsPage() {
 	const session = await getSrSession();
 	if (!session) redirect("/login?reason=session");
 	if (session.requiresPasswordChange) redirect("/change-password");
-	if (!session.canManageEventScoring) redirect("/dashboard");
+	if (!session.canReadAttendancePoints) redirect("/dashboard");
 	return <PointsRecap />;
 }

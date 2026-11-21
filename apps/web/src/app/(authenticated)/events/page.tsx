@@ -3,6 +3,6 @@ import { getSrSession } from "@/features/identity/server";
 export default async function EventsPage() {
 	const session = await getSrSession();
 	return (
-		<EventList canManageScoring={session?.canManageEventScoring ?? false} />
+		<EventList canReadPoints={session?.canReadAttendancePoints ?? false} />
 	);
 }
