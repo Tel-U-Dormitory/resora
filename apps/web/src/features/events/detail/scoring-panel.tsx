@@ -1,7 +1,6 @@
 "use client";
 
 import { Select } from "@resora/ui/components/select";
-import { Textarea } from "@resora/ui/components/textarea";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import type { EventDetailView } from "./detail-model";
@@ -41,15 +40,10 @@ export function ScoringPanel({ view }: { view: EventDetailView }) {
 								return;
 							}
 							if (scoringMode === event.attendanceScoringMode) return;
-							const reason = String(form.get("reason") ?? "").trim();
-							if (!reason) {
-								setError("Alasan perubahan penilaian wajib diisi.");
-								return;
-							}
 							void act(
 								"scoring",
 								"Penilaian kehadiran berhasil disimpan.",
-								() => scoring.mutateAsync({ eventId, scoringMode, reason }),
+								() => scoring.mutateAsync({ eventId, scoringMode }),
 							);
 						}}
 					>
@@ -74,20 +68,6 @@ export function ScoringPanel({ view }: { view: EventDetailView }) {
 									</option>
 								))}
 							</Select>
-						</label>
-						<label
-							htmlFor="attendance-scoring-reason"
-							className="block space-y-2 text-sm"
-						>
-							Alasan perubahan
-							<Textarea
-								id="attendance-scoring-reason"
-								name="reason"
-								rows={3}
-								maxLength={2000}
-								required
-								disabled={busy}
-							/>
 						</label>
 						<Button
 							type="submit"
