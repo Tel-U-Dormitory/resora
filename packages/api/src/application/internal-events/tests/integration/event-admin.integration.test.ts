@@ -32,6 +32,7 @@ import {
 	deletedDraftHistory,
 	eventAuditHistory,
 } from "../../../../modules/events/event-audit";
+import { setAccountPermission } from "../../../../modules/identity/account-permissions";
 import { getActiveSrDirectory } from "../../../../modules/identity/identity.public";
 import {
 	localProvisioningTarget,
@@ -240,7 +241,227 @@ const target = process.env.RESORA_EVENT_ADMIN_TEST_DB_URL;
 			expect(waiting).toBe(true);
 			return outcomes;
 		}
-		test("all eleven versioned hashes, schema FKs/indexes/guards and VISIBLE default match", async () => {
+		test("scoring column defaults to NULL and rejects unsupported values without altering existing audit guards", async () => {
+			const f = await fixture();
+			expect(
+				(await service.getEvent(db, admin, f.id)).event.attendanceScoringMode,
+			).toBeNull();
+			await negativeSQL(
+				"update events set attendance_scoring_mode='INVALID' where id=$1",
+				[f.id],
+			);
+			const readiness = await db.execute<{
+				relrowsecurity: boolean;
+				anon_write: boolean;
+			}>(
+				sql`select relrowsecurity, has_table_privilege('anon','events','UPDATE') as anon_write from pg_class where oid='events'::regclass`,
+			);
+			expect(readiness.rows[0]).toEqual({
+				relrowsecurity: getTableConfig(events).enableRLS,
+				anon_write: false,
+			});
+		});
+		test("scoring changes and no-ops are atomic, projected and leave attendance/QR/snapshots untouched", async () => {
+			const f = await fixture();
+			await service.activateSession(db, admin, f.id);
+			await manualInsert(db, admin, { eventId: f.id, userId: srId, reason });
+			const before = await db.execute(
+				sql`select row_to_json(e) as event, (select jsonb_agg(s) from attendance_sessions s where s.internal_event_id=e.id) as sessions, (select jsonb_agg(p) from event_participants p where p.event_id=e.id) as participants, (select jsonb_agg(a) from attendance_records a join attendance_sessions s on s.id=a.session_id where s.internal_event_id=e.id) as records, (select jsonb_agg(q) from qr_challenges q join attendance_sessions s on s.id=q.session_id where s.internal_event_id=e.id) as qr from events e where e.id=${f.id}`,
+			);
+			for (const scoringMode of ["EXCLUDED", "INCLUDED", "EXCLUDED"] as const) {
+				expect(
+					await service.setScoringMode(db, admin, {
+						eventId: f.id,
+						scoringMode,
+						reason,
+					}),
+				).toEqual({ scoringMode, changed: true });
+			}
+			expect(
+				(
+					await service.setScoringMode(db, admin, {
+						eventId: f.id,
+						scoringMode: "EXCLUDED",
+						reason,
+					})
+				).changed,
+			).toBe(false);
+			const history = await eventAuditHistory(db, admin, { eventId: f.id });
+			expect(history.items).toHaveLength(3);
+			expect(
+				history.items.every(
+					(row) =>
+						row.action === "ATTENDANCE_SCORING_MODE_CHANGED" &&
+						row.operator &&
+						row.createdAt &&
+						row.reason === reason &&
+						!("before" in row),
+				),
+			).toBe(true);
+			expect(
+				history.items.some((row) =>
+					row.changes.some(
+						(change) =>
+							change.field === "attendanceScoringMode" &&
+							change.before === null &&
+							change.after === "EXCLUDED",
+					),
+				),
+			).toBe(true);
+			const after = await db.execute(
+				sql`select row_to_json(e) as event, (select jsonb_agg(s) from attendance_sessions s where s.internal_event_id=e.id) as sessions, (select jsonb_agg(p) from event_participants p where p.event_id=e.id) as participants, (select jsonb_agg(a) from attendance_records a join attendance_sessions s on s.id=a.session_id where s.internal_event_id=e.id) as records, (select jsonb_agg(q) from qr_challenges q join attendance_sessions s on s.id=q.session_id where s.internal_event_id=e.id) as qr from events e where e.id=${f.id}`,
+			);
+			const old = before.rows[0] as { event: Record<string, unknown> };
+			const next = after.rows[0] as { event: Record<string, unknown> };
+			expect(old).toEqual({
+				...next,
+				event: {
+					...next.event,
+					attendance_scoring_mode: null,
+					updated_at: old.event.updated_at,
+				},
+			});
+			await service.closeEvent(db, admin, f.id);
+			expect(
+				(
+					await service.setScoringMode(db, admin, {
+						eventId: f.id,
+						scoringMode: "INCLUDED",
+						reason,
+					})
+				).changed,
+			).toBe(true);
+			await failure(eventAuditHistory(db, hco, { eventId: f.id }), "FORBIDDEN");
+		});
+		test("manual grants never authorize scoring; live KADEP and SUPERADMIN changes are enforced", async () => {
+			const f = await fixture();
+			await setAccountPermission(db, admin, {
+				userId: hcoId,
+				permissionCode: "ATTENDANCE_MANUAL_MANAGE",
+				enabled: true,
+			});
+			try {
+				for (const positionCode of ["ANGGOTA", "SEKDEP", "KADEP"]) {
+					await db
+						.update(srProfiles)
+						.set({ positionCode })
+						.where(eq(srProfiles.userId, hcoId));
+					const live = await getActiveIdentity(db, hcoId);
+					if (!live) throw Error("FIXTURE_IDENTITY_REQUIRED");
+					const detail = await service.getEvent(db, live, f.id);
+					expect(detail.canManage).toBe(true);
+					expect(detail.canManageScoringMode).toBe(positionCode === "KADEP");
+					if (positionCode === "KADEP") {
+						await service.setScoringMode(db, live, {
+							eventId: f.id,
+							scoringMode: "INCLUDED",
+							reason,
+						});
+						await db
+							.update(srProfiles)
+							.set({ positionCode: "ANGGOTA" })
+							.where(eq(srProfiles.userId, hcoId));
+						await failure(
+							service.setScoringMode(db, live, {
+								eventId: f.id,
+								scoringMode: "EXCLUDED",
+								reason,
+							}),
+							"FORBIDDEN",
+						);
+					} else
+						await failure(
+							service.setScoringMode(db, live, {
+								eventId: f.id,
+								scoringMode: "EXCLUDED",
+								reason,
+							}),
+							"FORBIDDEN",
+						);
+				}
+				await failure(
+					service.setScoringMode(db, sr, {
+						eventId: f.id,
+						scoringMode: "EXCLUDED",
+						reason,
+					}),
+					"FORBIDDEN",
+				);
+				await db
+					.update(userProfiles)
+					.set({ isActive: false })
+					.where(eq(userProfiles.userId, adminId));
+				await failure(
+					service.setScoringMode(db, admin, {
+						eventId: f.id,
+						scoringMode: "EXCLUDED",
+						reason,
+					}),
+					"FORBIDDEN",
+				);
+			} finally {
+				await db
+					.update(userProfiles)
+					.set({ isActive: true })
+					.where(eq(userProfiles.userId, adminId));
+				await db
+					.update(srProfiles)
+					.set({ positionCode: "ANGGOTA" })
+					.where(eq(srProfiles.userId, hcoId));
+				await setAccountPermission(db, admin, {
+					userId: hcoId,
+					permissionCode: "ATTENDANCE_MANUAL_MANAGE",
+					enabled: false,
+				});
+			}
+		});
+		test("failed scoring audit rolls back its write and no concurrent identical update duplicates evidence", async () => {
+			const f = await fixture();
+			await failure(
+				db.transaction(async (tx) => {
+					await tx.execute(
+						sql`create function pg_temp.reject_scoring_audit() returns trigger language plpgsql as $$ begin raise exception 'synthetic scoring audit rejection'; end $$`,
+					);
+					await tx.execute(
+						sql`create trigger scoring_test_audit_failure before insert on event_audit_logs for each row execute function pg_temp.reject_scoring_audit()`,
+					);
+					await service.setScoringMode(tx as unknown as Database, admin, {
+						eventId: f.id,
+						scoringMode: "INCLUDED",
+						reason,
+					});
+				}),
+			);
+			expect(
+				(await service.getEvent(db, admin, f.id)).event.attendanceScoringMode,
+			).toBeNull();
+			expect(
+				(await eventAuditHistory(db, admin, { eventId: f.id })).items,
+			).toHaveLength(0);
+			const outcomes = await race(
+				f.id,
+				(source) =>
+					service.setScoringMode(source, admin, {
+						eventId: f.id,
+						scoringMode: "INCLUDED",
+						reason,
+					}),
+				() =>
+					service.setScoringMode(db, admin, {
+						eventId: f.id,
+						scoringMode: "INCLUDED",
+						reason,
+					}),
+			);
+			expect(outcomes.map((row) => row.status)).toEqual([
+				"fulfilled",
+				"fulfilled",
+			]);
+			expect(
+				(await eventAuditHistory(db, admin, { eventId: f.id })).items,
+			).toHaveLength(1);
+		});
+		test("all versioned hashes, schema FKs/indexes/guards and VISIBLE default match", async () => {
 			const history = await db.execute<{ hash: string }>(
 				sql`select hash from drizzle.__drizzle_migrations order by created_at`,
 			);

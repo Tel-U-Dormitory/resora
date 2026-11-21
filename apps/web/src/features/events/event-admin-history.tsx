@@ -18,6 +18,7 @@ const actions = {
 	EVENT_UNHIDDEN: "Event ditampilkan kembali",
 	EVENT_ARCHIVED: "Event diarsipkan",
 	EVENT_RESTORED: "Event dipulihkan dari arsip",
+	ATTENDANCE_SCORING_MODE_CHANGED: "Penilaian kehadiran diperbarui",
 };
 const fields: Record<string, string> = {
 	title: "Judul",
@@ -30,9 +31,11 @@ const fields: Record<string, string> = {
 	location: "Titik lokasi",
 	roster: "Pemilihan peserta",
 	visibility: "Visibilitas",
+	attendanceScoringMode: "Penilaian kehadiran",
 };
 function value(field: string, content: string | number | null) {
-	if (content === null || content === "") return "—";
+	if (content === null || content === "")
+		return field === "attendanceScoringMode" ? "Belum diklasifikasikan" : "—";
 	if (field === "startsAt" || field === "endsAt")
 		return formatEventTime(String(content));
 	return (
@@ -41,6 +44,8 @@ function value(field: string, content: string | number | null) {
 				VISIBLE: "Ditampilkan",
 				HIDDEN: "Disembunyikan",
 				ARCHIVED: "Diarsipkan",
+				INCLUDED: "Masukkan dalam penilaian",
+				EXCLUDED: "Tidak dihitung dalam penilaian",
 			} as Record<string, string>
 		)[String(content)] ?? content
 	);

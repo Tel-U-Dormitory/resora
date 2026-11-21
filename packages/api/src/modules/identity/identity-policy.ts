@@ -49,6 +49,19 @@ export function canManageCommittee(identity: Identity) {
 	);
 }
 
+// Scoring classification is intrinsic authority, never an explicit manual-attendance grant.
+export function canManageEventScoring(identity: Identity) {
+	return (
+		identity != null &&
+		!requiresPasswordChange(identity) &&
+		(hasSuperadminPrivilege(identity) ||
+			(canAccessPersonalSr(identity) &&
+				isValidSrAssignment(identity.departmentCode, identity.positionCode) &&
+				identity.departmentCode === "HCO" &&
+				identity.positionCode === "KADEP"))
+	);
+}
+
 export function canReadBroadcast(identity: Identity) {
 	return (
 		identity != null &&

@@ -97,7 +97,7 @@ export function reportAttendance(
 }
 
 // Excel-compatible text marker, never a spreadsheet formula. Preserve all original digits.
-function csvCell(value: string | number | null, textIdentifier = false) {
+export function csvCell(value: string | number | null, textIdentifier = false) {
 	if (value === null) return "";
 	const raw = String(value);
 	// Ignore leading whitespace/control bytes when detecting spreadsheet formula prefixes.

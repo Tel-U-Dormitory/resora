@@ -120,6 +120,34 @@ export async function reportInvitationSnapshots(db: Db, eventId: string) {
 		.orderBy(asc(eventParticipants.nim), asc(eventParticipants.userId));
 }
 
+export async function scoringInvitationSnapshots(
+	db: Db,
+	eventIds: string[],
+	userIds: string[],
+) {
+	if (!eventIds.length || !userIds.length) return [];
+	return db
+		.select({
+			eventId: eventParticipants.eventId,
+			userId: eventParticipants.userId,
+			nim: eventParticipants.nim,
+			name: eventParticipants.name,
+			departmentCode: eventParticipants.departmentCode,
+			positionCode: eventParticipants.positionCode,
+			buildingCode: eventParticipants.buildingCode,
+			buildingName: eventParticipants.buildingName,
+			committeeDivision: eventParticipants.committeeDivision,
+			committeePosition: eventParticipants.committeePosition,
+		})
+		.from(eventParticipants)
+		.where(
+			and(
+				inArray(eventParticipants.eventId, eventIds),
+				inArray(eventParticipants.userId, userIds),
+			),
+		);
+}
+
 export async function ownInvitedEventHistory(
 	db: Db,
 	userId: string,

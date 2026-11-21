@@ -1,0 +1,3 @@
+ALTER TABLE "events" ADD COLUMN "attendance_scoring_mode" text;--> statement-breakpoint
+ALTER TABLE "events" ADD CONSTRAINT "events_attendance_scoring_mode" CHECK ("attendance_scoring_mode" IN ('INCLUDED', 'EXCLUDED'));--> statement-breakpoint
+ALTER TABLE "event_audit_logs" DROP CONSTRAINT "event_audit_logs_action", ADD CONSTRAINT "event_audit_logs_action" CHECK ("action" IN ('PUBLISHED_CONFIGURATION_EDITED', 'PUBLISHED_DETAILS_EDITED', 'CLOSED_METADATA_EDITED', 'EVENT_HIDDEN', 'EVENT_UNHIDDEN', 'EVENT_ARCHIVED', 'EVENT_RESTORED', 'ATTENDANCE_SCORING_MODE_CHANGED'));

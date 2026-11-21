@@ -22,6 +22,7 @@ export function fixture() {
 		session: { centerLat: -6.9, centerLng: 107.6 },
 	});
 	const state = {
+		tenureStatus: "ACTIVE",
 		identity: {
 			userId: "synthetic-admin",
 			actor: "SYSTEM_ADMIN",
@@ -34,6 +35,7 @@ export function fixture() {
 			organizationContext: "SR",
 			committeeId: null,
 			snapshotCommitteeName: null,
+			attendanceScoringMode: null,
 			id: eventId,
 			...draft,
 			startsAt: new Date(draft.startsAt),
@@ -199,7 +201,7 @@ export function fixture() {
 					if (table === "user_profiles") {
 						const identity = {
 							...state.identity,
-							tenureStatus: "ACTIVE",
+							tenureStatus: state.tenureStatus,
 							nim:
 								state.identity.actor === "SR"
 									? state.identity.nim
@@ -214,7 +216,7 @@ export function fixture() {
 							rows = [
 								{
 									...identity,
-									tenureStatus: "ACTIVE",
+									tenureStatus: state.tenureStatus,
 									name: "Operator",
 									buildingCode: "A",
 									buildingName: "Gedung A",

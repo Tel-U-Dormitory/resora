@@ -12,6 +12,7 @@
 		"./modules/committee/committee.public": "./src/modules/committee/committee.public.ts",
 		"./modules/broadcast/broadcast.public": "./src/modules/broadcast/broadcast.public.ts",
 		"./modules/attendance/attendance.contracts": "./src/modules/attendance/attendance.contracts.ts",
+		"./modules/attendance/points.contracts": "./src/modules/attendance/points.contracts.ts",
 		"./modules/broadcast/broadcast.contracts": "./src/modules/broadcast/broadcast.contracts.ts",
 		"./modules/committee/committee.contracts": "./src/modules/committee/committee.contracts.ts"
 	},
