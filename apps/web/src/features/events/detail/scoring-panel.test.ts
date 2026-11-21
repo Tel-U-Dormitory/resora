@@ -36,6 +36,103 @@ function nodes(value: unknown): Node[] {
 	const node = value as Node;
 	return [node, ...node.children.flatMap(nodes)];
 }
+
+test("event detail gives scoring and recap distinct sibling identities across refreshes and navigation", () => {
+	const source = readFileSync(
+		new URL("event-detail.tsx", import.meta.url),
+		"utf8",
+	);
+	let view: Record<string, unknown>;
+	const module = {} as { default: (props: { eventId: string }) => Node };
+	const mutations = Object.fromEntries(
+		[
+			"publish",
+			"activate",
+			"close",
+			"revoke",
+			"reissue",
+			"metadata",
+			"scoring",
+			"visibility",
+			"deleteDraft",
+		].map((name) => [name, { isPending: false }]),
+	);
+	new Function(
+		"require",
+		"exports",
+		"React",
+		ts.transpileModule(source, {
+			compilerOptions: {
+				jsx: ts.JsxEmit.React,
+				module: ts.ModuleKind.CommonJS,
+			},
+		}).outputText,
+	)(
+		() => ({
+			...Object.fromEntries(
+				[
+					"Card",
+					"CardHeader",
+					"CardContent",
+					"Button",
+					"StatusBadge",
+					"ScoringPanel",
+					"EventRecap",
+					"SessionPanel",
+					"MetadataPanel",
+					"InvitationsPanel",
+					"AdministrationPanel",
+					"EventAuditHistory",
+					"CalendarDays",
+					"MapPin",
+				].map((name) => [name, name]),
+			),
+			default: "a",
+			useEventDetail: () => ({ detail: { data: {}, isPending: false } }),
+			createDetailView: () => view,
+			formatEventTime: () => "WIB",
+		}),
+		module,
+		{
+			createElement: (type: string, props: object, ...children: unknown[]) => ({
+				type,
+				props: props ?? {},
+				children,
+			}),
+		},
+	);
+	for (const eventId of ["event-a", "event-b", "event-a"]) {
+		for (const status of ["PUBLISHED", "CLOSED"]) {
+			for (const mode of [null, "INCLUDED", "EXCLUDED"]) {
+				view = {
+					...mutations,
+					event: { status, visibility: "VISIBLE", attendanceScoringMode: mode },
+					session: {},
+					data: {},
+					canManage: true,
+					activeAction: null,
+				};
+				const tree = module.default({ eventId });
+				const siblings = tree.children
+					.flat(Number.POSITIVE_INFINITY)
+					.filter((child): child is Node =>
+						Boolean(child && typeof child === "object" && "props" in child),
+					);
+				const keys = siblings
+					.map((child) => child.props.key)
+					.filter((key) => key != null);
+				// Duplicate keys can orphan mounted DOM nodes when React reconciles past conditional siblings.
+				expect(new Set(keys).size).toBe(keys.length);
+				expect(
+					siblings.filter((child) => child.type === "ScoringPanel"),
+				).toHaveLength(1);
+				expect(
+					siblings.filter((child) => child.type === "EventRecap"),
+				).toHaveLength(1);
+			}
+		}
+	}
+});
 function fixture(
 	mode: "INCLUDED" | "EXCLUDED" | null = null,
 	canManage = true,
