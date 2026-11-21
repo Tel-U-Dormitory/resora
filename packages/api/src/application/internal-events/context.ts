@@ -71,7 +71,7 @@ export async function lockedEvent(
 		if (!hasSuperadminPrivilege(live))
 			throw new TRPCError({ code: "FORBIDDEN" });
 	} else operator(live);
-	return { event, session };
+	return { event, session, identity: live };
 }
 
 export async function advancedEditMode(

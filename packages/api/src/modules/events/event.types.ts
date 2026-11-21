@@ -20,6 +20,7 @@ export type EventFact = {
 	organizationContext: "SR" | "COMMITTEE";
 	committeeId: string | null;
 	snapshotCommitteeName: string | null;
+	attendanceScoringMode: "INCLUDED" | "EXCLUDED" | null;
 	publishedAt: Date | null;
 	closedAt: Date | null;
 	createdAt: Date;
@@ -62,7 +63,14 @@ export type EventAuditEvidence = {
 		| "EVENT_HIDDEN"
 		| "EVENT_UNHIDDEN"
 		| "EVENT_ARCHIVED"
-		| "EVENT_RESTORED";
-	beforeState: EventEditAuditState | { visibility: EventVisibility };
-	afterState: EventEditAuditState | { visibility: EventVisibility };
+		| "EVENT_RESTORED"
+		| "ATTENDANCE_SCORING_MODE_CHANGED";
+	beforeState:
+		| EventEditAuditState
+		| { visibility: EventVisibility }
+		| { attendanceScoringMode: EventFact["attendanceScoringMode"] };
+	afterState:
+		| EventEditAuditState
+		| { visibility: EventVisibility }
+		| { attendanceScoringMode: EventFact["attendanceScoringMode"] };
 };

@@ -12,6 +12,7 @@ export {
 	amendPublishedConfiguration,
 	amendPublishedDetails,
 	appendEventAudit,
+	changeAttendanceScoringMode,
 	changeVisibility,
 	closePublishedEvent,
 	createInternalDraft,
@@ -22,6 +23,7 @@ export {
 	replaceDraftDetails,
 } from "./event-commands";
 export {
+	closedEventsForScoring,
 	eventHasDeletionReferences,
 	eventOrganizationHint,
 	listInvitedEvents,
@@ -38,5 +40,6 @@ export {
 	ownInvitedEventHistory,
 	removeInvitationsBeforeAttendance,
 	reportInvitationSnapshots,
+	scoringInvitationSnapshots,
 } from "./invitation-operations";
 export { resolveCommitteeRoster, resolveRoster } from "./roster";
