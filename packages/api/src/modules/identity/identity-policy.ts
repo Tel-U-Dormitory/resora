@@ -49,6 +49,18 @@ export function canManageCommittee(identity: Identity) {
 	);
 }
 
+// Reporting access is separate from authority to change event classification.
+export function canReadAttendancePoints(identity: Identity) {
+	return (
+		identity != null &&
+		!requiresPasswordChange(identity) &&
+		(hasSuperadminPrivilege(identity) ||
+			(canAccessPersonalSr(identity) &&
+				isValidSrAssignment(identity.departmentCode, identity.positionCode) &&
+				identity.departmentCode === "HCO"))
+	);
+}
+
 // Scoring classification is intrinsic authority, never an explicit manual-attendance grant.
 export function canManageEventScoring(identity: Identity) {
 	return (

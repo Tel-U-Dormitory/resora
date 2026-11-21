@@ -376,7 +376,7 @@ const target = process.env.RESORA_POINTS_TEST_DB_URL;
 				maximumPossiblePoints: 0,
 			});
 		});
-		test("authorized read endpoint rejects grants, stale role/privilege and inactive identities without write authority", async () => {
+		test("all HCO can read while grants, revoked department/privilege and inactive identities cannot bypass live checks", async () => {
 			const p = await period("02", [ids.member]);
 			const caller = appRouter.createCaller({
 				db,
@@ -391,6 +391,43 @@ const target = process.env.RESORA_POINTS_TEST_DB_URL;
 				enabled: true,
 			});
 			try {
+				for (const positionCode of ["KADEP", "SEKDEP", "ANGGOTA"]) {
+					await db
+						.update(srProfiles)
+						.set({ positionCode })
+						.where(eq(srProfiles.userId, ids.member));
+					const current = await getActiveIdentity(db, ids.member);
+					if (!current) throw Error("FIXTURE_IDENTITY_REQUIRED");
+					const client = appRouter.createCaller({
+						db,
+						session: { user: { id: ids.member } },
+					} as never);
+					expect(
+						(await client.attendance.pointsRecap({ periodId: p.id }))
+							.participants,
+					).toHaveLength(1);
+					expect(await client.attendance.pointsPeriods()).toHaveLength(2);
+					expect(
+						(await client.attendance.exportPointsCsv({ periodId: p.id }))
+							.content,
+					).toContain("Total Poin");
+					expect(await client.identity.session()).toMatchObject({
+						canReadAttendancePoints: true,
+						canManageEventScoring: positionCode === "KADEP",
+					});
+					if (positionCode !== "KADEP")
+						await failure(
+							client.attendance.setScoringMode({
+								eventId: randomUUID(),
+								scoringMode: "INCLUDED",
+							}),
+							"FORBIDDEN",
+						);
+				}
+				await db
+					.update(srProfiles)
+					.set({ departmentCode: "RND" })
+					.where(eq(srProfiles.userId, ids.member));
 				await failure(pointsRecap(db, member, { periodId: p.id }), "FORBIDDEN");
 				await failure(pointsPeriods(db, member), "FORBIDDEN");
 				await failure(
@@ -399,12 +436,16 @@ const target = process.env.RESORA_POINTS_TEST_DB_URL;
 				);
 				await db
 					.update(srProfiles)
-					.set({ positionCode: "ANGGOTA" })
+					.set({ departmentCode: "HCO" })
+					.where(eq(srProfiles.userId, ids.member));
+				await db
+					.update(srProfiles)
+					.set({ departmentCode: "RND" })
 					.where(eq(srProfiles.userId, ids.kadep));
 				await failure(pointsRecap(db, kadep, { periodId: p.id }), "FORBIDDEN");
 				await db
 					.update(srProfiles)
-					.set({ positionCode: "KADEP" })
+					.set({ positionCode: "KADEP", departmentCode: "HCO" })
 					.where(eq(srProfiles.userId, ids.kadep));
 				await db
 					.update(userProfiles)
@@ -426,8 +467,12 @@ const target = process.env.RESORA_POINTS_TEST_DB_URL;
 					.onConflictDoNothing();
 				await db
 					.update(srProfiles)
-					.set({ positionCode: "KADEP" })
+					.set({ positionCode: "KADEP", departmentCode: "HCO" })
 					.where(eq(srProfiles.userId, ids.kadep));
+				await db
+					.update(srProfiles)
+					.set({ departmentCode: "HCO", positionCode: "ANGGOTA" })
+					.where(eq(srProfiles.userId, ids.member));
 				await setAccountPermission(db, admin, {
 					userId: ids.member,
 					permissionCode: "ATTENDANCE_MANUAL_MANAGE",
@@ -569,6 +614,7 @@ const target = process.env.RESORA_POINTS_TEST_DB_URL;
 			} as never);
 			expect(await memberCaller.identity.session()).toMatchObject({
 				canManageEventScoring: false,
+				canReadAttendancePoints: true,
 				canManageInternalEvents: true,
 				canManageBroadcast: false,
 				isSuperadmin: false,

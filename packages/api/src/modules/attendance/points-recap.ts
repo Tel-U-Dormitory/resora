@@ -13,7 +13,7 @@ import {
 	scoringInvitationSnapshots,
 } from "../events/events.public";
 import {
-	canManageEventScoring,
+	canReadAttendancePoints,
 	readOperationalIdentity,
 	readScoringPeriods,
 	readSrPeriod,
@@ -158,13 +158,13 @@ export async function pointsRecap(
 	identity: ActiveIdentity,
 	input: z.input<typeof pointsRecapSchema>,
 ) {
-	if (!canManageEventScoring(identity))
+	if (!canReadAttendancePoints(identity))
 		throw new TRPCError({ code: "FORBIDDEN" });
 	const { periodId } = pointsRecapSchema.parse(input);
 	return db.transaction(
 		async (tx) => {
 			if (
-				!canManageEventScoring(
+				!canReadAttendancePoints(
 					await readOperationalIdentity(tx, identity.userId),
 				)
 			)
@@ -220,12 +220,12 @@ export async function pointsRecap(
 }
 
 export async function pointsPeriods(db: Database, identity: ActiveIdentity) {
-	if (!canManageEventScoring(identity))
+	if (!canReadAttendancePoints(identity))
 		throw new TRPCError({ code: "FORBIDDEN" });
 	return db.transaction(
 		async (tx) => {
 			if (
-				!canManageEventScoring(
+				!canReadAttendancePoints(
 					await readOperationalIdentity(tx, identity.userId),
 				)
 			)

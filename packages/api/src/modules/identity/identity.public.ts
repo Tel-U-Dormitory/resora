@@ -30,6 +30,7 @@ export {
 	canManageEventScoring,
 	canManageInternalAttendanceManually,
 	canManageInternalEvent,
+	canReadAttendancePoints,
 	canReadBroadcast,
 	hasSuperadminPrivilege,
 } from "./identity-policy";

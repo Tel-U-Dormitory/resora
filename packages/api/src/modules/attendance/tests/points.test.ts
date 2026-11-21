@@ -400,24 +400,43 @@ test("points query uses one read-only snapshot and bounded bulk reads with expli
 		expect(json).not.toContain(field);
 });
 
-test("permission grants never authorize scoring reads; stale live identity is revalidated before report reads", async () => {
-	const f = databaseFixture();
-	for (const positionCode of ["ANGGOTA", "SEKDEP"]) {
-		const member = {
-			userId: "member",
-			actor: "SR" as const,
-			nim: "0001",
+test("all HCO positions share read/export access; non-HCO grants and revoked live identities do not", async () => {
+	for (const positionCode of ["KADEP", "SEKDEP", "ANGGOTA"]) {
+		const f = databaseFixture();
+		Object.assign(f.state.profile, {
+			actor: "SR",
 			isSuperadmin: false,
-			isActive: true,
-			mustChangePassword: false,
-			departmentCode: "HCO",
+			srUserId: f.identity.userId,
 			positionCode,
-			buildingId: randomUUID(),
+		});
+		const member = {
+			...f.state.profile,
+			actor: "SR" as const,
+			isSuperadmin: false,
 		};
-		await expect(
-			pointsRecap(f.db, member, { periodId: f.period.id }),
-		).rejects.toMatchObject({ code: "FORBIDDEN" });
+		expect(
+			(await pointsRecap(f.db, member, { periodId: f.period.id })).events,
+		).toHaveLength(1);
+		expect(await pointsPeriods(f.db, member)).toHaveLength(1);
+		expect(
+			(await exportPointsCsv(f.db, member, { periodId: f.period.id })).content,
+		).toContain("Total Poin");
+		expect(f.state.reads).not.toContain("user_permission_grants");
 	}
+	const f = databaseFixture();
+	const outsider = {
+		...f.state.profile,
+		actor: "SR" as const,
+		isSuperadmin: false,
+		departmentCode: "RND",
+		positionCode: "ANGGOTA",
+	};
+	for (const operation of [
+		() => pointsRecap(f.db, outsider, { periodId: f.period.id }),
+		() => pointsPeriods(f.db, outsider),
+		() => exportPointsCsv(f.db, outsider, { periodId: f.period.id }),
+	])
+		await expect(operation()).rejects.toMatchObject({ code: "FORBIDDEN" });
 	expect(f.state.reads).toEqual([]);
 	f.state.profile.isActive = false;
 	await expect(
@@ -527,12 +546,14 @@ test("scoring period options recheck authority and do not expand account-period 
 	});
 	for (const positionCode of ["SEKDEP", "ANGGOTA"]) {
 		const member = { ...kadep, positionCode };
-		await expect(pointsPeriods(f.db, member)).rejects.toMatchObject({
+		f.state.profile.positionCode = positionCode;
+		expect(await pointsPeriods(f.db, member)).toHaveLength(1);
+		expect(
+			(await exportPointsCsv(f.db, member, { periodId: f.period.id })).content,
+		).toContain("Total Poin");
+		await expect(listPeriods(f.db, member)).rejects.toMatchObject({
 			code: "FORBIDDEN",
 		});
-		await expect(
-			exportPointsCsv(f.db, member, { periodId: f.period.id }),
-		).rejects.toMatchObject({ code: "FORBIDDEN" });
 	}
 	f.state.profile.isActive = false;
 	await expect(pointsPeriods(f.db, f.identity)).rejects.toMatchObject({

@@ -433,8 +433,8 @@ test("direct route and event-list entry use backend session capability, never st
 	for (const [session, expected] of [
 		[null, "/login?reason=session"],
 		[{ requiresPasswordChange: true }, "/change-password"],
-		[{ canManageEventScoring: false }, "/dashboard"],
-		[{ canManageEventScoring: true }, null],
+		[{ canReadAttendancePoints: false }, "/dashboard"],
+		[{ canReadAttendancePoints: true }, null],
 	] as const) {
 		const module = load("../../app/(authenticated)/events/points/page.tsx", {
 			"next/navigation": {
@@ -463,11 +463,9 @@ test("direct route and event-list entry use backend session capability, never st
 			trpc: { attendance: { list: { queryOptions: () => ({}) } } },
 		},
 	});
-	const list = module.default as (props: { canManageScoring: boolean }) => Node;
-	expect(text(list({ canManageScoring: true }))).toContain(
-		"Rekap Poin Kehadiran",
-	);
-	expect(text(list({ canManageScoring: false }))).not.toContain(
+	const list = module.default as (props: { canReadPoints: boolean }) => Node;
+	expect(text(list({ canReadPoints: true }))).toContain("Rekap Poin Kehadiran");
+	expect(text(list({ canReadPoints: false }))).not.toContain(
 		"Rekap Poin Kehadiran",
 	);
 });
