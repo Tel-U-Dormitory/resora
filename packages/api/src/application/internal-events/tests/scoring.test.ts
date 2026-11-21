@@ -1,6 +1,13 @@
 import { expect, test } from "bun:test";
 import type { ActiveSrIdentity } from "@resora/auth/sr-access";
-import { setScoringModeSchema } from "../../../contracts/attendance";
+import {
+	advancedEventEditSchema,
+	deleteDraftSchema,
+	eventVisibilitySchema,
+	manualCorrectSchema,
+	manualInsertSchema,
+	setScoringModeSchema,
+} from "../../../contracts/attendance";
 import { administrativeChanges } from "../../../modules/events/event-audit";
 import { canManageEventScoring } from "../../../modules/identity/identity.public";
 import { appRouter } from "../../../routers";
@@ -26,10 +33,9 @@ const input = (
 ) => ({
 	eventId: f.state.event.id,
 	scoringMode,
-	reason: "Approved classification",
 });
 
-test("scoring accepts only INCLUDED/EXCLUDED, a valid event and a nonblank bounded reason", () => {
+test("scoring accepts INCLUDED/EXCLUDED without a reason and rejects client-supplied audit evidence", () => {
 	const f = fixture();
 	for (const scoringMode of ["INCLUDED", "EXCLUDED"] as const)
 		expect(setScoringModeSchema.safeParse(input(f, scoringMode)).success).toBe(
@@ -46,6 +52,29 @@ test("scoring accepts only INCLUDED/EXCLUDED, a valid event and a nonblank bound
 		expect(
 			setScoringModeSchema.safeParse({ ...input(f), ...data }).success,
 		).toBe(false);
+});
+
+test("manual attendance and other administrative workflows still require nonblank reasons", () => {
+	const { eventId } = input(fixture());
+	for (const [schema, data] of [
+		[deleteDraftSchema, { eventId }],
+		[eventVisibilitySchema, { eventId, action: "HIDE" }],
+		[
+			advancedEventEditSchema,
+			{ eventId, mode: "LIMITED", title: "Title", description: "Description" },
+		],
+		[manualInsertSchema, { eventId, userId: "synthetic-sr" }],
+		[
+			manualCorrectSchema,
+			{ attendanceId: eventId, attendanceAt: "2026-10-12T02:00:00Z" },
+		],
+	] as const) {
+		expect(schema.safeParse(data).success).toBe(false);
+		expect(schema.safeParse({ ...data, reason: " " }).success).toBe(false);
+		expect(
+			schema.safeParse({ ...data, reason: "Actual correction" }).success,
+		).toBe(true);
+	}
 });
 
 test("only operational HCO KADEP and legitimate SUPERADMIN have intrinsic scoring authority", () => {
@@ -98,7 +127,7 @@ test("NULL classification, all transitions and no-op preserve event, snapshots, 
 				actorUserId: actor.userId,
 				eventId: f.state.event.id,
 				action: "ATTENDANCE_SCORING_MODE_CHANGED",
-				reason: input(f).reason,
+				reason: `Klasifikasi penilaian kehadiran diubah dari ${before ?? "Belum diklasifikasikan"} menjadi ${after}.`,
 				beforeState: { attendanceScoringMode: before },
 				afterState: { attendanceScoringMode: after },
 			});
@@ -171,8 +200,9 @@ test("unauthorized, invalid payload and revoked live identities never write", as
 		expect(f.state.writes).toEqual([]);
 	}
 	const f = fixture();
+	const forged = { ...input(f), reason: "Client-authored audit evidence" };
 	await expect(
-		setScoringMode(f.db, f.state.identity, { ...input(f), reason: " " }),
+		setScoringMode(f.db, f.state.identity, forged),
 	).rejects.toMatchObject({ code: "BAD_REQUEST" });
 	expect(f.state.writes).toEqual([]);
 });

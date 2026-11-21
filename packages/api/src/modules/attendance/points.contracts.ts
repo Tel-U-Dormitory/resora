@@ -1,8 +1,8 @@
 // Browser-safe presentation shared by the matrix and CSV; scoring remains in F2.
 export const pointsSummaryLabels = [
 	"Jumlah Hadir",
-	"Jumlah Event",
 	"Jumlah Tidak Hadir",
+	"Jumlah Event",
 	"Total Poin",
 	"Maksimal Poin",
 	"Belum Dinilai",
@@ -24,8 +24,8 @@ export function pointsSummaryValues(row: {
 }) {
 	return [
 		row.attendedCount,
-		row.eventCount,
 		row.absentCount,
+		row.eventCount,
 		row.totalPoints,
 		row.maximumPossiblePoints,
 		row.unclassifiedCount,

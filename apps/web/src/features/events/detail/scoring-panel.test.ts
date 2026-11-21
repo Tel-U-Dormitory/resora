@@ -17,9 +17,10 @@ const exports = {} as { ScoringPanel: (props: { view: object }) => Node };
 new Function("require", "exports", "React", code)(
 	() =>
 		Object.fromEntries(
-			["Select", "Textarea", "Button", "Card", "CardHeader", "CardContent"].map(
-				(name) => [name, name],
-			),
+			["Select", "Button", "Card", "CardHeader", "CardContent"].map((name) => [
+				name,
+				name,
+			]),
 		),
 	exports,
 	{
@@ -36,6 +37,103 @@ function nodes(value: unknown): Node[] {
 	const node = value as Node;
 	return [node, ...node.children.flatMap(nodes)];
 }
+
+test("event detail gives scoring and recap distinct sibling identities across refreshes and navigation", () => {
+	const source = readFileSync(
+		new URL("event-detail.tsx", import.meta.url),
+		"utf8",
+	);
+	let view: Record<string, unknown>;
+	const module = {} as { default: (props: { eventId: string }) => Node };
+	const mutations = Object.fromEntries(
+		[
+			"publish",
+			"activate",
+			"close",
+			"revoke",
+			"reissue",
+			"metadata",
+			"scoring",
+			"visibility",
+			"deleteDraft",
+		].map((name) => [name, { isPending: false }]),
+	);
+	new Function(
+		"require",
+		"exports",
+		"React",
+		ts.transpileModule(source, {
+			compilerOptions: {
+				jsx: ts.JsxEmit.React,
+				module: ts.ModuleKind.CommonJS,
+			},
+		}).outputText,
+	)(
+		() => ({
+			...Object.fromEntries(
+				[
+					"Card",
+					"CardHeader",
+					"CardContent",
+					"Button",
+					"StatusBadge",
+					"ScoringPanel",
+					"EventRecap",
+					"SessionPanel",
+					"MetadataPanel",
+					"InvitationsPanel",
+					"AdministrationPanel",
+					"EventAuditHistory",
+					"CalendarDays",
+					"MapPin",
+				].map((name) => [name, name]),
+			),
+			default: "a",
+			useEventDetail: () => ({ detail: { data: {}, isPending: false } }),
+			createDetailView: () => view,
+			formatEventTime: () => "WIB",
+		}),
+		module,
+		{
+			createElement: (type: string, props: object, ...children: unknown[]) => ({
+				type,
+				props: props ?? {},
+				children,
+			}),
+		},
+	);
+	for (const eventId of ["event-a", "event-b", "event-a"]) {
+		for (const status of ["PUBLISHED", "CLOSED"]) {
+			for (const mode of [null, "INCLUDED", "EXCLUDED"]) {
+				view = {
+					...mutations,
+					event: { status, visibility: "VISIBLE", attendanceScoringMode: mode },
+					session: {},
+					data: {},
+					canManage: true,
+					activeAction: null,
+				};
+				const tree = module.default({ eventId });
+				const siblings = tree.children
+					.flat(Number.POSITIVE_INFINITY)
+					.filter((child): child is Node =>
+						Boolean(child && typeof child === "object" && "props" in child),
+					);
+				const keys = siblings
+					.map((child) => child.props.key)
+					.filter((key) => key != null);
+				// Duplicate keys can orphan mounted DOM nodes when React reconciles past conditional siblings.
+				expect(new Set(keys).size).toBe(keys.length);
+				expect(
+					siblings.filter((child) => child.type === "ScoringPanel"),
+				).toHaveLength(1);
+				expect(
+					siblings.filter((child) => child.type === "EventRecap"),
+				).toHaveLength(1);
+			}
+		}
+	}
+});
 function fixture(
 	mode: "INCLUDED" | "EXCLUDED" | null = null,
 	canManage = true,
@@ -63,12 +161,12 @@ function fixture(
 		setError: (message: string) => errors.push(message),
 	};
 	const render = () => nodes(exports.ScoringPanel({ view }));
-	const submit = (scoringMode: string, reason: string) => {
+	const submit = (scoringMode: string) => {
 		const form = render().find((node) => node.type === "form");
 		if (!form) throw Error("Expected scoring form");
 		const event = {
 			preventDefault() {},
-			currentTarget: { scoringMode, reason },
+			currentTarget: { scoringMode },
 		};
 		const original = globalThis.FormData;
 		try {
@@ -108,19 +206,18 @@ test("scoring status and editable controls come only from backend mode/capabilit
 
 test("scoring form validates changes and sends one scoped mutation; pending blocks submission", async () => {
 	const f = fixture();
-	f.submit("INVALID", "reason");
-	f.submit("INCLUDED", "   ");
-	expect(f.errors).toHaveLength(2);
+	f.submit("INVALID");
+	expect(f.errors).toHaveLength(1);
 	expect(f.requests).toEqual([]);
-	f.submit("INCLUDED", " Approved ");
-	expect(f.requests).toEqual([
-		{ eventId: "event-a", scoringMode: "INCLUDED", reason: "Approved" },
-	]);
+	f.submit("INCLUDED");
+	expect(JSON.stringify(f.render())).not.toContain("Alasan perubahan");
+	expect(f.render().some((node) => node.type === "Textarea")).toBe(false);
+	expect(f.requests).toEqual([{ eventId: "event-a", scoringMode: "INCLUDED" }]);
 	f.view.busy = true;
 	f.view.activeAction = "scoring";
-	f.submit("EXCLUDED", "reason");
+	f.submit("EXCLUDED");
 	expect(f.requests).toHaveLength(1);
-	for (const type of ["Button", "Select", "Textarea"])
+	for (const type of ["Button", "Select"])
 		expect(f.render().find((node) => node.type === type)?.props.disabled).toBe(
 			true,
 		);
@@ -128,7 +225,7 @@ test("scoring form validates changes and sends one scoped mutation; pending bloc
 		true,
 	);
 	const unchanged = fixture("INCLUDED");
-	unchanged.submit("INCLUDED", "reason");
+	unchanged.submit("INCLUDED");
 	expect(unchanged.requests).toEqual([]);
 });
 
@@ -190,7 +287,7 @@ test("failed scoring mutation leaves prior mode and form intact; shared action g
 	f.view.act = new Function(...Object.keys(scope), `${js}; return act`)(
 		...Object.values(scope),
 	);
-	f.submit("EXCLUDED", "Retained reason");
+	f.submit("EXCLUDED");
 	await f.view.act("scoring", "duplicate", async () => {
 		attempts++;
 	});
@@ -210,7 +307,7 @@ test("failed scoring mutation leaves prior mode and form intact; shared action g
 	f.view.scoring.mutateAsync = async () => {
 		attempts++;
 	};
-	f.submit("EXCLUDED", "Retained reason");
+	f.submit("EXCLUDED");
 	await new Promise(setImmediate);
 	expect(attempts).toBe(2);
 	expect(refreshes).toBe(1);

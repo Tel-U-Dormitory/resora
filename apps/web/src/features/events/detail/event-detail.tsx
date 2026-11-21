@@ -279,7 +279,9 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 				</Link>
 			)}
 			{administration && <AdministrationPanel view={view} />}
-			{event.status !== "DRAFT" && <ScoringPanel key={eventId} view={view} />}
+			{event.status !== "DRAFT" && (
+				<ScoringPanel key={`scoring:${eventId}`} view={view} />
+			)}
 			{canManage && event.status === "PUBLISHED" && (
 				<>
 					<div className="grid items-stretch gap-6 xl:grid-cols-2">
@@ -328,7 +330,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 			)}
 			{administration && <EventAuditHistory eventId={eventId} />}
 			{canManage && event.status !== "DRAFT" && (
-				<EventRecap key={eventId} eventId={eventId} />
+				<EventRecap key={`recap:${eventId}`} eventId={eventId} />
 			)}
 		</section>
 	);

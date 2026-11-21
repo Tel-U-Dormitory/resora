@@ -273,7 +273,6 @@ const target = process.env.RESORA_EVENT_ADMIN_TEST_DB_URL;
 					await service.setScoringMode(db, admin, {
 						eventId: f.id,
 						scoringMode,
-						reason,
 					}),
 				).toEqual({ scoringMode, changed: true });
 			}
@@ -282,7 +281,6 @@ const target = process.env.RESORA_EVENT_ADMIN_TEST_DB_URL;
 					await service.setScoringMode(db, admin, {
 						eventId: f.id,
 						scoringMode: "EXCLUDED",
-						reason,
 					})
 				).changed,
 			).toBe(false);
@@ -294,7 +292,9 @@ const target = process.env.RESORA_EVENT_ADMIN_TEST_DB_URL;
 						row.action === "ATTENDANCE_SCORING_MODE_CHANGED" &&
 						row.operator &&
 						row.createdAt &&
-						row.reason === reason &&
+						row.reason.startsWith(
+							"Klasifikasi penilaian kehadiran diubah dari ",
+						) &&
 						!("before" in row),
 				),
 			).toBe(true);
@@ -327,7 +327,6 @@ const target = process.env.RESORA_EVENT_ADMIN_TEST_DB_URL;
 					await service.setScoringMode(db, admin, {
 						eventId: f.id,
 						scoringMode: "INCLUDED",
-						reason,
 					})
 				).changed,
 			).toBe(true);
@@ -355,7 +354,6 @@ const target = process.env.RESORA_EVENT_ADMIN_TEST_DB_URL;
 						await service.setScoringMode(db, live, {
 							eventId: f.id,
 							scoringMode: "INCLUDED",
-							reason,
 						});
 						await db
 							.update(srProfiles)
@@ -365,7 +363,6 @@ const target = process.env.RESORA_EVENT_ADMIN_TEST_DB_URL;
 							service.setScoringMode(db, live, {
 								eventId: f.id,
 								scoringMode: "EXCLUDED",
-								reason,
 							}),
 							"FORBIDDEN",
 						);
@@ -374,7 +371,6 @@ const target = process.env.RESORA_EVENT_ADMIN_TEST_DB_URL;
 							service.setScoringMode(db, live, {
 								eventId: f.id,
 								scoringMode: "EXCLUDED",
-								reason,
 							}),
 							"FORBIDDEN",
 						);
@@ -383,7 +379,6 @@ const target = process.env.RESORA_EVENT_ADMIN_TEST_DB_URL;
 					service.setScoringMode(db, sr, {
 						eventId: f.id,
 						scoringMode: "EXCLUDED",
-						reason,
 					}),
 					"FORBIDDEN",
 				);
@@ -395,7 +390,6 @@ const target = process.env.RESORA_EVENT_ADMIN_TEST_DB_URL;
 					service.setScoringMode(db, admin, {
 						eventId: f.id,
 						scoringMode: "EXCLUDED",
-						reason,
 					}),
 					"FORBIDDEN",
 				);
@@ -428,7 +422,6 @@ const target = process.env.RESORA_EVENT_ADMIN_TEST_DB_URL;
 					await service.setScoringMode(tx as unknown as Database, admin, {
 						eventId: f.id,
 						scoringMode: "INCLUDED",
-						reason,
 					});
 				}),
 			);
@@ -444,13 +437,11 @@ const target = process.env.RESORA_EVENT_ADMIN_TEST_DB_URL;
 					service.setScoringMode(source, admin, {
 						eventId: f.id,
 						scoringMode: "INCLUDED",
-						reason,
 					}),
 				() =>
 					service.setScoringMode(db, admin, {
 						eventId: f.id,
 						scoringMode: "INCLUDED",
-						reason,
 					}),
 			);
 			expect(outcomes.map((row) => row.status)).toEqual([

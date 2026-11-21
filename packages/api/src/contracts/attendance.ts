@@ -88,7 +88,6 @@ const reasonSchema = z.string().trim().min(1).max(2000);
 export const attendanceScoringModeSchema = z.enum(["INCLUDED", "EXCLUDED"]);
 export const setScoringModeSchema = eventIdSchema.extend({
 	scoringMode: attendanceScoringModeSchema,
-	reason: reasonSchema,
 });
 export type SetScoringModeInput = z.infer<typeof setScoringModeSchema>;
 export const pointsRecapSchema = z.object({ periodId: z.uuid() }).strict();

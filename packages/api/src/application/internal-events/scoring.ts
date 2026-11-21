@@ -47,7 +47,7 @@ export async function setScoringMode(
 			eventId: event.id,
 			actorUserId: identity.userId,
 			action: "ATTENDANCE_SCORING_MODE_CHANGED",
-			reason: data.reason,
+			reason: `Klasifikasi penilaian kehadiran diubah dari ${previousMode ?? "Belum diklasifikasikan"} menjadi ${data.scoringMode}.`,
 			beforeState: { attendanceScoringMode: previousMode },
 			afterState: { attendanceScoringMode: data.scoringMode },
 		});
