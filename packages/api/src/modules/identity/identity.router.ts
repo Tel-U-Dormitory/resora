@@ -53,6 +53,7 @@ import {
 	canManageEventScoring,
 	canManageInternalEvent,
 	canOperateGeneralActivity,
+	canReadAttendancePoints,
 	hasSuperadminPrivilege,
 } from "./identity-policy";
 
@@ -163,6 +164,7 @@ export const identityRouter = router({
 			canManageBroadcast: canManageBroadcast(identity),
 			canManageCommittee: canManageCommittee(identity),
 			canManageEventScoring: canManageEventScoring(identity),
+			canReadAttendancePoints: canReadAttendancePoints(identity),
 			canManageInternalAttendanceManually: await canManageManualAttendance(
 				ctx.db,
 				identity,

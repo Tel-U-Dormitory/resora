@@ -21,6 +21,7 @@ import {
 } from "@resora/db/schema/identity";
 import { assignSyntheticSrTenure } from "@resora/db/sr-tenure.fixture";
 import { eq, sql } from "drizzle-orm";
+import { setEventVisibility } from "../../../../application/internal-events";
 import { appRouter } from "../../../../routers";
 import { setAccountPermission } from "../../../identity/account-permissions";
 import {
@@ -302,7 +303,16 @@ const target = process.env.RESORA_POINTS_TEST_DB_URL;
 				{ startsAt: "2026-01-11T02:00:00Z", status: "DRAFT" as const },
 			])
 				await event(input);
-			const report = await pointsRecap(db, admin, { periodId: p.id });
+			const defaults = await pointsRecap(db, admin, { periodId: p.id });
+			expect(defaults.events).toHaveLength(6);
+			expect(
+				defaults.events.some((e) => e.eventId === committeeEvent.event.id),
+			).toBe(false);
+			expect(defaults.availableEvents).toHaveLength(7);
+			const report = await pointsRecap(db, admin, {
+				periodId: p.id,
+				selectedEventIds: defaults.availableEvents.map((e) => e.eventId),
+			});
 			expect(report.events).toHaveLength(7);
 			expect(report.events.map((e) => e.eventId)).toEqual(
 				[...report.events]
@@ -376,7 +386,7 @@ const target = process.env.RESORA_POINTS_TEST_DB_URL;
 				maximumPossiblePoints: 0,
 			});
 		});
-		test("authorized read endpoint rejects grants, stale role/privilege and inactive identities without write authority", async () => {
+		test("all HCO can read while grants, revoked department/privilege and inactive identities cannot bypass live checks", async () => {
 			const p = await period("02", [ids.member]);
 			const caller = appRouter.createCaller({
 				db,
@@ -391,6 +401,47 @@ const target = process.env.RESORA_POINTS_TEST_DB_URL;
 				enabled: true,
 			});
 			try {
+				for (const positionCode of ["KADEP", "SEKDEP", "ANGGOTA"]) {
+					await db
+						.update(srProfiles)
+						.set({ positionCode })
+						.where(eq(srProfiles.userId, ids.member));
+					const current = await getActiveIdentity(db, ids.member);
+					if (!current) throw Error("FIXTURE_IDENTITY_REQUIRED");
+					const client = appRouter.createCaller({
+						db,
+						session: { user: { id: ids.member } },
+					} as never);
+					expect(
+						(await client.attendance.pointsRecap({ periodId: p.id }))
+							.participants,
+					).toHaveLength(1);
+					expect(
+						(await client.attendance.pointsPeriods()).some(
+							(period) => period.periodId === p.id,
+						),
+					).toBe(true);
+					expect(
+						(await client.attendance.exportPointsCsv({ periodId: p.id }))
+							.content,
+					).toContain("Total Poin");
+					expect(await client.identity.session()).toMatchObject({
+						canReadAttendancePoints: true,
+						canManageEventScoring: positionCode === "KADEP",
+					});
+					if (positionCode !== "KADEP")
+						await failure(
+							client.attendance.setScoringMode({
+								eventId: randomUUID(),
+								scoringMode: "INCLUDED",
+							}),
+							"FORBIDDEN",
+						);
+				}
+				await db
+					.update(srProfiles)
+					.set({ departmentCode: "RND" })
+					.where(eq(srProfiles.userId, ids.member));
 				await failure(pointsRecap(db, member, { periodId: p.id }), "FORBIDDEN");
 				await failure(pointsPeriods(db, member), "FORBIDDEN");
 				await failure(
@@ -399,12 +450,16 @@ const target = process.env.RESORA_POINTS_TEST_DB_URL;
 				);
 				await db
 					.update(srProfiles)
-					.set({ positionCode: "ANGGOTA" })
+					.set({ departmentCode: "HCO" })
+					.where(eq(srProfiles.userId, ids.member));
+				await db
+					.update(srProfiles)
+					.set({ departmentCode: "RND" })
 					.where(eq(srProfiles.userId, ids.kadep));
 				await failure(pointsRecap(db, kadep, { periodId: p.id }), "FORBIDDEN");
 				await db
 					.update(srProfiles)
-					.set({ positionCode: "KADEP" })
+					.set({ positionCode: "KADEP", departmentCode: "HCO" })
 					.where(eq(srProfiles.userId, ids.kadep));
 				await db
 					.update(userProfiles)
@@ -426,8 +481,12 @@ const target = process.env.RESORA_POINTS_TEST_DB_URL;
 					.onConflictDoNothing();
 				await db
 					.update(srProfiles)
-					.set({ positionCode: "KADEP" })
+					.set({ positionCode: "KADEP", departmentCode: "HCO" })
 					.where(eq(srProfiles.userId, ids.kadep));
+				await db
+					.update(srProfiles)
+					.set({ departmentCode: "HCO", positionCode: "ANGGOTA" })
+					.where(eq(srProfiles.userId, ids.member));
 				await setAccountPermission(db, admin, {
 					userId: ids.member,
 					permissionCode: "ATTENDANCE_MANUAL_MANAGE",
@@ -569,6 +628,7 @@ const target = process.env.RESORA_POINTS_TEST_DB_URL;
 			} as never);
 			expect(await memberCaller.identity.session()).toMatchObject({
 				canManageEventScoring: false,
+				canReadAttendancePoints: true,
 				canManageInternalEvents: true,
 				canManageBroadcast: false,
 				isSuperadmin: false,
@@ -597,6 +657,168 @@ const target = process.env.RESORA_POINTS_TEST_DB_URL;
 			expect(csv.filename).toContain(p.id);
 			for (const field of ["gpsAccuracy", "scanLat", "qrToken", "audit"])
 				expect(csv.content).not.toContain(field);
+		});
+		test("default/custom/empty selections preserve every total and CSV, reject ineligible IDs, and never write", async () => {
+			const p = await period("07");
+			const a = await event({
+				startsAt: "2026-07-02T02:00:00Z",
+				attendance: [{ userId: ids.member, delta: 0, timingClass: "ON_TIME" }],
+			});
+			const b = await event({
+				startsAt: "2026-07-03T02:00:00Z",
+				visibility: "HIDDEN",
+				attendance: [
+					{ userId: ids.member, delta: 16 * 60_000, timingClass: "LATE" },
+				],
+			});
+			const c = await event({
+				startsAt: "2026-07-04T02:00:00Z",
+				visibility: "ARCHIVED",
+				subset: true,
+				attendance: [{ userId: ids.member, delta: 0, timingClass: "ON_TIME" }],
+			});
+			const d = await event({
+				startsAt: "2026-07-05T02:00:00Z",
+				visibility: "ARCHIVED",
+				mode: null,
+			});
+			const e = await event({
+				startsAt: "2026-07-06T02:00:00Z",
+				visibility: "HIDDEN",
+				mode: null,
+				invited: [ids.former],
+			});
+			const invalid = [];
+			for (const options of [
+				{ mode: "EXCLUDED" as const },
+				{ status: "PUBLISHED" as const },
+				{ status: "DRAFT" as const },
+			])
+				invalid.push(
+					(await event({ startsAt: "2026-07-10T02:00:00Z", ...options })).event
+						.id,
+				);
+			invalid.push(
+				(await event({ startsAt: "2026-08-01T02:00:00Z" })).event.id,
+				randomUUID(),
+			);
+			const snapshot = () =>
+				db.execute(
+					sql`select (select jsonb_agg(e order by e.id) from events e) as events,(select jsonb_agg(a order by a.id) from attendance_records a) as attendance,(select jsonb_agg(p order by p.event_id,p.user_id) from event_participants p) as invitations,(select count(*)::int from event_audit_logs) as audits`,
+				);
+			const before = (await snapshot()).rows;
+			const defaults = await pointsRecap(db, admin, { periodId: p.id });
+			expect(defaults.events.map((e) => e.eventId)).toEqual([
+				a.event.id,
+				b.event.id,
+				e.event.id,
+			]);
+			expect(defaults.availableEvents.map((e) => e.eventId)).toEqual([
+				a.event.id,
+				b.event.id,
+				c.event.id,
+				d.event.id,
+				e.event.id,
+			]);
+			expect(
+				defaults.participants.find((r) => r.userId === ids.member),
+			).toMatchObject({
+				attendedCount: 2,
+				absentCount: 0,
+				eventCount: 2,
+				totalPoints: 17,
+				maximumPossiblePoints: 20,
+				unclassifiedCount: 0,
+				scoringStatus: "COMPLETE",
+			});
+			expect(
+				defaults.participants.find((r) => r.userId === ids.former),
+			).toMatchObject({ unclassifiedCount: 1, scoringStatus: "PARTIAL" });
+			for (const [selectedEventIds, total, maximum, unclassified, status] of [
+				[[c.event.id, b.event.id, a.event.id], 23, 26, 0, "COMPLETE"],
+				[[a.event.id], 10, 10, 0, "COMPLETE"],
+				[[d.event.id], 0, 0, 1, "PARTIAL"],
+				[[], 0, 0, 0, "COMPLETE"],
+			] as const) {
+				const input = {
+					periodId: p.id,
+					selectedEventIds: [...selectedEventIds],
+				};
+				const report = await pointsRecap(db, kadep, input);
+				expect(report.participants).toHaveLength(3);
+				expect(
+					report.participants.find((r) => r.userId === ids.member),
+				).toMatchObject({
+					totalPoints: total,
+					maximumPossiblePoints: maximum,
+					unclassifiedCount: unclassified,
+					scoringStatus: status,
+				});
+				expect((await exportPointsCsv(db, kadep, input)).content).toBe(
+					pointsCsv(report),
+				);
+			}
+			const caller = appRouter.createCaller({
+				db,
+				session: { user: { id: ids.kadep } },
+			} as never);
+			for (const eventId of invalid)
+				await failure(
+					caller.attendance.pointsRecap({
+						periodId: p.id,
+						selectedEventIds: [eventId],
+					}),
+					"BAD_REQUEST",
+				);
+			for (const selectedEventIds of [["bad"], [a.event.id, a.event.id]])
+				await failure(
+					caller.attendance.exportPointsCsv({
+						periodId: p.id,
+						selectedEventIds,
+					}),
+					"BAD_REQUEST",
+				);
+			for (const positionCode of ["KADEP", "SEKDEP", "ANGGOTA"]) {
+				await db
+					.update(srProfiles)
+					.set({ positionCode })
+					.where(eq(srProfiles.userId, ids.member));
+				const client = appRouter.createCaller({
+					db,
+					session: { user: { id: ids.member } },
+				} as never);
+				const input = { periodId: p.id, selectedEventIds: [c.event.id] };
+				const report = await client.attendance.pointsRecap(input);
+				expect(report.events.map((e) => e.eventId)).toEqual([c.event.id]);
+				expect(
+					(await client.attendance.exportPointsCsv(input)).content,
+				).toContain("Total Poin");
+			}
+			expect((await snapshot()).rows).toEqual(before);
+			await setEventVisibility(db, admin, {
+				eventId: a.event.id,
+				action: "ARCHIVE",
+				reason: "Synthetic archive test",
+			});
+			expect(
+				(await pointsRecap(db, admin, { periodId: p.id })).events.some(
+					(e) => e.eventId === a.event.id,
+				),
+			).toBe(false);
+			await setEventVisibility(db, admin, {
+				eventId: a.event.id,
+				action: "RESTORE",
+				reason: "Synthetic restore test",
+			});
+			expect(
+				(await pointsRecap(db, admin, { periodId: p.id })).events.some(
+					(e) => e.eventId === a.event.id,
+				),
+			).toBe(true);
+			expect(
+				(await db.select().from(events).where(eq(events.id, a.event.id)))[0]
+					?.attendanceScoringMode,
+			).toBe("INCLUDED");
 		});
 	},
 );

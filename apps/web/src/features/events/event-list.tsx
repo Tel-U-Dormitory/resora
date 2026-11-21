@@ -25,9 +25,9 @@ const visibilityFilters = [
 ] as const;
 
 export default function EventList({
-	canManageScoring = false,
+	canReadPoints = false,
 }: {
-	canManageScoring?: boolean;
+	canReadPoints?: boolean;
 } = {}) {
 	const params = useSearchParams();
 	const [visibility, setVisibility] =
@@ -70,7 +70,7 @@ export default function EventList({
 					</Link>
 				)}
 			</div>
-			{management && canManageScoring && (
+			{management && canReadPoints && (
 				<Link
 					href="/events/points"
 					className="focus-ring inline-flex min-h-11 items-center rounded-xl border border-border px-4 py-2 font-semibold text-sm hover:bg-muted"

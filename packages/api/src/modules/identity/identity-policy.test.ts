@@ -8,9 +8,11 @@ import type { Database } from "@resora/db";
 import {
 	canAccessPersonalSr,
 	canManageCommittee,
+	canManageEventScoring,
 	canManageInternalAttendanceManually,
 	canManageInternalEvent,
 	canOperateGeneralActivity,
+	canReadAttendancePoints,
 	hasSuperadminPrivilege,
 } from "./identity-policy";
 
@@ -66,10 +68,10 @@ test("independent committee policy allows all eligible structural HCO and valid 
 		{ ...admin, isSuperadmin: false },
 		{ ...admin, mustChangePassword: true },
 		{ ...admin, isActive: false },
-		{ ...admin, passwordResetRequired: true },
+		{ ...admin, passwordResetRequired: true as const },
 		{ ...identity("HCO", "KADEP"), isActive: false },
-		{ ...identity("HCO", "KADEP"), passwordResetRequired: true },
-		{ ...identity("HCO", "SEKDEP"), passwordResetRequired: true },
+		{ ...identity("HCO", "KADEP"), passwordResetRequired: true as const },
+		{ ...identity("HCO", "SEKDEP"), passwordResetRequired: true as const },
 		{ ...identity("HCO", "ANGGOTA"), isActive: false },
 		identity("HCO", "KETUM", true),
 		{ ...identity("RND", "ANGGOTA"), committeePositionCode: "KADEP" },
@@ -232,4 +234,35 @@ test("missing identity, inactive/non-SR identity and first-change gate deny ever
 				false,
 			);
 	}
+});
+
+test("attendance points read access covers HCO without expanding classification authority", () => {
+	for (const position of ["KADEP", "SEKDEP", "ANGGOTA"]) {
+		const current = identity("HCO", position);
+		expect(canReadAttendancePoints(current)).toBe(true);
+		expect(canManageEventScoring(current)).toBe(position === "KADEP");
+	}
+	for (const current of [
+		null,
+		undefined,
+		identity("RND", "KADEP"),
+		identity("ADAPTIF", "ANGGOTA"),
+		identity("HCO", "PJ"),
+		{ ...identity("HCO", "ANGGOTA"), isActive: false },
+		{ ...identity("HCO", "SEKDEP"), passwordResetRequired: true as const },
+	])
+		expect(canReadAttendancePoints(current)).toBe(false);
+	const admin: ActiveIdentity = {
+		userId: "synthetic-admin",
+		actor: "SYSTEM_ADMIN",
+		username: "synthetic.admin",
+		isSuperadmin: true,
+		isActive: true,
+		mustChangePassword: false,
+	};
+	expect(canReadAttendancePoints(admin)).toBe(true);
+	expect(canManageEventScoring(admin)).toBe(true);
+	expect(canReadAttendancePoints({ ...admin, mustChangePassword: true })).toBe(
+		false,
+	);
 });

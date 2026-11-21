@@ -32,6 +32,7 @@ function event(overrides: Partial<Inputs[0][number]> = {}): Inputs[0][number] {
 		organizationContext: "SR",
 		committeeName: null,
 		scoringMode: "INCLUDED",
+		visibility: "VISIBLE",
 		rosterCriteria: {
 			allSr: true,
 			exclude: [],
@@ -302,6 +303,9 @@ function databaseFixture() {
 			buildingId: randomUUID(),
 		},
 		period: period as typeof period | null,
+		events: [e],
+		invitations: [invitation(e.eventId)],
+		attendance: [attendance(e.eventId)],
 		options: {} as unknown,
 		reads: [] as string[],
 		filters: [] as { table: string; sql: string; params: unknown[] }[],
@@ -350,11 +354,11 @@ function databaseFixture() {
 								: table === "sr_period_memberships"
 									? people
 									: table === "events"
-										? [e]
+										? state.events
 										: table === "event_participants"
-											? [invitation(e.eventId)]
+											? state.invitations
 											: table === "attendance_sessions"
-												? [attendance(e.eventId)]
+												? state.attendance
 												: [],
 					).then(resolve),
 			};
@@ -400,24 +404,43 @@ test("points query uses one read-only snapshot and bounded bulk reads with expli
 		expect(json).not.toContain(field);
 });
 
-test("permission grants never authorize scoring reads; stale live identity is revalidated before report reads", async () => {
-	const f = databaseFixture();
-	for (const positionCode of ["ANGGOTA", "SEKDEP"]) {
-		const member = {
-			userId: "member",
-			actor: "SR" as const,
-			nim: "0001",
+test("all HCO positions share read/export access; non-HCO grants and revoked live identities do not", async () => {
+	for (const positionCode of ["KADEP", "SEKDEP", "ANGGOTA"]) {
+		const f = databaseFixture();
+		Object.assign(f.state.profile, {
+			actor: "SR",
 			isSuperadmin: false,
-			isActive: true,
-			mustChangePassword: false,
-			departmentCode: "HCO",
+			srUserId: f.identity.userId,
 			positionCode,
-			buildingId: randomUUID(),
+		});
+		const member = {
+			...f.state.profile,
+			actor: "SR" as const,
+			isSuperadmin: false,
 		};
-		await expect(
-			pointsRecap(f.db, member, { periodId: f.period.id }),
-		).rejects.toMatchObject({ code: "FORBIDDEN" });
+		expect(
+			(await pointsRecap(f.db, member, { periodId: f.period.id })).events,
+		).toHaveLength(1);
+		expect(await pointsPeriods(f.db, member)).toHaveLength(1);
+		expect(
+			(await exportPointsCsv(f.db, member, { periodId: f.period.id })).content,
+		).toContain("Total Poin");
+		expect(f.state.reads).not.toContain("user_permission_grants");
 	}
+	const f = databaseFixture();
+	const outsider = {
+		...f.state.profile,
+		actor: "SR" as const,
+		isSuperadmin: false,
+		departmentCode: "RND",
+		positionCode: "ANGGOTA",
+	};
+	for (const operation of [
+		() => pointsRecap(f.db, outsider, { periodId: f.period.id }),
+		() => pointsPeriods(f.db, outsider),
+		() => exportPointsCsv(f.db, outsider, { periodId: f.period.id }),
+	])
+		await expect(operation()).rejects.toMatchObject({ code: "FORBIDDEN" });
 	expect(f.state.reads).toEqual([]);
 	f.state.profile.isActive = false;
 	await expect(
@@ -527,12 +550,14 @@ test("scoring period options recheck authority and do not expand account-period 
 	});
 	for (const positionCode of ["SEKDEP", "ANGGOTA"]) {
 		const member = { ...kadep, positionCode };
-		await expect(pointsPeriods(f.db, member)).rejects.toMatchObject({
+		f.state.profile.positionCode = positionCode;
+		expect(await pointsPeriods(f.db, member)).toHaveLength(1);
+		expect(
+			(await exportPointsCsv(f.db, member, { periodId: f.period.id })).content,
+		).toContain("Total Poin");
+		await expect(listPeriods(f.db, member)).rejects.toMatchObject({
 			code: "FORBIDDEN",
 		});
-		await expect(
-			exportPointsCsv(f.db, member, { periodId: f.period.id }),
-		).rejects.toMatchObject({ code: "FORBIDDEN" });
 	}
 	f.state.profile.isActive = false;
 	await expect(pointsPeriods(f.db, f.identity)).rejects.toMatchObject({
@@ -701,4 +726,137 @@ test("CSV neutralizes spreadsheet expressions in names, headers and organization
 	]);
 	expect(csv).toContain('""quoted""');
 	expect(csv).not.toContain('="000001"');
+});
+
+test("event selection validates UUIDs, uniqueness, bounds and membership before reading attendance", async () => {
+	const f = databaseFixture();
+	const id = fixtureValue(f.state.events[0]).eventId;
+	for (const selectedEventIds of [
+		["bad"],
+		[id, id],
+		[
+			"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+			"AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA",
+		],
+		Array.from({ length: 1001 }, () => randomUUID()),
+	])
+		expect(
+			pointsRecapSchema.safeParse({ periodId: f.period.id, selectedEventIds })
+				.success,
+		).toBe(false);
+	expect(
+		pointsRecapSchema.safeParse({ periodId: f.period.id, selectedEventIds: [] })
+			.success,
+	).toBe(true);
+	await expect(
+		pointsRecap(f.db, f.identity, {
+			periodId: f.period.id,
+			selectedEventIds: [randomUUID()],
+		}),
+	).rejects.toMatchObject({
+		code: "BAD_REQUEST",
+		message: "POINTS_EVENT_SELECTION_INVALID",
+	});
+	expect(f.state.reads).not.toContain("event_participants");
+	expect(f.state.reads).not.toContain("attendance_sessions");
+	const other = databaseFixture();
+	const otherId = fixtureValue(other.state.events[0]).eventId;
+	expect(
+		(
+			await pointsRecap(other.db, other.identity, {
+				periodId: other.period.id,
+				selectedEventIds: [otherId.toUpperCase()],
+			})
+		).events.map((event) => event.eventId),
+	).toEqual([otherId]);
+});
+
+test("one selection step controls columns, every summary and CSV; defaults include HIDDEN, not ARCHIVED", async () => {
+	const f = databaseFixture();
+	const a = event();
+	const b = event({ visibility: "HIDDEN" });
+	const c = event({ visibility: "ARCHIVED", organizationContext: "COMMITTEE" });
+	const d = event({ visibility: "ARCHIVED", scoringMode: null });
+	f.state.events = [a, b, c, d];
+	f.state.invitations = f.state.events.map((e) => invitation(e.eventId));
+	f.state.attendance = [
+		attendance(a.eventId),
+		attendance(b.eventId, "a", 16 * 60_000, "LATE"),
+		attendance(c.eventId),
+		attendance(d.eventId),
+	];
+	const defaults = await pointsRecap(f.db, f.identity, {
+		periodId: f.period.id,
+	});
+	expect(defaults.events.map((e) => e.eventId)).toEqual([a.eventId, b.eventId]);
+	expect(
+		defaults.availableEvents.map((e) => [e.eventId, e.visibility]),
+	).toEqual(f.state.events.map((e) => [e.eventId, e.visibility]));
+	expect(Object.keys(fixtureValue(defaults.availableEvents[0])).sort()).toEqual(
+		["eventId", "title", "startsAt", "scoringMode", "visibility"].sort(),
+	);
+	expect(defaults.participants[0]).toMatchObject({
+		attendedCount: 2,
+		absentCount: 0,
+		eventCount: 2,
+		totalPoints: 17,
+		maximumPossiblePoints: 20,
+		unclassifiedCount: 0,
+		scoringStatus: "COMPLETE",
+	});
+	for (const filter of f.state.filters.filter(
+		(r) =>
+			r.table === "event_participants" || r.table === "attendance_sessions",
+	)) {
+		expect(filter.params).not.toContain(c.eventId);
+		expect(filter.params).not.toContain(d.eventId);
+	}
+	for (const [selectedEventIds, total, maximum, unclassified, status] of [
+		[[c.eventId, b.eventId, a.eventId], 23, 26, 0, "COMPLETE"],
+		[[a.eventId], 10, 10, 0, "COMPLETE"],
+		[[d.eventId], 0, 0, 1, "PARTIAL"],
+		[[], 0, 0, 0, "COMPLETE"],
+	] as const) {
+		const input = {
+			periodId: f.period.id,
+			selectedEventIds: [...selectedEventIds],
+		};
+		const report = await pointsRecap(f.db, f.identity, input);
+		expect(report.events.map((e) => e.eventId)).toEqual(
+			f.state.events
+				.filter((e) => selectedEventIds.some((id) => id === e.eventId))
+				.map((e) => e.eventId),
+		);
+		expect(report.participants).toHaveLength(3);
+		expect(report.participants[0]).toMatchObject({
+			totalPoints: total,
+			maximumPossiblePoints: maximum,
+			unclassifiedCount: unclassified,
+			scoringStatus: status,
+		});
+		expect(report.participants[1]).toMatchObject({
+			eventCount: 0,
+			absentCount: 0,
+			totalPoints: 0,
+		});
+		const csv = await exportPointsCsv(f.db, f.identity, input);
+		expect(csv.content).toBe(pointsCsv(report));
+		if (selectedEventIds.length === 0)
+			expect(csvRows(csv.content)[1]?.at(-1)).toBe("Tanpa event penilaian");
+		expect(csvRows(csv.content)[0]).toHaveLength(11 + selectedEventIds.length);
+	}
+	const empty = databaseFixture();
+	await pointsRecap(empty.db, empty.identity, {
+		periodId: empty.period.id,
+		selectedEventIds: [],
+	});
+	expect(empty.state.reads).not.toContain("event_participants");
+	expect(empty.state.reads).not.toContain("attendance_sessions");
+	c.visibility = "VISIBLE";
+	expect(
+		(await pointsRecap(f.db, f.identity, { periodId: f.period.id })).events.map(
+			(e) => e.eventId,
+		),
+	).toEqual([a.eventId, b.eventId, c.eventId]);
+	expect(c.scoringMode).toBe("INCLUDED");
 });
