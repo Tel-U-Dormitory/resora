@@ -94,7 +94,7 @@ export const pointsRecapSchema = z
 	.object({
 		periodId: z.uuid(),
 		selectedEventIds: z
-			.array(z.uuid())
+			.array(z.uuid().transform((id) => id.toLowerCase()))
 			.max(1000)
 			.refine((ids) => new Set(ids).size === ids.length, {
 				message: "POINTS_EVENT_SELECTION_INVALID",

@@ -258,7 +258,7 @@ export default function PointsRecap() {
 																? "Belum diklasifikasikan"
 																: "INCLUDED"}
 															{event.visibility === "ARCHIVED"
-																? " ? Diarsipkan"
+																? " - Diarsipkan"
 																: ""}
 														</span>
 													</span>
@@ -267,7 +267,7 @@ export default function PointsRecap() {
 										{availableEvents.length === 0 && (
 											<p className="p-2 text-muted-foreground text-sm">
 												{recap.isFetching
-													? "Memuat pilihan event?"
+													? "Memuat pilihan event..."
 													: recap.error
 														? "Pilihan event belum dapat dimuat. Reset default lalu terapkan kembali."
 														: "Tidak ada event yang memenuhi syarat pada periode ini."}

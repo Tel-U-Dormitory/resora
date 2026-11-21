@@ -734,6 +734,10 @@ test("event selection validates UUIDs, uniqueness, bounds and membership before 
 	for (const selectedEventIds of [
 		["bad"],
 		[id, id],
+		[
+			"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+			"AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA",
+		],
 		Array.from({ length: 1001 }, () => randomUUID()),
 	])
 		expect(
@@ -755,6 +759,16 @@ test("event selection validates UUIDs, uniqueness, bounds and membership before 
 	});
 	expect(f.state.reads).not.toContain("event_participants");
 	expect(f.state.reads).not.toContain("attendance_sessions");
+	const other = databaseFixture();
+	const otherId = fixtureValue(other.state.events[0]).eventId;
+	expect(
+		(
+			await pointsRecap(other.db, other.identity, {
+				periodId: other.period.id,
+				selectedEventIds: [otherId.toUpperCase()],
+			})
+		).events.map((event) => event.eventId),
+	).toEqual([otherId]);
 });
 
 test("one selection step controls columns, every summary and CSV; defaults include HIDDEN, not ARCHIVED", async () => {
@@ -827,6 +841,8 @@ test("one selection step controls columns, every summary and CSV; defaults inclu
 		});
 		const csv = await exportPointsCsv(f.db, f.identity, input);
 		expect(csv.content).toBe(pointsCsv(report));
+		if (selectedEventIds.length === 0)
+			expect(csvRows(csv.content)[1]?.at(-1)).toBe("Tanpa event penilaian");
 		expect(csvRows(csv.content)[0]).toHaveLength(11 + selectedEventIds.length);
 	}
 	const empty = databaseFixture();

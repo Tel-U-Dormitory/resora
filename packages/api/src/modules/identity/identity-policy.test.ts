@@ -68,10 +68,10 @@ test("independent committee policy allows all eligible structural HCO and valid 
 		{ ...admin, isSuperadmin: false },
 		{ ...admin, mustChangePassword: true },
 		{ ...admin, isActive: false },
-		{ ...admin, passwordResetRequired: true },
+		{ ...admin, passwordResetRequired: true as const },
 		{ ...identity("HCO", "KADEP"), isActive: false },
-		{ ...identity("HCO", "KADEP"), passwordResetRequired: true },
-		{ ...identity("HCO", "SEKDEP"), passwordResetRequired: true },
+		{ ...identity("HCO", "KADEP"), passwordResetRequired: true as const },
+		{ ...identity("HCO", "SEKDEP"), passwordResetRequired: true as const },
 		{ ...identity("HCO", "ANGGOTA"), isActive: false },
 		identity("HCO", "KETUM", true),
 		{ ...identity("RND", "ANGGOTA"), committeePositionCode: "KADEP" },
@@ -249,7 +249,7 @@ test("attendance points read access covers HCO without expanding classification 
 		identity("ADAPTIF", "ANGGOTA"),
 		identity("HCO", "PJ"),
 		{ ...identity("HCO", "ANGGOTA"), isActive: false },
-		{ ...identity("HCO", "SEKDEP"), passwordResetRequired: true },
+		{ ...identity("HCO", "SEKDEP"), passwordResetRequired: true as const },
 	])
 		expect(canReadAttendancePoints(current)).toBe(false);
 	const admin: ActiveIdentity = {

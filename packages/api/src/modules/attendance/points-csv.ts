@@ -7,7 +7,12 @@ import {
 import type { pointsRecap } from "./points-recap";
 import { csvCell } from "./reporting-policy";
 
-export function pointsCsv(report: Awaited<ReturnType<typeof pointsRecap>>) {
+export function pointsCsv(
+	report: Pick<
+		Awaited<ReturnType<typeof pointsRecap>>,
+		"events" | "participants"
+	>,
+) {
 	const headers = [
 		"NIM",
 		"Nama",

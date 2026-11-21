@@ -147,7 +147,7 @@ function fixture() {
 	const lock = { current: false };
 	const queries: {
 		kind: string;
-		input?: { periodId: string };
+		input?: { periodId: string; selectedEventIds?: string[] };
 		enabled?: boolean;
 	}[] = [];
 	let retries = 0;
