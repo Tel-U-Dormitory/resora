@@ -24,7 +24,11 @@ const visibilityFilters = [
 	["ARCHIVED", "Diarsipkan"],
 ] as const;
 
-export default function EventList() {
+export default function EventList({
+	canManageScoring = false,
+}: {
+	canManageScoring?: boolean;
+} = {}) {
 	const params = useSearchParams();
 	const [visibility, setVisibility] =
 		useState<(typeof visibilityFilters)[number][0]>("NON_ARCHIVED");
@@ -66,6 +70,14 @@ export default function EventList() {
 					</Link>
 				)}
 			</div>
+			{management && canManageScoring && (
+				<Link
+					href="/events/points"
+					className="focus-ring inline-flex min-h-11 items-center rounded-xl border border-border px-4 py-2 font-semibold text-sm hover:bg-muted"
+				>
+					Rekap Poin Kehadiran
+				</Link>
+			)}
 			{management && query.data?.isSuperadmin && (
 				<label
 					htmlFor="event-visibility"

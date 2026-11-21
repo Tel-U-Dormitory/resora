@@ -24,9 +24,11 @@ import {
 	auditHistory,
 	checkIn,
 	exportCsv,
+	exportPointsCsv,
 	manualCorrect,
 	manualInsert,
 	ownHistory,
+	pointsPeriods,
 	pointsRecap,
 	recap,
 } from "../modules/attendance/attendance.public";
@@ -36,6 +38,12 @@ import {
 } from "../modules/events/events.public";
 
 export const attendanceRouter = router({
+	pointsPeriods: protectedProcedure.query(({ ctx }) =>
+		pointsPeriods(ctx.db, ctx.identity),
+	),
+	exportPointsCsv: protectedProcedure
+		.input(pointsRecapSchema)
+		.query(({ ctx, input }) => exportPointsCsv(ctx.db, ctx.identity, input)),
 	pointsRecap: protectedProcedure
 		.input(pointsRecapSchema)
 		.query(({ ctx, input }) => pointsRecap(ctx.db, ctx.identity, input)),

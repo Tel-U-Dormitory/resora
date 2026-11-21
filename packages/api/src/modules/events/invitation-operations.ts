@@ -134,6 +134,8 @@ export async function scoringInvitationSnapshots(
 			name: eventParticipants.name,
 			departmentCode: eventParticipants.departmentCode,
 			positionCode: eventParticipants.positionCode,
+			buildingCode: eventParticipants.buildingCode,
+			buildingName: eventParticipants.buildingName,
 			committeeDivision: eventParticipants.committeeDivision,
 			committeePosition: eventParticipants.committeePosition,
 		})

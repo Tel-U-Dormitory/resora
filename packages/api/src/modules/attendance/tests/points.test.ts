@@ -6,8 +6,20 @@ import { getTableName, type SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { pointsRecapSchema } from "../../../contracts/attendance";
 import { appRouter } from "../../../routers";
+import { listPeriods } from "../../identity/accounts/account-period";
+import {
+	pointsCellValue,
+	pointsEventHeading,
+	pointsSummaryValues,
+} from "../points.contracts";
+import { pointsCsv } from "../points-csv";
 import { attendancePoints, eventMaximumPoints } from "../points-policy";
-import { aggregateAttendancePoints, pointsRecap } from "../points-recap";
+import {
+	aggregateAttendancePoints,
+	exportPointsCsv,
+	pointsPeriods,
+	pointsRecap,
+} from "../points-recap";
 
 type Inputs = Parameters<typeof aggregateAttendancePoints>;
 const startsAt = new Date("2026-10-12T02:00:00Z");
@@ -36,6 +48,10 @@ const people: Inputs[1] = ["a", "b", "c"].map((userId) => ({
 	userId,
 	name: "Same name",
 	nim: `000${userId}`,
+	currentDepartmentCode: "RND",
+	currentDepartmentName: "Current department",
+	currentBuildingCode: "A",
+	currentBuildingName: "Current building",
 }));
 function invitation(eventId: string, userId = "a"): Inputs[2][number] {
 	return {
@@ -45,6 +61,8 @@ function invitation(eventId: string, userId = "a"): Inputs[2][number] {
 		name: "Historical name",
 		departmentCode: "HCO",
 		positionCode: "ANGGOTA",
+		buildingCode: "B",
+		buildingName: "Historical building",
 		committeeDivision: "Historical division",
 		committeePosition: "PIC1",
 	};
@@ -293,7 +311,7 @@ function databaseFixture() {
 			state.options = options;
 			return run(double);
 		},
-		select: () => {
+		select: (selection?: Record<string, unknown>) => {
 			let table = "";
 			const q = {
 				from: (value: Parameters<typeof getTableName>[0]) => {
@@ -318,7 +336,16 @@ function databaseFixture() {
 							? [state.profile]
 							: table === "sr_periods"
 								? state.period
-									? [state.period]
+									? [
+											selection?.periodId
+												? {
+														periodId: state.period.id,
+														name: state.period.name,
+														startsOn: state.period.startsOn,
+														endsOn: state.period.endsOn,
+													}
+												: state.period,
+										]
 									: []
 								: table === "sr_period_memberships"
 									? people
@@ -440,4 +467,220 @@ test("read-only operational recheck enforces current tenure, assignment and pass
 		expect(f.state.reads).not.toContain("events");
 		expect(f.state.reads).not.toContain("user_permission_grants");
 	}
+});
+
+// Quoting-aware parser for assertions, including embedded commas/newlines/quotes.
+function csvRows(content: string) {
+	const rows: string[][] = [];
+	let row: string[] = [];
+	let value = "";
+	let quoted = false;
+	for (let i = 1; i < content.length; i++) {
+		const char = content[i];
+		if (char === '"') {
+			if (quoted && content[i + 1] === '"') {
+				value += '"';
+				i++;
+			} else quoted = !quoted;
+		} else if (!quoted && char === ",") {
+			row.push(value);
+			value = "";
+		} else if (!quoted && char === "\r" && content[i + 1] === "\n") {
+			row.push(value);
+			rows.push(row);
+			row = [];
+			value = "";
+			i++;
+		} else value += char;
+	}
+	return rows;
+}
+
+function fixtureValue<T>(value: T | undefined): T {
+	if (value === undefined) throw Error("FIXTURE_VALUE_REQUIRED");
+	return value;
+}
+
+test("scoring period options recheck authority and do not expand account-period administration", async () => {
+	const f = databaseFixture();
+	expect(await pointsPeriods(f.db, f.identity)).toEqual([
+		{
+			periodId: f.period.id,
+			name: f.period.name,
+			startsOn: f.period.startsOn,
+			endsOn: f.period.endsOn,
+		},
+	]);
+	Object.assign(f.state.profile, {
+		actor: "SR",
+		isSuperadmin: false,
+		srUserId: f.identity.userId,
+	});
+	const kadep = {
+		...f.state.profile,
+		actor: "SR" as const,
+		isSuperadmin: false,
+	};
+	expect(await pointsPeriods(f.db, kadep)).toHaveLength(1);
+	await expect(listPeriods(f.db, kadep)).rejects.toMatchObject({
+		code: "FORBIDDEN",
+	});
+	for (const positionCode of ["SEKDEP", "ANGGOTA"]) {
+		const member = { ...kadep, positionCode };
+		await expect(pointsPeriods(f.db, member)).rejects.toMatchObject({
+			code: "FORBIDDEN",
+		});
+		await expect(
+			exportPointsCsv(f.db, member, { periodId: f.period.id }),
+		).rejects.toMatchObject({ code: "FORBIDDEN" });
+	}
+	f.state.profile.isActive = false;
+	await expect(pointsPeriods(f.db, f.identity)).rejects.toMatchObject({
+		code: "FORBIDDEN",
+	});
+});
+
+test("CSV consumes every F2 row and summary, with numeric scores and safe text identifiers", async () => {
+	const f = databaseFixture();
+	const report = await pointsRecap(f.db, f.identity, { periodId: f.period.id });
+	const csv = await exportPointsCsv(f.db, f.identity, {
+		periodId: f.period.id,
+	});
+	expect(csv.filename).toBe(
+		`attendance-points-${f.period.id}-${f.period.startsOn}-${f.period.endsOn}.csv`,
+	);
+	expect(csv.content.startsWith("\uFEFF")).toBe(true);
+	expect(csv.content.endsWith("\r\n")).toBe(true);
+	const rows = csvRows(csv.content);
+	expect(rows).toHaveLength(report.participants.length + 1);
+	expect(rows[0]?.slice(0, 4)).toEqual([
+		"NIM",
+		"Nama",
+		"Departemen (saat ini)",
+		"Gedung (saat ini)",
+	]);
+	expect(rows[0]?.[4]).toBe(pointsEventHeading(fixtureValue(report.events[0])));
+	for (const [index, person] of report.participants.entries()) {
+		const row = rows[index + 1];
+		expect(row?.[0]).toBe(`'${person.nim}`);
+		expect(row?.slice(-7)).toEqual(pointsSummaryValues(person).map(String));
+	}
+	expect(rows[1]?.[4]).toBe("10");
+	expect(rows[2]?.[4]).toBe("—");
+	expect(f.state.options).toEqual({
+		isolationLevel: "repeatable read",
+		accessMode: "read only",
+	});
+	for (const field of [
+		"scanLat",
+		"scanLng",
+		"qrToken",
+		"password",
+		"audit",
+		"gpsAccuracy",
+	])
+		expect(csv.content).not.toContain(field);
+});
+
+test("CSV preserves all matrix states, decimal 4.2, distinct duplicate event columns and rows beyond pagination", () => {
+	const events = [
+		event({ organizationContext: "COMMITTEE" }),
+		event({ scoringMode: null }),
+		event(),
+		event(),
+	];
+	const first = events[0];
+	const unclassified = events[1];
+	const absent = events[2];
+	if (!first || !unclassified || !absent)
+		throw Error("FIXTURE_EVENTS_REQUIRED");
+	const roster = Array.from({ length: 16 }, (_, i) => ({
+		...fixtureValue(people[0]),
+		userId: `sr-${i}`,
+		nim: `000${i}`,
+	}));
+	const id = roster[0]?.userId;
+	if (!id) throw Error("FIXTURE_PERSON_REQUIRED");
+	const report = {
+		period: {
+			id: randomUUID(),
+			name: "Synthetic period",
+			startsOn: "2026-10-01",
+			endsOn: "2026-10-31",
+			timeZone: "Asia/Jakarta" as const,
+		},
+		...aggregateAttendancePoints(
+			events,
+			roster,
+			[
+				invitation(first.eventId, id),
+				invitation(unclassified.eventId, id),
+				invitation(absent.eventId, id),
+			],
+			[
+				attendance(first.eventId, id, 16 * 60_000, "LATE"),
+				{
+					eventId: absent.eventId,
+					session: { status: "CLOSED", lateGraceMinutes: 15 },
+					record: null,
+				},
+			],
+		),
+	};
+	const csv = pointsCsv(report);
+	const rows = csvRows(csv);
+	expect(rows).toHaveLength(17);
+	expect(new Set(rows[0]?.slice(4, 8)).size).toBe(4);
+	expect(rows[1]?.slice(4, 8)).toEqual(["4.2", "Belum dinilai", "0", "—"]);
+	expect(rows[1]?.slice(-7)).toEqual(
+		pointsSummaryValues(fixtureValue(report.participants[0])).map(String),
+	);
+	expect(rows[1]?.at(-1)).toBe("Belum lengkap");
+	expect(pointsCellValue({ scoringStatus: "UNSCORABLE", points: null })).toBe(
+		"Tidak dapat dinilai",
+	);
+	const typeCheck: (typeof report.participants)[number]["scoringStatus"] =
+		"PARTIAL";
+	expect(typeCheck).toBe("PARTIAL");
+});
+
+test("CSV neutralizes spreadsheet expressions in names, headers and organization fields without converting numeric points into formulas", () => {
+	const e = event({ title: '=SUM(1,2),"quoted"\r\nnext line' });
+	const first = people[0];
+	if (!first) throw Error("FIXTURE_PERSON_REQUIRED");
+	const report = {
+		period: {
+			id: randomUUID(),
+			name: "Synthetic",
+			startsOn: "2026-10-01",
+			endsOn: "2026-10-31",
+			timeZone: "Asia/Jakarta" as const,
+		},
+		...aggregateAttendancePoints(
+			[e],
+			[
+				{
+					...first,
+					nim: "000001",
+					name: "\t=HYPERLINK()",
+					currentDepartmentCode: "+CMD",
+					currentBuildingName: "@FORMULA",
+				},
+			],
+			[invitation(e.eventId)],
+			[attendance(e.eventId)],
+		),
+	};
+	const csv = pointsCsv(report);
+	const rows = csvRows(csv);
+	expect(rows[0]?.[4]).toBe(`'${pointsEventHeading(e)}`);
+	expect(rows[1]?.slice(0, 5)).toEqual([
+		"'000001",
+		"'\t=HYPERLINK()",
+		"'+CMD",
+		"'@FORMULA",
+		"10",
+	]);
+	expect(csv).toContain('""quoted""');
+	expect(csv).not.toContain('="000001"');
 });

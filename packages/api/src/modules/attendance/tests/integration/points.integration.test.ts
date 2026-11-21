@@ -28,7 +28,12 @@ import {
 	verifyLocalProvisioningDatabase,
 } from "../../../identity/provisioning/sr-provisioning";
 import { manualCorrect } from "../../manual-attendance";
-import { pointsRecap } from "../../points-recap";
+import { pointsCsv } from "../../points-csv";
+import {
+	exportPointsCsv,
+	pointsPeriods,
+	pointsRecap,
+} from "../../points-recap";
 
 const target = process.env.RESORA_POINTS_TEST_DB_URL;
 (target ? describe : describe.skip)(
@@ -387,6 +392,11 @@ const target = process.env.RESORA_POINTS_TEST_DB_URL;
 			});
 			try {
 				await failure(pointsRecap(db, member, { periodId: p.id }), "FORBIDDEN");
+				await failure(pointsPeriods(db, member), "FORBIDDEN");
+				await failure(
+					exportPointsCsv(db, member, { periodId: p.id }),
+					"FORBIDDEN",
+				);
 				await db
 					.update(srProfiles)
 					.set({ positionCode: "ANGGOTA" })
@@ -513,6 +523,80 @@ const target = process.env.RESORA_POINTS_TEST_DB_URL;
 				[0, 0, "COMPLETE"],
 				[0, 0, "COMPLETE"],
 			]);
+		});
+		test("F3 period options and CSV retain historical members, distinguish current metadata and remain read-only", async () => {
+			const p = await period("06");
+			await event({
+				startsAt: "2026-06-02T02:00:00Z",
+				invited: [ids.former],
+				attendance: [{ userId: ids.former, delta: 0, timingClass: "ON_TIME" }],
+			});
+			const report = await pointsRecap(db, admin, { periodId: p.id });
+			const former = report.participants.find(
+				(row) => row.userId === ids.former,
+			);
+			expect(former).toMatchObject({
+				currentDepartmentCode: "RND",
+				currentBuildingCode: "A",
+			});
+			expect(former?.events[0]?.snapshot).toMatchObject({
+				departmentCode: "HCO",
+				buildingName: "Historical building",
+				buildingCode: "A",
+			});
+			for (const identity of [admin, kadep]) {
+				const options = await pointsPeriods(db, identity);
+				expect(options.some((option) => option.periodId === p.id)).toBe(true);
+				for (const option of options)
+					expect(Object.keys(option).sort()).toEqual([
+						"endsOn",
+						"name",
+						"periodId",
+						"startsOn",
+					]);
+			}
+			const caller = appRouter.createCaller({
+				db,
+				session: { user: { id: ids.kadep } },
+			} as never);
+			await failure(caller.identity.listPeriods(), "FORBIDDEN");
+			expect((await caller.identity.session())?.canManageEventScoring).toBe(
+				true,
+			);
+			const memberCaller = appRouter.createCaller({
+				db,
+				session: { user: { id: ids.member } },
+			} as never);
+			expect(await memberCaller.identity.session()).toMatchObject({
+				canManageEventScoring: false,
+				canManageInternalEvents: true,
+				canManageBroadcast: false,
+				isSuperadmin: false,
+			});
+			const held = new Proxy(db, {
+				get(object, key, receiver) {
+					if (key !== "transaction") return Reflect.get(object, key, receiver);
+					return (
+						callback: Parameters<Database["transaction"]>[0],
+						options: Parameters<Database["transaction"]>[1],
+					) =>
+						db.transaction(async (tx) => {
+							const settings = await tx.execute<{ value: string }>(
+								sql`select current_setting('transaction_read_only') as value`,
+							);
+							expect(settings.rows[0]?.value).toBe("on");
+							return callback(tx);
+						}, options);
+				},
+			});
+			const csv = await exportPointsCsv(held, kadep, { periodId: p.id });
+			expect(csv.content).toBe(pointsCsv(report));
+			expect(csv.content.split("\r\n")).toHaveLength(
+				report.participants.length + 2,
+			);
+			expect(csv.filename).toContain(p.id);
+			for (const field of ["gpsAccuracy", "scanLat", "qrToken", "audit"])
+				expect(csv.content).not.toContain(field);
 		});
 	},
 );

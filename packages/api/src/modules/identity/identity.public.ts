@@ -151,11 +151,21 @@ export async function readSrPeriodRoster(
 	periodId: string,
 ) {
 	return db
-		.select({ userId: user.id, nim: user.username, name: user.name })
+		.select({
+			userId: user.id,
+			nim: user.username,
+			name: user.name,
+			currentDepartmentCode: srProfiles.departmentCode,
+			currentDepartmentName: departments.name,
+			currentBuildingCode: buildings.code,
+			currentBuildingName: buildings.name,
+		})
 		.from(srPeriodMemberships)
 		.innerJoin(srProfiles, eq(srProfiles.userId, srPeriodMemberships.userId))
 		.innerJoin(userProfiles, eq(userProfiles.userId, srProfiles.userId))
 		.innerJoin(user, eq(user.id, srProfiles.userId))
+		.leftJoin(departments, eq(departments.code, srProfiles.departmentCode))
+		.leftJoin(buildings, eq(buildings.id, srProfiles.buildingId))
 		.where(
 			and(
 				eq(srPeriodMemberships.periodId, periodId),
@@ -163,6 +173,19 @@ export async function readSrPeriodRoster(
 			),
 		)
 		.orderBy(asc(user.username), asc(user.id));
+}
+
+// Reporting options only; account-period administration retains its own SUPERADMIN gate.
+export async function readScoringPeriods(db: Database | DatabaseTransaction) {
+	return db
+		.select({
+			periodId: srPeriods.id,
+			name: srPeriods.name,
+			startsOn: srPeriods.startsOn,
+			endsOn: srPeriods.endsOn,
+		})
+		.from(srPeriods)
+		.orderBy(asc(srPeriods.startsOn), asc(srPeriods.id));
 }
 
 // Lock only the target's live identity/assignment/reference rows during check-in.

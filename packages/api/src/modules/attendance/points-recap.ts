@@ -15,9 +15,11 @@ import {
 import {
 	canManageEventScoring,
 	readOperationalIdentity,
+	readScoringPeriods,
 	readSrPeriod,
 	readSrPeriodRoster,
 } from "../identity/identity.public";
+import { pointsCsv } from "./points-csv";
 import {
 	attendancePoints,
 	eventMaximumPoints,
@@ -144,7 +146,8 @@ export function aggregateAttendancePoints(
 				totalPoints: totalTenths / 10,
 				maximumPossiblePoints,
 				unclassifiedCount,
-				scoringStatus,
+				// Callback assignments are not reflected in TypeScript's outer control-flow narrowing.
+				scoringStatus: scoringStatus as "COMPLETE" | "PARTIAL",
 			};
 		}),
 	};
@@ -214,4 +217,33 @@ export async function pointsRecap(
 		},
 		{ isolationLevel: "repeatable read", accessMode: "read only" },
 	);
+}
+
+export async function pointsPeriods(db: Database, identity: ActiveIdentity) {
+	if (!canManageEventScoring(identity))
+		throw new TRPCError({ code: "FORBIDDEN" });
+	return db.transaction(
+		async (tx) => {
+			if (
+				!canManageEventScoring(
+					await readOperationalIdentity(tx, identity.userId),
+				)
+			)
+				throw new TRPCError({ code: "FORBIDDEN" });
+			return readScoringPeriods(tx);
+		},
+		{ isolationLevel: "repeatable read", accessMode: "read only" },
+	);
+}
+
+export async function exportPointsCsv(
+	db: Database,
+	identity: ActiveIdentity,
+	input: z.input<typeof pointsRecapSchema>,
+) {
+	const report = await pointsRecap(db, identity, input);
+	return {
+		filename: `attendance-points-${report.period.id}-${report.period.startsOn}-${report.period.endsOn}.csv`,
+		content: pointsCsv(report),
+	};
 }

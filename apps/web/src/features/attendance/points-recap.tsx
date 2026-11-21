@@ -1,0 +1,386 @@
+"use client";
+
+import {
+	pointsCellValue,
+	pointsEventHeading,
+	pointsSummaryLabels,
+	pointsSummaryValues,
+} from "@resora/api/modules/attendance/points.contracts";
+import { Input } from "@resora/ui/components/input";
+import { Select } from "@resora/ui/components/select";
+import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
+import { useRef, useState } from "react";
+import { eventErrorMessage } from "@/components/event-feedback";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { participantPage } from "@/utils/participant-page";
+import { trpc, trpcClient } from "@/utils/trpc";
+
+const numbers = new Intl.NumberFormat("id-ID", { maximumFractionDigits: 1 });
+const identityColumns = [
+	"NIM",
+	"Nama",
+	"Departemen (saat ini)",
+	"Gedung (saat ini)",
+];
+
+export default function PointsRecap() {
+	const [periodId, setPeriodId] = useState("");
+	const [search, setSearch] = useState("");
+	const [page, setPage] = useState(1);
+	const [exporting, setExporting] = useState(false);
+	const [feedback, setFeedback] = useState("");
+	const [error, setError] = useState("");
+	const exportLock = useRef(false);
+	const periods = useQuery({
+		...trpc.attendance.pointsPeriods.queryOptions(),
+		retry: false,
+		meta: { errorHandledLocally: true },
+	});
+	const recap = useQuery({
+		...trpc.attendance.pointsRecap.queryOptions({ periodId }),
+		enabled: Boolean(periodId),
+		retry: false,
+		meta: { errorHandledLocally: true },
+	});
+	const report =
+		!recap.error && recap.data?.period.id === periodId ? recap.data : undefined;
+	const visible = participantPage(
+		(report?.participants ?? []).map((row) => ({ ...row, nim: row.nim ?? "" })),
+		search,
+		page,
+	);
+	const partial = report?.participants.some(
+		(row) => row.scoringStatus === "PARTIAL",
+	);
+	return (
+		<section className="resora-page min-w-0 space-y-6">
+			<div className="space-y-2">
+				<Link
+					href="/events?view=manage"
+					className="focus-ring rounded-md text-primary text-sm underline"
+				>
+					Kembali ke kelola event
+				</Link>
+				<h1 className="font-bold text-2xl tracking-tight">
+					Rekap Poin Kehadiran SR
+				</h1>
+				<p className="text-muted-foreground text-sm">
+					Rekap akumulasi poin kehadiran berdasarkan kegiatan yang telah
+					selesai.
+				</p>
+			</div>
+			{periods.isPending && <p role="status">Memuat periode SR…</p>}
+			{periods.error && (
+				<div role="alert" className="space-y-3">
+					<p>{eventErrorMessage(periods.error)}</p>
+					<Button
+						variant="outline"
+						disabled={periods.isFetching}
+						onClick={() => periods.refetch()}
+					>
+						Coba kembali
+					</Button>
+				</div>
+			)}
+			{!periods.isPending && !periods.error && periods.data?.length === 0 && (
+				<p>Belum ada periode SR yang dikonfigurasi.</p>
+			)}
+			{!periods.error && Boolean(periods.data?.length) && (
+				<>
+					<Card>
+						<CardContent className="flex flex-wrap items-end gap-4">
+							<label
+								htmlFor="points-period"
+								className="min-w-0 flex-1 space-y-2 text-sm"
+							>
+								Periode SR
+								<Select
+									id="points-period"
+									value={periodId}
+									disabled={exporting}
+									onChange={(event) => {
+										if (exportLock.current) return;
+										setPeriodId(event.target.value);
+										setSearch("");
+										setPage(1);
+										setError("");
+										setFeedback("");
+									}}
+								>
+									<option value="">Pilih periode SR</option>
+									{periods.data?.map((period) => (
+										<option key={period.periodId} value={period.periodId}>
+											{period.name} ({period.startsOn} – {period.endsOn})
+										</option>
+									))}
+								</Select>
+							</label>
+							<Button
+								variant="outline"
+								disabled={!periodId || recap.isFetching || exporting}
+								onClick={() => recap.refetch()}
+							>
+								Perbarui rekap
+							</Button>
+							<Button
+								disabled={!report || recap.isFetching || exporting}
+								loading={exporting}
+								onClick={async () => {
+									if (exportLock.current || !periodId || !report) return;
+									exportLock.current = true;
+									setExporting(true);
+									setError("");
+									setFeedback("");
+									let url: string | undefined;
+									try {
+										const csv =
+											await trpcClient.attendance.exportPointsCsv.query({
+												periodId,
+											});
+										url = URL.createObjectURL(
+											new Blob([csv.content], {
+												type: "text/csv;charset=utf-8",
+											}),
+										);
+										const link = document.createElement("a");
+										link.href = url;
+										link.download = csv.filename;
+										document.body.appendChild(link);
+										try {
+											link.click();
+										} finally {
+											link.remove();
+										}
+										setFeedback(
+											"CSV seluruh anggota periode disiapkan untuk diunduh.",
+										);
+									} catch (cause) {
+										setError(eventErrorMessage(cause));
+									} finally {
+										if (url) URL.revokeObjectURL(url);
+										exportLock.current = false;
+										setExporting(false);
+									}
+								}}
+							>
+								{exporting ? "Menyiapkan CSV…" : "Export CSV Semua SR"}
+							</Button>
+						</CardContent>
+					</Card>
+					{error && (
+						<p role="alert" className="text-destructive text-sm">
+							{error}
+						</p>
+					)}
+					{feedback && (
+						<p role="status" className="text-sm text-success">
+							{feedback}
+						</p>
+					)}
+					{periodId && recap.isPending && (
+						<p role="status">Memuat rekap poin…</p>
+					)}
+					{periodId && recap.error && (
+						<div role="alert" className="space-y-3">
+							<p>{eventErrorMessage(recap.error)}</p>
+							<Button
+								variant="outline"
+								disabled={recap.isFetching}
+								onClick={() => recap.refetch()}
+							>
+								Coba muat rekap kembali
+							</Button>
+						</div>
+					)}
+					{report && (
+						<>
+							<div className="space-y-2 text-sm">
+								<p>
+									{report.participants.length} SR ·{" "}
+									{
+										report.events.filter(
+											(event) => event.scoringMode === "INCLUDED",
+										).length
+									}{" "}
+									event dinilai ·{" "}
+									{
+										report.events.filter((event) => event.scoringMode === null)
+											.length
+									}{" "}
+									event belum dinilai.
+								</p>
+								<p className="text-muted-foreground">
+									Departemen dan gedung adalah data saat ini, bukan riwayat
+									penugasan pada periode ini. Undangan dan penilaian memakai
+									snapshot masing-masing event.
+								</p>
+								{partial && (
+									<p
+										role="status"
+										className="rounded-lg border border-warning/30 bg-warning/10 p-3"
+									>
+										Rekap belum lengkap. Total poin hanya mencakup skor yang
+										diketahui dan belum merupakan penilaian final.
+									</p>
+								)}
+								{report.events.length === 0 && (
+									<p>
+										Belum ada event CLOSED yang memenuhi penilaian pada periode
+										ini.
+									</p>
+								)}
+							</div>
+							{report.participants.length === 0 ? (
+								<p>Belum ada anggota SR pada periode ini.</p>
+							) : (
+								<>
+									<label
+										htmlFor="points-search"
+										className="block max-w-sm space-y-2 text-sm"
+									>
+										Cari NIM atau nama
+										<Input
+											id="points-search"
+											value={search}
+											onChange={(event) => {
+												setSearch(event.target.value);
+												setPage(1);
+											}}
+										/>
+									</label>
+									<p className="text-muted-foreground text-sm">
+										{visible.matching} hasil dari {report.participants.length}{" "}
+										SR. CSV selalu mencakup seluruh anggota periode. Geser tabel
+										untuk melihat semua event.
+									</p>
+									<section
+										aria-label="Matriks poin kehadiran SR"
+										// biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard access is required for horizontal scrolling.
+										tabIndex={0}
+										className="focus-ring overflow-x-auto rounded-xl border border-border"
+									>
+										<table className="w-full border-collapse text-left text-sm">
+											<caption className="sr-only">
+												Rekap {report.period.name}; — berarti tidak diundang, 0
+												berarti tidak hadir pada event yang dinilai.
+											</caption>
+											<thead className="bg-muted">
+												<tr>
+													{identityColumns.map((column) => (
+														<th
+															key={column}
+															scope="col"
+															className="min-w-28 border-border border-b p-3"
+														>
+															{column}
+														</th>
+													))}
+													{report.events.map((event) => (
+														<th
+															key={event.eventId}
+															scope="col"
+															className="min-w-48 max-w-64 break-words border-border border-b p-3 align-top"
+														>
+															{pointsEventHeading(event)}
+														</th>
+													))}
+													{pointsSummaryLabels.map((label) => (
+														<th
+															key={label}
+															scope="col"
+															className="min-w-28 border-border border-b p-3"
+														>
+															{label}
+														</th>
+													))}
+												</tr>
+											</thead>
+											<tbody>
+												{visible.rows.map((row) => (
+													<tr
+														key={row.userId}
+														className="border-border border-b last:border-b-0"
+													>
+														<th
+															scope="row"
+															className="whitespace-nowrap p-3 font-medium"
+														>
+															{row.nim || "—"}
+														</th>
+														<td className="min-w-40 p-3">{row.name}</td>
+														<td className="p-3">{row.currentDepartmentCode}</td>
+														<td className="min-w-36 p-3">
+															{row.currentBuildingName ??
+																row.currentBuildingCode ??
+																"—"}
+														</td>
+														{row.events.map((cell) => {
+															const value = pointsCellValue(cell);
+															return (
+																<td
+																	key={cell.eventId}
+																	className="p-3 tabular-nums"
+																>
+																	{typeof value === "number"
+																		? numbers.format(value)
+																		: value}
+																</td>
+															);
+														})}
+														{pointsSummaryValues(row).map((value, index) => (
+															<td
+																key={pointsSummaryLabels[index]}
+																className={`p-3 tabular-nums ${row.scoringStatus === "PARTIAL" ? "text-warning" : ""}`}
+															>
+																{typeof value === "number"
+																	? numbers.format(value)
+																	: value}
+															</td>
+														))}
+													</tr>
+												))}
+												{visible.matching === 0 && (
+													<tr>
+														<td
+															colSpan={11 + report.events.length}
+															className="p-6 text-center"
+														>
+															Tidak ada SR yang sesuai pencarian.
+														</td>
+													</tr>
+												)}
+											</tbody>
+										</table>
+									</section>
+									<div className="flex flex-wrap items-center justify-between gap-3">
+										<p className="text-sm">
+											Halaman {visible.page} dari {visible.pages}
+										</p>
+										<div className="flex gap-2">
+											<Button
+												variant="outline"
+												disabled={visible.page <= 1}
+												onClick={() => setPage(visible.page - 1)}
+											>
+												Sebelumnya
+											</Button>
+											<Button
+												variant="outline"
+												disabled={visible.page >= visible.pages}
+												onClick={() => setPage(visible.page + 1)}
+											>
+												Berikutnya
+											</Button>
+										</div>
+									</div>
+								</>
+							)}
+						</>
+					)}
+				</>
+			)}
+		</section>
+	);
+}
