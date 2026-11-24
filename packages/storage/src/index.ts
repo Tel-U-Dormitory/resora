@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
 	CopyObjectCommand,
 	DeleteObjectCommand,
@@ -8,7 +9,6 @@ import {
 	S3ServiceException,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { randomUUID } from "node:crypto";
 
 export type R2StorageConfig = {
 	accountId: string;
@@ -39,7 +39,9 @@ export type ObjectStorage = {
 		url: string;
 		expiresInSeconds: number;
 	}>;
-	getPrivateObjectMetadata: (key: string) => Promise<ObjectMetadata | undefined>;
+	getPrivateObjectMetadata: (
+		key: string,
+	) => Promise<ObjectMetadata | undefined>;
 	copyPrivateObjectToPublic: (input: {
 		sourceKey: string;
 		targetKey: string;
