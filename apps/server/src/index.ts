@@ -1,7 +1,7 @@
 import { createApp } from "./app";
 import { databaseBackup } from "./database-backup";
 import { ENV } from "./env.server";
-import { auth, db } from "./services";
+import { auth, db, storage } from "./services";
 
 // Persistent production ingress must be authenticated by NPM. Development and
 // the separate Vercel entrypoint retain their existing socket/platform policy.
@@ -14,6 +14,7 @@ const app = createApp(
 	{
 		auth,
 		db,
+		storage,
 		authConfig: ENV,
 		authProxySecret: ENV.AUTH_PROXY_SECRET,
 		backup:

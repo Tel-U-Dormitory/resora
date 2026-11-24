@@ -25,6 +25,7 @@
 		"@resora/api": "workspace:*",
 		"@resora/auth": "workspace:*",
 		"@resora/db": "workspace:*",
+		"@resora/storage": "workspace:*",
 		"@trpc/server": "catalog:",
 		"@vercel/functions": "^3.10.1",
 		"better-auth": "catalog:",

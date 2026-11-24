@@ -1,6 +1,7 @@
 import type { Context as ApiContext } from "@resora/api/context";
 import type { Auth, AuthConfig } from "@resora/auth";
 import type { Database } from "@resora/db";
+import type { ObjectStorage } from "@resora/storage";
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import { APIError } from "better-auth/api";
 import { fromNodeHeaders } from "better-auth/node";
@@ -8,6 +9,7 @@ import { fromNodeHeaders } from "better-auth/node";
 export async function createContext(
 	services: {
 		db: Database;
+		storage?: ObjectStorage;
 		auth: Auth;
 		authConfig?: AuthConfig;
 		authPerfDiagnosticsEnabled?: boolean;
@@ -37,6 +39,7 @@ export async function createContext(
 	}
 	return {
 		db,
+		storage: services.storage,
 		session,
 		qrSigningSecret: auth.options.secret,
 		authConfig: services.authConfig,
