@@ -41,6 +41,29 @@ RESORA is an integrated digital platform for operations and services related to 
 - This system-wide PRD covers product-wide rules and capability boundaries. Individual module PRDs describe approved feature behavior; acceptance documents describe testable outcomes; Architecture describes technical realization; ADRs preserve decisions and rationale.
 - Change control requires aligning the master FR, affected PRD, acceptance criteria, Architecture/data-model references, and ADR before development of the changed feature. Never use a stale module document to override a later explicit PM decision.
 
+**Additional module baseline reviewed 2026-11-24:** The PM identified only P1 as
+reviewed/final for the upcoming modules in [FR Modul Sistem](https://docs.google.com/spreadsheets/d/1oDqX5oEaxT7wscJVUJHIsRL_y6rlSXeiVOiDTx2hr2Y/edit).
+All 12 tabs were read; this supplements the historical master register above and
+does not renumber its NEED/FR IDs or reopen implemented attendance behavior.
+Within P1, only Approved rows are implementation candidates; Pending/Rejected rows
+remain excluded. Execution mapping is in the [RSA board](https://telkomdormitory.atlassian.net/jira/software/projects/RSA/boards/1/backlog),
+not inferred from Jira's priority field (the inspected P1 items use Medium).
+
+| Reviewed tab | Decision snapshot | Jira epic |
+| --- | --- | --- |
+| P1-01 Penilaian & Analitik | 28 Approved, 2 Pending (FR-EVAL-009/010) | [RSA-5](https://telkomdormitory.atlassian.net/browse/RSA-5) |
+| P1-02 Landing Page & CMS | 29 Approved, 1 Rejected (FR-WEB-013) | [RSA-6](https://telkomdormitory.atlassian.net/browse/RSA-6) |
+| P1-03 Pelanggaran | 20 Approved, 1 Pending (FR-VIOL-006), 6 Rejected (007/008/009/015/016/020) | [RSA-7](https://telkomdormitory.atlassian.net/browse/RSA-7) |
+
+Source discrepancies are recorded, not silently resolved: RSA-7's prose says
+21 Approved/5 Rejected although its own rejected list and the sheet yield 20/6;
+FR-WEB-015 is Approved but has a stale Rejected dependency note (tracked by
+[RSA-29](https://telkomdormitory.atlassian.net/browse/RSA-29)). Three P2 Prestasi rows
+(FR-ACH-001–003) say Approved, but the PM's current instruction does not authorize
+implementation of P2. Pending P2 publication proposals and PX editorial roles do
+not override Approved P1 CMS publication rules. Ask for a decision before implementing
+those affected future integrations; preserve the original source records.
+
 **Decision terminology**
 
 | State            | Meaning                                                                                |
@@ -173,6 +196,42 @@ Broadcast adalah pengumuman plain text untuk seluruh SR eligible, terpisah dari 
 Implementasi, kontrak API, migration dan verifikasi dijelaskan di [Architecture — Broadcast B1](architecture.md#broadcast--pengumuman-sr--fase-b1).
 
 Alur B2: dashboard menampilkan tiga pengumuman aktif terbaru; `Lihat Semua` menuju `/broadcasts` dengan pagination 10 item, dan History berada di `/broadcasts/history`. Detail lengkap dibuka melalui dialog. Tombol Create memakai capability session backend, sedangkan Edit/Archive mengikuti capability record. Form mendukung link opsional dan expiry WIB; archive memerlukan konfirmasi, History read-only. Setelah perubahan, hanya data Broadcast yang diperbarui tanpa reload aplikasi. Masa berlaku, ownership, eligibility, dan otorisasi tetap mengikuti B1. Konfirmasi penerapan migration DEV dan UAT keyboard/mobile/role pada B3 diperlukan sebelum release.
+
+### 6.4 Upcoming P1 files and publication — reviewed 2026-11-24
+
+This records approved planning scope, not delivered modules. Cloudflare R2 is the
+PM-selected object-storage provider; technical realization is specified in
+[Architecture §10.3](architecture.md#103-cloudflare-r2-object-storage--planning-baseline-2026-11-24).
+
+- **Pelanggaran:** FR-VIOL-003 requires name, NIM, date, description and exactly
+  one KTM photo when creating a report. Identity is entered manually; no student
+  directory or verification/approval workflow is introduced. The photo is private;
+  all authorized active SR who can read the report and legitimate SUPERADMIN may
+  access it after server authorization. Report edits/deletion follow
+  FR-VIOL-014/025–027, including reasons, audit and soft delete. Soft-deleting a
+  report does not authorize destruction of its KTM evidence. Retention, access to
+  the photo after report deletion, and replacement-history policy remain TBD.
+- **CMS:** FR-CMS-002/006/009/010 require images, selection/upload and authorized
+  draft preview. Only published content and explicitly published media are public;
+  draft/internal files remain private. Unpublish must withdraw public media access
+  as well as the page. CMS is the P1 publication entry for Prestasi
+  (FR-WEB-016/FR-CMS-011), without requiring P2 Akademik integration or exposing
+  internal achievement evidence. FR-CMS-012 approves automatic web publication
+  after HCO/SUPERADMIN approval of appropriate PX content, without a second Media
+  publication step; building the PX modules themselves is outside P1.
+- **Penilaian:** FR-EVAL-015–018 approve file import, validation, preview and
+  duplicate handling; FR-EVAL-021 approves export. They do not require permanent
+  retention of the original import/export files. File formats, limits and any
+  retention of source files must be decided before the affected implementation.
+- **Remaining decisions:** permitted file formats/size/count by purpose (KTM count
+  is already one), retention and purge authority, CMS editor permission mapping,
+  public-profile fields/source, publication cache withdrawal target and backup
+  RPO/RTO remain TBD. Existing HCO threshold/access questions remain tracked by
+  RSA-27/28; category remains Pending under RSA-31. Do not invent these policies.
+
+R2 bucket/credential configuration, database schema changes, remote operations and
+deployment still require the explicit implementation approval specified in the
+source and repository governance. This documentation update performs none of them.
 
 ## 7. Current delivery scope, milestones and implementation state
 

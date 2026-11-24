@@ -22,6 +22,7 @@
 	"dependencies": {
 		"@resora/auth": "workspace:*",
 		"@resora/db": "workspace:*",
+		"@resora/storage": "workspace:*",
 		"@trpc/client": "catalog:",
 		"@trpc/server": "catalog:",
 		"drizzle-orm": "catalog:",

@@ -7,6 +7,11 @@
 **Owner:** RnD engineering, subject to PM approval for consequential scope, data and deployment changes  
 **Status:** Modular boundaries and maintainability follow-up implemented and verified locally. Deployment, remote state and manual UAT have separate records and approval gates.
 
+**2026-11-24 storage foundation:** [§10.3](#103-cloudflare-r2-object-storage--foundation-2026-11-24)
+records the implemented server-only R2 adapter and the remaining manual/provider
+and domain integration gates. The [PRD amendment](prd.md#64-upcoming-p1-files-and-publication--reviewed-2026-11-24)
+records the approved business scope separately from implementation state.
+
 > **Document boundary:** The [system-wide PRD](prd.md) owns **business rules, user actors, feature scope and ownership**; this document owns **how the implementation is organized, boundaries, constraints, interfaces, migration strategy and operations**. Module PRDs and FR Master are the authoritative reference for feature acceptance. A technical pattern written here does not grant new business permissions.
 
 
@@ -498,6 +503,221 @@ A universal attendance FK to `event_participants` is not part of the shared-engi
 - Configure separate least-privilege access to external Postgres and operational secrets; test session behavior across the intended hostname design.
 - Production readiness includes project/domain ownership, funding, monitoring, secure backup/restore, recovery targets, migration runbook, rollback/forward-fix plan, incident response and PM approval.
 - Backup ownership and production Supabase subscription/point-in-time restore capabilities must be verified, not inferred from Development behavior. No production deployment is approved by this architecture.
+
+### 10.3 Cloudflare R2 object storage — foundation 2026-11-24
+
+**State:** Provider selected by PM; the local server-only adapter is implemented
+on branch `feature/r2-object-storage-foundation`. R2 account, buckets, custom
+domain, credentials and live compatibility remain unconfigured/unverified. The
+existing `packages/ui/src/components/attachment.tsx` remains a presentation
+primitive, not a storage integration. This foundation does not create an upload
+API or file metadata schema; domain authorization, record binding and lifecycle
+remain with the first consuming feature and require reviewed schema work.
+
+#### Requirement coverage and first consumers
+
+All 12 tabs of [FR Modul Sistem](https://docs.google.com/spreadsheets/d/1oDqX5oEaxT7wscJVUJHIsRL_y6rlSXeiVOiDTx2hr2Y/edit)
+were inspected. Only P1 Approved requirements form the current implementation
+baseline; see the [PRD](prd.md#2-governance-and-sources-of-truth) for decision counts,
+source discrepancies and unresolved permissions. P2/P3/PX inform reuse only.
+
+| Tab / capability | Storage implication | Delivery boundary |
+| --- | --- | --- |
+| P1-01 Penilaian & Analitik | Import validation/preview; exports generated from authorized data | FR-EVAL-015–018/021; permanent file archive not required |
+| P1-02 Landing Page & CMS | Private drafts/previews; selected images; published public media | FR-CMS-002/006/009/010/011, FR-WEB-007/009/016/018 |
+| P1-03 Pelanggaran | One mandatory private KTM photo; authorized report access; evidence retention | FR-VIOL-003/014/025–027; upload failure must not produce a complete report |
+| P2-01 Pendaftaran Event | No explicit attachment upload requirement in inspected rows | Pending; do not invent poster/document upload |
+| P2-02 Manajemen Prestasi | Potential private achievement evidence (FR-ACH-009/013); separate public selection if later approved | Upload/publication rows Pending; no automatic CMS integration |
+| P2-03 Kebersihan Kamar | Potential private inspection photos (FR-CLEAN-008/016) | Pending; optional attachment and access rules not final |
+| P2-04 Manajemen DT | No explicit attachment upload requirement | Pending; membership does not automatically grant storage access |
+| P3-01 Penilaian Sesama SR | Structured responses/exports; no explicit attachment requirement | Pending; do not require R2 for questionnaire data |
+| P3-02 Penilaian Maba ke SR | Structured responses/exports; no explicit attachment requirement | Pending; no assumed file archive |
+| PX-01 Proyek Event | Tasks/progress; no explicit attachment requirement | Pending/optional; no speculative file feature |
+| PX-02 Aspirasi Anonim | No explicit attachment requirement; possible future approved public content | Pending; source anonymity/moderation needs separate decisions |
+| PX-03 Berita Acara SR Harian | Potential private documentation (FR-LOG-006), explicit safe public version (019/020) | Pending; originals never automatically public |
+
+#### Package, ownership and dependency direction
+
+Use **one server-only workspace package `@resora/storage`** for R2 object
+operations. It uses `@aws-sdk/client-s3` and `@aws-sdk/s3-request-presigner`.
+The current API can create opaque UUID keys, sign private PUT/GET URLs (5-minute
+and 1-minute expiry), read private metadata, copy a verified private object into
+the public bucket with explicit content type/cache control, delete from either
+bucket, and form a public URL. Use the S3-compatible endpoint and region `auto` per
+[R2's SDK example](https://developers.cloudflare.com/r2/examples/aws/aws-sdk-js-v3/).
+Do not install a separate SDK per domain or add a provider adapter framework,
+generic CRUD router, standalone file service deployment, or media-library UI.
+
+Proposed responsibilities:
+
+- `packages/storage`: configuration passed from the server; narrowly named
+  signing, read/write, metadata, copy and delete operations as actually needed.
+  It has no DB access, user permission logic or browser export.
+- `packages/api/src/modules/files`: one shared backend owner for upload intents,
+  technical file metadata and retryable cleanup/publication work. It uses the
+  storage package and exposes narrow internal `files.public.ts` operations.
+  This is shared file lifecycle ownership, not an authority to access all files.
+- Consuming domains (`cms`, `violations`, `evaluation`, names subject to module
+  implementation review): own their business records, explicit file references,
+  purpose-specific limits, authorization and business audits. Their protected
+  procedures authorize a concrete purpose/resource before invoking Files.
+- `packages/db`: central Drizzle schema/migration composition as today. A consumer
+  must not query Files' private tables. Compose record creation/attachment and
+  audit atomically through owner operations sharing the DB transaction.
+- `apps/server`: optional Varlock R2 configuration and storage-client construction
+  injected through the API context; partial configuration fails startup and all
+  values empty leaves local storage disabled. `apps/web`: file input/progress and
+  direct upload using temporary URLs. Reuse the attachment primitive if
+  appropriate; extract shared upload UI only for demonstrated common behavior.
+
+The storage package is included in the architecture source graph and browser
+runtime-import ban. Add Files module exports, table ownership and negative boundary
+fixtures when the first consumer's schema/API is reviewed. Keep modules shallow;
+no mandatory service/repository layers or empty future consumers.
+
+#### Buckets, identity and access
+
+Use separate **private and public buckets per environment**, not private/public
+prefixes in one publicly exposed bucket. Names and production domain are TBD.
+Private contains upload staging, KTM and CMS originals/drafts; public contains
+only explicitly published, verified media. Disable public domains and `r2.dev`
+for private buckets. Production public delivery uses a reviewed custom domain,
+not the development `r2.dev` endpoint. See [R2 public access](https://developers.cloudflare.com/r2/buckets/public-buckets/).
+
+Runtime uses bucket-scoped object credentials, not account administration
+credentials; environment credentials cannot access other environments. Secrets
+remain server-only. The optional server env schema defines account ID, scoped key,
+private/public bucket names and the public HTTPS base URL; configure these only in
+the server secret store. Cloudflare buckets, token, custom domain and per-environment
+CORS policy remain manual setup. Restrict browser CORS origins/methods/headers to
+actual clients; CORS is not authorization. See [R2 authentication](https://developers.cloudflare.com/r2/api/tokens/)
+and [CORS](https://developers.cloudflare.com/r2/buckets/cors/).
+
+The browser submits a purpose and resource identifier, never an arbitrary trusted
+bucket/key. Generate opaque keys without NIM, names or raw filenames. Metadata
+needs an opaque ID, bucket role/key, purpose, uploader, declared and verified
+size/type, lifecycle timestamps and technical state; store explicit domain FKs or
+join rows for references. Exact schema awaits review. Store neither file binary
+nor persisted signed URLs. A technical file state is not a Pelanggaran approval
+status. A file ID or uploader identity alone grants no read/delete/attach access.
+
+#### Upload, validation and binding
+
+1. A protected domain procedure checks live Identity/permission, target resource,
+   purpose, allowed format/count/size and quota before reserving a bounded upload
+   intent in PostgreSQL. For a new report, bind it to the authorized creation
+   intent until the report exists; no unrestricted attachment endpoint.
+2. Sign a short-lived PUT for a fresh key in private staging. Frontend uploads
+   bytes directly to R2, then requests completion using the intent ID. The signer
+   endpoint itself is rate-limited; declared limits do not prove actual size.
+3. Completion rechecks live permissions and intent ownership/expiry. Read object
+   metadata and bounded content; verify actual bytes/format, size and decodability
+   against the purpose policy. Filename, browser MIME and HEAD alone are
+   insufficient. Reject unsupported active content; apply resource limits to
+   image decoding and import parsing. Numerical limits remain TBD.
+4. Signed PUT URLs are reusable until expiry. Never treat completion as revoking
+   that URL: read a bounded snapshot, validate those exact bytes, and write them
+   to a fresh server-only canonical key that was never signed for browser writes.
+   Do not validate staging then blindly copy a possibly changed object. Track
+   failed/unbound canonical writes for cleanup. Valid images may be normalized
+   and metadata stripped according to the reviewed processing policy.
+5. In one DB transaction, consume the ready intent once, bind the canonical file
+   to the authorized domain record and append the appropriate audit. Repeated
+   requests return the recorded result; a file cannot be rebound to an unrelated
+   resource. Recheck resource lifecycle/required attachment invariants under lock.
+   Report creation needs exactly one verified KTM and affirmative building
+   confirmation; cancellation does not create a report. Abandoned uploads expire.
+
+[R2 presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/)
+use the S3 endpoint, not a custom domain, and are bearer capabilities until expiry.
+Do not log their query strings or include them in audit JSON/browser persistence.
+Set the expiry policy before implementation; do not assume one-time URLs or
+immediate revocation after access changes. If immediate revocation is required,
+review a backend-streamed read that checks access on every request.
+
+#### Read, replace, delete and publication
+
+- **Read/list:** list references through the domain's authorized DB query, not
+  bucket listing. For KTM/drafts, recheck current report/editor access on each
+  signed GET request, use short expiry and private/no-store responses; ensure any
+  image proxy/optimizer cannot turn private bytes into a public shared cache.
+- **Replace:** upload/verify a new immutable object, atomically swap the permitted
+  reference with audit, then consider old-object cleanup. For KTM, retention of
+  prior versions is a PM decision; do not destroy evidence by generic replacement.
+- **Delete:** report soft delete preserves record/audit and does not delete KTM
+  objects. Until retention and deleted-report photo visibility are approved, no
+  automatic hard purge or new access route for deleted photos is introduced.
+  Referenced/evidence files are not orphan uploads. Any physical purge checks
+  reference/retention rules again and is retryable/idempotent.
+- **Publish:** CMS promotes only explicitly selected, verified media to fresh
+  public keys; originals remain private. Reusing a selected CMS image does not
+  make every file uploaded by that editor public. Track which published content
+  still references a public rendition. Never promote KTM or internal proof as a
+  side effect of publishing a page.
+- **Unpublish:** stop public page/media resolution, remove renditions that have
+  no remaining authorized public references, and purge edge caches. Check the
+  direct asset URL, not only the page. Persist pending withdrawal and retry on
+  failure; do not report full withdrawal while origin/cache cleanup is pending.
+  Update does not overwrite a cached key: use a new rendition and retire the old
+  one. Asset reuse and withdrawal must serialize to prevent deletion of a newly
+  published reference. A direct public bucket cannot recheck CMS status on every
+  read; if the PM requires immediate revocation, use a publication-aware delivery
+  gate instead and review its cache policy before release. Withdrawal latency is
+  TBD; previously downloaded copies cannot be recalled.
+- **Import/export:** Evaluation owns parsing, preview, duplicate checks and atomic
+  import results. Use bounded temporary input; if an R2 import source is retained,
+  keep it private with an explicit retention policy. Do not create a permanent
+  media object for every import/export by default. Audit import provenance does
+  not itself require indefinite storage of the original spreadsheet.
+
+#### Consistency, operations and verification gates
+
+PostgreSQL transactions cannot atomically commit R2 operations. Use small durable
+DB work records for publication/withdrawal/cleanup retries where needed; a periodic
+server job is sufficient initially, with no new queue service. Handle crash after
+object write but before DB commit, commit with lost response, duplicate completion,
+expiry during upload, cancellation, access revocation and transient R2 failure.
+Cleanup needs a grace period covering in-flight URLs/uploads plus a live reference
+recheck and concurrency guard; lifecycle rules must never expire referenced KTM
+or media indiscriminately. Retry records must survive server restart.
+
+PostgreSQL backups contain references, not object bytes. Define separate object
+backup/restore, inventory reconciliation, credential rotation, storage/traffic
+monitoring and recovery tests with synthetic private/public files. RPO/RTO,
+retention, numeric quotas, cleanup intervals and purge authority remain TBD in
+the PRD; provider durability or a second copy is not a verified backup strategy.
+
+CLI verification for implementation must cover authorization/IDOR, inactive or
+revoked actors, purpose/key substitution, invalid actual bytes/size, signed PUT
+replay after validation, one-time binding, missing KTM, retries and concurrent
+replace/cleanup, soft-delete evidence retention, draft/direct URL isolation,
+shared media publish/unpublish and failed cache purge. Use a fake storage client
+for offline tests; real R2/CORS/cache/restore checks require an explicitly approved
+isolated environment with synthetic data. Browser/mobile UAT remains separate
+and is performed only when explicitly requested.
+
+#### Jira P1 traceability — inspected 2026-11-24
+
+Board 1 resolves to RSA's `SCRUM board`. The complete P1-labelled board result
+contains RSA-5–31, all To Do at inspection time; Jira state is not implementation
+or release evidence. This is a documentation mapping, not a Jira mutation or a
+new sprint commitment.
+
+| Existing Jira scope | Required storage integration / boundary |
+| --- | --- |
+| [RSA-22](https://telkomdormitory.atlassian.net/browse/RSA-22), [RSA-23](https://telkomdormitory.atlassian.net/browse/RSA-23) | Shared R2 foundation, mandatory verified KTM, protected report/photo reads; RSA-22 already records provider choice and configuration/schema gates |
+| [RSA-24](https://telkomdormitory.atlassian.net/browse/RSA-24), [RSA-25](https://telkomdormitory.atlassian.net/browse/RSA-25) | Audited edits/soft delete; no physical KTM deletion before retention decision |
+| [RSA-20](https://telkomdormitory.atlassian.net/browse/RSA-20) | Same storage foundation, selected CMS images, private draft/preview validation |
+| [RSA-19](https://telkomdormitory.atlassian.net/browse/RSA-19), [RSA-21](https://telkomdormitory.atlassian.net/browse/RSA-21) | Published renditions, direct URL/cache withdrawal and Prestasi CMS without P2 coupling |
+| [RSA-11](https://telkomdormitory.atlassian.net/browse/RSA-11), [RSA-15](https://telkomdormitory.atlassian.net/browse/RSA-15) | Import/export; private transient input if needed, no assumed permanent archive |
+| [RSA-30](https://telkomdormitory.atlassian.net/browse/RSA-30) | Future PX-approved public versions use the same publication boundary; no second Media approval and no PX implementation in P1 |
+| [RSA-27](https://telkomdormitory.atlassian.net/browse/RSA-27), [RSA-28](https://telkomdormitory.atlassian.net/browse/RSA-28), [RSA-29](https://telkomdormitory.atlassian.net/browse/RSA-29), [RSA-31](https://telkomdormitory.atlassian.net/browse/RSA-31) | Preserve unresolved decisions; storage does not grant assessment access, choose thresholds, expose profiles or make categories mandatory |
+
+Implement the shared storage foundation together with the first approved consumer
+(KTM or CMS), then reuse it for the other; no disconnected package scaffold.
+Review the schema and unresolved policy for that slice before implementation.
+Keep rollout/verification status in Jira; do not mark these tasks complete from
+this architecture amendment.
 
 ## 11. Testing strategy and release gates
 

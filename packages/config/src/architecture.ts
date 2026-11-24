@@ -9,6 +9,7 @@ const aliases: Record<string, string> = {
 	"@resora/api": "packages/api/src",
 	"@resora/db": "packages/db/src",
 	"@resora/auth": "packages/auth/src",
+	"@resora/storage": "packages/storage/src",
 	"@resora/ui": "packages/ui/src",
 	"@/": "apps/web/src/",
 };
@@ -262,6 +263,7 @@ export function violations(sources: SourceMap) {
 				if (
 					item.runtime &&
 					(/^(node:|@resora\/(db|auth)(\/|$))/.test(item.specifier) ||
+						item.specifier === "@resora/storage" ||
 						item.specifier === "@trpc/server" ||
 						item.specifier === "next/headers" ||
 						item.specifier === "server-only" ||
@@ -296,6 +298,7 @@ export function repositorySources(root: string): SourceMap {
 		"packages/api/src",
 		"packages/db/src",
 		"packages/auth/src",
+		"packages/storage/src",
 		"packages/ui/src",
 		"apps/web/src",
 		"apps/server/src",

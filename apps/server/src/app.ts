@@ -6,6 +6,7 @@ import type { Auth, AuthConfig } from "@resora/auth";
 import { handlePasswordChangeRequest } from "@resora/auth/password-change-request";
 import { getActiveIdentity } from "@resora/auth/sr-access";
 import type { Database } from "@resora/db";
+import type { ObjectStorage } from "@resora/storage";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { toNodeHandler } from "better-auth/node";
 import cors from "cors";
@@ -48,6 +49,7 @@ export function resolveProxyClientIp(
 export function createApp(
 	services: {
 		db: Database;
+		storage?: ObjectStorage;
 		auth: Auth;
 		authConfig?: AuthConfig;
 		authProxySecret?: string;
