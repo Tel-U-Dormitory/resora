@@ -14,6 +14,7 @@
 		"./modules/attendance/attendance.contracts": "./src/modules/attendance/attendance.contracts.ts",
 		"./modules/attendance/points.contracts": "./src/modules/attendance/points.contracts.ts",
 		"./modules/broadcast/broadcast.contracts": "./src/modules/broadcast/broadcast.contracts.ts",
+		"./modules/violations/violations.contracts": "./src/modules/violations/violations.contracts.ts",
 		"./modules/committee/committee.contracts": "./src/modules/committee/committee.contracts.ts"
 	},
 	"scripts": {
@@ -27,6 +28,7 @@
 		"@trpc/server": "catalog:",
 		"drizzle-orm": "catalog:",
 		"qrcode": "1.5.4",
+		"sharp": "0.35.5",
 		"zod": "catalog:"
 	},
 	"devDependencies": {

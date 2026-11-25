@@ -4,3 +4,4 @@ export * from "./broadcast";
 export * from "./committee";
 export * from "./identity";
 export * from "./password-reset";
+export * from "./violations";

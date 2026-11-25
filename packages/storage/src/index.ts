@@ -32,7 +32,7 @@ export type ObjectStorage = {
 	) => Promise<{
 		url: string;
 		method: "PUT";
-		headers: { "content-type": string };
+		headers: { "content-type": string; "if-none-match": "*" };
 		expiresInSeconds: number;
 	}>;
 	createPrivateDownloadUrl: (key: string) => Promise<{
@@ -42,6 +42,18 @@ export type ObjectStorage = {
 	getPrivateObjectMetadata: (
 		key: string,
 	) => Promise<ObjectMetadata | undefined>;
+	getPrivateObjectBytes: (
+		key: string,
+		maxBytes: number,
+	) => Promise<{
+		bytes: Uint8Array;
+		contentType: string | undefined;
+	}>;
+	copyPrivateObject: (
+		sourceKey: string,
+		targetKey: string,
+		contentType: string,
+	) => Promise<void>;
 	copyPrivateObjectToPublic: (input: {
 		sourceKey: string;
 		targetKey: string;
@@ -112,11 +124,12 @@ export function createR2Storage(config: R2StorageConfig) {
 						Bucket: config.privateBucket,
 						Key: key,
 						ContentType: contentType,
+						IfNoneMatch: "*",
 					}),
 					{ expiresIn: uploadExpirySeconds },
 				),
 				method: "PUT" as const,
-				headers: { "content-type": contentType },
+				headers: { "content-type": contentType, "if-none-match": "*" },
 				expiresInSeconds: uploadExpirySeconds,
 			};
 		},
@@ -153,6 +166,46 @@ export function createR2Storage(config: R2StorageConfig) {
 					return;
 				throw error;
 			}
+		},
+		getPrivateObjectBytes: async (key: string, maxBytes: number) => {
+			assertObjectKey(key);
+			if (!Number.isSafeInteger(maxBytes) || maxBytes < 1)
+				throw new Error("Invalid object size limit");
+			const result = await client.send(
+				new GetObjectCommand({ Bucket: config.privateBucket, Key: key }),
+			);
+			if (
+				!result.Body ||
+				result.ContentLength === undefined ||
+				result.ContentLength > maxBytes
+			)
+				throw new Error("Object exceeds size limit or has no body");
+			const bytes = await result.Body.transformToByteArray();
+			if (
+				bytes.byteLength !== result.ContentLength ||
+				bytes.byteLength > maxBytes
+			)
+				throw new Error("Object size changed or exceeds limit");
+			return { bytes, contentType: result.ContentType };
+		},
+		copyPrivateObject: async (
+			sourceKey: string,
+			targetKey: string,
+			contentType: string,
+		) => {
+			assertObjectKey(sourceKey);
+			assertObjectKey(targetKey);
+			assertContentType(contentType);
+			await client.send(
+				new CopyObjectCommand({
+					Bucket: config.privateBucket,
+					Key: targetKey,
+					CopySource: `${config.privateBucket}/${encodeKey(sourceKey)}`,
+					MetadataDirective: "REPLACE",
+					ContentType: contentType,
+					ContentDisposition: "inline",
+				}),
+			);
 		},
 		copyPrivateObjectToPublic: async (input: {
 			sourceKey: string;

@@ -41,19 +41,29 @@ RESORA is an integrated digital platform for operations and services related to 
 - This system-wide PRD covers product-wide rules and capability boundaries. Individual module PRDs describe approved feature behavior; acceptance documents describe testable outcomes; Architecture describes technical realization; ADRs preserve decisions and rationale.
 - Change control requires aligning the master FR, affected PRD, acceptance criteria, Architecture/data-model references, and ADR before development of the changed feature. Never use a stale module document to override a later explicit PM decision.
 
-**Additional module baseline reviewed 2026-11-24:** The PM identified only P1 as
+**Additional module baseline reviewed 2026-11-24 and updated 2026-11-25:** The PM identified P1 as
 reviewed/final for the upcoming modules in [FR Modul Sistem](https://docs.google.com/spreadsheets/d/1oDqX5oEaxT7wscJVUJHIsRL_y6rlSXeiVOiDTx2hr2Y/edit).
-All 12 tabs were read; this supplements the historical master register above and
+P1-01 through P1-03 and P1-04 Dashboard RESORA were read; this supplements the historical master register above and
 does not renumber its NEED/FR IDs or reopen implemented attendance behavior.
 Within P1, only Approved rows are implementation candidates; Pending/Rejected rows
 remain excluded. Execution mapping is in the [RSA board](https://telkomdormitory.atlassian.net/jira/software/projects/RSA/boards/1/backlog),
 not inferred from Jira's priority field (the inspected P1 items use Medium).
+Arahan PM 25 November 2026: backlog/status kerja dikelola di spreadsheet PM dan
+koordinasi proyek/persetujuan melalui WA. Jira hanya referensi item backlog;
+status atau komentar Jira tidak menjadi gate persetujuan. Solusi teknis yang
+tidak mengubah proses bisnis didelegasikan kepada Nafi/Codex sesuai Architecture.
+Keputusan proses bisnis yang belum jelas tetap diputuskan PM.
 
 | Reviewed tab | Decision snapshot | Jira epic |
 | --- | --- | --- |
 | P1-01 Penilaian & Analitik | 28 Approved, 2 Pending (FR-EVAL-009/010) | [RSA-5](https://telkomdormitory.atlassian.net/browse/RSA-5) |
 | P1-02 Landing Page & CMS | 29 Approved, 1 Rejected (FR-WEB-013) | [RSA-6](https://telkomdormitory.atlassian.net/browse/RSA-6) |
 | P1-03 Pelanggaran | 20 Approved, 1 Pending (FR-VIOL-006), 6 Rejected (007/008/009/015/016/020) | [RSA-7](https://telkomdormitory.atlassian.net/browse/RSA-7) |
+| P1-04 Dashboard RESORA | 9 Approved (FR-DASH-001–009) | Not specified in the source tab |
+
+Detail P1-03 mengikuti [PRD modul Pelanggaran](modules/pelanggaran/prd.md), diturunkan dari spreadsheet backlog PM yang diperiksa 2026-11-25. [Rencana fase dan prompt Codex](modules/pelanggaran/roadmap.md) memisahkan pekerjaan Nafi, handoff tim, dan gate persetujuan; dokumen tersebut bukan bukti implementasi atau rilis.
+
+P1-04 adalah satu modul frontend untuk overview utama. Modul ini mengambil ringkasan berizin dari API modul sumber dan menautkan ke halaman detailnya; tidak ada backend agregator dashboard khusus yang disetujui. Pelanggaran mempertahankan analitik RSA-26 sendiri dan menyediakan data sumber tersebut. Tab yang diperiksa belum mencantumkan Jira untuk modul Dashboard RESORA.
 
 Source discrepancies are recorded, not silently resolved: RSA-7's prose says
 21 Approved/5 Rejected although its own rejected list and the sheet yield 20/6;
