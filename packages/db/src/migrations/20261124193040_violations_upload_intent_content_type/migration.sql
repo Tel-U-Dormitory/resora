@@ -1,0 +1,1 @@
+ALTER TABLE "violations_upload_intents" ADD COLUMN "content_type" text NOT NULL;

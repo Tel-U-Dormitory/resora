@@ -115,6 +115,28 @@ export async function getActiveSrDirectory(
 	};
 }
 
+// Narrow reference-data contract for modules that need selectable active buildings.
+export async function getActiveBuildings(db: Database | DatabaseTransaction) {
+	return db
+		.select({ id: buildings.id, code: buildings.code, name: buildings.name })
+		.from(buildings)
+		.where(eq(buildings.isActive, true))
+		.orderBy(asc(buildings.code));
+}
+
+export async function getActiveBuilding(
+	db: Database | DatabaseTransaction,
+	buildingId: string,
+	lock = false,
+) {
+	const query = db
+		.select({ id: buildings.id, name: buildings.name })
+		.from(buildings)
+		.where(and(eq(buildings.id, buildingId), eq(buildings.isActive, true)));
+	const [building] = await (lock ? query.for("share") : query);
+	return building ?? null;
+}
+
 // Read-only counterpart for consistent reports; write authorization still uses live locks.
 export async function readOperationalIdentity(
 	db: Database | DatabaseTransaction,
