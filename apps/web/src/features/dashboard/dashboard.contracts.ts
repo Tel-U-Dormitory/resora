@@ -7,6 +7,7 @@ export type DashboardPeriod = {
 };
 
 export type DashboardMetricState =
+	| { kind: "loading"; message: string }
 	| { kind: "ready"; value: number; unit: string | null; note: string | null }
 	| {
 			kind: "ready_summary";
@@ -18,6 +19,7 @@ export type DashboardMetricState =
 	| { kind: "missing_period"; message: string }
 	| { kind: "coming_soon"; message: string }
 	| { kind: "unavailable"; message: string }
+	| { kind: "error"; message: string }
 	| { kind: "forbidden"; message: string };
 
 export type DashboardExportCapability = {

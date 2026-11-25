@@ -1,4 +1,5 @@
 import { Card, CardContent } from "@resora/ui/components/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import type {
 	DashboardMetric,
 	DashboardMetricState,
@@ -8,6 +9,8 @@ const numberFormat = new Intl.NumberFormat("id-ID");
 
 function stateLabel(state: DashboardMetricState) {
 	switch (state.kind) {
+		case "loading":
+		case "error":
 		case "empty":
 		case "not_assessed":
 		case "missing_period":
@@ -45,7 +48,12 @@ export function DashboardMetricCard({
 						</span>
 					)}
 				</div>
-				{state.kind === "ready" ? (
+				{state.kind === "loading" ? (
+					<div role="status" aria-label={state.message} className="space-y-3">
+						<Skeleton className="h-9 w-2/3" />
+						<Skeleton className="h-4 w-full" />
+					</div>
+				) : state.kind === "ready" ? (
 					<p className="break-words font-bold text-3xl tracking-tight sm:text-4xl">
 						{value}
 						{state.unit && (
@@ -72,7 +80,11 @@ export function DashboardMetricCard({
 					</dl>
 				) : (
 					<p
-						role={state.kind === "forbidden" ? "alert" : "status"}
+						role={
+							state.kind === "forbidden" || state.kind === "error"
+								? "alert"
+								: "status"
+						}
 						className={`font-semibold text-sm ${state.kind === "coming_soon" ? "text-muted-foreground" : "text-foreground"}`}
 					>
 						{stateLabel(state)}

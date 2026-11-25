@@ -17,6 +17,7 @@ const dashboardFixtureSchema = z.object({
 			}),
 			scope: z.enum(["individual", "department", "organization"]),
 			state: z.discriminatedUnion("kind", [
+				z.object({ kind: z.literal("loading"), message: z.string() }),
 				z.object({
 					kind: z.literal("ready"),
 					value: z.number(),
@@ -41,6 +42,7 @@ const dashboardFixtureSchema = z.object({
 						"missing_period",
 						"coming_soon",
 						"unavailable",
+						"error",
 						"forbidden",
 					] as const
 				).map((kind) =>

@@ -8,7 +8,11 @@ const unavailableMetrics: DashboardMetric[] = [
 	{
 		id: "assessment",
 		title: "Penilaian",
-		period: { label: "Periode evaluasi belum tersedia", startsAt: null, endsAt: null },
+		period: {
+			label: "Periode evaluasi belum tersedia",
+			startsAt: null,
+			endsAt: null,
+		},
 		scope: "individual",
 		state: { kind: "unavailable", message: "Data belum tersedia." },
 		export: null,
@@ -28,7 +32,11 @@ const unavailableMetrics: DashboardMetric[] = [
 	{
 		id: "violations",
 		title: "Pelanggaran aktif",
-		period: { label: "Periode menjabat belum tersedia", startsAt: null, endsAt: null },
+		period: {
+			label: "Periode menjabat belum tersedia",
+			startsAt: null,
+			endsAt: null,
+		},
 		scope: "individual",
 		state: { kind: "unavailable", message: "Data belum tersedia." },
 		export: null,
@@ -56,14 +64,20 @@ function addAttendancePercentage(metric: DashboardMetric): DashboardMetric {
 	const present = metric.state.values.find(
 		(value) => value.label === "Hadir",
 	)?.value;
+	const absent = metric.state.values.find(
+		(value) => value.label === "Tidak hadir",
+	)?.value;
 	if (
 		total === undefined ||
 		present === undefined ||
+		absent === undefined ||
 		!Number.isFinite(total) ||
 		!Number.isFinite(present) ||
+		!Number.isFinite(absent) ||
 		total <= 0 ||
 		present < 0 ||
-		present > total
+		absent < 0 ||
+		present + absent !== total
 	)
 		return metric;
 

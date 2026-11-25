@@ -52,6 +52,24 @@ test("coming soon is shown as a module state, not an empty value", () => {
 	expect(markup).not.toContain(">0<");
 });
 
+test("loading and error remain distinct KPI states", () => {
+	const metric = dashboardFixtures.personal.metrics[0];
+	const loadingMarkup = renderToStaticMarkup(
+		jsxRuntime.jsx(DashboardMetricCard, {
+			metric: { ...metric, state: { kind: "loading", message: "Memuat" } },
+		}),
+	);
+	const errorMarkup = renderToStaticMarkup(
+		jsxRuntime.jsx(DashboardMetricCard, {
+			metric: { ...metric, state: { kind: "error", message: "Gagal memuat" } },
+		}),
+	);
+	expect(loadingMarkup).toContain('role="status"');
+	expect(loadingMarkup).toContain("Memuat");
+	expect(errorMarkup).toContain('role="alert"');
+	expect(errorMarkup).toContain("Gagal memuat");
+});
+
 test("state fixture covers transport and unavailable display states", () => {
 	expect(states.ready_zero).toMatchObject({ kind: "ready", value: 0 });
 	for (const kind of [
@@ -149,7 +167,11 @@ test("preview fixtures provide the approved KPI fields and show only approved ex
 		"Hadir",
 		"Tidak hadir",
 	]);
-	expect(attendance.state.values.some((item) => item.label === "Persentase kehadiran")).toBe(false);
+	expect(
+		attendance.state.values.some(
+			(item) => item.label === "Persentase kehadiran",
+		),
+	).toBe(false);
 	expect(cleanliness).toMatchObject({
 		title: "Kebersihan Kamar",
 		state: { kind: "coming_soon", message: "Segera hadir" },
@@ -170,4 +192,40 @@ test("preview fixtures provide the approved KPI fields and show only approved ex
 	);
 	expect(dashboardMarkup).toContain("Persentase kehadiran");
 	expect(dashboardMarkup).toContain("92,6");
+});
+
+test("attendance percentage is omitted for zero or inconsistent counts", () => {
+	const fixture = dashboardFixtures.management;
+	const attendance = fixture.metrics.find(
+		(metric) => metric.id === "attendance",
+	);
+	if (attendance?.state.kind !== "ready_summary")
+		throw new Error("Management attendance fixture missing");
+	for (const values of [
+		attendance.state.values.map((value) =>
+			value.label === "Total kegiatan relevan" ? { ...value, value: 0 } : value,
+		),
+		attendance.state.values.map((value) =>
+			value.label === "Tidak hadir" ? { ...value, value: 59 } : value,
+		),
+	]) {
+		const markup = renderToStaticMarkup(
+			jsxRuntime.jsx(DashboardPreviewProvider, {
+				fixtures: {
+					management: {
+						...fixture,
+						metrics: fixture.metrics.map((metric) =>
+							metric.id === "attendance"
+								? { ...metric, state: { ...attendance.state, values } }
+								: metric,
+						),
+					},
+				},
+				canManage: true,
+				initialMode: "management",
+				children: jsxRuntime.jsx(DashboardMetrics, {}),
+			}),
+		);
+		expect(markup).not.toContain("Persentase kehadiran");
+	}
 });
