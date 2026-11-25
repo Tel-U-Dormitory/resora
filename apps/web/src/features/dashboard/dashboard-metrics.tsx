@@ -47,17 +47,33 @@ const unavailableMetrics: DashboardMetric[] = [
 ];
 
 export function DashboardMetrics() {
-	const { fixture, previewMode, setPreviewMode } = useDashboardPreview();
-	const metrics = fixture?.metrics ?? unavailableMetrics;
+	const { fixture, previewMode, setPreviewMode, canManage } =
+		useDashboardPreview();
+	const metrics =
+		fixture?.metrics ??
+		(previewMode === "management"
+			? unavailableMetrics.map((metric) => ({
+					...metric,
+					scope: "organization" as const,
+					state:
+						metric.id === "cleanliness"
+							? metric.state
+							: {
+									kind: "unavailable" as const,
+									message: "Sumber ringkasan manajemen belum tersedia.",
+								},
+					export: null,
+				}))
+			: unavailableMetrics);
 	return (
 		<section aria-labelledby="dashboard-kpi-title" className="space-y-3">
 			<div className="flex items-end justify-between gap-3">
 				<h2 id="dashboard-kpi-title" className="font-semibold text-lg">
-					Ringkasan
+					{previewMode === "management" ? "Ringkasan Manajemen" : "Ringkasan"}
 				</h2>
-				{fixture && (
+				{canManage && (
 					<select
-						aria-label="Mode preview dashboard"
+						aria-label={fixture ? "Mode preview dashboard" : "Mode dashboard"}
 						className="min-h-10 max-w-48 rounded-lg border border-border bg-surface px-3 text-foreground text-xs"
 						value={previewMode}
 						onChange={(event) =>
@@ -65,10 +81,17 @@ export function DashboardMetrics() {
 						}
 					>
 						<option value="personal">Personal</option>
-						<option value="management">Manajemen (sintetis)</option>
+						<option value="management">
+							{fixture ? "Manajemen (sintetis)" : "Manajemen"}
+						</option>
 					</select>
 				)}
 			</div>
+			{previewMode === "management" && (
+				<p className="text-muted-foreground text-xs">
+					Cakupan: seluruh departemen. Data mengikuti izin tiap modul sumber.
+				</p>
+			)}
 			{fixture && (
 				<p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-muted-foreground text-xs">
 					<strong className="text-foreground">Preview sintetis.</strong> Bukan

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { DashboardFixture } from "./dashboard.contracts";
+import type { DashboardFixture, DashboardMode } from "./dashboard.contracts";
 import management from "./fixtures/management.json";
 import personal from "./fixtures/personal.json";
 
@@ -72,3 +72,11 @@ export const dashboardFixtures: Record<
 	personal: dashboardFixtureSchema.parse(personal),
 	management: dashboardFixtureSchema.parse(management),
 };
+
+export function dashboardFixturesFor(
+	canManage: boolean,
+): Partial<Record<DashboardMode, DashboardFixture>> {
+	return canManage
+		? dashboardFixtures
+		: { personal: dashboardFixtures.personal };
+}

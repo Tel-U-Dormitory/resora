@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test";
 import * as jsxRuntime from "react/jsx-runtime";
 import { renderToStaticMarkup } from "react-dom/server";
-import { dashboardFixtures } from "./dashboard-fixtures";
+import { dashboardFixtures, dashboardFixturesFor } from "./dashboard-fixtures";
 import { DashboardMetricCard } from "./dashboard-metric-card";
+import { DashboardMetrics } from "./dashboard-metrics";
+import { DashboardPreviewProvider } from "./dashboard-preview-context";
 import states from "./fixtures/states.json";
 
 test("dashboard fixtures expose both modes and valid periods and scopes", () => {
@@ -76,4 +78,41 @@ test("personal attendance preview is synthetic and management has no personal hi
 		),
 	).toBe(true);
 	expect(dashboardFixtures.management.attendanceHistory).toHaveLength(0);
+});
+
+test("management mode is capability-gated and production KPIs fail closed", () => {
+	const managementMarkup = renderToStaticMarkup(
+		jsxRuntime.jsx(DashboardPreviewProvider, {
+			fixtures: null,
+			canManage: true,
+			initialMode: "management",
+			children: jsxRuntime.jsx(DashboardMetrics, {}),
+		}),
+	);
+	expect(managementMarkup).toContain("Ringkasan Manajemen");
+	expect(managementMarkup).toContain("Cakupan: seluruh departemen.");
+	expect(managementMarkup).toContain(
+		"Sumber ringkasan manajemen belum tersedia.",
+	);
+	expect(managementMarkup).toContain("Mode dashboard");
+
+	const personalMarkup = renderToStaticMarkup(
+		jsxRuntime.jsx(DashboardPreviewProvider, {
+			fixtures: null,
+			canManage: false,
+			initialMode: "management",
+			children: jsxRuntime.jsx(DashboardMetrics, {}),
+		}),
+	);
+	expect(personalMarkup).toContain("Ringkasan");
+	expect(personalMarkup).not.toContain("Ringkasan Manajemen");
+	expect(personalMarkup).not.toContain("Mode dashboard");
+});
+
+test("management preview fixture is not sent to sessions without capability", async () => {
+	const personalOnly = dashboardFixturesFor(false);
+	const managementEnabled = dashboardFixturesFor(true);
+	expect(personalOnly?.personal).toBeDefined();
+	expect(personalOnly?.management).toBeUndefined();
+	expect(managementEnabled?.management).toBeDefined();
 });

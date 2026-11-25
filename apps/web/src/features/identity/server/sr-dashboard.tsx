@@ -26,8 +26,9 @@ export default async function SrDashboard() {
 	const session = await getSrSession();
 	if (!session) redirect("/login?reason=session");
 	if (session.requiresPasswordChange) redirect("/change-password");
-	const previewFixtures = await getDashboardPreviewFixtures();
 	const isSr = session.actor === "SR";
+	const canManageDashboard = session.canManageBroadcast || session.isSuperadmin;
+	const previewFixtures = await getDashboardPreviewFixtures(canManageDashboard);
 	const actions = [
 		...(isSr
 			? [
@@ -68,7 +69,11 @@ export default async function SrDashboard() {
 				name={session.name}
 				isSystem={session.actor === "SYSTEM_ADMIN"}
 			/>
-			<DashboardPreviewProvider fixtures={previewFixtures}>
+			<DashboardPreviewProvider
+				fixtures={previewFixtures}
+				canManage={canManageDashboard}
+				initialMode={canManageDashboard ? "management" : "personal"}
+			>
 				<DashboardMetrics />
 				<BroadcastFeed view="LATEST" canManage={session.canManageBroadcast} />
 				<DashboardActivities personalSr={isSr} />

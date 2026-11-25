@@ -115,7 +115,7 @@ export function DashboardActivities({ personalSr }: { personalSr: boolean }) {
 	});
 	const ownHistory = useQuery({
 		...trpc.attendance.ownHistory.queryOptions({ offset: 0, limit: 3 }),
-		enabled: !fixture && personalSr,
+		enabled: !fixture && personalSr && previewMode === "personal",
 		retry: false,
 		meta: { errorHandledLocally: true },
 	});
@@ -136,8 +136,7 @@ export function DashboardActivities({ personalSr }: { personalSr: boolean }) {
 			.slice(0, 5) ?? [];
 	const fixtureActivities = fixture?.activities.slice(0, 5) ?? [];
 	const forbidden = query.error?.data?.code === "FORBIDDEN";
-	const showPersonalHistory =
-		personalSr && (!fixture || previewMode === "personal");
+	const showPersonalHistory = personalSr && previewMode === "personal";
 	const historyItems = fixture
 		? fixture.attendanceHistory.slice(0, 3)
 		: ownHistory.data?.items.slice(0, 3).map((item) => ({
