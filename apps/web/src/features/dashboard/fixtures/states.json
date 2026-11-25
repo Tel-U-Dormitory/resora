@@ -1,0 +1,23 @@
+{
+	"loading": { "kind": "loading", "label": "Memuat data" },
+	"ready": { "kind": "ready", "value": 12, "unit": " SR", "note": null },
+	"ready_zero": {
+		"kind": "ready",
+		"value": 0,
+		"unit": " kegiatan",
+		"note": null
+	},
+	"empty": { "kind": "empty", "message": "Belum ada data." },
+	"not_assessed": { "kind": "not_assessed", "message": "Belum dinilai." },
+	"missing_period": {
+		"kind": "missing_period",
+		"message": "Periode belum tersedia."
+	},
+	"coming_soon": { "kind": "coming_soon", "message": "Modul segera tersedia." },
+	"error": { "kind": "error", "message": "Data gagal dimuat." },
+	"forbidden": { "kind": "forbidden", "message": "Akses ditolak." },
+	"stale": {
+		"kind": "stale",
+		"message": "Data terakhir diperbarui beberapa saat lalu."
+	}
+}
