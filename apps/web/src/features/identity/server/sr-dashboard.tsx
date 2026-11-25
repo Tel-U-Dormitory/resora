@@ -71,7 +71,7 @@ export default async function SrDashboard() {
 			<DashboardPreviewProvider fixtures={previewFixtures}>
 				<DashboardMetrics />
 				<BroadcastFeed view="LATEST" canManage={session.canManageBroadcast} />
-				<DashboardActivities />
+				<DashboardActivities personalSr={isSr} />
 				<div className="space-y-3">
 					<h2 className="font-semibold text-lg">Akses cepat</h2>
 					{(isSr || session.isSuperadmin) && (

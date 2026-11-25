@@ -2,16 +2,20 @@
 
 import { Card, CardContent } from "@resora/ui/components/card";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, CalendarDays } from "lucide-react";
+import { ArrowRight, CalendarDays, History } from "lucide-react";
 import Link from "next/link";
 import {
 	eventErrorMessage,
 	formatEventSchedule,
+	StatusBadge,
 } from "@/components/event-feedback";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { trpc } from "@/utils/trpc";
-import type { DashboardActivity } from "./dashboard.contracts";
+import type {
+	DashboardActivity,
+	DashboardAttendanceActivity,
+} from "./dashboard.contracts";
 import { useDashboardPreview } from "./dashboard-preview-context";
 
 function ActivityCard({
@@ -45,11 +49,73 @@ function ActivityCard({
 	);
 }
 
-export function DashboardActivities() {
-	const { fixture } = useDashboardPreview();
+function AttendanceHistoryCard({
+	items,
+	linkEvents,
+}: {
+	items: DashboardAttendanceActivity[];
+	linkEvents: boolean;
+}) {
+	return (
+		<Card className="resora-panel">
+			<CardContent className="divide-y divide-border px-4 sm:px-5">
+				{items.map((item) => (
+					<article
+						key={item.id}
+						className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-3 py-4 first:pt-0 last:pb-0"
+					>
+						<div className="min-w-0 space-y-2">
+							<h3 className="break-words font-semibold text-sm leading-snug">
+								{linkEvents ? (
+									<Link
+										href={`/events/${item.id}`}
+										className="focus-ring rounded-sm hover:text-primary"
+									>
+										{item.title}
+									</Link>
+								) : (
+									item.title
+								)}
+							</h3>
+							<p className="text-muted-foreground text-xs">
+								{formatEventSchedule(item.startsAt, item.endsAt)}
+							</p>
+						</div>
+						<StatusBadge status={item.presence} />
+					</article>
+				))}
+			</CardContent>
+		</Card>
+	);
+}
+
+function EmptyAttendance() {
+	return (
+		<Card className="resora-panel">
+			<CardContent className="flex min-h-24 items-center gap-3 p-4 sm:p-5">
+				<History
+					aria-hidden="true"
+					className="size-5 shrink-0 text-muted-foreground"
+				/>
+				<p className="text-muted-foreground text-sm">
+					Belum ada riwayat kehadiran.
+				</p>
+			</CardContent>
+		</Card>
+	);
+}
+
+export function DashboardActivities({ personalSr }: { personalSr: boolean }) {
+	const { fixture, previewMode } = useDashboardPreview();
 	const query = useQuery({
 		...trpc.attendance.list.queryOptions({ visibility: "NON_ARCHIVED" }),
 		enabled: !fixture,
+		retry: false,
+		meta: { errorHandledLocally: true },
+	});
+	const ownHistory = useQuery({
+		...trpc.attendance.ownHistory.queryOptions({ offset: 0, limit: 3 }),
+		enabled: !fixture && personalSr,
 		retry: false,
 		meta: { errorHandledLocally: true },
 	});
@@ -70,6 +136,18 @@ export function DashboardActivities() {
 			.slice(0, 5) ?? [];
 	const fixtureActivities = fixture?.activities.slice(0, 5) ?? [];
 	const forbidden = query.error?.data?.code === "FORBIDDEN";
+	const showPersonalHistory =
+		personalSr && (!fixture || previewMode === "personal");
+	const historyItems = fixture
+		? fixture.attendanceHistory.slice(0, 3)
+		: ownHistory.data?.items.slice(0, 3).map((item) => ({
+				id: item.event.id,
+				title: item.event.title,
+				startsAt: item.event.startsAt,
+				endsAt: item.event.endsAt,
+				presence: item.presence,
+			}));
+	const historyForbidden = ownHistory.error?.data?.code === "FORBIDDEN";
 
 	return (
 		<section aria-labelledby="dashboard-activities-title" className="space-y-3">
@@ -174,6 +252,46 @@ export function DashboardActivities() {
 				<p className="text-muted-foreground text-xs" role="status">
 					Memperbarui kegiatan…
 				</p>
+			)}
+			{showPersonalHistory && (
+				<div className="space-y-3">
+					<h3 className="font-medium text-muted-foreground text-sm">
+						Riwayat kehadiran
+					</h3>
+					{fixture ? (
+						historyItems?.length ? (
+							<AttendanceHistoryCard items={historyItems} linkEvents={false} />
+						) : (
+							<EmptyAttendance />
+						)
+					) : ownHistory.isPending ? (
+						<div role="status" className="space-y-2">
+							<span className="sr-only">Memuat riwayat kehadiran…</span>
+							<Skeleton className="h-24 w-full rounded-xl" />
+						</div>
+					) : ownHistory.error ? (
+						<Card className="resora-panel">
+							<CardContent className="space-y-3 p-4 sm:p-5">
+								<p role="alert" className="text-destructive text-sm">
+									{historyForbidden
+										? "Akses ke riwayat kehadiran ditolak."
+										: eventErrorMessage(ownHistory.error)}
+								</p>
+								<Button
+									variant="outline"
+									disabled={ownHistory.isFetching}
+									onClick={() => void ownHistory.refetch()}
+								>
+									Coba kembali
+								</Button>
+							</CardContent>
+						</Card>
+					) : historyItems?.length ? (
+						<AttendanceHistoryCard items={historyItems} linkEvents />
+					) : (
+						<EmptyAttendance />
+					)}
+				</div>
 			)}
 		</section>
 	);

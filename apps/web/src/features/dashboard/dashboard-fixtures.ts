@@ -53,6 +53,15 @@ const dashboardFixtureSchema = z.object({
 			endsAt: z.string(),
 		}),
 	),
+	attendanceHistory: z.array(
+		z.object({
+			id: z.string(),
+			title: z.string(),
+			startsAt: z.string(),
+			endsAt: z.string(),
+			presence: z.enum(["PRESENT", "PENDING", "ABSENT"]),
+		}),
+	),
 });
 
 // JSON fixture stays at the provider boundary and is never imported by UI components.

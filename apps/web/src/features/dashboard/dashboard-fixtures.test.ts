@@ -63,3 +63,17 @@ test("state fixture covers transport and unavailable display states", () => {
 		);
 	}
 });
+
+test("personal attendance preview is synthetic and management has no personal history", () => {
+	const personalHistory = dashboardFixtures.personal.attendanceHistory;
+	expect(personalHistory.length).toBeGreaterThan(0);
+	expect(personalHistory.every((item) => item.id.startsWith("fixture-"))).toBe(
+		true,
+	);
+	expect(
+		personalHistory.every((item) =>
+			["PRESENT", "PENDING", "ABSENT"].includes(item.presence),
+		),
+	).toBe(true);
+	expect(dashboardFixtures.management.attendanceHistory).toHaveLength(0);
+});

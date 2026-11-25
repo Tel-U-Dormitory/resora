@@ -89,5 +89,21 @@
 			"startsAt": "2026-12-08T13:00:00+07:00",
 			"endsAt": "2026-12-08T15:00:00+07:00"
 		}
+	],
+	"attendanceHistory": [
+		{
+			"id": "fixture-attendance-1",
+			"title": "Briefing Pengelola Asrama",
+			"startsAt": "2026-11-14T08:00:00+07:00",
+			"endsAt": "2026-11-14T09:00:00+07:00",
+			"presence": "PRESENT"
+		},
+		{
+			"id": "fixture-attendance-2",
+			"title": "Koordinasi Lantai",
+			"startsAt": "2026-11-18T15:00:00+07:00",
+			"endsAt": "2026-11-18T16:00:00+07:00",
+			"presence": "PENDING"
+		}
 	]
 }

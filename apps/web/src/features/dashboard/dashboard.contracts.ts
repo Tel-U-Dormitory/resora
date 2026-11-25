@@ -37,9 +37,14 @@ export type DashboardActivity = {
 	endsAt: string;
 };
 
+export type DashboardAttendanceActivity = DashboardActivity & {
+	presence: "PRESENT" | "PENDING" | "ABSENT";
+};
+
 export type DashboardFixture = {
 	mode: DashboardMode;
 	scope: DashboardScope;
 	metrics: DashboardMetric[];
 	activities: DashboardActivity[];
+	attendanceHistory: DashboardAttendanceActivity[];
 };
