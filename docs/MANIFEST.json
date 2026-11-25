@@ -12,6 +12,8 @@
 		"docs/decisions/0004-pilot-scope-and-governance.md",
 		"docs/decisions/0005-deployment-and-integrations.md",
 		"docs/decisions/README.md",
+		"docs/modules/pelanggaran/prd.md",
+		"docs/modules/pelanggaran/roadmap.md",
 		"docs/modules/need-001/acceptance-tests.md",
 		"docs/modules/need-001/prd.md",
 		"docs/prd.md",

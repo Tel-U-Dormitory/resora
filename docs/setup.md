@@ -39,6 +39,39 @@ Use the exact dashboard host/username and percent-encode reserved password chara
 
 Keep `apps/web/.env` limited to frontend configuration, including `NEXT_PUBLIC_SERVER_URL=http://localhost:3000` (and the existing `SERVER_URL`). Never add database credentials there.
 
+### Cloudflare R2 object storage
+
+R2 is optional until the server has all six values below. Keep S3 credentials only
+in the backend's ignored `apps/server/.env` for local development and in the
+private production server environment (for example `.private/production/server.env`).
+Do not put them in `apps/web/.env`, browser variables, Git, or chat. Create one
+Cloudflare R2 S3 API token for dev scoped to `resora-private-dev` and
+`resora-public-dev`, and a separate token for prod scoped to
+`resora-private-prod` and `resora-public-prod`; choose `Object Read & Write` and
+apply each token to only its environment's two buckets. Paste each Access Key ID
+and Secret Access Key directly into that environment's server secret store.
+
+Use this mapping in each server environment:
+
+| Variable | Development | Production |
+| --- | --- | --- |
+| `R2_ACCOUNT_ID` | Cloudflare account ID | Same account ID |
+| `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | Dev token credentials | Separate prod token credentials |
+| `R2_PRIVATE_BUCKET` | `resora-private-dev` | `resora-private-prod` |
+| `R2_PUBLIC_BUCKET` | `resora-public-dev` | `resora-public-prod` |
+| `R2_PUBLIC_BASE_URL` | HTTPS `r2.dev` URL shown for `resora-public-dev` | HTTPS custom media domain attached to `resora-public-prod` |
+
+The dev public URL and bucket CORS are configured for the web origin
+`http://localhost:3001`; production CORS is limited to
+`https://resora.telkomdormitory.com`. The production public bucket has no public
+domain yet. Connect the `telkomdormitory.com` zone to this Cloudflare account (or
+select another domain already managed by this account), then attach a reviewed
+media hostname to `resora-public-prod` and use it as `R2_PUBLIC_BASE_URL`. Do not
+enable `r2.dev` for production. Until the token credentials are entered, R2 remains
+disabled by the server; partial configuration fails startup. See [R2 public
+access](https://developers.cloudflare.com/r2/buckets/public-buckets/) and [R2
+token setup](https://developers.cloudflare.com/r2/api/tokens/).
+
 From the repository root:
 
 ```bash
