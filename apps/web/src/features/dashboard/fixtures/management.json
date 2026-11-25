@@ -12,10 +12,14 @@
 			},
 			"scope": "organization",
 			"state": {
-				"kind": "ready",
-				"value": 0,
-				"unit": " SR dinilai",
-				"note": "Cakupan contoh lintas departemen"
+				"kind": "ready_summary",
+				"values": [
+					{ "label": "Rata-rata nilai SR", "value": 84.6, "unit": "/100" },
+					{ "label": "Kelengkapan penilaian", "value": 92, "unit": "%" },
+					{ "label": "Sudah dinilai", "value": 46, "unit": "SR" },
+					{ "label": "Belum dinilai", "value": 4, "unit": "SR" }
+				],
+				"note": "Data sintetis untuk preview"
 			},
 			"export": {
 				"report": "assessment",
@@ -27,14 +31,20 @@
 			"id": "attendance",
 			"title": "Kehadiran",
 			"period": {
-				"label": "Periode belum ditetapkan",
-				"startsAt": null,
-				"endsAt": null
+				"label": "Periode menjabat 2026/2027",
+				"startsAt": "2026-08-01T00:00:00+07:00",
+				"endsAt": "2027-07-31T23:59:59+07:00"
 			},
 			"scope": "organization",
 			"state": {
-				"kind": "missing_period",
-				"message": "Periode rekap belum tersedia."
+				"kind": "ready_summary",
+				"values": [
+					{ "label": "Total kegiatan relevan", "value": 812, "unit": "kegiatan" },
+					{ "label": "Hadir", "value": 752, "unit": "kegiatan" },
+					{ "label": "Tidak hadir", "value": 60, "unit": "kegiatan" },
+					{ "label": "Persentase kehadiran", "value": 92.6, "unit": "%" }
+				],
+				"note": "Data sintetis untuk preview"
 			},
 			"export": null
 		},
@@ -48,23 +58,28 @@
 			},
 			"scope": "organization",
 			"state": {
-				"kind": "not_assessed",
-				"message": "Belum ada penilaian untuk periode ini."
+				"kind": "ready_summary",
+				"values": [
+					{ "label": "Total laporan aktif", "value": 7, "unit": "laporan" },
+					{ "label": "Gedung A", "value": 3, "unit": "laporan" },
+					{ "label": "Gedung B", "value": 4, "unit": "laporan" }
+				],
+				"note": "Data sintetis untuk preview"
 			},
 			"export": null
 		},
 		{
 			"id": "cleanliness",
-			"title": "Kebersihan",
+			"title": "Kebersihan Kamar",
 			"period": {
-				"label": "Periode 2026/2027",
-				"startsAt": "2026-08-01T00:00:00+07:00",
-				"endsAt": "2027-07-31T23:59:59+07:00"
+				"label": "Segera hadir",
+				"startsAt": null,
+				"endsAt": null
 			},
 			"scope": "organization",
 			"state": {
 				"kind": "coming_soon",
-				"message": "Modul kebersihan segera tersedia."
+				"message": "Segera hadir"
 			},
 			"export": null
 		}

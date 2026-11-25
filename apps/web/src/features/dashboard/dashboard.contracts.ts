@@ -8,6 +8,11 @@ export type DashboardPeriod = {
 
 export type DashboardMetricState =
 	| { kind: "ready"; value: number; unit: string | null; note: string | null }
+	| {
+			kind: "ready_summary";
+			values: Array<{ label: string; value: number; unit: string | null }>;
+			note: string | null;
+	  }
 	| { kind: "empty"; message: string }
 	| { kind: "not_assessed"; message: string }
 	| { kind: "missing_period"; message: string }

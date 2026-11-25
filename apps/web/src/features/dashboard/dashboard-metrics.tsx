@@ -8,39 +8,39 @@ const unavailableMetrics: DashboardMetric[] = [
 	{
 		id: "assessment",
 		title: "Penilaian",
-		period: { label: "Periode belum tersedia", startsAt: null, endsAt: null },
+		period: { label: "Periode evaluasi belum tersedia", startsAt: null, endsAt: null },
 		scope: "individual",
-		state: { kind: "unavailable", message: "Sumber rekap belum tersedia." },
+		state: { kind: "unavailable", message: "Data belum tersedia." },
 		export: null,
 	},
 	{
 		id: "attendance",
 		title: "Kehadiran",
 		period: {
-			label: "Rekap periode belum tersedia",
+			label: "Periode menjabat belum tersedia",
 			startsAt: null,
 			endsAt: null,
 		},
 		scope: "individual",
-		state: { kind: "unavailable", message: "Sumber rekap belum tersedia." },
+		state: { kind: "unavailable", message: "Data belum tersedia." },
 		export: null,
 	},
 	{
 		id: "violations",
 		title: "Pelanggaran aktif",
-		period: { label: "Periode belum tersedia", startsAt: null, endsAt: null },
+		period: { label: "Periode menjabat belum tersedia", startsAt: null, endsAt: null },
 		scope: "individual",
-		state: { kind: "unavailable", message: "Modul belum tersedia." },
+		state: { kind: "unavailable", message: "Data belum tersedia." },
 		export: null,
 	},
 	{
 		id: "cleanliness",
-		title: "Kebersihan",
-		period: { label: "Periode berjalan", startsAt: null, endsAt: null },
+		title: "Kebersihan Kamar",
+		period: { label: "Segera hadir", startsAt: null, endsAt: null },
 		scope: "individual",
 		state: {
 			kind: "coming_soon",
-			message: "Modul kebersihan segera tersedia.",
+			message: "Segera hadir",
 		},
 		export: null,
 	},
@@ -60,7 +60,7 @@ export function DashboardMetrics() {
 							? metric.state
 							: {
 									kind: "unavailable" as const,
-									message: "Sumber ringkasan manajemen belum tersedia.",
+									message: "Data belum tersedia.",
 								},
 					export: null,
 				}))
@@ -100,7 +100,11 @@ export function DashboardMetrics() {
 			)}
 			<div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
 				{metrics.map((metric) => (
-					<DashboardMetricCard key={metric.id} metric={metric} />
+					<DashboardMetricCard
+						key={metric.id}
+						metric={metric}
+						preview={fixture !== null}
+					/>
 				))}
 			</div>
 		</section>

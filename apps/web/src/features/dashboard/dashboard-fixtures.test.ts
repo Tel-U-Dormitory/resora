@@ -21,15 +21,19 @@ test("dashboard fixtures expose both modes and valid periods and scopes", () => 
 });
 
 test("zero is a ready value and distinct from empty", () => {
-	const zero = dashboardFixtures.personal.metrics.find(
+	const attendance = dashboardFixtures.personal.metrics.find(
 		(metric) => metric.id === "attendance",
 	);
 	const empty = dashboardFixtures.personal.metrics.find(
 		(metric) => metric.id === "violations",
 	);
-	if (!zero || !empty)
+	if (!attendance || !empty)
 		throw new Error("Required personal fixture metrics missing");
-	expect(zero?.state).toMatchObject({ kind: "ready", value: 0 });
+	const zero = {
+		...attendance,
+		state: { kind: "ready" as const, value: 0, unit: " kegiatan", note: null },
+	};
+	expect(zero.state).toMatchObject({ kind: "ready", value: 0 });
 	expect(empty?.state.kind).toBe("empty");
 	expect(
 		renderToStaticMarkup(jsxRuntime.jsx(DashboardMetricCard, { metric: zero })),
@@ -44,7 +48,7 @@ test("coming soon is shown as a module state, not an empty value", () => {
 	const markup = renderToStaticMarkup(
 		jsxRuntime.jsx(DashboardMetricCard, { metric: cleanliness }),
 	);
-	expect(markup).toContain("Modul kebersihan segera tersedia.");
+	expect(markup).toContain("Segera hadir");
 	expect(markup).not.toContain(">0<");
 });
 
@@ -91,9 +95,8 @@ test("management mode is capability-gated and production KPIs fail closed", () =
 	);
 	expect(managementMarkup).toContain("Ringkasan Manajemen");
 	expect(managementMarkup).toContain("Cakupan: seluruh departemen.");
-	expect(managementMarkup).toContain(
-		"Sumber ringkasan manajemen belum tersedia.",
-	);
+	expect(managementMarkup).toContain("Data belum tersedia.");
+	expect(managementMarkup).toContain("Segera hadir");
 	expect(managementMarkup).toContain("Mode dashboard");
 
 	const personalMarkup = renderToStaticMarkup(
@@ -115,4 +118,46 @@ test("management preview fixture is not sent to sessions without capability", as
 	expect(personalOnly?.personal).toBeDefined();
 	expect(personalOnly?.management).toBeUndefined();
 	expect(managementEnabled?.management).toBeDefined();
+});
+
+test("preview fixtures provide the approved KPI fields and show only approved export CTAs", () => {
+	const assessment = dashboardFixtures.management.metrics.find(
+		(metric) => metric.id === "assessment",
+	);
+	const attendance = dashboardFixtures.management.metrics.find(
+		(metric) => metric.id === "attendance",
+	);
+	const cleanliness = dashboardFixtures.management.metrics.find(
+		(metric) => metric.id === "cleanliness",
+	);
+	if (!assessment || !attendance || !cleanliness)
+		throw new Error("Required management preview metrics missing");
+	expect(assessment.state).toMatchObject({ kind: "ready_summary" });
+	expect(attendance.state).toMatchObject({ kind: "ready_summary" });
+	if (assessment.state.kind !== "ready_summary")
+		throw new Error("Management assessment summary missing");
+	if (attendance.state.kind !== "ready_summary")
+		throw new Error("Management attendance summary missing");
+	expect(assessment.state.values.map((item) => item.label)).toEqual([
+		"Rata-rata nilai SR",
+		"Kelengkapan penilaian",
+		"Sudah dinilai",
+		"Belum dinilai",
+	]);
+	expect(attendance.state.values.map((item) => item.label)).toEqual([
+		"Total kegiatan relevan",
+		"Hadir",
+		"Tidak hadir",
+		"Persentase kehadiran",
+	]);
+	expect(cleanliness).toMatchObject({
+		title: "Kebersihan Kamar",
+		state: { kind: "coming_soon", message: "Segera hadir" },
+		export: null,
+	});
+	const markup = renderToStaticMarkup(
+		jsxRuntime.jsx(DashboardMetricCard, { metric: assessment, preview: true }),
+	);
+	expect(markup).toContain("Ekspor (simulasi)");
+	expect(markup).toContain("disabled");
 });

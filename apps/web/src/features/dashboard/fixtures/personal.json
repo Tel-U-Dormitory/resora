@@ -12,10 +12,12 @@
 			},
 			"scope": "individual",
 			"state": {
-				"kind": "ready",
-				"value": 86,
-				"unit": "/100",
-				"note": "Contoh sintetis"
+				"kind": "ready_summary",
+				"values": [
+					{ "label": "Nilai akhir pribadi", "value": 86, "unit": "/100" },
+					{ "label": "Kelengkapan penilaian", "value": 91, "unit": "%" }
+				],
+				"note": "Data sintetis untuk preview"
 			},
 			"export": {
 				"report": "assessment",
@@ -27,16 +29,20 @@
 			"id": "attendance",
 			"title": "Kehadiran",
 			"period": {
-				"label": "Periode 2026/2027",
+				"label": "Periode menjabat 2026/2027",
 				"startsAt": "2026-08-01T00:00:00+07:00",
 				"endsAt": "2027-07-31T23:59:59+07:00"
 			},
 			"scope": "individual",
 			"state": {
-				"kind": "ready",
-				"value": 0,
-				"unit": " kegiatan",
-				"note": "Contoh nilai nol"
+				"kind": "ready_summary",
+				"values": [
+					{ "label": "Total kegiatan relevan", "value": 8, "unit": "kegiatan" },
+					{ "label": "Hadir", "value": 7, "unit": "kegiatan" },
+					{ "label": "Tidak hadir", "value": 1, "unit": "kegiatan" },
+					{ "label": "Persentase kehadiran", "value": 87.5, "unit": "%" }
+				],
+				"note": "Data sintetis untuk preview"
 			},
 			"export": {
 				"report": "attendance",
@@ -62,16 +68,16 @@
 		},
 		{
 			"id": "cleanliness",
-			"title": "Kebersihan",
+			"title": "Kebersihan Kamar",
 			"period": {
-				"label": "Periode 2026/2027",
-				"startsAt": "2026-08-01T00:00:00+07:00",
-				"endsAt": "2027-07-31T23:59:59+07:00"
+				"label": "Segera hadir",
+				"startsAt": null,
+				"endsAt": null
 			},
 			"scope": "individual",
 			"state": {
 				"kind": "coming_soon",
-				"message": "Modul kebersihan segera tersedia."
+				"message": "Segera hadir"
 			},
 			"export": null
 		}

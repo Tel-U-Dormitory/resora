@@ -16,14 +16,22 @@ function stateLabel(state: DashboardMetricState) {
 		case "forbidden":
 			return state.message;
 		case "ready":
+		case "ready_summary":
 			return state.note;
 	}
 }
 
-export function DashboardMetricCard({ metric }: { metric: DashboardMetric }) {
+export function DashboardMetricCard({
+	metric,
+	preview = false,
+}: {
+	metric: DashboardMetric;
+	preview?: boolean;
+}) {
 	const { state } = metric;
 	const value =
 		state.kind === "ready" ? numberFormat.format(state.value) : null;
+	const ready = state.kind === "ready" || state.kind === "ready_summary";
 	return (
 		<Card className="resora-panel h-full min-w-0">
 			<CardContent className="flex h-full min-h-36 flex-col gap-3 p-4 sm:p-5">
@@ -46,6 +54,22 @@ export function DashboardMetricCard({ metric }: { metric: DashboardMetric }) {
 							</span>
 						)}
 					</p>
+				) : state.kind === "ready_summary" ? (
+					<dl className="grid grid-cols-2 gap-x-3 gap-y-4">
+						{state.values.map((item) => (
+							<div key={item.label} className="min-w-0 space-y-1">
+								<dt className="text-muted-foreground text-xs">{item.label}</dt>
+								<dd className="break-words font-bold text-xl tracking-tight sm:text-2xl">
+									{numberFormat.format(item.value)}
+									{item.unit && (
+										<span className="ml-1 font-medium text-muted-foreground text-xs">
+											{item.unit}
+										</span>
+									)}
+								</dd>
+							</div>
+						))}
+					</dl>
 				) : (
 					<p
 						role={state.kind === "forbidden" ? "alert" : "status"}
@@ -56,8 +80,17 @@ export function DashboardMetricCard({ metric }: { metric: DashboardMetric }) {
 				)}
 				<div className="mt-auto space-y-1 border-border/70 border-t pt-3">
 					<p className="text-muted-foreground text-xs">{metric.period.label}</p>
-					{state.kind === "ready" && state.note && (
+					{ready && state.note && (
 						<p className="text-muted-foreground text-xs">{state.note}</p>
+					)}
+					{metric.export && (
+						<button
+							type="button"
+							disabled
+							className="min-h-9 cursor-not-allowed rounded-lg border border-border px-3 text-muted-foreground text-xs"
+						>
+							{preview ? "Ekspor (simulasi)" : "Ekspor"}
+						</button>
 					)}
 				</div>
 			</CardContent>

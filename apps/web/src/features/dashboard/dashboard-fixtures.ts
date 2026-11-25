@@ -23,6 +23,17 @@ const dashboardFixtureSchema = z.object({
 					unit: z.string().nullable(),
 					note: z.string().nullable(),
 				}),
+				z.object({
+					kind: z.literal("ready_summary"),
+					values: z.array(
+						z.object({
+							label: z.string(),
+							value: z.number(),
+							unit: z.string().nullable(),
+						}),
+					),
+					note: z.string().nullable(),
+				}),
 				...(
 					[
 						"empty",
