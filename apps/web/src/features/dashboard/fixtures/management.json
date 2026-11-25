@@ -1,0 +1,80 @@
+{
+	"mode": "management",
+	"scope": "organization",
+	"metrics": [
+		{
+			"id": "assessment",
+			"title": "Penilaian",
+			"period": {
+				"label": "Periode 2026/2027",
+				"startsAt": "2026-08-01T00:00:00+07:00",
+				"endsAt": "2027-07-31T23:59:59+07:00"
+			},
+			"scope": "organization",
+			"state": {
+				"kind": "ready",
+				"value": 0,
+				"unit": " SR dinilai",
+				"note": "Cakupan contoh lintas departemen"
+			},
+			"export": {
+				"report": "assessment",
+				"formats": ["xlsx", "pdf"],
+				"filters": ["period", "department"]
+			}
+		},
+		{
+			"id": "attendance",
+			"title": "Kehadiran",
+			"period": {
+				"label": "Periode belum ditetapkan",
+				"startsAt": null,
+				"endsAt": null
+			},
+			"scope": "organization",
+			"state": {
+				"kind": "missing_period",
+				"message": "Periode rekap belum tersedia."
+			},
+			"export": null
+		},
+		{
+			"id": "violations",
+			"title": "Pelanggaran aktif",
+			"period": {
+				"label": "Periode 2026/2027",
+				"startsAt": "2026-08-01T00:00:00+07:00",
+				"endsAt": "2027-07-31T23:59:59+07:00"
+			},
+			"scope": "organization",
+			"state": {
+				"kind": "not_assessed",
+				"message": "Belum ada penilaian untuk periode ini."
+			},
+			"export": null
+		},
+		{
+			"id": "cleanliness",
+			"title": "Kebersihan",
+			"period": {
+				"label": "Periode 2026/2027",
+				"startsAt": "2026-08-01T00:00:00+07:00",
+				"endsAt": "2027-07-31T23:59:59+07:00"
+			},
+			"scope": "organization",
+			"state": {
+				"kind": "coming_soon",
+				"message": "Modul kebersihan segera tersedia."
+			},
+			"export": null
+		}
+	],
+	"activities": [
+		{
+			"id": "fixture-management-activity-1",
+			"title": "Koordinasi Pengelola Asrama",
+			"startsAt": "2026-12-03T10:00:00+07:00",
+			"endsAt": "2026-12-03T11:30:00+07:00"
+		}
+	]
+}

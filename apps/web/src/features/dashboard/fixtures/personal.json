@@ -1,0 +1,93 @@
+{
+	"mode": "personal",
+	"scope": "individual",
+	"metrics": [
+		{
+			"id": "assessment",
+			"title": "Penilaian",
+			"period": {
+				"label": "Periode 2026/2027",
+				"startsAt": "2026-08-01T00:00:00+07:00",
+				"endsAt": "2027-07-31T23:59:59+07:00"
+			},
+			"scope": "individual",
+			"state": {
+				"kind": "ready",
+				"value": 86,
+				"unit": "/100",
+				"note": "Contoh sintetis"
+			},
+			"export": {
+				"report": "assessment",
+				"formats": ["xlsx", "pdf"],
+				"filters": ["period"]
+			}
+		},
+		{
+			"id": "attendance",
+			"title": "Kehadiran",
+			"period": {
+				"label": "Periode 2026/2027",
+				"startsAt": "2026-08-01T00:00:00+07:00",
+				"endsAt": "2027-07-31T23:59:59+07:00"
+			},
+			"scope": "individual",
+			"state": {
+				"kind": "ready",
+				"value": 0,
+				"unit": " kegiatan",
+				"note": "Contoh nilai nol"
+			},
+			"export": {
+				"report": "attendance",
+				"formats": ["xlsx"],
+				"filters": ["period"]
+			}
+		},
+		{
+			"id": "violations",
+			"title": "Pelanggaran aktif",
+			"period": {
+				"label": "Periode 2026/2027",
+				"startsAt": "2026-08-01T00:00:00+07:00",
+				"endsAt": "2027-07-31T23:59:59+07:00"
+			},
+			"scope": "individual",
+			"state": { "kind": "empty", "message": "Tidak ada pelanggaran aktif." },
+			"export": {
+				"report": "violations",
+				"formats": ["xlsx", "pdf"],
+				"filters": ["period"]
+			}
+		},
+		{
+			"id": "cleanliness",
+			"title": "Kebersihan",
+			"period": {
+				"label": "Periode 2026/2027",
+				"startsAt": "2026-08-01T00:00:00+07:00",
+				"endsAt": "2027-07-31T23:59:59+07:00"
+			},
+			"scope": "individual",
+			"state": {
+				"kind": "coming_soon",
+				"message": "Modul kebersihan segera tersedia."
+			},
+			"export": null
+		}
+	],
+	"activities": [
+		{
+			"id": "fixture-personal-activity-1",
+			"title": "Orientasi Hunian",
+			"startsAt": "2026-12-02T09:00:00+07:00",
+			"endsAt": "2026-12-02T11:00:00+07:00"
+		},
+		{
+			"id": "fixture-personal-activity-2",
+			"title": "Diskusi Pengembangan SR",
+			"startsAt": "2026-12-08T13:00:00+07:00",
+			"endsAt": "2026-12-08T15:00:00+07:00"
+		}
+	]
+}
