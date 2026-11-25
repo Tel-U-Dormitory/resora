@@ -39,7 +39,11 @@
 			"state": {
 				"kind": "ready_summary",
 				"values": [
-					{ "label": "Total kegiatan relevan", "value": 812, "unit": "kegiatan" },
+					{
+						"label": "Total kegiatan relevan",
+						"value": 812,
+						"unit": "kegiatan"
+					},
 					{ "label": "Hadir", "value": 752, "unit": "kegiatan" },
 					{ "label": "Tidak hadir", "value": 60, "unit": "kegiatan" }
 				],
