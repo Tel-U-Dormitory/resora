@@ -41,8 +41,7 @@
 				"values": [
 					{ "label": "Total kegiatan relevan", "value": 812, "unit": "kegiatan" },
 					{ "label": "Hadir", "value": 752, "unit": "kegiatan" },
-					{ "label": "Tidak hadir", "value": 60, "unit": "kegiatan" },
-					{ "label": "Persentase kehadiran", "value": 92.6, "unit": "%" }
+					{ "label": "Tidak hadir", "value": 60, "unit": "kegiatan" }
 				],
 				"note": "Data sintetis untuk preview"
 			},

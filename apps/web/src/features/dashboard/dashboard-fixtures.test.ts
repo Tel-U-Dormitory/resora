@@ -148,8 +148,8 @@ test("preview fixtures provide the approved KPI fields and show only approved ex
 		"Total kegiatan relevan",
 		"Hadir",
 		"Tidak hadir",
-		"Persentase kehadiran",
 	]);
+	expect(attendance.state.values.some((item) => item.label === "Persentase kehadiran")).toBe(false);
 	expect(cleanliness).toMatchObject({
 		title: "Kebersihan Kamar",
 		state: { kind: "coming_soon", message: "Segera hadir" },
@@ -160,4 +160,14 @@ test("preview fixtures provide the approved KPI fields and show only approved ex
 	);
 	expect(markup).toContain("Ekspor (simulasi)");
 	expect(markup).toContain("disabled");
+	const dashboardMarkup = renderToStaticMarkup(
+		jsxRuntime.jsx(DashboardPreviewProvider, {
+			fixtures: { management: dashboardFixtures.management },
+			canManage: true,
+			initialMode: "management",
+			children: jsxRuntime.jsx(DashboardMetrics, {}),
+		}),
+	);
+	expect(dashboardMarkup).toContain("Persentase kehadiran");
+	expect(dashboardMarkup).toContain("92,6");
 });

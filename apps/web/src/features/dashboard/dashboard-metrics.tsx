@@ -46,6 +46,45 @@ const unavailableMetrics: DashboardMetric[] = [
 	},
 ];
 
+function addAttendancePercentage(metric: DashboardMetric): DashboardMetric {
+	if (metric.id !== "attendance" || metric.state.kind !== "ready_summary")
+		return metric;
+
+	const total = metric.state.values.find(
+		(value) => value.label === "Total kegiatan relevan",
+	)?.value;
+	const present = metric.state.values.find(
+		(value) => value.label === "Hadir",
+	)?.value;
+	if (
+		total === undefined ||
+		present === undefined ||
+		!Number.isFinite(total) ||
+		!Number.isFinite(present) ||
+		total <= 0 ||
+		present < 0 ||
+		present > total
+	)
+		return metric;
+
+	return {
+		...metric,
+		state: {
+			...metric.state,
+			values: [
+				...metric.state.values.filter(
+					(value) => value.label !== "Persentase kehadiran",
+				),
+				{
+					label: "Persentase kehadiran",
+					value: (present / total) * 100,
+					unit: "%",
+				},
+			],
+		},
+	};
+}
+
 export function DashboardMetrics() {
 	const { fixture, previewMode, setPreviewMode, canManage } =
 		useDashboardPreview();
@@ -65,6 +104,7 @@ export function DashboardMetrics() {
 					export: null,
 				}))
 			: unavailableMetrics);
+	const displayMetrics = metrics.map(addAttendancePercentage);
 	return (
 		<section aria-labelledby="dashboard-kpi-title" className="space-y-3">
 			<div className="flex items-end justify-between gap-3">
@@ -99,7 +139,7 @@ export function DashboardMetrics() {
 				</p>
 			)}
 			<div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
-				{metrics.map((metric) => (
+				{displayMetrics.map((metric) => (
 					<DashboardMetricCard
 						key={metric.id}
 						metric={metric}
