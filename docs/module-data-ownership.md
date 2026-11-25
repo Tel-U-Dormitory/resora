@@ -13,8 +13,12 @@ public data API for domain consumers.
 | Attendance | attendance_sessions, qr_challenges, attendance_records, attendance_audit_logs |
 | Committee | committees, committee_divisions, committee_members |
 | Broadcast | broadcasts |
+| Pelanggaran | violations_reports, violations_audits, violations_upload_intents |
 
-Identity supplies minimal display names for cross-domain audit/Broadcast composition.
+Identity supplies minimal display names and active SR/building facts through its
+server-only public operations for cross-domain audit and module composition.
+Pelanggaran snapshots the confirmed building in its own report record, but does not
+copy SR profiles, building catalogs, or RBAC grants into Pelanggaran tables.
 An existing foreign key is not permission for a consumer to query the referenced
 table. Public operations accept an internal transaction and return materialized
 DTOs; schemas/table objects and arbitrary query predicates are not public contracts.

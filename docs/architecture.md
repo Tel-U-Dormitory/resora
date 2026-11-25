@@ -52,6 +52,7 @@ packages/api/src/
     attendance/               check-in/, sessions/, QR, manual records and reporting
     committee/                reusable committees, divisions and member assignments
     broadcast/                announcement lifecycle
+    violations/               violation reports, private KTM lifecycle, audits and source analytics API
     <owner>/tests/integration/ owner-local guarded PostgreSQL suites
 packages/db/src/               central Drizzle schema, FKs and immutable migration history
 packages/config/src/architecture.ts  executable boundary policy
@@ -66,6 +67,11 @@ packages/config/src/architecture.ts  executable boundary policy
 - Events owns `events`, invitation snapshots and event audits. Attendance owns sessions,
   QR challenges, attendance records and attendance audits. See the complete
   [table ownership matrix](module-data-ownership.md).
+- Pelanggaran owns `violations_reports`, `violations_audits`, and
+  `violations_upload_intents`. It consumes minimal Identity facts through
+  `identity.public.ts` (`getLiveOperationalIdentity`, active SR candidate and
+  active building readers); it must not query Identity tables directly or copy
+  SR/building/RBAC data into its own tables.
 - Events uses Identity/Committee public contracts. Attendance uses Events/Identity.
   Committee and Broadcast use Identity. Events never imports Attendance: the application
   layer coordinates both through named public operations. No generic SQL/CRUD port is
@@ -124,7 +130,7 @@ unused layers, an event bus or a package merely to match a template.
 | -------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Frontend             | **Next.js**, React, TypeScript                                    | Feature capabilities and explicit client/server entries implemented; Event screens decomposed.                                                                    |
 | Backend entrypoint   | **Express.js** with **Bun 1.3.13** runtime                        | Repo present; keep runtime bootstrap thin.                                                                                                           |
-| API boundary         | **tRPC** + Zod schema validation                                  | Five backend domains with public server contracts; protected tRPC transport remains compatible.                                                                                                    |
+| API boundary         | **tRPC** + Zod schema validation                                  | Existing domains have public server contracts. Pelanggaran exposes upload/create/list/detail/history/update/remove/statistics. |
 | Identity             | **Better Auth** + Username Plugin (`username=NIM` for SR)         | Phase 2B SR login/logout, live active-account enforcement and first-password-change gate tested locally; provisioning/recovery and pilot UAT pending. |
 | Primary database     | **External Supabase PostgreSQL (production for now)**                                   | Docker PostgreSQL is optional development-only; local manual SUPERADMIN backups remain available, disabled in production.                                                                      |
 | ORM & schema         | **Drizzle**                                                       | Central schema and immutable migration history. Follow-up validated the chain on scratch PostgreSQL; remote state is recorded separately in Setup. |
@@ -578,20 +584,35 @@ no mandatory service/repository layers or empty future consumers.
 #### Buckets, identity and access
 
 Use separate **private and public buckets per environment**, not private/public
-prefixes in one publicly exposed bucket. Names and production domain are TBD.
+prefixes in one publicly exposed bucket: `resora-private-dev`,
+`resora-public-dev`, `resora-private-prod`, and `resora-public-prod`. All four
+are created in APAC with the default jurisdiction and `Standard` storage class.
 Private contains upload staging, KTM and CMS originals/drafts; public contains
-only explicitly published, verified media. Disable public domains and `r2.dev`
-for private buckets. Production public delivery uses a reviewed custom domain,
-not the development `r2.dev` endpoint. See [R2 public access](https://developers.cloudflare.com/r2/buckets/public-buckets/).
+only explicitly published, verified media. Private buckets have no public URL.
+The public dev bucket uses Cloudflare's rate-limited `r2.dev` URL; production
+public delivery still requires a reviewed custom domain, not `r2.dev`. See
+[R2 public access](https://developers.cloudflare.com/r2/buckets/public-buckets/).
 
-Runtime uses bucket-scoped object credentials, not account administration
-credentials; environment credentials cannot access other environments. Secrets
-remain server-only. The optional server env schema defines account ID, scoped key,
-private/public bucket names and the public HTTPS base URL; configure these only in
-the server secret store. Cloudflare buckets, token, custom domain and per-environment
-CORS policy remain manual setup. Restrict browser CORS origins/methods/headers to
-actual clients; CORS is not authorization. See [R2 authentication](https://developers.cloudflare.com/r2/api/tokens/)
-and [CORS](https://developers.cloudflare.com/r2/buckets/cors/).
+Runtime uses separate bucket-scoped object credentials for dev and prod, not
+account administration credentials; environment credentials must not cross
+environments. Secrets remain server-only. The optional server env schema defines
+account ID, scoped key, private/public bucket names and the public HTTPS base URL;
+configure these only in the server secret store. The four buckets and their
+baseline CORS rules are provisioned. Dev CORS allows the local web origin
+(`http://localhost:3001`); production CORS allows the production web origin
+(`https://resora.telkomdormitory.com`). Private rules permit only the required
+upload/read methods; public rules are read-only. The private-prod `r2.dev` URL is
+disabled. S3 credentials still need to be created and entered into each server
+environment, and the production public custom domain remains pending because its
+Cloudflare DNS zone is not connected to the account. The public-prod bucket has no
+public endpoint until that domain is configured. Restrict browser CORS
+origins/methods/headers to actual clients; CORS is not authorization. See
+[R2 authentication](https://developers.cloudflare.com/r2/api/tokens/) and
+[CORS](https://developers.cloudflare.com/r2/buckets/cors/).
+
+R2's default rule aborts incomplete multipart uploads after seven days; no object
+expiry lifecycle rule or bucket lock rule is configured. Keep this cleanup default
+separate from the future business retention policy.
 
 The browser submits a purpose and resource identifier, never an arbitrary trusted
 bucket/key. Generate opaque keys without NIM, names or raw filenames. Metadata
@@ -607,20 +628,31 @@ status. A file ID or uploader identity alone grants no read/delete/attach access
    purpose, allowed format/count/size and quota before reserving a bounded upload
    intent in PostgreSQL. For a new report, bind it to the authorized creation
    intent until the report exists; no unrestricted attachment endpoint.
-2. Sign a short-lived PUT for a fresh key in private staging. Frontend uploads
-   bytes directly to R2, then requests completion using the intent ID. The signer
-   endpoint itself is rate-limited; declared limits do not prove actual size.
+2. Frontend compresses the selected image locally, then requests an upload intent.
+   Sign a short-lived PUT for a fresh private staging key with `If-None-Match: *`
+   included in the signature. The browser sends the exact signed Content-Type and
+   conditional header, uploads bytes directly to R2, then requests completion
+   using the intent ID. R2 CORS must allow `If-None-Match`; CORS is not auth.
+   The signer endpoint itself is rate-limited; declared limits do not prove actual
+   size. No image compression library is installed in the frontend, so use
+   `createImageBitmap` + canvas APIs rather than adding a dependency; recommend
+   orienting from image metadata, resizing to at most 1600x1600 and exporting
+   JPEG quality 0.82. Client settings improve upload size only; they are not
+   security guarantees.
 3. Completion rechecks live permissions and intent ownership/expiry. Read object
    metadata and bounded content; verify actual bytes/format, size and decodability
    against the purpose policy. Filename, browser MIME and HEAD alone are
    insufficient. Reject unsupported active content; apply resource limits to
    image decoding and import parsing. Numerical limits remain TBD.
-4. Signed PUT URLs are reusable until expiry. Never treat completion as revoking
-   that URL: read a bounded snapshot, validate those exact bytes, and write them
-   to a fresh server-only canonical key that was never signed for browser writes.
-   Do not validate staging then blindly copy a possibly changed object. Track
-   failed/unbound canonical writes for cleanup. Valid images may be normalized
-   and metadata stripped according to the reviewed processing policy.
+4. R2 evaluates `If-None-Match: *` atomically for PutObject, so reuse/replay cannot
+   replace an object while that key exists. Read a bounded snapshot, verify actual
+   size/type/signature and fully decode within pixel/dimension limits. Do not
+   trust client compression as validation. After validation, use R2 `CopyObject`
+   internally to a fresh server-only canonical key that was never signed for
+   browser writes; this avoids routing image bytes through the API server and
+   avoids a second client transfer. Bind only this canonical key. Invalid or
+   abandoned staging objects need cleanup after their presigned URL expires;
+   report KTM objects follow the separate business retention policy.
 5. In one DB transaction, consume the ready intent once, bind the canonical file
    to the authorized domain record and append the appropriate audit. Repeated
    requests return the recorded result; a file cannot be rebound to an unrelated
@@ -1072,3 +1104,77 @@ The browser retains the existing <=40 m accuracy ceiling and strict server radiu
 Only after existing account/invitation/session/current-QR verification, an accuracy/radius rejection attaches a dedicated AttendanceLocationError. The tRPC formatter exposes an explicit numeric projection only on attendance.checkIn/FORBIDDEN; no arbitrary error cause, stack, raw coordinates, QR or account identifiers are included. Distance and accuracy are rounded up to meters for diagnosis only; acceptance still uses the existing full-precision checks. Failed attempts create no attendance or location-history rows. The additive error metadata is also compatible with older clients, which can ignore it.
 
 The scanner keeps only the latest diagnosis in component memory: fixed outcome code, reported accuracy, sample age at submission, total acquisition elapsed time (including any background pause), and server distance/radius when provided. A collapsed copyable panel is available inside the result/error dialog, including manual text-copy fallback when Clipboard access is unavailable. Closing/resetting the scanner clears it. Users add device/iOS/browser details themselves; the app does not infer Precise Location state. Shared dialogs scroll within the dynamic viewport so expanded diagnosis remains accessible on small screens. No telemetry endpoint, localStorage/IndexedDB persistence, schema or remote mutation is added.
+
+### Pelanggaran — implementation baseline (2026-11-25)
+
+PM delegates non-business technical choices to Nafi/Codex; pending business rules
+remain in [the module PRD](modules/pelanggaran/prd.md#71-arahan-pm-terbaru--25-november-2026).
+P1-04 is one frontend Dashboard RESORA; backend Pelanggaran provides source
+statistics and has no dashboard UI or aggregation backend.
+
+- Schema owner `packages/db/src/schema/violations.ts` defines `violations_reports`,
+  `violations_audits`, and `violations_upload_intents`. Each table and related
+  index/constraint uses the `violations_` prefix in shared PostgreSQL `public`.
+  All three tables enable RLS. Audit updates/deletes/truncates are blocked by a
+  database trigger. Report mutations and audit rows share one transaction.
+- `packages/api/src/modules/violations` exposes upload intent, create, list,
+  detail, history, update, remove and statistics through `AppRouter`. Every request uses the live
+  Identity public contract. SR creation resolves one active assigned building;
+  an empty/ambiguous assignment is rejected. SYSTEM_ADMIN/SUPERADMIN without an
+  SR assignment can select an active building and confirm it. Identity exposes
+  narrow active-SR-candidate and active-building readers; Pelanggaran does not
+  read Identity tables directly or duplicate the reference data. Reports keep a
+  building snapshot for historical attribution.
+- R2 upload uses a 300-second presigned PUT and random temporary key bound to a
+  server-side upload intent and reporter. The browser compresses locally and sends
+  bytes directly to private R2. The URL signs `If-None-Match: *` and Content-Type;
+  R2 rejects a replay/overwrite with 412 while the object exists. Create checks
+  actual size <=10 MiB, stored content type, JPEG/PNG/WebP signature and full
+  decode, then copies the verified object internally in R2 to a final private key.
+  Decode is capped at 40 million pixels and each dimension at 12,000 pixels;
+  animated/multipage inputs are rejected. Backend still spends CPU on security
+  validation/decode, but does no image compression and does not transfer/re-upload
+  the image bytes. It commits report + create audit + consumed intent atomically.
+  Upload schemas reject unknown
+  fields, bound all text and paging values, reject control characters, and keep
+  user text plain; SQL uses parameterized Drizzle queries and clients must render
+  returned text as text (never raw HTML). Unused temp objects are not purged
+  automatically. Soft-deleted report data stays available for
+  audit; active SR users see only the deletion tombstone, while SUPERADMIN can
+  inspect deleted details and full audit. The KTM object remains in R2 through
+  the start of the next SR term; post-transition purge/other PII retention and
+  orphan cleanup policy remain open. KTM download is signed for 60 seconds only
+  after live access check. Backend decoding is security validation, not image
+  re-encoding or compression.
+- Three additive migrations are applied to the Development database; a read-only
+  postflight found zero pending migrations and confirmed all three tables, RLS,
+  audit triggers and constraints with zero rows. No Production environment was
+  accessed. The direct-upload conditional header and full synthetic DB+R2 flow
+  were tested against Development; fixtures rolled back and uploaded test objects
+  were cleaned. The Development bucket CORS configuration could not be inspected
+  with storage-scoped credentials (`AccessDenied`); the bucket owner must confirm
+  that the web origin may send `If-None-Match` before browser UAT.
+- Statistics count active reports by inclusive incident-date range and daily
+  bucket, grouped by recorded building snapshot. `violations.list` pages at 20 by
+  default and caps at 50. Edit is owner/SUPERADMIN-only, requires a reason and
+  expected version, allows only the PM-approved fields and optional KTM replacement,
+  and appends before/after audit in the same transaction. Old KTM objects are retained.
+  Deleted records cannot be edited/restored. Retention after the next SR term and
+  physical purge authority remain to be defined.
+
+Local migrations are generated in `packages/db/src/migrations` and have not
+been applied. Development DB `SELECT 1` succeeded through `apps/server/.env`.
+The read-only target-aware migration preflight stopped safely during TLS
+verification with `SELF_SIGNED_CERT_IN_CHAIN`; a verified CA certificate for
+the Development Supabase project is needed before preflight can pass. The user
+has authorized Development DB writes, so continue the documented migration
+workflow after verifying that CA and target. Production is untouched. A
+synthetic roundtrip against the configured Development R2 buckets
+`resora-private-dev`/`resora-public-dev` passed signed PUT, metadata, read and
+signed GET; the test object was deleted. No credentials or signed URLs were
+exposed.
+
+Checks completed: targeted Biome, TypeScript checks for API/storage/DB packages,
+`bun test packages/api/src/modules/violations packages/db/src/schema/violations.test.ts`
+(15 passing across six files). DB schema integration, R2 compensation when a DB
+commit fails, frontend integration, UAT and release remain unverified.
