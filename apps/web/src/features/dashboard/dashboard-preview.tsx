@@ -101,11 +101,28 @@ export function DashboardPreview({
 											["500", "500 — gagal memuat"],
 											["503", "503 — layanan tidak tersedia"],
 											["timeout", "Timeout"],
-										].map(([value, label]) => (
-											<option key={value} value={value}>
-												{label}
-											</option>
-										))}
+										]
+											.filter(([value]) => {
+												const feed = id === "broadcasts" || id === "activities";
+												if (feed)
+													return [
+														"ready",
+														"slow",
+														"empty",
+														"401",
+														"403",
+														"429",
+														"500",
+														"503",
+														"timeout",
+													].includes(value);
+												return value !== "not_assessed" || id === "assessment";
+											})
+											.map(([value, label]) => (
+												<option key={value} value={value}>
+													{label}
+												</option>
+											))}
 									</select>
 								</label>
 							))}

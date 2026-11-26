@@ -108,4 +108,6 @@ export function dashboardFixturesFor(
 		: { personal: dashboardFixtures.personal };
 }
 
-export const dashboardStateFixtures = states;
+export const dashboardStateFixtures = z
+	.record(z.string(), dashboardFixtureSchema.shape.metrics.element.shape.state)
+	.parse(states);

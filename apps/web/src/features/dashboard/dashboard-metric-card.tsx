@@ -44,7 +44,10 @@ export function DashboardMetricCard({
 	metric: DashboardMetric;
 	preview?: boolean;
 }) {
-	const { state } = metric;
+	const state: DashboardMetricState =
+		metric.id === "cleanliness"
+			? { kind: "coming_soon", message: "Segera hadir" }
+			: metric.state;
 	const Icon = icons[metric.id];
 	const ready = state.kind === "ready" || state.kind === "ready_summary";
 	return (
@@ -121,20 +124,24 @@ export function DashboardMetricCard({
 						{ready && state.note && (
 							<p className="text-muted-foreground text-xs">{state.note}</p>
 						)}
-						{metric.export && preview && (
-							<>
-								<button
-									type="button"
-									disabled
-									className="min-h-11 rounded-lg border border-border px-3 text-sm"
-								>
-									Ekspor (simulasi)
-								</button>
-								<p className="text-muted-foreground text-xs">
-									Ekspor belum tersedia pada preview.
-								</p>
-							</>
-						)}
+						{metric.export &&
+							preview &&
+							ready &&
+							metric.period.startsAt &&
+							metric.period.endsAt && (
+								<>
+									<button
+										type="button"
+										disabled
+										className="min-h-11 rounded-lg border border-border px-3 text-sm"
+									>
+										Ekspor (simulasi)
+									</button>
+									<p className="text-muted-foreground text-xs">
+										Ekspor belum tersedia pada preview.
+									</p>
+								</>
+							)}
 					</div>
 				)}
 			</CardContent>

@@ -282,3 +282,32 @@ test("all approved metric display states retain their distinct meaning", () => {
 		expect(markup).not.toContain('class="resora-metric-value"');
 	}
 });
+
+test("unavailable, forbidden and missing-period cards never expose export controls", () => {
+	const metric = dashboardFixtures.management.metrics[0];
+	for (const kind of [
+		"empty",
+		"not_assessed",
+		"missing_period",
+		"unavailable",
+		"forbidden",
+		"error",
+		"stale",
+	] as const) {
+		const markup = renderToStaticMarkup(
+			jsxRuntime.jsx(DashboardMetricCard, {
+				metric: { ...metric, state: { kind, message: "State" } },
+				preview: true,
+			}),
+		);
+		expect(markup).not.toContain("<button");
+	}
+	const cleanliness = { ...metric, id: "cleanliness" as const };
+	const markup = renderToStaticMarkup(
+		jsxRuntime.jsx(DashboardMetricCard, { metric: cleanliness, preview: true }),
+	);
+	expect(markup).toContain("Segera hadir");
+	expect(markup).not.toContain("<button");
+	expect(markup).not.toContain("<dl");
+	expect(markup).not.toContain("<a ");
+});

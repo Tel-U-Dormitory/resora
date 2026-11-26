@@ -130,3 +130,19 @@ test("broadcast preview uses latest active synthetic summaries and excludes expi
 	expect(items.map((item) => item.id)).toEqual(["fixture-broadcast-1"]);
 	expect((await requestDashboardBroadcasts(fixture, "empty")).length).toBe(0);
 });
+
+test("production transport bundle excludes JSON fixture payloads", async () => {
+	const result = await Bun.build({
+		entrypoints: [
+			new URL("./dashboard-preview-api.ts", import.meta.url).pathname,
+		],
+		target: "browser",
+		define: { "process.env.NODE_ENV": JSON.stringify("production") },
+		minify: true,
+	});
+	expect(result.success).toBe(true);
+	const code = await result.outputs[0].text();
+	expect(code).not.toContain("Pengurus sintetis");
+	expect(code).not.toContain("fixture-management-activity");
+	expect(code).not.toContain("Belum dinilai.");
+});

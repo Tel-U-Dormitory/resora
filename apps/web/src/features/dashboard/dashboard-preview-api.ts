@@ -81,7 +81,14 @@ export async function requestDashboardMetric(
 			"stale",
 		].includes(scenario)
 	) {
-		const { dashboardStateFixtures } = await import("./dashboard-fixtures");
+		if (
+			process.env.NODE_ENV !== "development" &&
+			process.env.NODE_ENV !== "test"
+		)
+			throw new Error("Dashboard preview is disabled in production");
+		const { default: dashboardStateFixtures } = await import(
+			"./fixtures/states.json"
+		);
 		// Explicit cases keep domain payloads distinct from transport failures.
 		switch (scenario) {
 			case "empty":
