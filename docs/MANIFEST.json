@@ -1,8 +1,7 @@
 {
 	"project": "RESORA (working name)",
 	"created_on": "2026-10-10",
-	"type": "Documentation sources only; not a scaffolded code repository",
-	"target_pilot": "2026-10-18",
+	"type": "RESORA application monorepo; this file indexes selected product/architecture/documentation baselines.",
 	"files": [
 		"AGENTS.md",
 		"docs/architecture.md",
@@ -17,6 +16,13 @@
 		"docs/modules/need-001/acceptance-tests.md",
 		"docs/modules/need-001/prd.md",
 		"docs/prd.md",
-		"docs/setup.md"
+		"docs/setup.md",
+		"DESIGN.md",
+		"docs/design-system.md",
+		"docs/design-frontend-guidelines.md",
+		"docs/design/interaction-spec.md",
+		"docs/design/component-catalog.md",
+		"docs/design/verification.md",
+		"docs/design/REFACTOR-FRONTEND-HANDOFF.md"
 	]
 }

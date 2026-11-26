@@ -10,6 +10,7 @@ Read only the documents relevant to the task, then inspect the actual code and c
 | ----------------------------------------- | -------------------------------------------------------------------------------------------- |
 | `docs/prd.md`                             | Product goals, scope, business rules, and approval boundaries                                |
 | `docs/modules/`                           | Module-specific requirements, workflows, and acceptance criteria                             |
+| `docs/design-system.md`                  | Canonical UI/UX and frontend design rules, linked specifications and verification gates       |
 | `docs/architecture.md`                    | Technical architecture, code organization, integration boundaries, and engineering standards |
 | `docs/decisions/`                         | Architecture decisions and their rationale; check each decision's status                     |
 | `docs/setup.md` and repository manifests  | Available commands, environment setup, and tooling                                           |
@@ -42,7 +43,7 @@ Read only the documents relevant to the task, then inspect the actual code and c
 ## 4. Verification and quality gates
 
 - **Default to command-line verification:** focused unit/integration tests, typecheck, relevant lint, and build as appropriate to the change.
-- Do **not** launch Chromium, browser automation, computer-use, screenshots, or visual UI testing unless the user explicitly requests them. CLI verification is not a substitute for separately required manual UAT or release sign-off.
+- **Standing PM authorization (2026-11-26):** browser automation, screenshots and interaction checks on local UI with synthetic data are authorized and required after each visually impactful feature, before continuing another visual feature. Follow the verification contract linked from `docs/design-system.md`. This does not authorize remote mutations or replace manual UAT/release sign-off. Documentation-only changes do not require launching the app.
 - Inspect scripts and flags before running commands; distinguish read-only checks from tools that automatically format, modify, migrate, seed, or deploy.
 - Use local or otherwise explicitly approved test environments and synthetic data. Never run destructive validation against a remote environment by default.
 - Test relevant positive and negative paths, especially security, authorization, state transitions, and transactional integrity when touched.
@@ -59,7 +60,14 @@ Read only the documents relevant to the task, then inspect the actual code and c
 6. **Use external research only when needed.** Prefer repository documentation and local evidence; consult external references for genuine unknowns or version-sensitive blockers.
 7. **Stop at approval gates.** Do not infer approval from access to credentials, tools, or environments.
 
-## 6. Completion report
+## 6. Frontend design and UX
+
+- For frontend design or implementation work, follow [`docs/design-frontend-guidelines.md`](docs/design-frontend-guidelines.md) and the approved visual system in [`docs/design-system.md`](docs/design-system.md).
+- Automatically use `ui-ux-pro-max` and `design-taste-frontend` for relevant frontend design/build work. Apply `uxui-principles` when shaping or evaluating flows and interaction decisions, `ux-copy` when writing or reviewing interface text, and `review-ux-ui` when evaluating usability or accessibility. Load only the skills relevant to the work; the project guidance defines when each applies.
+- Project requirements, existing components, accessibility, and approved design decisions take precedence over generic skill examples. Do not invent user-facing behavior or content to satisfy a skill.
+- Local browser verification follows the standing authorization in §4 and the canonical design system. Old per-task explicit-browser-request instructions are superseded for local RESORA UI checks.
+
+## 7. Completion report
 
 Conclude with a short, evidence-based report containing:
 

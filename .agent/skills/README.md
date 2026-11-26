@@ -15,18 +15,16 @@ panduan, bukan sertifikasi keamanan seluruh skrip atau pengukuran efektivitas sk
 
 ## Cara memilih panduan
 
-- UI operasional: `ui-ux-pro-max`, `mobile-native`, lalu skill Next/React/shadcn/CSS yang relevan.
+- UI operasional: `ui-ux-pro-max` + `design-taste-frontend`; tambahkan `uxui-principles` untuk flow/usability, `ux-copy` untuk copy, `review-ux-ui` untuk review aksesibilitas sesuai [routing pusat](../../docs/design-frontend-guidelines.md).
 - Backend: `nodejs-backend-patterns`; sesuaikan contoh dengan kontrak dan policy yang aktual.
 - Implementasi dan review: `ponytail`, `ponytail-review`, `ponytail-audit`, `ponytail-debt` sesuai tugas.
 - Keamanan: `security-audit`; audit lengkap hanya pada permintaan yang sesuai.
 - Konsistensi visual dari source: `extract-design-system`; tidak perlu browser/Stitch untuk tahap dokumen.
-- QA browser yang diminta: `playwright`. Ini CLI interaksi browser, bukan runner suite E2E persisten.
+- QA browser UI lokal: `playwright` sesuai [otorisasi tetap dan gate RESORA](../../docs/design/verification.md). Ini CLI interaksi browser, bukan runner suite E2E persisten.
 - Landing publik kreatif: `awwwards` bila brief meminta; QA visual/skor: `jury` bila diminta.
 
-Muat hanya skill yang relevan. Memasang skill tidak menjalankan workflow atau
-memberikan otorisasi untuk browser, perubahan eksternal, database, atau deployment.
+Muat hanya skill yang relevan. Memasang skill tidak menjalankan workflow atau memberi otorisasi untuk perubahan eksternal, database, atau deployment. PM memberi otorisasi tetap untuk browser/screenshot UI lokal dengan data sintetis; gate pusat mewajibkan verifikasi setiap perubahan visual.
 `AGENTS.md`, persetujuan PRD, Architecture, dan konvensi aktual tetap diikuti.
-Browser/screenshot/visual testing hanya atas permintaan eksplisit pengguna.
 Pakai data sintetis dan lingkungan lokal/disetujui. Tidak ada package/browser
 baru yang dipasang dalam peninjauan ini. Manual UAT dan release sign-off terpisah.
 
@@ -42,7 +40,7 @@ Sumber di `agents/skills/` tidak diedit. Pada 8 skill tambahan:
 
 - `stitch-extract-design-md` disalin sebagai `extract-design-system`; nama frontmatter dibuat portabel.
 - Path Playwright yang semula menunjuk `.agents/skills/` menjadi placeholder direktori skill aktual.
-- Trigger Awwwards/Jury/Playwright diperjelas agar sesuai scope dan aturan browser RESORA.
+- Trigger Awwwards/Jury/Playwright diperjelas agar sesuai scope dan otorisasi/gate browser RESORA.
 - Catatan integrasi menjaga PRD, batas modul, format pelaporan, dan pemisahan review/release.
 - `argument-hint` pada Ponytail tidak disalin ke frontmatter lokal agar lolos validator skill yang tersedia.
 - File pendukung disalin; cache Python dan node_modules tidak disalin.
@@ -69,10 +67,10 @@ Sumber di `agents/skills/` tidak diedit. Pada 8 skill tambahan:
 | `jury` | Ditambahkan, bersyarat | QA visual berbasis bukti saat diminta; skor bukan bukti fungsi, keamanan, atau release readiness. |
 | `laravel-best-practices` | Tidak sesuai stack | PHP/Laravel/Eloquent tidak digunakan. |
 | `laravel-specialist` | Tidak sesuai stack | Laravel/Sanctum/Horizon/Livewire tidak digunakan. |
-| `mobile-native` | Terpasang | Relevan untuk QR scan dan formulir mobile; pengujian perangkat/browser tetap atas permintaan. |
+| `mobile-native` | Terpasang | Relevan untuk QR scan dan formulir mobile; pengujian perangkat nyata mengikuti matriks/gate UAT, browser lokal mengikuti otorisasi tetap PM. |
 | `next-best-practices` | Terpasang | Sesuai Next.js App Router dan batas server/client. |
 | `nodejs-backend-patterns` | Terpasang | Express/Bun; contoh JWT, repository, atau REST bukan mandat mengganti Better Auth/tRPC/Drizzle. |
-| `playwright` | Ditambahkan, bersyarat | QA alur UI/browser saat diminta eksplisit; path wrapper diperbaiki, tanpa menjalankan browser. |
+| `playwright` | Ditambahkan, bersyarat | QA alur UI/browser lokal dengan data sintetis di setiap perubahan visual; uji browser/device luar cakupan lokal mengikuti gate UAT. |
 | `ponytail` | Ditambahkan | Implementasi sederhana yang tetap memenuhi seluruh acceptance criteria. |
 | `ponytail-audit` | Ditambahkan | Audit kualitas repo dengan cakupan dan batas verifikasi yang dinyatakan. |
 | `ponytail-debt` | Ditambahkan | Inventaris shortcut teknis; abaikan contoh pada folder skill. |
