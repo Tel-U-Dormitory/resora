@@ -4,6 +4,7 @@
 @import "./styles/workspace-scanner.css";
 @import "./styles/workspace-dashboard.css";
 @import "./styles/workspace-inbox.css";
+@import "./styles/workspace-personal.css";
 
 .resora-scan-line {
 	animation: resora-scan-line 2.4s ease-in-out infinite;

@@ -11,9 +11,10 @@ import {
 	Clock3,
 	History,
 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { trpc } from "@/utils/trpc";
+import { getPersonalTrpc } from "@/utils/trpc";
 import {
 	eventErrorMessage,
 	formatEventSchedule,
@@ -29,20 +30,40 @@ const checkInDateFormatter = new Intl.DateTimeFormat("id-ID", {
 	timeZone: "Asia/Jakarta",
 });
 
-export default function OwnHistory() {
+export default function OwnHistory({ userId }: { userId: string }) {
 	const [offset, setOffset] = useState(0);
+	const options = getPersonalTrpc(userId).attendance.ownHistory.queryOptions({
+		offset,
+		limit: 25,
+	});
 	const history = useQuery({
-		...trpc.attendance.ownHistory.queryOptions({ offset, limit: 25 }),
+		...options,
 		retry: false,
+		staleTime: 0,
+		refetchOnMount: "always",
+		placeholderData: undefined,
+		meta: { errorHandledLocally: true },
 	});
 	return (
-		<section className="resora-page space-y-6">
+		<section className="resora-page resora-history space-y-6">
+			<Link
+				href="/profile"
+				className="focus-ring inline-flex min-h-11 items-center rounded-lg py-2 font-semibold text-primary text-sm"
+			>
+				Kembali ke profil
+			</Link>
 			<div className="space-y-2">
 				<h1 className="font-bold text-2xl tracking-tight">Riwayat kehadiran</h1>
 				<p className="text-muted-foreground text-sm">
-					Lihat status dan waktu kehadiran Anda di setiap kegiatan.
+					Lihat status dan waktu kehadiran kamu di setiap kegiatan.
 				</p>
 			</div>
+			{history.fetchStatus === "paused" && (
+				<p role="status">
+					Koneksi terputus. Riwayat yang sudah dimuat bisa belum terbaru.
+					Sambungkan internet untuk memperbarui.
+				</p>
+			)}
 			{history.isPending && (
 				<div role="status" className="space-y-3">
 					<span className="sr-only">Memuat riwayat…</span>
@@ -68,7 +89,7 @@ export default function OwnHistory() {
 						/>
 						<h2 className="font-semibold">Belum ada riwayat kegiatan</h2>
 						<p className="text-muted-foreground text-sm">
-							Event yang mengundang Anda akan tampil di sini beserta status
+							Kegiatan yang mengundang kamu akan tampil di sini beserta status
 							kehadirannya.
 						</p>
 					</CardContent>
@@ -79,22 +100,17 @@ export default function OwnHistory() {
 					className="resora-panel gap-0 py-0"
 					aria-busy={history.isFetching}
 				>
-					<div className="hidden grid-cols-[minmax(0,1fr)_220px_130px] gap-6 border-border border-b bg-muted/30 px-6 py-3 font-medium text-muted-foreground text-xs lg:grid">
-						<span>Kegiatan</span>
-						<span>Check-in · WIB</span>
-						<span>Status</span>
-					</div>
 					<CardContent className="divide-y divide-border px-4 sm:px-6">
 						{history.data?.items.map((item) => (
 							<article
 								key={item.event.id}
-								className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-4 py-5 sm:py-6 lg:grid-cols-[minmax(0,1fr)_220px_130px] lg:items-center lg:gap-6"
+								className="resora-history-row grid gap-4 py-5"
 							>
 								<div className="min-w-0 space-y-2.5">
 									<h2 className="break-words font-semibold text-base leading-snug">
 										{item.event.title}
 									</h2>
-									<p className="flex items-start gap-2 text-muted-foreground text-xs leading-relaxed sm:text-sm">
+									<p className="flex items-start gap-2 text-muted-foreground text-sm leading-relaxed sm:text-sm">
 										<CalendarDays
 											className="mt-0.5 size-4 shrink-0"
 											aria-hidden="true"
@@ -107,10 +123,10 @@ export default function OwnHistory() {
 										</span>
 									</p>
 								</div>
-								<div className="col-start-2 row-start-1 self-start lg:col-start-3 lg:self-center">
+								<div className="resora-history-status">
 									<StatusBadge status={item.presence} />
 								</div>
-								<div className="col-span-2 flex items-start gap-3 rounded-xl bg-muted/40 p-3.5 lg:col-span-1 lg:col-start-2 lg:row-start-1 lg:bg-transparent lg:p-0">
+								<div className="resora-history-time flex items-start gap-3 rounded-xl bg-muted p-3">
 									{item.attendanceAt ? (
 										<CheckCheck
 											className="mt-0.5 size-4 shrink-0 text-success"
@@ -124,9 +140,7 @@ export default function OwnHistory() {
 									)}
 									<div className="min-w-0 space-y-1">
 										<p className="text-sm">
-											<span className="text-muted-foreground lg:sr-only">
-												Check-in{" "}
-											</span>
+											<span className="text-muted-foreground">Check-in </span>
 											{item.attendanceAt ? (
 												<>
 													<time
@@ -146,7 +160,7 @@ export default function OwnHistory() {
 											)}
 										</p>
 										{item.attendanceAt && (
-											<p className="text-muted-foreground text-xs">
+											<p className="text-muted-foreground text-sm">
 												{checkInDateFormatter.format(
 													new Date(item.attendanceAt),
 												)}
@@ -154,10 +168,12 @@ export default function OwnHistory() {
 										)}
 										{item.timingClass && (
 											<p
-												className={`text-xs ${item.timingClass === "LATE" ? "text-warning" : "text-muted-foreground"}`}
+												className={`text-sm ${item.timingClass === "LATE" ? "text-warning" : "text-muted-foreground"}`}
 											>
 												{item.timingClass === "LATE"
-													? `Terlambat ${item.lateMinutes} menit setelah toleransi`
+													? item.lateMinutes == null
+														? "Terlambat; durasi belum tersedia"
+														: `Terlambat ${item.lateMinutes} menit setelah toleransi`
 													: item.timingClass === "EARLY"
 														? "Datang lebih awal"
 														: "Tepat waktu"}
@@ -165,41 +181,70 @@ export default function OwnHistory() {
 										)}
 									</div>
 								</div>
+								<details className="resora-history-details border-border border-t pt-2">
+									<summary className="focus-ring cursor-pointer rounded-lg py-2 font-semibold text-sm">
+										Detail kehadiran
+									</summary>
+									<dl className="mt-2 grid gap-3 text-sm">
+										<div>
+											<dt className="text-muted-foreground">Status kegiatan</dt>
+											<dd className="mt-1">
+												<StatusBadge status={item.event.status} />
+											</dd>
+										</div>
+										<div>
+											<dt className="text-muted-foreground">
+												Metode pencatatan
+											</dt>
+											<dd className="mt-1">
+												{item.source === "QR"
+													? "Scan QR"
+													: item.source === "MANUAL"
+														? "Dicatat manual"
+														: "Belum tercatat"}
+											</dd>
+										</div>
+									</dl>
+								</details>
 							</article>
 						))}
 					</CardContent>
 				</Card>
 			)}
 
-			{(offset > 0 || history.data?.nextOffset != null) && (
-				<nav
-					aria-label="Halaman riwayat"
-					className="flex flex-wrap items-center justify-between gap-3 border-border border-t pt-4"
-				>
-					<p className="text-muted-foreground text-xs">
-						Halaman {Math.floor(offset / 25) + 1}
-					</p>
-					<div className="flex gap-2">
-						<Button
-							variant="outline"
-							disabled={offset === 0 || history.isFetching}
-							onClick={() => setOffset(Math.max(0, offset - 25))}
-						>
-							<ChevronLeft size={16} aria-hidden="true" /> Sebelumnya
-						</Button>
-						<Button
-							variant="outline"
-							disabled={history.data?.nextOffset == null || history.isFetching}
-							onClick={() => {
-								if (history.data?.nextOffset != null)
-									setOffset(history.data.nextOffset);
-							}}
-						>
-							Berikutnya <ChevronRight size={16} aria-hidden="true" />
-						</Button>
-					</div>
-				</nav>
-			)}
+			{!history.error &&
+				!history.isPending &&
+				(offset > 0 || history.data?.nextOffset != null) && (
+					<nav
+						aria-label="Halaman riwayat"
+						className="flex flex-wrap items-center justify-between gap-3 border-border border-t pt-4"
+					>
+						<p className="text-muted-foreground text-sm">
+							Halaman {Math.floor(offset / 25) + 1}
+						</p>
+						<div className="flex gap-2">
+							<Button
+								variant="outline"
+								disabled={offset === 0 || history.isFetching}
+								onClick={() => setOffset(Math.max(0, offset - 25))}
+							>
+								<ChevronLeft size={16} aria-hidden="true" /> Sebelumnya
+							</Button>
+							<Button
+								variant="outline"
+								disabled={
+									history.data?.nextOffset == null || history.isFetching
+								}
+								onClick={() => {
+									if (history.data?.nextOffset != null)
+										setOffset(history.data.nextOffset);
+								}}
+							>
+								Berikutnya <ChevronRight size={16} aria-hidden="true" />
+							</Button>
+						</div>
+					</nav>
+				)}
 		</section>
 	);
 }
