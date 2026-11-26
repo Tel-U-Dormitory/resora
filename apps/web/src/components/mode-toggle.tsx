@@ -10,7 +10,7 @@ import {
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 
-export function ModeToggle() {
+export function ModeToggle({ allowSystem = true }: { allowSystem?: boolean }) {
 	const { setTheme } = useTheme();
 
 	return (
@@ -35,9 +35,11 @@ export function ModeToggle() {
 				<DropdownMenuItem onClick={() => setTheme("dark")}>
 					Gelap
 				</DropdownMenuItem>
-				<DropdownMenuItem onClick={() => setTheme("system")}>
-					Ikuti sistem
-				</DropdownMenuItem>
+				{allowSystem && (
+					<DropdownMenuItem onClick={() => setTheme("system")}>
+						Ikuti sistem
+					</DropdownMenuItem>
+				)}
 			</DropdownMenuContent>
 		</DropdownMenu>
 	);

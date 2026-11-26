@@ -61,7 +61,7 @@ export function AppShell({
 						<p className="min-w-0 flex-1 truncate font-semibold text-sm">
 							{sectionTitle}
 						</p>
-						<ModeToggle />
+						<ModeToggle allowSystem={false} />
 					</header>
 					<main
 						id="workspace-content"

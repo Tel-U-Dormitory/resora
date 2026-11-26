@@ -27,3 +27,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Plus Jakarta Sans — foundation 1.1 (26 November 2026)
+
+Workspace typography uses the unmodified variable font from [Google Fonts](https://github.com/google/fonts/tree/main/ofl/plusjakartasans), copyright 2020 The Plus Jakarta Sans Project Authors, under SIL Open Font License 1.1. The font and full license are stored in `apps/web/src/styles/fonts/`. Next.js `next/font/local` serves the asset locally with `display: swap`, weights 400–700 and system fallback. Public pages retain Geist/Geist Mono. No font or icon package was added; Lucide remains the icon family. The local asset avoids build-time Google downloads for workspace typography.
