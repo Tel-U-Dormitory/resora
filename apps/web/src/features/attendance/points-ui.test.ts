@@ -639,3 +639,87 @@ function requiredNode<T>(value: T | undefined): T {
 	if (value === undefined) throw Error("FIXTURE_VALUE_REQUIRED");
 	return value;
 }
+
+test("event list searches its authorized response and paginates without changing server visibility", () => {
+	const state: unknown[] = [];
+	let cursor = 0;
+	const inputs: unknown[] = [];
+	const module = load("../events/event-list.tsx", {
+		react: {
+			useState: (initial: unknown) => {
+				const i = cursor++;
+				if (!(i in state)) state[i] = initial;
+				return [
+					state[i],
+					(value: unknown) => {
+						state[i] = value;
+					},
+				];
+			},
+		},
+		"next/navigation": {
+			useSearchParams: () => new URLSearchParams("view=manage"),
+		},
+		"@tanstack/react-query": {
+			useQuery: () => ({
+				data: {
+					canManage: true,
+					isSuperadmin: false,
+					events: Array.from({ length: 27 }, (_, i) => ({
+						id: String(i),
+						title: `Kegiatan ${i}`,
+						description: i === 26 ? "Pencarian khusus" : "Informasi",
+						status: "PUBLISHED",
+						visibility: "VISIBLE",
+						startsAt: "2026-11-26T00:00:00Z",
+						endsAt: "2026-11-26T01:00:00Z",
+					})),
+				},
+			}),
+		},
+		"@/utils/trpc": {
+			trpc: {
+				attendance: {
+					list: {
+						queryOptions: (input: unknown) => {
+							inputs.push(input);
+							return {};
+						},
+					},
+				},
+			},
+		},
+		"../../components/event-feedback": {
+			formatEventSchedule: () => "Jadwal WIB",
+			StatusBadge: "StatusBadge",
+		},
+	});
+	const render = () => {
+		cursor = 0;
+		return (module.default as (props: object) => Node)({ canReadPoints: true });
+	};
+	let tree = render();
+	expect(nodes(tree).filter((node) => node.type === "article")).toHaveLength(
+		25,
+	);
+	const next = nodes(tree).find(
+		(node) => node.type === "Button" && text(node) === "Berikutnya",
+	);
+	if (!next) throw Error("Missing next");
+	(next.props.onClick as () => void)();
+	tree = render();
+	expect(nodes(tree).filter((node) => node.type === "article")).toHaveLength(2);
+	const search = nodes(tree).find((node) => node.props.id === "event-search");
+	if (!search) throw Error("Missing search");
+	(search.props.onChange as (event: unknown) => void)({
+		target: { value: "KHUSUS" },
+	});
+	tree = render();
+	expect(nodes(tree).filter((node) => node.type === "article")).toHaveLength(1);
+	expect(text(tree)).toContain("Kegiatan 26");
+	expect(
+		inputs.every(
+			(input) => JSON.stringify(input) === '{"visibility":"NON_ARCHIVED"}',
+		),
+	).toBe(true);
+});

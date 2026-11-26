@@ -1,6 +1,7 @@
 "use client";
 
 import { Card, CardContent } from "@resora/ui/components/card";
+import { Input } from "@resora/ui/components/input";
 import { Select } from "@resora/ui/components/select";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, CalendarDays, Plus } from "lucide-react";
@@ -30,6 +31,8 @@ export default function EventList({
 	canReadPoints?: boolean;
 } = {}) {
 	const params = useSearchParams();
+	const [search, setSearch] = useState("");
+	const [page, setPage] = useState(0);
 	const [visibility, setVisibility] =
 		useState<(typeof visibilityFilters)[number][0]>("NON_ARCHIVED");
 	const query = useQuery({
@@ -41,23 +44,34 @@ export default function EventList({
 		meta: { errorHandledLocally: true },
 	});
 	const management = query.data?.canManage && params.get("view") === "manage";
-	const events =
+	const eligibleEvents =
 		query.data?.events.filter(
 			(event) =>
 				management ||
 				(event.status === "PUBLISHED" && event.visibility === "VISIBLE"),
 		) ?? [];
+	const keyword = search.trim().toLocaleLowerCase("id-ID");
+	const matching = eligibleEvents.filter(
+		(event) =>
+			!keyword ||
+			`${event.title} ${event.description ?? ""}`
+				.toLocaleLowerCase("id-ID")
+				.includes(keyword),
+	);
+	const lastPage = Math.max(0, Math.ceil(matching.length / 25) - 1);
+	const currentPage = Math.min(page, lastPage);
+	const events = matching.slice(currentPage * 25, (currentPage + 1) * 25);
 	return (
-		<section className="resora-page space-y-6">
+		<section className="resora-page resora-events resora-events-list space-y-6">
 			<div className="flex flex-wrap items-start justify-between gap-4">
 				<div className="space-y-2">
 					<h1 className="font-bold text-2xl tracking-tight">
-						{management ? "Kelola event internal" : "Event internal SR"}
+						{management ? "Kelola kegiatan" : "Kegiatan"}
 					</h1>
 					<p className="text-muted-foreground text-sm">
 						{management
 							? "Atur kegiatan dan kehadiran Senior Resident."
-							: "Kegiatan yang mengundang Anda."}
+							: "Kegiatan yang mengundang kamu."}
 					</p>
 				</div>
 				{management && (
@@ -88,9 +102,10 @@ export default function EventList({
 						id="event-visibility"
 						value={visibility}
 						disabled={query.isFetching}
-						onChange={(event) =>
-							setVisibility(event.target.value as typeof visibility)
-						}
+						onChange={(event) => {
+							setVisibility(event.target.value as typeof visibility);
+							setPage(0);
+						}}
 					>
 						{visibilityFilters.map(([value, label]) => (
 							<option key={value} value={value}>
@@ -99,6 +114,23 @@ export default function EventList({
 						))}
 					</Select>
 				</label>
+			)}
+			<label htmlFor="event-search" className="block space-y-2 text-sm">
+				Cari judul atau deskripsi kegiatan
+				<Input
+					id="event-search"
+					type="search"
+					value={search}
+					onChange={(event) => {
+						setSearch(event.target.value);
+						setPage(0);
+					}}
+				/>
+			</label>
+			{query.fetchStatus === "paused" && (
+				<p role="status">
+					Koneksi terputus. Daftar yang sudah dimuat bisa belum terbaru.
+				</p>
 			)}
 			{(query.isPending || query.isPlaceholderData) && (
 				<div role="status" className="grid gap-3">
@@ -142,20 +174,26 @@ export default function EventList({
 							<span className="rounded-2xl bg-primary-soft p-4 text-primary">
 								<CalendarDays size={28} aria-hidden="true" />
 							</span>
-							<h2 className="font-semibold text-lg">Belum ada event</h2>
+							<h2 className="font-semibold text-lg">
+								{keyword
+									? "Tidak ada kegiatan yang cocok"
+									: "Belum ada kegiatan"}
+							</h2>
 							<p className="max-w-md text-muted-foreground text-sm">
-								{management && visibility !== "NON_ARCHIVED"
-									? "Tidak ada event yang sesuai dengan filter visibilitas ini."
-									: management
-										? "Mulai dengan membuat draft event, lalu pilih peserta yang ingin diundang."
-										: "Event akan muncul di sini setelah Anda menerima undangan."}
+								{keyword
+									? "Ubah kata pencarian atau hapus pencarian untuk melihat daftar semula."
+									: management && visibility !== "NON_ARCHIVED"
+										? "Tidak ada event yang sesuai dengan filter visibilitas ini."
+										: management
+											? "Mulai dengan membuat draft event, lalu pilih peserta yang ingin diundang."
+											: "Event akan muncul di sini setelah Anda menerima undangan."}
 							</p>
 						</CardContent>
 					</Card>
 				)}
 			{!query.error && !query.isPlaceholderData && events.length > 0 && (
 				<Card className="resora-panel gap-0 py-0" aria-busy={query.isFetching}>
-					<div className="hidden grid-cols-[minmax(0,1fr)_180px_140px] items-center gap-6 border-border border-b bg-muted/30 px-6 py-3 font-medium text-muted-foreground text-xs lg:grid">
+					<div className="resora-event-list-head hidden grid-cols-[minmax(0,1fr)_180px_140px] items-center gap-6 border-border border-b bg-muted/30 px-6 py-3 font-medium text-muted-foreground text-xs lg:grid">
 						<span>Kegiatan & jadwal</span>
 						<span>Status</span>
 						<span className="text-right">Detail kegiatan</span>
@@ -206,6 +244,36 @@ export default function EventList({
 			)}
 
 			{management && query.data?.isSuperadmin && <DeletedDraftHistory />}
+			{!query.error &&
+				!query.isPending &&
+				!query.isPlaceholderData &&
+				matching.length > 25 && (
+					<nav
+						aria-label="Halaman kegiatan"
+						className="flex flex-wrap items-center justify-between gap-3"
+					>
+						<p className="text-sm">
+							Halaman {currentPage + 1} dari {lastPage + 1} · {matching.length}{" "}
+							hasil pada daftar ini
+						</p>
+						<div className="flex flex-wrap gap-2">
+							<Button
+								variant="outline"
+								disabled={currentPage === 0 || query.isFetching}
+								onClick={() => setPage(currentPage - 1)}
+							>
+								Sebelumnya
+							</Button>
+							<Button
+								variant="outline"
+								disabled={currentPage === lastPage || query.isFetching}
+								onClick={() => setPage(currentPage + 1)}
+							>
+								Berikutnya
+							</Button>
+						</div>
+					</nav>
+				)}
 		</section>
 	);
 }

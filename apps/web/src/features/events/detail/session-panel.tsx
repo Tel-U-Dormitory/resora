@@ -2,17 +2,16 @@
 
 import { QrCode } from "lucide-react";
 import Image from "next/image";
-
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-
 import {
 	formatEventTime,
 	StatusBadge,
 } from "../../../components/event-feedback";
-
 import type { EventDetailView } from "./detail-model";
+import { useEventConfirmation } from "./event-confirmation";
 export function SessionPanel({ view }: { view: EventDetailView }) {
+	const { confirm, confirmation } = useEventConfirmation();
 	const {
 		eventId,
 		activeAction,
@@ -125,10 +124,11 @@ export function SessionPanel({ view }: { view: EventDetailView }) {
 								variant="danger"
 								disabled={busy || !qrUsable}
 								loading={activeAction === "revoke"}
-								onClick={() => {
+								onClick={async () => {
 									if (
-										window.confirm(
-											"Batalkan QR ini? QR yang sedang ditampilkan tidak dapat digunakan lagi. Anda dapat menerbitkan QR baru.",
+										await confirm(
+											"Batalkan QR ini? QR yang sedang ditampilkan tidak dapat digunakan lagi. Kamu dapat menerbitkan QR baru.",
+											"Batalkan QR",
 										)
 									)
 										void act("revoke", "QR berhasil dibatalkan.", () =>
@@ -155,6 +155,7 @@ export function SessionPanel({ view }: { view: EventDetailView }) {
 						</div>
 					</>
 				)}
+				{confirmation}
 			</CardContent>
 		</Card>
 	);

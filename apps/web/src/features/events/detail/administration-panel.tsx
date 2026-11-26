@@ -2,16 +2,16 @@
 
 import { Select } from "@resora/ui/components/select";
 import { Textarea } from "@resora/ui/components/textarea";
-
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-
 import {
 	type AdministrativeAction,
 	administrativeLabels,
 	type EventDetailView,
 } from "./detail-model";
+import { useEventConfirmation } from "./event-confirmation";
 export function AdministrationPanel({ view }: { view: EventDetailView }) {
+	const { confirm, confirmation } = useEventConfirmation();
 	const {
 		eventId,
 		activeAction,
@@ -43,7 +43,7 @@ export function AdministrationPanel({ view }: { view: EventDetailView }) {
 				) : (
 					<form
 						className="space-y-4"
-						onSubmit={(e) => {
+						onSubmit={async (e) => {
 							e.preventDefault();
 							if (
 								busy ||
@@ -57,11 +57,12 @@ export function AdministrationPanel({ view }: { view: EventDetailView }) {
 							}
 							const deleting = administrativeAction === "DELETE_DRAFT";
 							if (
-								!window.confirm(
+								!(await confirm(
 									deleting
 										? `Hapus draft "${event.title}" secara permanen? Tindakan ini tidak dapat dibatalkan dan bukti audit akan tetap disimpan.`
 										: `${administrativeLabels[administrativeAction]} "${event.title}"? Tindakan ini tidak mengubah status event, sesi, QR, atau catatan kehadiran.`,
-								)
+									administrativeLabels[administrativeAction],
+								))
 							)
 								return;
 							void act(
@@ -141,6 +142,7 @@ export function AdministrationPanel({ view }: { view: EventDetailView }) {
 						</Button>
 					</form>
 				)}
+				{confirmation}
 			</CardContent>
 		</Card>
 	);

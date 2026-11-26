@@ -1,0 +1,113 @@
+.resora-events {
+	min-width: 0;
+}
+.resora-events :is(h1, h2, h3, p, dt, dd, label, a, button, summary, span) {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.resora-events :is(button, a, summary) {
+	transition-property: background-color, border-color, color, box-shadow;
+	max-width: 100%;
+	min-height: 44px;
+	height: auto;
+	white-space: normal;
+}
+.resora-events .text-xs {
+	font-size: var(--type-small);
+}
+.resora-events [data-slot="card"] {
+	padding-block: 0;
+}
+.resora-events :is([data-slot="card-content"], [data-slot="card-header"]) {
+	padding: 1rem;
+}
+.resora-events [data-slot="card-header"] {
+	padding-bottom: 0;
+}
+.resora-events :is(fieldset, form, label, input, select, textarea) {
+	min-width: 0;
+	max-width: 100%;
+}
+.resora-events input:not([type="checkbox"]):not([type="radio"]) {
+	font-size: max(1rem, 16px);
+}
+.resora-events-list article {
+	grid-template-columns: minmax(0, 1fr);
+}
+.resora-events-list article > a {
+	grid-column: auto;
+}
+.resora-events-list article > div:nth-child(2) {
+	align-items: flex-start;
+	max-width: 100%;
+}
+.resora-events-list .resora-event-list-head {
+	display: none;
+}
+.resora-events :is(.flex, nav) {
+	min-width: 0;
+}
+.resora-points-cards {
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+}
+.resora-points [aria-label="Matriks poin kehadiran SR"] {
+	max-width: 100%;
+	overscroll-behavior-inline: contain;
+}
+.resora-points table :is(th, td) {
+	overflow-wrap: anywhere;
+}
+@media (max-width: 767px) {
+	.resora-events .grid:not(.resora-points-cards) {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.resora-events .grid > * {
+		grid-column: auto;
+	}
+}
+@media (min-width: 1200px) {
+	.resora-events-list article,
+	.resora-events-list .resora-event-list-head {
+		grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
+	}
+	.resora-events-list .resora-event-list-head {
+		display: grid;
+	}
+	.resora-points-cards {
+		display: none;
+	}
+}
+.resora-events-dialog {
+	width: calc(100% - 32px);
+	padding: min(1.5rem, 24px);
+}
+.resora-events-dialog :is(h2, h3, p, button) {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.resora-events-dialog button {
+	transition-property: background-color, border-color, color, box-shadow;
+	min-height: 44px;
+	max-width: 100%;
+	height: auto;
+	white-space: normal;
+}
+.resora-events .flex:not(.flex-col) {
+	flex-wrap: wrap;
+}
+.resora-events [aria-label="Rekap peserta kegiatan"] {
+	max-width: 100%;
+	min-width: 0;
+	overscroll-behavior-inline: contain;
+}
+
+.resora-events-editor .resora-event-form-actions {
+	position: static;
+	box-shadow: none;
+}
+@media (min-width: 1200px) {
+	.resora-events-editor .resora-event-form-actions {
+		position: sticky;
+		bottom: 1rem;
+	}
+}

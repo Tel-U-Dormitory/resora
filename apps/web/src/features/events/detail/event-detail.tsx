@@ -1,28 +1,26 @@
 "use client";
 
 import { CalendarDays, MapPin } from "lucide-react";
-
 import Link from "next/link";
-
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EventRecap } from "@/features/attendance/public";
-
 import {
 	eventErrorMessage,
 	formatEventTime,
 	StatusBadge,
 } from "../../../components/event-feedback";
-
 import { EventAuditHistory } from "../event-admin-history";
 import { AdministrationPanel } from "./administration-panel";
 import { createDetailView, useEventDetail } from "./detail-model";
+import { useEventConfirmation } from "./event-confirmation";
 import { InvitationsPanel } from "./invitations-panel";
 import { MetadataPanel } from "./metadata-panel";
 import { ScoringPanel } from "./scoring-panel";
 import { SessionPanel } from "./session-panel";
 export default function EventDetail({ eventId }: { eventId: string }) {
+	const { confirm, confirmation } = useEventConfirmation();
 	const state = useEventDetail(eventId);
 	const { detail } = state;
 	if (detail.isPending)
@@ -40,6 +38,9 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 					<p role="alert" className="text-destructive text-sm">
 						{eventErrorMessage(detail.error)}
 					</p>
+					<Button variant="outline" onClick={() => void detail.refetch()}>
+						Coba kembali
+					</Button>
 					<Link
 						className="focus-ring rounded-md text-primary underline"
 						href="/events"
@@ -73,7 +74,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 		data,
 	} = view;
 	return (
-		<section className="resora-page min-w-0 space-y-6">
+		<section className="resora-page resora-events resora-events-detail min-w-0 space-y-6">
 			<nav aria-label="Breadcrumb event" className="text-sm">
 				<ol className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
 					<li>
@@ -302,10 +303,11 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 								className="w-full sm:w-auto"
 								disabled={busy}
 								loading={activeAction === "close"}
-								onClick={() => {
+								onClick={async () => {
 									if (
-										window.confirm(
+										await confirm(
 											"Tutup event ini? Sesi akan berakhir dan QR dibatalkan. Event tidak dapat dibuka kembali.",
+											"Tutup event",
 										)
 									)
 										void act(
@@ -332,6 +334,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 			{canManage && event.status !== "DRAFT" && (
 				<EventRecap key={`recap:${eventId}`} eventId={eventId} />
 			)}
+			{confirmation}
 		</section>
 	);
 }
