@@ -3,6 +3,9 @@ import { Card, CardContent } from "@resora/ui/components/card";
 import {
 	ArrowRight,
 	CalendarDays,
+	ChartNoAxesCombined,
+	ClipboardCheck,
+	FileWarning,
 	History,
 	ListChecks,
 	Plus,
@@ -156,6 +159,33 @@ export default async function SrDashboard() {
 					</div>
 				</section>
 			</DashboardPreviewProvider>
+			<section aria-label="Modul mendatang" className="space-y-3">
+				<h2 className="font-semibold text-lg">Modul mendatang</h2>
+				<p className="text-muted-foreground text-sm">
+					Modul berikut sedang direncanakan dan belum bisa digunakan.
+				</p>
+				<div className="resora-dashboard-upcoming grid gap-3">
+					{[
+						{ title: "Penilaian & Analitik", icon: ChartNoAxesCombined },
+						{ title: "Pelanggaran", icon: FileWarning },
+						{ title: "Kebersihan Kamar", icon: ClipboardCheck },
+					].map(({ title, icon: Icon }) => (
+						<Card key={title} className="resora-panel">
+							<CardContent className="flex items-start gap-3 p-4">
+								<Icon
+									size={22}
+									aria-hidden="true"
+									className="shrink-0 text-muted-foreground"
+								/>
+								<div className="min-w-0 space-y-1">
+									<h3 className="font-semibold text-sm">{title}</h3>
+									<p className="text-muted-foreground text-sm">Segera hadir</p>
+								</div>
+							</CardContent>
+						</Card>
+					))}
+				</div>
+			</section>
 			<details className="text-sm">
 				<summary className="focus-ring w-fit cursor-pointer rounded-lg py-3 text-muted-foreground">
 					Informasi akun

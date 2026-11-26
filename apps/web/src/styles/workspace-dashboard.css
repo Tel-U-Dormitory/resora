@@ -90,6 +90,10 @@
 .resora-dashboard-quick > .grid {
 	grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
 }
+.resora-dashboard-broadcasts section > div:first-child > div {
+	min-width: 0;
+	max-width: 100%;
+}
 .resora-dashboard .resora-panel {
 	padding-block: 0;
 }
@@ -132,4 +136,15 @@
 }
 .resora-dashboard-activities h3 {
 	font-size: var(--type-small);
+}
+
+.resora-dashboard-upcoming {
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+}
+.resora-dashboard-broadcasts button {
+	max-width: 100%;
+	height: auto;
+	min-height: 44px;
+	white-space: normal;
+	overflow-wrap: anywhere;
 }

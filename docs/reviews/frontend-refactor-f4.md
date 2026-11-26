@@ -42,3 +42,9 @@ Tidak mengubah backend, autentikasi/otorisasi, schema, database, dependency, kon
 Belum diverifikasi: perangkat nyata, Safari iOS/Chrome Android/Brave aktual, pembaca layar native, metrik performa lapangan dan UAT PM. Pemeriksaan semantik/keyboard adalah proxy, bukan klaim telah menguji VoiceOver/TalkBack/NVDA atau sertifikasi WCAG penuh.
 
 Sumber KPI/ekspor produksi dan scope detail manajemen tetap deferred sesuai DASH-01; tidak menjadi angka palsu di F4. Peringatan versi Next existing perlu tindak lanjut terpisah. **Berhenti sebelum F5 untuk review PM.**
+
+## PM follow-up — visible upcoming modules
+
+The PM requested visible coming-soon module cards before F5. Beranda now includes static Penilaian & Analitik, Pelanggaran, and Kebersihan Kamar cards, based on PRD P1 and DASH-01 plus the rough reference. These are informational, with no links, permissions, numeric data, delivery dates, or implementation of future workflows. Existing KPI source availability remains accurate. This explicitly expands the original F4 placeholder presentation only.
+
+Follow-up verification: isolated Next webpack build passed; dashboard fixture tests 13 passed / 96 assertions; Biome and `git diff --check` passed. Local Chromium checked the three static cards with no focusable actions at 320/390/768/1440, plus 200% text and text spacing at 320 with management controls visible. No page errors or horizontal overflow. Screenshots: `output/playwright/f4/upcoming-*.png`. Fixed an existing dashboard broadcast create-button reflow exposed by the management-role enlarged-text check. Hardware and PM UAT remain pending.
