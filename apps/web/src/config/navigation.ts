@@ -39,6 +39,17 @@ export function getSidebarGroups({
 					({ href }) =>
 						isSr || ["/dashboard", "/broadcasts", "/profile"].includes(href),
 				),
+				...((process.env.NODE_ENV === "development" ||
+					process.env.NODE_ENV === "test") &&
+				(isSr || isSuperadmin)
+					? [
+							{
+								title: "Pelanggaran",
+								href: "/pelanggaran",
+								icon: "violations",
+							} as const,
+						]
+					: []),
 				...(canReadAttendancePoints
 					? [
 							{
@@ -98,8 +109,7 @@ export function getAppItems(
 }
 
 export function getPrimaryDestination(pathname: string) {
-	if (pathname === "/dashboard" || pathname === "/dashboard-preview")
-		return "/dashboard";
+	if (pathname === "/dashboard") return "/dashboard";
 	if (pathname === "/broadcasts" || pathname.startsWith("/broadcasts/"))
 		return "/broadcasts";
 	if (
@@ -116,7 +126,6 @@ export function isSidebarLinkActive(
 	pathname: string,
 	managementView: boolean,
 ) {
-	if (href === "/dashboard" && pathname === "/dashboard-preview") return true;
 	const managingEvents =
 		pathname.startsWith("/events") &&
 		pathname !== "/events/points" &&

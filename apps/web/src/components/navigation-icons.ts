@@ -2,6 +2,7 @@ import {
 	CalendarDays,
 	CalendarRange,
 	ChartNoAxesColumn,
+	ClipboardList,
 	History,
 	House,
 	Inbox,
@@ -23,4 +24,6 @@ export const navigationIcons = {
 	committees: Users,
 	periods: CalendarRange,
 	points: ChartNoAxesColumn,
+	violations: ClipboardList,
+	ClipboardList,
 };

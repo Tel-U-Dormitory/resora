@@ -61,7 +61,7 @@ export function AppShell({
 			cleanliness: "Kebersihan Kamar",
 		};
 		const syncDetailFromUrl = () => {
-			if (pathname !== "/dashboard" && pathname !== "/dashboard-preview") {
+			if (pathname !== "/dashboard") {
 				setDetailMetricTitle(null);
 				return;
 			}
