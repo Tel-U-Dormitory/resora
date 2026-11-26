@@ -7,6 +7,7 @@
 @import "./styles/workspace-personal.css";
 @import "./styles/workspace-events.css";
 @import "./styles/workspace-committee.css";
+@import "./styles/workspace-administration.css";
 
 .resora-scan-line {
 	animation: resora-scan-line 2.4s ease-in-out infinite;
