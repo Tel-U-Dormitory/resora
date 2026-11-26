@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { getSrSession } from "@/features/identity/server";
-import { ViolationsWorkspace } from "@/features/violations/workspace";
+import { ViolationsWorkspace } from "@/features/violations/public";
 
 export default async function ViolationsPage() {
 	if (process.env.NODE_ENV !== "development" && process.env.NODE_ENV !== "test")

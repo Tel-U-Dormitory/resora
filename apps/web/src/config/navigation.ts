@@ -109,8 +109,7 @@ export function getAppItems(
 }
 
 export function getPrimaryDestination(pathname: string) {
-	if (pathname === "/dashboard")
-		return "/dashboard";
+	if (pathname === "/dashboard") return "/dashboard";
 	if (pathname === "/broadcasts" || pathname.startsWith("/broadcasts/"))
 		return "/broadcasts";
 	if (
