@@ -86,7 +86,7 @@ export default function PointsRecap() {
 		(row) => row.scoringStatus === "PARTIAL",
 	);
 	return (
-		<section className="resora-page min-w-0 space-y-6">
+		<section className="resora-page resora-events resora-points min-w-0 space-y-6">
 			<div className="space-y-2">
 				<Link
 					href="/events?view=manage"
@@ -410,6 +410,40 @@ export default function PointsRecap() {
 										SR. CSV selalu mencakup seluruh anggota periode. Geser tabel
 										untuk melihat semua event.
 									</p>
+									<section
+										aria-label="Ringkasan poin per SR"
+										className="resora-points-cards grid gap-3"
+									>
+										{visible.rows.map((row) => (
+											<article
+												key={row.userId}
+												className="rounded-2xl border border-border bg-surface p-4"
+											>
+												<h2 className="font-semibold text-base">{row.name}</h2>
+												<p className="text-muted-foreground text-sm">
+													NIM: {row.nim || "—"} · {row.currentDepartmentCode}
+												</p>
+												<dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
+													{pointsSummaryValues(
+														row,
+														report.events.length > 0,
+													).map((value, index) => (
+														<div key={pointsSummaryLabels[index]}>
+															<dt className="text-muted-foreground">
+																{pointsSummaryLabels[index]}
+															</dt>
+															<dd className="mt-1 font-semibold tabular-nums">
+																{typeof value === "number"
+																	? numbers.format(value)
+																	: value}
+															</dd>
+														</div>
+													))}
+												</dl>
+											</article>
+										))}
+									</section>
+
 									<section
 										aria-label="Matriks poin kehadiran SR"
 										// biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard access is required for horizontal scrolling.

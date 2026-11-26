@@ -579,7 +579,12 @@ export default function EventRecap({ eventId }: { eventId: string }) {
 						}}
 					/>
 				)}
-				<div className="overflow-x-auto rounded-lg border border-border">
+				<section
+					aria-label="Rekap peserta kegiatan"
+					// biome-ignore lint/a11y/noNoninteractiveTabindex: This region must support keyboard horizontal scrolling.
+					tabIndex={0}
+					className="focus-ring overflow-x-auto rounded-lg border border-border"
+				>
 					<table className="w-full text-left text-sm">
 						<caption className="sr-only">
 							Rekap seluruh peserta undangan
@@ -679,7 +684,7 @@ export default function EventRecap({ eventId }: { eventId: string }) {
 							})}
 						</tbody>
 					</table>
-				</div>
+				</section>
 				{visible.matching === 0 && (
 					<p className="text-muted-foreground text-sm">
 						Tidak ada peserta yang sesuai.

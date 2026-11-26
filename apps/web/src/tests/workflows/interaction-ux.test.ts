@@ -447,11 +447,9 @@ test("visibility/deletion UI requires reason and confirmation, respects pending 
 			eventId: "synthetic-event",
 			event: { title: "Synthetic draft" },
 			administrativeLabels: { [action]: "Synthetic action" },
-			window: {
-				confirm: (message: string) => {
-					expect(message).toContain("Synthetic draft");
-					return confirmed;
-				},
+			confirm: async (message: string) => {
+				expect(message).toContain("Synthetic draft");
+				return confirmed;
 			},
 			setError: (value: string) => {
 				feedback = value;
@@ -489,18 +487,18 @@ test("visibility/deletion UI requires reason and confirmation, respects pending 
 				),
 				scope,
 			)(event);
-		submit();
+		await submit();
 		expect(feedback).toContain("Alasan");
 		expect(calls).toHaveLength(0);
 		scope.administrativeReason = "Synthetic reason";
-		submit();
-		expect(calls).toHaveLength(0); // Native confirmation cancelled.
+		await submit();
+		expect(calls).toHaveLength(0); // Application confirmation cancelled.
 		confirmed = true;
 		scope.busy = true;
-		submit();
+		await submit();
 		expect(calls).toHaveLength(0);
 		scope.busy = false;
-		submit();
+		await submit();
 		await Promise.all(jobs);
 		expect(calls).toEqual([
 			{

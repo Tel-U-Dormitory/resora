@@ -90,6 +90,10 @@ test("event detail gives scoring and recap distinct sibling identities across re
 			),
 			default: "a",
 			useEventDetail: () => ({ detail: { data: {}, isPending: false } }),
+			useEventConfirmation: () => ({
+				confirm: async () => false,
+				confirmation: null,
+			}),
 			createDetailView: () => view,
 			formatEventTime: () => "WIB",
 		}),

@@ -62,7 +62,7 @@ export function DraftEditor(props: DraftEditorProps) {
 		invitedCount,
 	} = view;
 	return (
-		<section className="resora-page min-w-0 space-y-6">
+		<section className="resora-page resora-events resora-events-editor min-w-0 space-y-6">
 			<nav aria-label="Breadcrumb event" className="text-sm">
 				<ol className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
 					<li>
@@ -316,7 +316,7 @@ export function DraftEditor(props: DraftEditorProps) {
 						</label>
 					)}
 				</fieldset>
-				<div className="sticky bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-10 flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 shadow-md sm:flex-row sm:items-center sm:justify-between lg:bottom-4">
+				<div className="resora-event-form-actions z-10 flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 shadow-md sm:flex-row sm:items-center sm:justify-between">
 					<div className="min-w-0 text-sm">
 						<p className="font-semibold">
 							{fullEditing
