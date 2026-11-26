@@ -1,5 +1,11 @@
 # DASH-05 — source integration readiness
 
+> Superseded for the frontend-first DASH-04–08 delivery by
+> [DASH-04–08 delivery](./DASH-04-08-delivery.md). This inspection remains
+> evidence of real backend readiness; dashboard UI requests now use isolated
+> JSON simulation per the user's later instruction. It does not claim backend
+> source integration.
+
 Inspection date: 2026-11-26 (Asia/Jakarta). Branch: `feat/dashboard-resora`.
 Base: `b7d5718` (`origin/dev` at inspection). Existing dashboard worktree was
 fast-forwarded from `dcf2461`; no backend implementation was edited.

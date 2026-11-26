@@ -64,6 +64,7 @@ export function DashboardPreview({
 								"violations",
 								"broadcasts",
 								"activities",
+								"export",
 							].map((id) => (
 								<label key={id} className="grid gap-2 text-sm">
 									{id === "assessment"
@@ -74,7 +75,9 @@ export function DashboardPreview({
 												? "Pelanggaran"
 												: id === "broadcasts"
 													? "Pengumuman"
-													: "Kegiatan"}
+													: id === "activities"
+														? "Kegiatan"
+														: "Ekspor"}
 									<select
 										aria-label={`Respons ${id}`}
 										className="min-h-11 min-w-0 rounded-xl border border-border bg-surface px-3"
@@ -103,7 +106,10 @@ export function DashboardPreview({
 											["timeout", "Timeout"],
 										]
 											.filter(([value]) => {
-												const feed = id === "broadcasts" || id === "activities";
+												const feed =
+													id === "broadcasts" ||
+													id === "activities" ||
+													id === "export";
 												if (feed)
 													return [
 														"ready",

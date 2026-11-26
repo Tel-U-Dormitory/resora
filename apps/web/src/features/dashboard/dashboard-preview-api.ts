@@ -123,7 +123,10 @@ export async function requestDashboardMetric(
 	return {
 		...structuredClone(metric),
 		state,
-		export: ready ? metric.export : null,
+		export:
+			ready && (scenario === "ready" || scenario === "slow")
+				? metric.export
+				: null,
 		period:
 			scenario === "missing_period"
 				? { label: "Periode belum tersedia", startsAt: null, endsAt: null }

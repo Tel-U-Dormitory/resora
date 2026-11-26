@@ -40,9 +40,11 @@ function stateLabel(state: DashboardMetricState) {
 export function DashboardMetricCard({
 	metric,
 	preview = false,
+	onExport,
 }: {
 	metric: DashboardMetric;
 	preview?: boolean;
+	onExport?: () => void;
 }) {
 	const state: DashboardMetricState =
 		metric.id === "cleanliness"
@@ -132,13 +134,16 @@ export function DashboardMetricCard({
 								<>
 									<button
 										type="button"
-										disabled
+										disabled={!onExport}
+										onClick={onExport}
 										className="min-h-11 rounded-lg border border-border px-3 text-sm"
 									>
-										Ekspor (simulasi)
+										{onExport ? "Ekspor contoh" : "Ekspor (simulasi)"}
 									</button>
 									<p className="text-muted-foreground text-xs">
-										Ekspor belum tersedia pada preview.
+										{onExport
+											? "File contoh sintetis, bukan laporan operasional."
+											: "Ekspor belum tersedia pada preview."}
 									</p>
 								</>
 							)}

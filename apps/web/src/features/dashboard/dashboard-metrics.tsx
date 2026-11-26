@@ -1,7 +1,9 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import type { DashboardMetric } from "./dashboard.contracts";
+import { DashboardExportDialog } from "./dashboard-export-dialog";
 import { DashboardMetricCard } from "./dashboard-metric-card";
 import {
 	DashboardPreviewError,
@@ -188,7 +190,9 @@ export function DashboardMetrics({
 }
 
 function DashboardMetricRequest({ metric }: { metric: DashboardMetric }) {
-	const { identityKey, previewMode, scenarios } = useDashboardPreview();
+	const [exportOpen, setExportOpen] = useState(false);
+	const { identityKey, previewMode, scenarios, fixture, canManage } =
+		useDashboardPreview();
 	const scenario = scenarios[metric.id] ?? "ready";
 	const query = useQuery({
 		queryKey: [
@@ -220,7 +224,29 @@ function DashboardMetricRequest({ metric }: { metric: DashboardMetric }) {
 		[401, 403].includes(Number(query.error.status));
 	return (
 		<div className="min-w-0 space-y-2">
-			<DashboardMetricCard metric={displayed} preview />
+			<DashboardMetricCard
+				metric={displayed}
+				preview
+				onExport={
+					canManage && previewMode === "management" && displayed.export
+						? () => setExportOpen(true)
+						: undefined
+				}
+			/>
+			{canManage &&
+				previewMode === "management" &&
+				fixture &&
+				displayed.export &&
+				(displayed.state.kind === "ready" ||
+					displayed.state.kind === "ready_summary") && (
+					<DashboardExportDialog
+						key={`${identityKey}:${previewMode}:${scenario}`}
+						metric={displayed}
+						fixture={fixture}
+						open={exportOpen}
+						onOpenChange={setExportOpen}
+					/>
+				)}
 			{query.error && !denied && (
 				<button
 					type="button"

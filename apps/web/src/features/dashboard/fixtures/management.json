@@ -6,7 +6,7 @@
 			"id": "assessment",
 			"title": "Penilaian",
 			"period": {
-				"label": "Periode 2026/2027",
+				"label": "Periode evaluasi 2026/2027",
 				"startsAt": "2026-08-01T00:00:00+07:00",
 				"endsAt": "2027-07-31T23:59:59+07:00"
 			},
@@ -40,7 +40,7 @@
 			"export": {
 				"report": "assessment",
 				"formats": ["xlsx", "pdf"],
-				"filters": ["period", "department"]
+				"filters": ["period"]
 			}
 		},
 		{
@@ -73,13 +73,17 @@
 				],
 				"note": "Data sintetis untuk preview"
 			},
-			"export": null
+			"export": {
+				"report": "attendance",
+				"formats": ["xlsx", "pdf"],
+				"filters": ["period"]
+			}
 		},
 		{
 			"id": "violations",
 			"title": "Pelanggaran aktif",
 			"period": {
-				"label": "Periode 2026/2027",
+				"label": "Periode menjabat 2026/2027",
 				"startsAt": "2026-08-01T00:00:00+07:00",
 				"endsAt": "2027-07-31T23:59:59+07:00"
 			},
@@ -105,7 +109,11 @@
 				],
 				"note": "Data sintetis untuk preview"
 			},
-			"export": null
+			"export": {
+				"report": "violations",
+				"formats": ["xlsx", "pdf"],
+				"filters": ["period"]
+			}
 		},
 		{
 			"id": "cleanliness",

@@ -27,11 +27,7 @@
 				],
 				"note": "Data sintetis untuk preview"
 			},
-			"export": {
-				"report": "assessment",
-				"formats": ["xlsx", "pdf"],
-				"filters": ["period"]
-			}
+			"export": null
 		},
 		{
 			"id": "attendance",
@@ -63,11 +59,7 @@
 				],
 				"note": "Data sintetis untuk preview"
 			},
-			"export": {
-				"report": "attendance",
-				"formats": ["xlsx"],
-				"filters": ["period"]
-			}
+			"export": null
 		},
 		{
 			"id": "violations",
@@ -84,11 +76,7 @@
 				"unit": "laporan",
 				"note": "Laporan aktif yang dapat diakses; bukan jumlah pelanggaran pribadi."
 			},
-			"export": {
-				"report": "violations",
-				"formats": ["xlsx", "pdf"],
-				"filters": ["period"]
-			}
+			"export": null
 		},
 		{
 			"id": "cleanliness",
