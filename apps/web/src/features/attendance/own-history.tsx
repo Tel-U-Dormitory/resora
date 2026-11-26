@@ -42,7 +42,10 @@ export default function OwnHistory({ userId }: { userId: string }) {
 		staleTime: 0,
 		refetchOnMount: "always",
 		placeholderData: undefined,
-		meta: { errorHandledLocally: true },
+		meta: {
+			errorHandledLocally: true,
+			personalResource: "attendance.ownHistory",
+		},
 	});
 	return (
 		<section className="resora-page resora-history space-y-6">
