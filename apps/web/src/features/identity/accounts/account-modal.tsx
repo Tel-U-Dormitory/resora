@@ -30,7 +30,10 @@ export function AccountModal({
 				if (!open && !busy) onClose();
 			}}
 		>
-			<DialogContent className="resora-admin-dialog" initialFocus={titleRef}>
+			<DialogContent
+				className="resora-admin-dialog resora-administration-dialog"
+				initialFocus={titleRef}
+			>
 				<div className="mb-6 space-y-2">
 					<DialogTitle
 						ref={titleRef}

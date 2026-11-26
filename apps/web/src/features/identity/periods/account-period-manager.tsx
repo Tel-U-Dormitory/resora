@@ -52,7 +52,9 @@ export default function AccountPeriodManager({
 	const [message, setMessage] = useState("");
 	const [error, setError] = useState("");
 	const submitting = useRef(false);
-	const period = periods.data?.find((row) => row.id === periodId);
+	const period = periods.error
+		? undefined
+		: periods.data?.find((row) => row.id === periodId);
 	function choosePeriod(id: string) {
 		setPeriodId(id);
 		onPeriodChange(id);
@@ -89,8 +91,10 @@ export default function AccountPeriodManager({
 			setPending(false);
 		}
 	}
-	const selectedAccounts =
-		snapshot.data?.accounts.filter((a) => selected.includes(a.userId)) ?? [];
+	const selectedAccounts = snapshot.error
+		? []
+		: (snapshot.data?.accounts.filter((a) => selected.includes(a.userId)) ??
+			[]);
 	return (
 		<div className="space-y-4">
 			<Card>
@@ -111,15 +115,16 @@ export default function AccountPeriodManager({
 							<Select
 								id="assign-period"
 								value={periodId}
-								disabled={pending || !periods.data}
+								disabled={pending || !periods.data || !!periods.error}
 								onChange={(e) => choosePeriod(e.target.value)}
 							>
 								<option value="">Pilih periode</option>
-								{periods.data?.map((row) => (
-									<option key={row.id} value={row.id}>
-										{row.name} · {row.startsOn} – {row.endsOn}
-									</option>
-								))}
+								{!periods.error &&
+									periods.data?.map((row) => (
+										<option key={row.id} value={row.id}>
+											{row.name} · {row.startsOn} – {row.endsOn}
+										</option>
+									))}
 							</Select>
 						</div>
 						{period && (
@@ -163,7 +168,7 @@ export default function AccountPeriodManager({
 				</CardContent>
 			</Card>
 			{children}
-			<div className="sticky bottom-3 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface p-4 shadow-lg">
+			<div className="resora-admin-period-actions z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface p-4 shadow-lg">
 				<p className="text-sm">
 					<span className="font-semibold">
 						{selected.length} anggota dipilih
@@ -176,7 +181,12 @@ export default function AccountPeriodManager({
 				</p>
 				<Button
 					disabled={
-						pending || !periodId || !selected.length || selected.length > 200
+						pending ||
+						!!snapshot.error ||
+						!!periods.error ||
+						!periodId ||
+						!selected.length ||
+						selected.length > 200
 					}
 					onClick={() => open("assign")}
 				>
@@ -340,7 +350,7 @@ export default function AccountPeriodManager({
 						<Button
 							fullWidth
 							loading={pending}
-							disabled={pending}
+							disabled={pending || !!snapshot.error || !!periods.error}
 							onClick={() =>
 								void run(async () => {
 									const result = await trpcClient.identity.assignPeriod.mutate({

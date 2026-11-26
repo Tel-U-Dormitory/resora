@@ -1,0 +1,74 @@
+.resora-administration {
+	min-width: 0;
+	max-width: 72rem;
+	margin-inline: auto;
+}
+:is(.resora-administration, .resora-administration-dialog)
+	:is(h1, h2, h3, p, span, dt, dd, label, legend, summary, a, button) {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+:is(.resora-administration, .resora-administration-dialog)
+	:is(button, a, summary) {
+	max-width: 100%;
+	min-height: 44px;
+	height: auto;
+	white-space: normal;
+	transition-property: background-color, border-color, color, box-shadow;
+}
+:is(.resora-administration, .resora-administration-dialog)
+	.flex:not(.flex-col) {
+	flex-wrap: wrap;
+}
+.resora-administration
+	:is([data-resora-card-content], [data-resora-card-header]) {
+	padding: 1rem;
+}
+.resora-administration :is(form, fieldset, label, input, select, textarea) {
+	min-width: 0;
+	max-width: 100%;
+}
+.resora-admin-account-region {
+	max-width: 100%;
+	overscroll-behavior-inline: contain;
+}
+.resora-workspace .resora-administration .resora-account-table :is(th, td) {
+	font-size: var(--type-small);
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+.resora-workspace .resora-administration .resora-account-table td::before {
+	font-size: var(--type-small);
+}
+.resora-administration .text-xs {
+	font-size: var(--type-small);
+}
+.resora-administration-dialog {
+	width: calc(100% - 32px);
+	padding: min(1.5rem, 24px);
+}
+.resora-administration-dialog :is(fieldset, form, input, select, textarea, ul) {
+	min-width: 0;
+	max-width: 100%;
+}
+.resora-administration-dialog input:not([type="checkbox"]) {
+	font-size: max(1rem, 16px);
+}
+.resora-admin-period-actions {
+	position: static;
+	box-shadow: none;
+}
+@media (max-width: 767px) {
+	:is(.resora-administration, .resora-administration-dialog) .grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	:is(.resora-administration, .resora-administration-dialog) .grid > * {
+		grid-column: auto;
+	}
+}
+@media (min-width: 1200px) {
+	.resora-admin-period-actions {
+		position: sticky;
+		bottom: 1rem;
+	}
+}
