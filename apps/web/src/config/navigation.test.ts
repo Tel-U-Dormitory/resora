@@ -25,8 +25,10 @@ test("global, HCO and administration groups follow independent backend capabilit
 					"/dashboard",
 					"/broadcasts",
 					"/profile",
-					...(isSr ? ["/events", "/scan", "/attendance/history"] : []),
-					...(hasViolationsPreview ? ["/pelanggaran"] : []),
+					...(isSr
+						? (["/events", "/scan", "/attendance/history"] as const)
+						: []),
+					...(hasViolationsPreview ? (["/pelanggaran"] as const) : []),
 				]);
 				expect(groups.some((group) => group.id === "hco")).toBe(
 					canManageEvents,
@@ -132,7 +134,7 @@ test("Apps reuses sidebar capabilities and excludes primary destinations and QR"
 		"/attendance/history",
 		...(process.env.NODE_ENV === "development" ||
 		process.env.NODE_ENV === "test"
-			? ["/pelanggaran"]
+			? (["/pelanggaran"] as const)
 			: []),
 	]);
 	const admin = getAppItems({
@@ -143,7 +145,7 @@ test("Apps reuses sidebar capabilities and excludes primary destinations and QR"
 	expect(admin.map((item) => item.href)).toEqual([
 		...(process.env.NODE_ENV === "development" ||
 		process.env.NODE_ENV === "test"
-			? ["/pelanggaran"]
+			? (["/pelanggaran"] as const)
 			: []),
 		"/admin/users",
 		"/admin/periods",
