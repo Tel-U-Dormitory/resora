@@ -200,3 +200,26 @@
 .resora-apps-sheet [data-slot="sheet-description"] {
 	font-size: var(--type-small);
 }
+/* Keep decorative geometry bounded while enlarged navigation labels reflow. */
+.resora-mobile-dock {
+	inset-inline: max(min(0.75rem, 12px), env(safe-area-inset-left, 0px))
+		max(min(0.75rem, 12px), env(safe-area-inset-right, 0px));
+	gap: min(0.5rem, 8px);
+}
+.resora-bottom-nav {
+	padding: min(0.25rem, 4px);
+}
+.resora-nav-item > span {
+	min-width: 0;
+	max-width: 100%;
+	overflow-wrap: anywhere;
+}
+.resora-nav-item svg {
+	width: min(1.5rem, 24px);
+	height: min(1.5rem, 24px);
+}
+:root:has(.resora-workspace) .resora-scan-action {
+	min-width: 56px;
+	width: min(3.5rem, 56px);
+	height: min(3.5rem, 56px);
+}

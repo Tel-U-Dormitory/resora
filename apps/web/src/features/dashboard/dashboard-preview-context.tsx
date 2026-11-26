@@ -1,6 +1,12 @@
 "use client";
 
-import { createContext, type ReactNode, useContext, useState } from "react";
+import {
+	createContext,
+	type ReactNode,
+	useContext,
+	useState,
+	useSyncExternalStore,
+} from "react";
 import type { DashboardFixture, DashboardMode } from "./dashboard.contracts";
 
 type DashboardPreviewValue = {
@@ -17,6 +23,17 @@ const DashboardPreviewContext = createContext<DashboardPreviewValue>({
 	canManage: false,
 });
 
+function subscribeConnection(change: () => void) {
+	window.addEventListener("online", change);
+	window.addEventListener("offline", change);
+	return () => {
+		window.removeEventListener("online", change);
+		window.removeEventListener("offline", change);
+	};
+}
+const connectionSnapshot = () => navigator.onLine;
+const serverConnectionSnapshot = () => true;
+
 export function DashboardPreviewProvider({
 	fixtures,
 	canManage,
@@ -28,6 +45,11 @@ export function DashboardPreviewProvider({
 	initialMode: DashboardMode;
 	children: ReactNode;
 }) {
+	const online = useSyncExternalStore(
+		subscribeConnection,
+		connectionSnapshot,
+		serverConnectionSnapshot,
+	);
 	const [previewMode, setPreviewMode] = useState<DashboardMode>(
 		initialMode === "management" && !canManage ? "personal" : initialMode,
 	);
@@ -40,7 +62,16 @@ export function DashboardPreviewProvider({
 		<DashboardPreviewContext.Provider
 			value={{ fixture, previewMode, setPreviewMode: selectMode, canManage }}
 		>
-			<div className="space-y-8">{children}</div>
+			{!online && (
+				<p
+					role="status"
+					className="rounded-xl border border-border bg-surface p-4 text-sm"
+				>
+					Kamu sedang offline. Informasi yang sudah dimuat bisa belum terbaru.
+					Sambungkan internet untuk memperbarui.
+				</p>
+			)}
+			<div className="resora-dashboard-layout">{children}</div>
 		</DashboardPreviewContext.Provider>
 	);
 }

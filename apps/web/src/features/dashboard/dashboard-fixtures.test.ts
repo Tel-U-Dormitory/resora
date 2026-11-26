@@ -115,7 +115,7 @@ test("management mode is capability-gated and production KPIs fail closed", () =
 	expect(managementMarkup).toContain("Cakupan: seluruh departemen.");
 	expect(managementMarkup).toContain("Data belum tersedia.");
 	expect(managementMarkup).toContain("Segera hadir");
-	expect(managementMarkup).toContain("Mode dashboard");
+	expect(managementMarkup).toContain("Cakupan ringkasan");
 
 	const personalMarkup = renderToStaticMarkup(
 		jsxRuntime.jsx(DashboardPreviewProvider, {
@@ -127,7 +127,7 @@ test("management mode is capability-gated and production KPIs fail closed", () =
 	);
 	expect(personalMarkup).toContain("Ringkasan");
 	expect(personalMarkup).not.toContain("Ringkasan Manajemen");
-	expect(personalMarkup).not.toContain("Mode dashboard");
+	expect(personalMarkup).not.toContain("Cakupan ringkasan");
 });
 
 test("management preview fixture is not sent to sessions without capability", async () => {
@@ -227,5 +227,58 @@ test("attendance percentage is omitted for zero or inconsistent counts", () => {
 			}),
 		);
 		expect(markup).not.toContain("Persentase kehadiran");
+	}
+});
+
+test("metric cards keep scope and period explicit without exposing a fake production export", () => {
+	const metric = dashboardFixtures.management.metrics[0];
+	const production = renderToStaticMarkup(
+		jsxRuntime.jsx(DashboardMetricCard, { metric }),
+	);
+	expect(production).toContain("Seluruh departemen");
+	expect(production).toContain(metric.period.label);
+	expect(production).not.toContain("<button");
+	expect(production).not.toContain("<a ");
+	const preview = renderToStaticMarkup(
+		jsxRuntime.jsx(DashboardMetricCard, { metric, preview: true }),
+	);
+	expect(preview).toContain("Ekspor belum tersedia pada preview.");
+	expect(preview).toContain("disabled");
+});
+
+test("non participant dashboard omits the SR cleanliness placeholder", () => {
+	const markup = renderToStaticMarkup(
+		jsxRuntime.jsx(DashboardPreviewProvider, {
+			fixtures: null,
+			canManage: true,
+			initialMode: "management",
+			children: jsxRuntime.jsx(DashboardMetrics, { showCleanliness: false }),
+		}),
+	);
+	expect(markup).not.toContain("Kebersihan Kamar");
+	expect(markup).toContain('data-metric="assessment"');
+	expect(markup).toContain('data-state="unavailable"');
+	expect(markup).not.toContain("Ekspor");
+});
+
+test("all approved metric display states retain their distinct meaning", () => {
+	const metric = dashboardFixtures.personal.metrics[0];
+	for (const kind of [
+		"empty",
+		"not_assessed",
+		"missing_period",
+		"coming_soon",
+		"unavailable",
+		"error",
+		"forbidden",
+	] as const) {
+		const markup = renderToStaticMarkup(
+			jsxRuntime.jsx(DashboardMetricCard, {
+				metric: { ...metric, state: { kind, message: `State ${kind}` } },
+			}),
+		);
+		expect(markup).toContain(`data-state="${kind}"`);
+		expect(markup).toContain(`State ${kind}`);
+		expect(markup).not.toContain('class="resora-metric-value"');
 	}
 });

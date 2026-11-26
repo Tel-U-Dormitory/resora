@@ -34,7 +34,7 @@ export default async function SrDashboard() {
 			? [
 					{
 						href: "/events" as const,
-						title: "Event internal",
+						title: "Kegiatan",
 						icon: CalendarDays,
 					},
 					{
@@ -48,7 +48,7 @@ export default async function SrDashboard() {
 			? [
 					{
 						href: "/events?view=manage" as const,
-						title: "Kelola event",
+						title: "Kelola kegiatan",
 						icon: ListChecks,
 					},
 				]
@@ -64,7 +64,7 @@ export default async function SrDashboard() {
 			: []),
 	];
 	return (
-		<section className="resora-page space-y-8">
+		<section className="resora-page resora-dashboard space-y-6">
 			<DashboardHeader
 				name={session.name}
 				isSystem={session.actor === "SYSTEM_ADMIN"}
@@ -74,10 +74,17 @@ export default async function SrDashboard() {
 				canManage={canManageDashboard}
 				initialMode={canManageDashboard ? "management" : "personal"}
 			>
-				<DashboardMetrics />
-				<BroadcastFeed view="LATEST" canManage={session.canManageBroadcast} />
-				<DashboardActivities personalSr={isSr} />
-				<div className="space-y-3">
+				<DashboardMetrics showCleanliness={isSr} />
+				<div className="resora-dashboard-broadcasts">
+					<BroadcastFeed view="LATEST" canManage={session.canManageBroadcast} />
+				</div>
+				<div className="resora-dashboard-activities">
+					<DashboardActivities personalSr={isSr} />
+				</div>
+				<section
+					aria-label="Akses cepat"
+					className="resora-dashboard-quick space-y-3"
+				>
 					<h2 className="font-semibold text-lg">Akses cepat</h2>
 					{(isSr || session.isSuperadmin) && (
 						<Card className="resora-panel resora-feature-panel">
@@ -91,14 +98,12 @@ export default async function SrDashboard() {
 										)}
 									</span>
 									<div className="space-y-1">
-										<h2 className="font-semibold text-lg">
-											{isSr
-												? "Siap mengikuti kegiatan?"
-												: "Manajemen Senior Resident"}
-										</h2>
+										<h3 className="font-semibold text-lg">
+											{isSr ? "Absen kegiatan" : "Manajemen Senior Resident"}
+										</h3>
 										<p className="max-w-md text-muted-foreground text-sm">
 											{isSr
-												? "Pindai QR di lokasi kegiatan untuk mencatat kehadiran Anda."
+												? "Scan QR di lokasi kegiatan untuk mencatat kehadiran kamu."
 												: "Buat akun untuk memberikan akses kepada Senior Resident."}
 										</p>
 									</div>
@@ -115,13 +120,15 @@ export default async function SrDashboard() {
 									) : (
 										<Plus aria-hidden="true" />
 									)}
-									{isSr ? "Scan QR kehadiran" : "Tambah akun SR"}
+									<span className="min-w-0 break-words">
+										{isSr ? "Scan QR kehadiran" : "Tambah akun SR"}
+									</span>
 									<ArrowRight data-action-arrow aria-hidden="true" />
 								</Link>
 							</CardContent>
 						</Card>
 					)}
-					<div className="grid gap-4 sm:grid-cols-2">
+					<div className="grid gap-3 sm:grid-cols-2 min-[1200px]:grid-cols-4">
 						{actions.map(({ href, title, icon: Icon }) => (
 							<Card
 								key={href}
@@ -147,7 +154,7 @@ export default async function SrDashboard() {
 							</Card>
 						))}
 					</div>
-				</div>
+				</section>
 			</DashboardPreviewProvider>
 			<details className="text-sm">
 				<summary className="focus-ring w-fit cursor-pointer rounded-lg py-3 text-muted-foreground">
