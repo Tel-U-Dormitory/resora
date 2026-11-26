@@ -6,10 +6,22 @@ import {
 	DialogDescription,
 	DialogTitle,
 } from "@resora/ui/components/dialog";
-import { ClipboardList, Plus } from "lucide-react";
+import { Input } from "@resora/ui/components/input";
+import { Label } from "@resora/ui/components/label";
+import { Select } from "@resora/ui/components/select";
+import { Textarea } from "@resora/ui/components/textarea";
+import {
+	ChevronLeft,
+	ChevronRight,
+	Plus,
+	RotateCcw,
+	SlidersHorizontal,
+} from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import {
 	buildings,
 	currentActor,
@@ -17,13 +29,9 @@ import {
 	formatTime,
 	periods,
 } from "./model";
-import { control, type Draft, ReportForm } from "./report-form";
+import { type Draft, ReportForm } from "./report-form";
 
-const views = [
-	"Laporan aktif",
-	"Riwayat penghapusan",
-	"Rekap pelanggaran",
-] as const;
+const views = ["Laporan aktif", "Riwayat penghapusan"] as const;
 type View = (typeof views)[number];
 type Panel =
 	| { kind: "create" }
@@ -47,15 +55,25 @@ function Modal({
 				if (!open) close();
 			}}
 		>
-			<DialogContent>
-				<DialogTitle className="font-semibold text-xl">{title}</DialogTitle>
-				<DialogDescription className="mt-1 mb-5 text-muted-foreground text-sm">
-					{description}
-				</DialogDescription>
-				{children}
-				<Button variant="outline" className="mt-4 min-h-11" onClick={close}>
-					Tutup
-				</Button>
+			<DialogContent className="max-h-[85dvh] overflow-y-auto rounded-2xl p-5 sm:max-w-lg sm:p-6">
+				<div className="space-y-1">
+					<DialogTitle className="font-bold text-xl tracking-tight">
+						{title}
+					</DialogTitle>
+					<DialogDescription className="text-muted-foreground text-sm">
+						{description}
+					</DialogDescription>
+				</div>
+				<div className="mt-4">{children}</div>
+				<div className="mt-5 flex justify-end border-border border-t pt-4">
+					<Button
+						variant="outline"
+						className="min-h-11 w-full rounded-xl sm:w-auto"
+						onClick={close}
+					>
+						Tutup
+					</Button>
+				</div>
 			</DialogContent>
 		</Dialog>
 	);
@@ -74,48 +92,16 @@ function KtmPreview({ image }: { image: Blob }) {
 		<img
 			src={url}
 			alt="Foto KTM simulasi"
-			className="max-h-64 max-w-full rounded-xl object-contain"
+			className="max-h-64 max-w-full rounded-xl border border-border object-contain"
 		/>
 	) : null;
 }
 
-function Counts({
-	title,
-	entries,
-}: {
-	title: string;
-	entries: [string, number][];
-}) {
-	const max = Math.max(1, ...entries.map(([, count]) => count));
-	return (
-		<section className="min-w-0">
-			<h3 className="mb-3 font-semibold">{title}</h3>
-			<ul className="space-y-3">
-				{entries.map(([label, count]) => (
-					<li key={label}>
-						<div className="mb-1 flex justify-between gap-3 text-sm">
-							<span>{label}</span>
-							<strong>{count}</strong>
-						</div>
-						<div
-							aria-hidden="true"
-							className="h-2 overflow-hidden rounded-full bg-muted"
-						>
-							<div
-								className="h-full rounded-full bg-primary"
-								style={{ width: `${(count / max) * 100}%` }}
-							/>
-						</div>
-					</li>
-				))}
-			</ul>
-		</section>
-	);
-}
-
-export function ViolationsWorkspace() {
+export function ViolationsWorkspace({ fixedAdmin }: { fixedAdmin?: boolean }) {
 	const [reports, setReports] = useState(fixtures);
-	const [admin, setAdmin] = useState(false);
+	const [demoAdmin, setAdmin] = useState(false);
+	const admin = fixedAdmin ?? demoAdmin;
+	const [filtersOpen, setFiltersOpen] = useState(false);
 	const [view, setView] = useState<View>(views[0]);
 	const [panel, setPanel] = useState<Panel>();
 	const [draft, setDraft] = useState<Draft>();
@@ -134,6 +120,11 @@ export function ViolationsWorkspace() {
 	const canChange =
 		selected && !selected.deleted && (admin || selected.actor === actor);
 	const invalidRange = Boolean(from && until && from > until);
+	const activeFilterCount = [building, period, from, until].filter(
+		Boolean,
+	).length;
+	const hasAnyFilter = Boolean(query.trim() || activeFilterCount);
+
 	const matches = reports.filter(
 		(report) =>
 			!invalidRange &&
@@ -153,18 +144,21 @@ export function ViolationsWorkspace() {
 							.includes(query.trim().toLocaleLowerCase("id")),
 					),
 				);
-	const trend = [...new Set(active.map(({ date }) => date))]
-		.sort()
-		.map((date): [string, number] => [
-			date,
-			active.filter((report) => report.date === date).length,
-		]);
+
+	function resetFilters() {
+		setQuery("");
+		setBuilding("");
+		setPeriod("");
+		setFrom("");
+		setUntil("");
+	}
 
 	function close() {
 		setDraft(undefined);
 		setPanel(undefined);
 		setDeleteError("");
 	}
+
 	function create() {
 		if (!draft?.image) return;
 		const code = `PLG-DEMO-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
@@ -183,11 +177,7 @@ export function ViolationsWorkspace() {
 			...items,
 		]);
 		setView(views[0]);
-		setQuery("");
-		setBuilding("");
-		setPeriod("");
-		setFrom("");
-		setUntil("");
+		resetFilters();
 		setNotice(`Laporan simulasi ${code} dicatat pada ${formatTime(created)}.`);
 		close();
 	}
@@ -247,19 +237,20 @@ export function ViolationsWorkspace() {
 	}
 
 	return (
-		<div className="mx-auto grid w-full min-w-0 max-w-[90rem] gap-5 px-4 py-6 md:px-6 xl:px-8">
-			<header className="flex flex-wrap items-end justify-between gap-4">
-				<div>
-					<h1 className="font-bold text-2xl md:text-[1.75rem]">
+		<section className="resora-page space-y-6">
+			<div className="flex flex-wrap items-start justify-between gap-4">
+				<div className="space-y-1.5">
+					<h1 className="font-bold text-2xl tracking-tight">
 						Pencatatan pelanggaran
 					</h1>
-					<p className="mt-1 text-muted-foreground">
+					<p className="hidden text-muted-foreground text-sm sm:block">
 						Catat kejadian dan telusuri laporan lintas gedung.
 					</p>
 				</div>
 				<Button
 					size="lg"
-					leftIcon={<Plus size={20} />}
+					className="min-h-11 w-full rounded-xl sm:w-auto"
+					leftIcon={<Plus size={18} aria-hidden="true" />}
 					onClick={() => {
 						setNotice("");
 						setPanel({ kind: "create" });
@@ -267,200 +258,238 @@ export function ViolationsWorkspace() {
 				>
 					Buat laporan
 				</Button>
-			</header>
-			<div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-4">
-				<p className="max-w-prose text-muted-foreground text-sm">
-					<strong className="text-foreground">Simulasi frontend.</strong>{" "}
-					Gunakan data contoh. Perubahan hilang saat halaman dimuat ulang.
-				</p>
-				<label className="grid w-full gap-1 font-semibold text-sm sm:w-auto">
-					Peran simulasi
-					<select
-						className={control}
-						value={admin ? "admin" : "sr"}
-						onChange={(event) => {
-							close();
-							setAdmin(event.target.value === "admin");
-							setNotice("");
-						}}
-					>
-						<option value="sr">Senior Resident</option>
-						<option value="admin">SUPERADMIN</option>
-					</select>
-				</label>
 			</div>
+
+			<Card className="rounded-2xl border-border bg-surface shadow-none">
+				<CardContent className="flex flex-col gap-3 p-3.5 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+					<div className="flex flex-wrap items-center gap-2.5">
+						<span className="inline-flex items-center rounded-full border border-amber-500/35 bg-amber-500/10 px-2.5 py-0.5 font-semibold text-amber-800 text-xs dark:text-amber-300">
+							Preview sintetis
+						</span>
+						<p className="text-muted-foreground text-sm">
+							Data contoh simulasi frontend. Perubahan hilang saat halaman
+							dimuat ulang.
+						</p>
+					</div>
+					{fixedAdmin === undefined && (
+						<div className="w-full space-y-1 sm:w-52 sm:shrink-0">
+							<Label htmlFor="violation-demo-role" className="text-xs">
+								Peran simulasi
+							</Label>
+							<Select
+								id="violation-demo-role"
+								value={admin ? "admin" : "sr"}
+								onChange={(event) => {
+									close();
+									setAdmin(event.target.value === "admin");
+									setNotice("");
+								}}
+							>
+								<option value="sr">Senior Resident</option>
+								<option value="admin">SUPERADMIN</option>
+							</Select>
+						</div>
+					)}
+				</CardContent>
+			</Card>
+
 			{notice && (
 				<p
 					role="status"
-					className="rounded-xl border border-border bg-muted p-3 text-sm"
+					className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2.5 font-medium text-emerald-800 text-sm dark:text-emerald-300"
 				>
 					{notice}
 				</p>
 			)}
+
 			<fieldset
 				aria-label="Tampilan pelanggaran"
-				className="flex flex-wrap gap-2"
+				className="grid w-full grid-cols-2 gap-1 rounded-xl border border-border bg-surface p-1 sm:inline-flex sm:w-auto"
 			>
-				{views.map((item) => (
-					<Button
-						key={item}
-						className="min-h-11"
-						variant={view === item ? "primary" : "outline"}
-						aria-pressed={view === item}
-						onClick={() => setView(item)}
-					>
-						{item}
-					</Button>
-				))}
+				{views.map((item) => {
+					const activeTab = view === item;
+					return (
+						<button
+							key={item}
+							type="button"
+							aria-pressed={activeTab}
+							onClick={() => setView(item)}
+							className={cn(
+								"focus-ring inline-flex min-h-10 items-center justify-center rounded-lg px-3.5 py-2 font-semibold text-sm transition-colors",
+								activeTab
+									? "bg-primary text-white shadow-xs"
+									: "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+							)}
+						>
+							{item}
+						</button>
+					);
+				})}
 			</fieldset>
-			<Card className="rounded-2xl shadow-none">
-				<CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+
+			<Card className="rounded-2xl border-border bg-surface shadow-none">
+				<CardContent className="grid gap-3.5 p-3.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end sm:p-4">
 					{view === views[0] && (
-						<label className="grid gap-1 font-semibold text-sm">
-							Cari nama atau NIM
-							<input
-								className={control}
+						<div className="space-y-1.5">
+							<Label htmlFor="violations-search">Cari nama atau NIM</Label>
+							<Input
+								id="violations-search"
 								type="search"
+								placeholder="Ketik nama mahasiswa atau NIM…"
 								value={query}
 								onChange={(event) => setQuery(event.target.value)}
 							/>
-						</label>
+						</div>
 					)}
-					<label className="grid gap-1 font-semibold text-sm">
-						Gedung pencatat
-						<select
-							className={control}
-							value={building}
-							onChange={(event) => setBuilding(event.target.value)}
+					<div className="flex flex-wrap items-center gap-2 sm:col-start-2 sm:justify-end">
+						<Button
+							variant="outline"
+							className="min-h-11 flex-1 rounded-xl sm:flex-initial"
+							leftIcon={<SlidersHorizontal size={16} aria-hidden="true" />}
+							aria-expanded={filtersOpen}
+							aria-controls="violations-filters"
+							onClick={() => setFiltersOpen(!filtersOpen)}
 						>
-							<option value="">Semua gedung</option>
-							{buildings.map((item) => (
-								<option key={item}>{item}</option>
-							))}
-						</select>
-					</label>
-					<label className="grid gap-1 font-semibold text-sm">
-						Periode SR
-						<select
-							className={control}
-							value={period}
-							onChange={(event) => setPeriod(event.target.value)}
-						>
-							<option value="">Semua periode</option>
-							{periods.map((item) => (
-								<option key={item}>{item}</option>
-							))}
-						</select>
-					</label>
-					<label className="grid min-w-0 gap-1 font-semibold text-sm">
-						Dari tanggal
-						<input
-							className={control}
-							type="date"
-							value={from}
-							onChange={(event) => setFrom(event.target.value)}
-						/>
-					</label>
-					<label className="grid min-w-0 gap-1 font-semibold text-sm">
-						Sampai tanggal
-						<input
-							className={control}
-							type="date"
-							value={until}
-							aria-invalid={invalidRange}
-							aria-describedby={
-								invalidRange ? "violations-range-error" : undefined
-							}
-							onChange={(event) => setUntil(event.target.value)}
-						/>
-					</label>
-					{invalidRange && (
-						<p
-							id="violations-range-error"
-							role="alert"
-							className="text-destructive text-sm sm:col-span-2 xl:col-span-5"
-						>
-							Tanggal akhir harus sama dengan atau setelah tanggal awal.
-						</p>
-					)}
+							{filtersOpen ? "Tutup filter" : "Filter laporan"}
+							{activeFilterCount ? ` (${activeFilterCount})` : ""}
+						</Button>
+						{hasAnyFilter && (
+							<Button
+								variant="ghost"
+								className="min-h-11 rounded-xl"
+								leftIcon={<RotateCcw size={15} aria-hidden="true" />}
+								onClick={resetFilters}
+							>
+								Reset
+							</Button>
+						)}
+					</div>
+					<div
+						id="violations-filters"
+						hidden={!filtersOpen}
+						className="col-span-full grid gap-3.5 border-border border-t pt-3.5 sm:grid-cols-2 xl:grid-cols-4"
+						style={filtersOpen ? undefined : { display: "none" }}
+					>
+						<div className="space-y-1.5">
+							<Label htmlFor="filter-building">Gedung pencatat</Label>
+							<Select
+								id="filter-building"
+								value={building}
+								onChange={(event) => setBuilding(event.target.value)}
+							>
+								<option value="">Semua gedung</option>
+								{buildings.map((item) => (
+									<option key={item}>{item}</option>
+								))}
+							</Select>
+						</div>
+						<div className="space-y-1.5">
+							<Label htmlFor="filter-period">Periode SR</Label>
+							<Select
+								id="filter-period"
+								value={period}
+								onChange={(event) => setPeriod(event.target.value)}
+							>
+								<option value="">Semua periode</option>
+								{periods.map((item) => (
+									<option key={item}>{item}</option>
+								))}
+							</Select>
+						</div>
+						<div className="min-w-0 space-y-1.5">
+							<Label htmlFor="filter-from">Dari tanggal</Label>
+							<Input
+								id="filter-from"
+								type="date"
+								value={from}
+								onChange={(event) => setFrom(event.target.value)}
+							/>
+						</div>
+						<div className="min-w-0 space-y-1.5">
+							<Label htmlFor="filter-until">Sampai tanggal</Label>
+							<Input
+								id="filter-until"
+								type="date"
+								value={until}
+								aria-invalid={invalidRange}
+								aria-describedby={
+									invalidRange ? "violations-range-error" : undefined
+								}
+								onChange={(event) => setUntil(event.target.value)}
+							/>
+						</div>
+						{invalidRange && (
+							<p
+								id="violations-range-error"
+								role="alert"
+								className="col-span-full rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 font-medium text-danger text-sm"
+							>
+								Tanggal akhir harus sama dengan atau setelah tanggal awal.
+							</p>
+						)}
+					</div>
 				</CardContent>
 			</Card>
-			<section aria-labelledby="violations-results" className="grid gap-3">
-				<h2 id="violations-results" className="font-semibold text-xl">
-					{view}
-				</h2>
-				{view === views[2] ? (
-					<Card className="rounded-2xl shadow-none">
-						<CardContent className="grid gap-5">
-							<p>
-								<strong className="mr-2 text-3xl tabular-nums">
-									{active.length}
-								</strong>{" "}
-								laporan aktif
-							</p>
-							{active.length ? (
-								<div className="grid gap-6 md:grid-cols-2">
-									<Counts
-										title="Jumlah per gedung pencatat"
-										entries={buildings.map((item) => [
-											item,
-											active.filter((report) => report.building === item)
-												.length,
-										])}
-									/>
-									<Counts
-										title="Tren berdasarkan tanggal kejadian"
-										entries={trend}
-									/>
-								</div>
-							) : (
-								<p className="text-muted-foreground">
-									Tidak ada laporan aktif pada filter ini.
-								</p>
-							)}
-							<Button
-								variant="outline"
-								className="min-h-11 justify-self-start"
-								onClick={() => {
-									setQuery("");
-									setView(views[0]);
-								}}
-							>
-								Lihat laporan aktif
-							</Button>
-						</CardContent>
-					</Card>
-				) : visible.length ? (
+
+			<section aria-labelledby="violations-results" className="space-y-3.5">
+				<div className="flex flex-wrap items-center justify-between gap-2">
+					<h2
+						id="violations-results"
+						className="font-bold text-lg tracking-tight"
+					>
+						{view}
+					</h2>
+					<span className="text-muted-foreground text-sm tabular-nums">
+						{visible.length} laporan
+					</span>
+				</div>
+
+				{visible.length ? (
 					<ul className="grid gap-3">
 						{visible.map((report) => (
 							<li key={report.code}>
-								<Card className="rounded-2xl shadow-none">
-									<CardContent className="flex flex-wrap items-center justify-between gap-3">
-										<div className="min-w-0 space-y-1 break-words">
-											<p className="text-muted-foreground text-sm">
-												{report.code}
-											</p>
+								<Card className="rounded-2xl border-border bg-surface shadow-none transition-colors hover:border-border-control">
+									<CardContent className="flex flex-col gap-3.5 p-3.5 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+										<div className="min-w-0 space-y-1.5">
+											<div className="flex flex-wrap items-center gap-2">
+												<span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 font-mono font-semibold text-muted-foreground text-xs">
+													{report.code}
+												</span>
+												<span className="inline-flex items-center rounded-full border border-border bg-surface-subtle px-2.5 py-0.5 font-medium text-muted-foreground text-xs">
+													{report.building}
+												</span>
+												<span className="inline-flex items-center rounded-full border border-border bg-surface-subtle px-2.5 py-0.5 font-medium text-muted-foreground text-xs">
+													{report.period}
+												</span>
+												{report.deleted && (
+													<span className="inline-flex items-center rounded-full bg-danger/10 px-2.5 py-0.5 font-semibold text-danger text-xs">
+														Dihapus
+													</span>
+												)}
+											</div>
 											{report.deleted ? (
 												<>
-													<p>
+													<p className="font-medium text-foreground text-sm leading-relaxed">
 														Laporan {report.code} dihapus oleh{" "}
-														{report.deleted.actor} karena{" "}
-														{report.deleted.reason}
+														<strong className="font-semibold">
+															{report.deleted.actor}
+														</strong>{" "}
+														karena {report.deleted.reason}
 													</p>
-													<p className="text-muted-foreground text-sm">
+													<p className="text-muted-foreground text-xs">
 														{formatTime(report.deleted.at)}
 													</p>
 												</>
 											) : (
 												<>
-													<h3 className="font-semibold">
+													<h3 className="font-bold text-base text-foreground leading-snug">
 														{report.name}{" "}
-														<span className="font-normal text-muted-foreground text-sm">
+														<span className="font-medium text-muted-foreground text-sm tabular-nums">
 															· {report.nim}
 														</span>
 													</h3>
 													<p className="text-muted-foreground text-sm">
-														{report.building} · {report.date} · {report.actor}
+														{report.date} · Pencatat: {report.actor}
 													</p>
 												</>
 											)}
@@ -468,7 +497,10 @@ export function ViolationsWorkspace() {
 										{(!report.deleted || admin) && (
 											<Button
 												variant="outline"
-												className="min-h-11"
+												className="min-h-11 w-full shrink-0 rounded-xl sm:w-auto"
+												rightIcon={
+													<ChevronRight size={16} aria-hidden="true" />
+												}
 												aria-label={`Lihat detail ${report.code}`}
 												onClick={() =>
 													setPanel({ kind: "detail", code: report.code })
@@ -483,17 +515,38 @@ export function ViolationsWorkspace() {
 						))}
 					</ul>
 				) : (
-					<Card className="rounded-2xl shadow-none">
-						<CardContent className="flex items-start gap-3">
-							<ClipboardList aria-hidden size={22} />
-							<div>
-								<p className="font-semibold">Tidak ada laporan yang cocok</p>
-								<p className="text-muted-foreground text-sm">
-									Ubah pencarian atau filter untuk melihat hasil lain.
-								</p>
-							</div>
-						</CardContent>
-					</Card>
+					<EmptyState
+						variant={view === views[1] ? "history" : "folder"}
+						title="Tidak ada laporan yang cocok"
+						description={
+							hasAnyFilter
+								? "Ubah kata kunci pencarian atau reset filter untuk melihat laporan lain."
+								: "Belum ada data laporan pada tampilan ini."
+						}
+						action={
+							hasAnyFilter ? (
+								<Button
+									variant="outline"
+									className="min-h-11 rounded-xl"
+									leftIcon={<RotateCcw size={16} aria-hidden="true" />}
+									onClick={resetFilters}
+								>
+									Reset filter
+								</Button>
+							) : view === views[0] ? (
+								<Button
+									className="min-h-11 rounded-xl"
+									leftIcon={<Plus size={16} aria-hidden="true" />}
+									onClick={() => {
+										setNotice("");
+										setPanel({ kind: "create" });
+									}}
+								>
+									Buat laporan
+								</Button>
+							) : undefined
+						}
+					/>
 				)}
 			</section>
 
@@ -507,19 +560,24 @@ export function ViolationsWorkspace() {
 						<ReportForm admin={admin} onContinue={setDraft} />
 					</div>
 					{draft && (
-						<div className="grid gap-4">
-							<p tabIndex={-1} ref={(node) => node?.focus()}>
-								Apakah pelanggar adalah penghuni {draft.building}?
+						<div className="space-y-4">
+							<p
+								tabIndex={-1}
+								ref={(node) => node?.focus()}
+								className="rounded-xl border border-border bg-surface-subtle/60 p-3.5 font-medium text-foreground text-sm"
+							>
+								Apakah pelanggar adalah penghuni{" "}
+								<strong className="font-bold">{draft.building}</strong>?
 							</p>
-							<div className="flex flex-wrap gap-2">
+							<div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
 								<Button
-									className="min-h-11"
+									className="min-h-11 rounded-xl"
 									variant="outline"
 									onClick={() => setDraft(undefined)}
 								>
 									Tidak, kembali ke form
 								</Button>
-								<Button className="min-h-11" onClick={create}>
+								<Button className="min-h-11 rounded-xl" onClick={create}>
 									Ya, simpan laporan
 								</Button>
 							</div>
@@ -527,6 +585,7 @@ export function ViolationsWorkspace() {
 					)}
 				</Modal>
 			)}
+
 			{panel?.kind === "edit" && canChange && (
 				<Modal title="Edit laporan" description={selected.code} close={close}>
 					<ReportForm
@@ -537,41 +596,46 @@ export function ViolationsWorkspace() {
 					/>
 				</Modal>
 			)}
+
 			{panel?.kind === "delete" && canChange && (
 				<Modal
 					title="Hapus laporan?"
 					description={`Laporan ${selected.code} akan dipindahkan ke riwayat penghapusan.`}
 					close={close}
 				>
-					<form className="grid gap-3" onSubmit={remove}>
-						<label className="grid gap-1 font-semibold text-sm">
-							Alasan penghapusan
-							<textarea
-								className={control}
+					<form className="grid gap-3.5" onSubmit={remove}>
+						<div className="space-y-1.5">
+							<Label htmlFor="delete-reason">Alasan penghapusan</Label>
+							<Textarea
+								id="delete-reason"
 								name="reason"
 								rows={3}
 								required
 								maxLength={500}
 							/>
-						</label>
+						</div>
 						{deleteError && (
-							<p role="alert" className="text-destructive text-sm">
+							<p
+								role="alert"
+								className="rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 font-medium text-danger text-sm"
+							>
 								{deleteError}
 							</p>
 						)}
 						<Button
 							type="submit"
 							variant="danger"
-							className="min-h-11 justify-self-start"
+							className="min-h-11 w-full rounded-xl sm:w-auto sm:justify-self-start"
 						>
 							Hapus laporan simulasi
 						</Button>
 					</form>
 				</Modal>
 			)}
+
 			{panel?.kind === "detail" && selected && (!selected.deleted || admin) && (
 				<Modal title="Detail laporan" description={selected.code} close={close}>
-					<dl className="grid gap-3 break-words text-sm">
+					<dl className="grid gap-3 rounded-xl border border-border bg-surface-subtle/60 p-3.5 text-sm sm:grid-cols-2">
 						{Object.entries({
 							Mahasiswa: selected.name,
 							NIM: selected.nim,
@@ -582,77 +646,105 @@ export function ViolationsWorkspace() {
 							"Dicatat pada": formatTime(selected.created),
 							Keterangan: selected.description,
 						}).map(([label, value]) => (
-							<div key={label}>
-								<dt className="font-semibold">{label}</dt>
-								<dd className="whitespace-pre-wrap">{value}</dd>
+							<div
+								key={label}
+								className={label === "Keterangan" ? "sm:col-span-2" : undefined}
+							>
+								<dt className="text-muted-foreground text-xs">{label}</dt>
+								<dd className="mt-0.5 whitespace-pre-wrap font-medium text-foreground">
+									{value}
+								</dd>
 							</div>
 						))}
 					</dl>
+
 					<div className="mt-4">
 						{selected.image ? (
 							<KtmPreview image={selected.image} />
 						) : (
-							<p className="text-muted-foreground text-sm">
+							<p className="rounded-xl border border-border border-dashed px-3.5 py-3 text-muted-foreground text-sm">
 								Foto KTM tidak tersedia pada laporan contoh ini.
 							</p>
 						)}
 					</div>
+
 					{selected.deleted && (
-						<p className="mt-4 break-words text-sm">
-							Dihapus oleh {selected.deleted.actor} pada{" "}
-							{formatTime(selected.deleted.at)}. Alasan:{" "}
+						<p className="mt-4 rounded-xl border border-danger/30 bg-danger/10 p-3.5 text-danger text-sm">
+							Dihapus oleh{" "}
+							<strong className="font-semibold">
+								{selected.deleted.actor}
+							</strong>{" "}
+							pada {formatTime(selected.deleted.at)}. Alasan:{" "}
 							{selected.deleted.reason}
 						</p>
 					)}
+
 					{(admin || selected.actor === actor) && (
-						<section className="mt-5 space-y-2">
-							<h3 className="font-semibold">Riwayat koreksi</h3>
+						<section className="mt-4">
 							{selected.corrections.length ? (
-								<ul className="space-y-2">
-									{selected.corrections.map((change, index) => (
-										<li
-											className="break-words rounded-xl bg-muted p-3 text-sm"
-											key={`${change.at}-${index}`}
-										>
-											<p className="font-semibold">
-												{change.actor} · {formatTime(change.at)}
-											</p>
-											<p>{change.reason}</p>
-											{(["name", "nim", "date", "description"] as const).map(
-												(key, position) =>
-													change.before[key] !== change.after[key] && (
-														<p key={key}>
-															{
-																["Nama", "NIM", "Tanggal", "Keterangan"][
-																	position
-																]
-															}
-															: {change.before[key]} → {change.after[key]}
-														</p>
-													),
-											)}
-											{change.imageChanged && <p>Foto KTM diganti.</p>}
-										</li>
-									))}
-								</ul>
+								<details className="group rounded-xl border border-border bg-surface-subtle/40 p-3.5">
+									<summary className="flex cursor-pointer list-none items-center justify-between gap-2 font-semibold text-sm">
+										<span>Riwayat koreksi ({selected.corrections.length})</span>
+										<ChevronLeft
+											size={18}
+											aria-hidden="true"
+											className="shrink-0 text-primary transition-transform duration-200 group-open:-rotate-90"
+										/>
+									</summary>
+									<ul className="mt-3 space-y-2 border-border border-t pt-3">
+										{selected.corrections.map((change, index) => (
+											<li
+												className="break-words rounded-xl bg-muted p-3 text-sm"
+												key={`${change.at}-${index}`}
+											>
+												<p className="font-semibold">
+													{change.actor} · {formatTime(change.at)}
+												</p>
+												<p className="mt-0.5">{change.reason}</p>
+												{(["name", "nim", "date", "description"] as const).map(
+													(key, position) =>
+														change.before[key] !== change.after[key] && (
+															<p
+																key={key}
+																className="mt-1 text-muted-foreground text-xs"
+															>
+																{
+																	["Nama", "NIM", "Tanggal", "Keterangan"][
+																		position
+																	]
+																}
+																: {change.before[key]} → {change.after[key]}
+															</p>
+														),
+												)}
+												{change.imageChanged && (
+													<p className="mt-1 text-muted-foreground text-xs">
+														Foto KTM diganti.
+													</p>
+												)}
+											</li>
+										))}
+									</ul>
+								</details>
 							) : (
-								<p className="text-muted-foreground text-sm">
-									Belum ada koreksi.
-								</p>
+								<div className="rounded-xl border border-border bg-surface-subtle/40 px-3.5 py-2.5 text-muted-foreground text-sm">
+									Riwayat koreksi: Belum ada koreksi.
+								</div>
 							)}
 						</section>
 					)}
+
 					{canChange && (
-						<div className="mt-5 flex flex-wrap gap-2">
+						<div className="mt-5 grid grid-cols-2 gap-2.5">
 							<Button
-								className="min-h-11"
+								className="min-h-11 rounded-xl"
 								variant="outline"
 								onClick={() => setPanel({ kind: "edit", code: selected.code })}
 							>
 								Edit laporan
 							</Button>
 							<Button
-								className="min-h-11"
+								className="min-h-11 rounded-xl"
 								variant="danger"
 								onClick={() =>
 									setPanel({ kind: "delete", code: selected.code })
@@ -664,6 +756,6 @@ export function ViolationsWorkspace() {
 					)}
 				</Modal>
 			)}
-		</div>
+		</section>
 	);
 }

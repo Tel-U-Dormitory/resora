@@ -1,5 +1,9 @@
 "use client";
 
+import { Input } from "@resora/ui/components/input";
+import { Label } from "@resora/ui/components/label";
+import { Select } from "@resora/ui/components/select";
+import { Textarea } from "@resora/ui/components/textarea";
 import { type FormEvent, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -81,108 +85,126 @@ export function ReportForm({
 	const fields = report ?? emptyFields;
 	return (
 		<form className="grid gap-4" onSubmit={handleSubmit}>
-			<label className="grid gap-1.5 font-semibold text-sm">
-				Nama mahasiswa
-				<input
-					className={control}
+			<div className="space-y-1.5">
+				<Label htmlFor="violation-name">Nama mahasiswa</Label>
+				<Input
+					id="violation-name"
 					name="name"
 					defaultValue={fields.name}
 					required
 					maxLength={160}
 				/>
-			</label>
-			<label className="grid gap-1.5 font-semibold text-sm">
-				NIM mahasiswa
-				<input
-					className={control}
-					name="nim"
-					defaultValue={fields.nim}
-					required
-					maxLength={40}
-				/>
-			</label>
-			<label className="grid gap-1.5 font-semibold text-sm">
-				Tanggal kejadian
-				<input
-					className={control}
-					name="date"
-					type="date"
-					defaultValue={fields.date}
-					max={localDate()}
-					required
-				/>
-			</label>
+			</div>
+			<div className="grid gap-4 sm:grid-cols-2">
+				<div className="space-y-1.5">
+					<Label htmlFor="violation-nim">NIM mahasiswa</Label>
+					<Input
+						id="violation-nim"
+						name="nim"
+						defaultValue={fields.nim}
+						required
+						maxLength={40}
+					/>
+				</div>
+				<div className="space-y-1.5">
+					<Label htmlFor="violation-date">Tanggal kejadian</Label>
+					<Input
+						id="violation-date"
+						name="date"
+						type="date"
+						defaultValue={fields.date}
+						max={localDate()}
+						required
+					/>
+				</div>
+			</div>
 			{!report && admin ? (
-				<label className="grid gap-1.5 font-semibold text-sm">
-					Gedung pencatat
-					<select className={control} name="building" required defaultValue="">
+				<div className="space-y-1.5">
+					<Label htmlFor="violation-building">Gedung pencatat</Label>
+					<Select
+						id="violation-building"
+						name="building"
+						required
+						defaultValue=""
+					>
 						<option value="" disabled>
 							Pilih gedung
 						</option>
 						{buildings.map((building) => (
 							<option key={building}>{building}</option>
 						))}
-					</select>
-				</label>
+					</Select>
+				</div>
 			) : (
-				<p className="text-sm">
-					Gedung pencatat: <strong>{report?.building ?? buildings[0]}</strong>
-				</p>
+				<div className="flex items-center justify-between rounded-xl border border-border bg-surface-subtle/60 px-3.5 py-2.5 text-sm">
+					<span className="text-muted-foreground">Gedung pencatat</span>
+					<strong className="font-semibold text-foreground">
+						{report?.building ?? buildings[0]}
+					</strong>
+				</div>
 			)}
-			<label className="grid gap-1.5 font-semibold text-sm">
-				Keterangan pelanggaran
-				<textarea
-					className={control}
+			<div className="space-y-1.5">
+				<Label htmlFor="violation-description">Keterangan pelanggaran</Label>
+				<Textarea
+					id="violation-description"
 					name="description"
 					defaultValue={fields.description}
 					required
 					rows={4}
 					maxLength={2000}
 				/>
-			</label>
-			<label className="grid min-w-0 gap-1.5 font-semibold text-sm">
-				{report ? "Ganti foto KTM (opsional)" : "Foto KTM"}
+			</div>
+			<div className="min-w-0 space-y-1.5">
+				<Label htmlFor="violation-ktm">
+					{report ? "Ganti foto KTM (opsional)" : "Foto KTM"}
+				</Label>
 				<input
-					className={control}
+					id="violation-ktm"
+					className={`${control} file:mr-3 file:rounded-lg file:border-0 file:bg-muted file:px-3 file:py-1 file:font-semibold file:text-foreground file:text-xs`}
 					name="ktm"
 					type="file"
 					accept="image/jpeg,image/png,image/webp"
 					required={!report}
 					aria-describedby="ktm-help"
 				/>
-			</label>
-			<p id="ktm-help" className="text-muted-foreground text-sm">
-				Gunakan gambar sintetis. JPG, PNG, atau WebP, maksimal 10 MB.
-			</p>
+				<p id="ktm-help" className="text-muted-foreground text-xs">
+					Gunakan gambar sintetis. JPG, PNG, atau WebP, maksimal 10 MB.
+				</p>
+			</div>
 			{report && (
-				<label className="grid gap-1.5 font-semibold text-sm">
-					Alasan perubahan
-					<textarea
-						className={control}
+				<div className="space-y-1.5">
+					<Label htmlFor="violation-reason">Alasan perubahan</Label>
+					<Textarea
+						id="violation-reason"
 						name="reason"
 						required
 						rows={2}
 						maxLength={500}
 					/>
-				</label>
+				</div>
 			)}
 			{error && (
-				<p role="alert" className="text-destructive text-sm">
+				<p
+					role="alert"
+					className="rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 font-medium text-danger text-sm"
+				>
 					{error}
 				</p>
 			)}
-			<Button
-				type="submit"
-				size="lg"
-				loading={busy}
-				className="justify-self-start"
-			>
-				{busy
-					? "Memproses foto…"
-					: report
-						? "Simpan perubahan simulasi"
-						: "Lanjut ke konfirmasi"}
-			</Button>
+			<div className="pt-1">
+				<Button
+					type="submit"
+					size="lg"
+					loading={busy}
+					className="min-h-11 w-full rounded-xl sm:w-auto"
+				>
+					{busy
+						? "Memproses foto…"
+						: report
+							? "Simpan perubahan simulasi"
+							: "Lanjut ke konfirmasi"}
+				</Button>
+			</div>
 		</form>
 	);
 }

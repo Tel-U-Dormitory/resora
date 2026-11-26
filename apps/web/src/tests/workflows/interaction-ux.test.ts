@@ -1031,7 +1031,6 @@ const jsxScope = {
 	DashboardActivities: "DashboardActivities",
 	DashboardMetrics: "DashboardMetrics",
 	DashboardPreviewProvider: "DashboardPreviewProvider",
-	getDashboardPreviewFixtures: async () => ({}),
 	Avatar: "Avatar",
 	Link: "Link",
 	ArrowRight: "ArrowRight",
