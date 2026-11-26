@@ -612,7 +612,7 @@ test("bulk candidate loading, safe error/retry and empty states retain staged se
 	expect(text(render())).not.toContain("SQL private details");
 	expect(byText(render(), "Coba kembali")).toBeDefined();
 	f.setQuery({ data: [] });
-	expect(text(render())).toContain("Tidak ada SR eligible");
+	expect(text(render())).toContain("Tidak ada SR yang sesuai");
 	expect(render().props.submitLabel).toBe("Tambahkan 1 anggota");
 });
 
@@ -640,7 +640,7 @@ test("detail keeps ineligible members visible/removable and uses responsive card
 	expect(byText(tree, "Hapus kepanitiaan").props.disabled).toBe(true);
 	expect(byText(tree, "Edit penugasan").props.disabled).toBe(true);
 	expect(byText(tree, "Keluarkan").props.disabled).toBeUndefined();
-	expect(text(tree)).toContain("Tidak eligible");
+	expect(text(tree)).toContain("Tidak memenuhi syarat");
 	expect(elements(tree).filter((row) => row.type === "li")).toHaveLength(16); // 1 division + 15 members
 	expect(elements(tree).some((row) => row.type === "table")).toBe(false);
 	(field(tree, "member-search").props.onChange as (value: unknown) => void)({

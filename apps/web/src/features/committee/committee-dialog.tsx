@@ -78,7 +78,10 @@ export function CommitteeDialog({
 				if (!open && !submitting.current) onClose();
 			}}
 		>
-			<DialogContent className="resora-admin-dialog" initialFocus={titleRef}>
+			<DialogContent
+				className="resora-admin-dialog resora-committee-dialog"
+				initialFocus={titleRef}
+			>
 				<DialogTitle
 					ref={titleRef}
 					tabIndex={-1}
