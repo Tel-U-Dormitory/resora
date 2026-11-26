@@ -73,6 +73,7 @@ export default async function SrDashboard() {
 				isSystem={session.actor === "SYSTEM_ADMIN"}
 			/>
 			<DashboardPreviewProvider
+				key={session.userId}
 				fixtures={previewFixtures}
 				canManage={canManageDashboard}
 				initialMode={canManageDashboard ? "management" : "personal"}

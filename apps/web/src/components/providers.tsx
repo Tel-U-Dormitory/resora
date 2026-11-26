@@ -12,7 +12,7 @@ import { ThemeProvider } from "./theme-provider";
 export default function Providers({ children }: { children: React.ReactNode }) {
 	const pathname = usePathname();
 	const workspace =
-		/^\/(dashboard|broadcasts|profile|attendance|scan|events|committees|admin)(\/|$)/.test(
+		/^\/(dashboard-preview|dashboard|broadcasts|profile|attendance|scan|events|committees|admin)(\/|$)/.test(
 			pathname,
 		);
 	return (

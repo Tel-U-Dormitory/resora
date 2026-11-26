@@ -50,9 +50,10 @@ export function DashboardPreviewProvider({
 		connectionSnapshot,
 		serverConnectionSnapshot,
 	);
-	const [previewMode, setPreviewMode] = useState<DashboardMode>(
+	const [selectedMode, setPreviewMode] = useState<DashboardMode>(
 		initialMode === "management" && !canManage ? "personal" : initialMode,
 	);
+	const previewMode = canManage ? selectedMode : "personal";
 	const selectMode = (mode: DashboardMode) => {
 		if (mode === "personal" || canManage) setPreviewMode(mode);
 	};
