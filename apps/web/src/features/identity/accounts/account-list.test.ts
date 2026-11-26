@@ -66,6 +66,7 @@ function fixture(file: string) {
 		"lucide-react": { Plus: "Plus" },
 		"@/components/ui/button": { Button: "Button" },
 		"@/components/ui/card": { Card: "Card", CardContent: "CardContent" },
+		"@/components/empty-state": { EmptyState: "EmptyState" },
 	};
 	for (const name of ["Input", "Label", "Select", "Checkbox"])
 		mocks[`@resora/ui/components/${name.toLowerCase()}`] = { [name]: name };

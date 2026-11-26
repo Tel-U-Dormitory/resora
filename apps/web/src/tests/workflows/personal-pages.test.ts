@@ -17,7 +17,12 @@ function text(value: unknown): string {
 	if (typeof value === "string" || typeof value === "number")
 		return String(value);
 	return value && typeof value === "object"
-		? text((value as Node).props?.children)
+		? [
+				text((value as Node).props?.children),
+				(value as Node).type === "EmptyState"
+					? `${String((value as Node).props?.title ?? "")} ${String((value as Node).props?.description ?? "")}`
+					: "",
+			].join(" ")
 		: "";
 }
 function fixture(file: string) {
@@ -118,6 +123,11 @@ function fixture(file: string) {
 		return transport.trpc;
 	};
 	mocks["@/components/ui/button"] = { Button: "Button" };
+	mocks["@/components/empty-state"] = { EmptyState: "EmptyState" };
+	mocks["@/lib/auth-client"] = {
+		authClient: { signOut: async () => ({}) },
+	};
+	mocks.sonner = { toast: { error: () => {}, success: () => {} } };
 	const code = ts.transpileModule(
 		readFileSync(new URL(file, import.meta.url), "utf8"),
 		{
@@ -222,7 +232,7 @@ test("own history preserves server presence/timing, WIB and personal pagination 
 	expect(f.queries[0]?.refetchOnMount).toBe("always");
 	expect(text(tree)).toContain("07.30");
 	expect(text(tree)).toContain("WIB");
-	expect(text(tree)).toContain("Terlambat 5 menit setelah toleransi");
+	expect(text(tree)).toContain("Terlambat 5 mnt");
 	expect(text(tree)).toContain("Dicatat manual");
 	expect(
 		nodes(tree).find((node) => node.type === feedback.StatusBadge)?.props
