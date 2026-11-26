@@ -12,6 +12,7 @@
 			"!.agent/skills",
 			"!.codex/skills",
 			"!.private",
+			"!docs/design/referensi kasar",
 			"!tmp",
 			"!temp",
 			"!**/.next",
