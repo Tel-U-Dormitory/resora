@@ -82,36 +82,41 @@ export async function requestDashboardMetric(
 		].includes(scenario)
 	) {
 		if (
-			process.env.NODE_ENV !== "development" &&
-			process.env.NODE_ENV !== "test"
-		)
+			process.env.NODE_ENV === "development" ||
+			process.env.NODE_ENV === "test"
+		) {
+			const { default: dashboardStateFixtures } = await import(
+				"./fixtures/states.json"
+			);
+			// Explicit cases keep domain payloads distinct from transport failures.
+			switch (scenario) {
+				case "empty":
+					state = { ...dashboardStateFixtures.empty, kind: "empty" };
+					break;
+				case "not_assessed":
+					state = {
+						...dashboardStateFixtures.not_assessed,
+						kind: "not_assessed",
+					};
+					break;
+				case "missing_period":
+					state = {
+						...dashboardStateFixtures.missing_period,
+						kind: "missing_period",
+					};
+					break;
+				case "unavailable":
+					state = {
+						...dashboardStateFixtures.unavailable,
+						kind: "unavailable",
+					};
+					break;
+				case "stale":
+					state = { ...dashboardStateFixtures.stale, kind: "stale" };
+					break;
+			}
+		} else {
 			throw new Error("Dashboard preview is disabled in production");
-		const { default: dashboardStateFixtures } = await import(
-			"./fixtures/states.json"
-		);
-		// Explicit cases keep domain payloads distinct from transport failures.
-		switch (scenario) {
-			case "empty":
-				state = { ...dashboardStateFixtures.empty, kind: "empty" };
-				break;
-			case "not_assessed":
-				state = {
-					...dashboardStateFixtures.not_assessed,
-					kind: "not_assessed",
-				};
-				break;
-			case "missing_period":
-				state = {
-					...dashboardStateFixtures.missing_period,
-					kind: "missing_period",
-				};
-				break;
-			case "unavailable":
-				state = { ...dashboardStateFixtures.unavailable, kind: "unavailable" };
-				break;
-			case "stale":
-				state = { ...dashboardStateFixtures.stale, kind: "stale" };
-				break;
 		}
 	}
 	const ready = state.kind === "ready" || state.kind === "ready_summary";
