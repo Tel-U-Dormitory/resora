@@ -91,3 +91,47 @@ test("a failed background refresh preserves successful event data and is not a m
 		client.clear();
 	}
 });
+
+test("attendance refresh includes active account-scoped own history without fetching inactive accounts", async () => {
+	const client = new QueryClient({
+		defaultOptions: { queries: { retry: false } },
+	});
+	const personalMeta = { personalResource: "attendance.ownHistory" };
+	const ownKey = [
+		["personal:synthetic-a:v1"],
+		["attendance", "ownHistory"],
+		{ input: { offset: 0, limit: 25 } },
+	];
+	const otherKey = [
+		["personal:synthetic-b:v1"],
+		["attendance", "ownHistory"],
+		{ input: { offset: 0, limit: 25 } },
+	];
+	const profileKey = [["personal:synthetic-a:v1"], ["identity", "profile"], {}];
+	let calls = 0;
+	client.setQueryData(ownKey, "PENDING");
+	client.setQueryDefaults(otherKey, { meta: personalMeta });
+	client.setQueryData(otherKey, "OTHER ACCOUNT");
+	client.setQueryData(profileKey, "PRIVATE PROFILE");
+	const observer = new QueryObserver(client, {
+		queryKey: ownKey,
+		meta: personalMeta,
+		staleTime: Number.POSITIVE_INFINITY,
+		queryFn: async () => {
+			calls++;
+			return "PRESENT";
+		},
+	});
+	const stop = observer.subscribe(() => {});
+	try {
+		await refreshAttendanceQueries(client, keys);
+		expect(calls).toBe(1);
+		expect(client.getQueryData<string>(ownKey)).toBe("PRESENT");
+		expect(client.getQueryData<string>(otherKey)).toBe("OTHER ACCOUNT");
+		expect(client.getQueryState(otherKey)?.isInvalidated).toBe(true);
+		expect(client.getQueryState(profileKey)?.isInvalidated).toBe(false);
+	} finally {
+		stop();
+		client.clear();
+	}
+});
