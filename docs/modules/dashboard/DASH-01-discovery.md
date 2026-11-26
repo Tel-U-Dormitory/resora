@@ -1,6 +1,6 @@
 # Dashboard RESORA — discovery & frontend contract
 
-Status: **PM-approved frontend-first scope**. DASH-01–04 deliver the dashboard UI and synthetic JSON fixtures. Do not change backend, database, authentication, or authorization in these phases. KPI fixtures are available only in development/test; production shows unavailable states when no authorized source is connected. Existing dashboard sections and their current behavior are retained.
+Status: **PM-approved frontend-first scope**. DASH-01–04 deliver the dashboard UI and synthetic JSON fixtures. Visual layout, responsive behavior, components, copy and accessibility follow the [canonical RESORA Design System](../../design-system.md). This document governs approved KPI/data/source/capability behavior; its frontend-first phase does not change backend, database, authentication, or authorization. KPI fixtures are available only in development/test; production shows unavailable states when no authorized source is connected. Existing dashboard sections and their current behavior are retained.
 
 ## Requirement sources
 

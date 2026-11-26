@@ -1,5 +1,7 @@
 # Frontend UI consistency audit — 2026-10-19
 
+> **Historis:** audit ini mempertahankan bukti perubahan 2026-10-19. Arahan visualnya superseded oleh [Design System](../design-system.md) sejak 2026-11-26; hasil uji di bawah bukan validasi refactor baru.
+
 Scope: all frontend route entry points, shared shell/navigation, Identity and Attendance feature surfaces, and shared UI primitives. Method: repository/source inspection and CLI checks. This is not a visual acceptance or accessibility certification.
 
 ## Findings and applied changes

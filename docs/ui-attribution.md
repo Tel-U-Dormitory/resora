@@ -1,5 +1,7 @@
 # Administrator UI component sources
 
+> **Implementation provenance, not a library mandate.** This records the component stack and visual source used in the 2026-10-19 administrator UI. The current system may use another suitable free library; follow [Design System](design-system.md) and document dependency/architecture changes.
+
 Shared dialog composition, tooltips, buttons, inputs, select, checkbox and cards use the existing shadcn/ui + Base UI stack. Dialog composition follows [shadcn Dialog](https://ui.shadcn.com/docs/components/base/dialog); tooltip composition follows [shadcn Tooltip](https://ui.shadcn.com/docs/components/base/tooltip). RESORA theme tokens, consistent 44px action targets, keyboard focus, modal title/description and reduced-motion support are retained.
 
 Account action hover decoration adapts the `::before` sweep from [vinodjangid07's Uiverse button](https://uiverse.io/vinodjangid07/tall-termite-79), read from the [official Uiverse Galaxy archive](https://github.com/uiverse-io/galaxy/blob/main/Buttons/vinodjangid07_tall-termite-79.html). It uses RESORA colors, fixed button dimensions, no active-position translation or blend effect, and shadcn Tooltip for the label. It adds no dependency. Attribution: vinodjangid07 / Uiverse.io.

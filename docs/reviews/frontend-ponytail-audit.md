@@ -1,5 +1,7 @@
 # Frontend Ponytail audit — 2026-10-19
 
+> **Analisis historis dan usulan, bukan cleanup yang disetujui.** Jangan hapus/ganti library berdasarkan audit ini tanpa memeriksa consumer saat ini, [Design System](../design-system.md), lisensi dan kontrak Architecture. Arah visual lama superseded sejak 2026-11-26.
+
 Scope: `apps/web` and `packages/ui`, including source imports, manifests, and configuration. Static repository inspection; findings are proposals only. Line estimates describe source removable from the current tree, not measured bundle savings. Welcome/login and their styled-components dependency are excluded from cleanup.
 
 - delete: Remove unused chat scaffold (`attachment`, `bubble`, `marker`, `message`, `message-scroller`), 630 lines; no app imports found. Replacement: nothing until a chat capability is approved; `@shadcn/react` is referenced only by the unused scroller and can then be removed. [components](../../packages/ui/src/components/)

@@ -67,9 +67,11 @@ The API is running at [http://localhost:3000](http://localhost:3000).
 
 ## UI Customization
 
-React web apps in this stack share shadcn/ui primitives through `packages/ui`.
+For authenticated UI/UX and frontend work, first follow the [canonical RESORA design system](docs/design-system.md), its linked component/interaction catalog and [agent workflow](docs/design-frontend-guidelines.md). The current shared shadcn/Base UI components are an implementation source that may be adapted or replaced by a suitable free library; they do not override the canonical design system. Public `/` and `/login` are outside its refactor scope.
 
-- Change design tokens and global styles in `packages/ui/src/styles/globals.css`
+When reusing the current UI package:
+
+- Existing global styles and shared primitives are in `packages/ui/src/styles/globals.css`
 - Update shared primitives in `packages/ui/src/components/*`
 - Adjust shadcn aliases or style config in `packages/ui/components.json` and `apps/web/components.json`
 
