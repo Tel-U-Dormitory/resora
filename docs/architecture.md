@@ -1158,7 +1158,10 @@ statistics and has no dashboard UI or aggregation backend.
   bucket, grouped by recorded building snapshot. `violations.list` pages at 20 by
   default and caps at 50. Edit is owner/SUPERADMIN-only, requires a reason and
   expected version, allows only the PM-approved fields and optional KTM replacement,
-  and appends before/after audit in the same transaction. Old KTM objects are retained.
+  and appends before/after audit in the same transaction. List/detail expose the
+  persisted `version` for the next edit request. History rejects full audit access
+  to deleted reports for every SR, including the reporter; only privileged
+  SUPERADMIN retains that access. Old KTM objects are retained.
   Deleted records cannot be edited/restored. Retention after the next SR term and
   physical purge authority remain to be defined.
 
