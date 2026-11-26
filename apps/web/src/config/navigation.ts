@@ -98,7 +98,8 @@ export function getAppItems(
 }
 
 export function getPrimaryDestination(pathname: string) {
-	if (pathname === "/dashboard") return "/dashboard";
+	if (pathname === "/dashboard" || pathname === "/dashboard-preview")
+		return "/dashboard";
 	if (pathname === "/broadcasts" || pathname.startsWith("/broadcasts/"))
 		return "/broadcasts";
 	if (
@@ -115,6 +116,7 @@ export function isSidebarLinkActive(
 	pathname: string,
 	managementView: boolean,
 ) {
+	if (href === "/dashboard" && pathname === "/dashboard-preview") return true;
 	const managingEvents =
 		pathname.startsWith("/events") &&
 		pathname !== "/events/points" &&

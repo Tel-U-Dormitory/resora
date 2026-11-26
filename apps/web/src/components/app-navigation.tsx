@@ -1,14 +1,14 @@
 "use client";
 
-import { Button } from "@resora/ui/components/button";
 import {
-	Sheet,
-	SheetContent,
-	SheetDescription,
-	SheetHeader,
-	SheetTitle,
-} from "@resora/ui/components/sheet";
-import { Grid2X2, House, Inbox, ScanLine, UserRound, X } from "lucide-react";
+	Grip,
+	House,
+	Inbox,
+	QrCode,
+	ShieldAlert,
+	Sparkles,
+	UserRound,
+} from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -43,21 +43,39 @@ export function AppNavigation({
 	] as const;
 	const destination = getPrimaryDestination(pathname);
 	const appsCurrent = !destination && pathname !== "/scan";
+	const activeNavIndex =
+		open || appsCurrent
+			? 3
+			: destination
+				? destinations.findIndex((item) => item.href === destination)
+				: -1;
+
 	const close = useCallback(() => {
 		setOpen(false);
 		if (historyEntry.current && window.history.state?.resoraApps) {
 			historyEntry.current = false;
 			window.history.back();
 		}
+		requestAnimationFrame(() => {
+			trigger.current?.focus();
+		});
 	}, []);
+
 	useEffect(() => {
 		const onPopState = () => {
-			historyEntry.current = Boolean(window.history.state?.resoraApps);
-			setOpen(historyEntry.current);
+			const nextOpen = Boolean(window.history.state?.resoraApps);
+			historyEntry.current = nextOpen;
+			setOpen(nextOpen);
 		};
 		const wide = window.matchMedia("(min-width: 1200px)");
 		const onResize = () => {
-			if (wide.matches) close();
+			if (wide.matches) {
+				setOpen(false);
+				if (historyEntry.current && window.history.state?.resoraApps) {
+					historyEntry.current = false;
+					window.history.back();
+				}
+			}
 		};
 		window.addEventListener("popstate", onPopState);
 		wide.addEventListener("change", onResize);
@@ -67,135 +85,198 @@ export function AppNavigation({
 			window.removeEventListener("popstate", onPopState);
 			wide.removeEventListener("change", onResize);
 		};
-	}, [close]);
+	}, []);
+
+	useEffect(() => {
+		if (!open) return;
+		requestAnimationFrame(() => {
+			title.current?.focus();
+		});
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") {
+				event.preventDefault();
+				close();
+			}
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [open, close]);
+
 	return (
 		<>
+			{open && (
+				<div
+					aria-hidden="true"
+					className="resora-apps-backdrop fade-in-0 animate-in duration-150"
+					onClick={close}
+				/>
+			)}
 			<div className="resora-mobile-dock" data-mobile-navigation="">
-				<nav className="resora-bottom-nav" aria-label="Navigasi utama">
-					{destinations.map(({ label, href, icon: Icon }) => {
-						const current = destination === href;
-						return (
-							<Link
-								key={href}
-								href={href}
-								aria-current={current ? "page" : undefined}
-								className="resora-nav-item"
+				<div className="resora-nav-shell" data-open={open || undefined}>
+					{open && (
+						<div
+							id="resora-apps"
+							role="dialog"
+							aria-modal="true"
+							aria-labelledby="resora-apps-title"
+							className="resora-apps-panel fade-in-0 slide-in-from-bottom-4 animate-in duration-200"
+						>
+							<h2
+								id="resora-apps-title"
+								ref={title}
+								tabIndex={-1}
+								className="sr-only"
 							>
-								<Icon aria-hidden="true" />
-								<span>{label}</span>
-							</Link>
-						);
-					})}
-					<button
-						ref={trigger}
-						type="button"
-						className="resora-nav-item"
-						aria-expanded={open}
-						aria-controls="resora-apps"
-						aria-haspopup="dialog"
-						data-current={appsCurrent || undefined}
-						onClick={() => {
-							if (open) return;
-							historyEntry.current = true;
-							window.history.pushState(
-								{ ...window.history.state, resoraApps: true },
-								"",
+								Apps
+							</h2>
+							<button
+								type="button"
+								onClick={close}
+								aria-label="Tutup Apps"
+								className="focus-ring sr-only rounded-lg border border-border bg-surface px-2.5 py-1 font-semibold text-foreground text-xs focus:not-sr-only focus:mb-2 focus:self-end"
+							>
+								Tutup
+							</button>
+							<div className="resora-apps-grid">
+								{items.map(({ title: label, href, icon }) => {
+									const Icon = navigationIcons[icon];
+									return (
+										<Link
+											key={href}
+											href={href as Route}
+											className="resora-app-item focus-ring"
+											onClick={(event) => {
+												if (
+													event.metaKey ||
+													event.ctrlKey ||
+													event.shiftKey ||
+													event.altKey
+												)
+													return;
+												event.preventDefault();
+												setOpen(false);
+												historyEntry.current = false;
+												if (window.history.state?.resoraApps) {
+													const state = { ...window.history.state };
+													delete state.resoraApps;
+													window.history.replaceState(state, "");
+													router.replace(href as Route);
+												} else {
+													router.push(href as Route);
+												}
+											}}
+										>
+											<span className="resora-app-tile">
+												<span className="resora-app-icon" data-icon={icon}>
+													<Icon aria-hidden="true" />
+												</span>
+											</span>
+											<span className="resora-app-label">{label}</span>
+										</Link>
+									);
+								})}
+								{[
+									{
+										id: "cleanliness",
+										title: "Kebersihan Kamar",
+										icon: Sparkles,
+									},
+									{
+										id: "violations",
+										title: "Pelanggaran",
+										icon: ShieldAlert,
+									},
+								].map(({ id, title: upcomingTitle, icon: UpcomingIcon }) => (
+									<div
+										key={upcomingTitle}
+										aria-disabled="true"
+										className="resora-app-item resora-app-upcoming"
+									>
+										<span className="resora-app-tile">
+											<span className="resora-app-icon" data-icon={id}>
+												<UpcomingIcon aria-hidden="true" />
+											</span>
+										</span>
+										<span className="resora-app-label">{upcomingTitle}</span>
+										<span className="resora-app-soon">Segera</span>
+									</div>
+								))}
+							</div>
+						</div>
+					)}
+					<nav className="resora-bottom-nav" aria-label="Navigasi utama">
+						<span
+							aria-hidden="true"
+							className="resora-nav-indicator"
+							data-visible={activeNavIndex >= 0 ? "true" : "false"}
+							style={{
+								transform: `translateX(${Math.max(0, activeNavIndex) * 100}%)`,
+							}}
+						/>
+						{destinations.map(({ label, href, icon: Icon }) => {
+							const current = !open && destination === href;
+							return (
+								<Link
+									key={href}
+									href={href}
+									aria-current={current ? "page" : undefined}
+									className="resora-nav-item"
+									onClick={() => {
+										if (open) {
+											setOpen(false);
+											if (
+												historyEntry.current &&
+												window.history.state?.resoraApps
+											) {
+												const state = { ...window.history.state };
+												delete state.resoraApps;
+												window.history.replaceState(state, "");
+												historyEntry.current = false;
+											}
+										}
+									}}
+								>
+									<Icon aria-hidden="true" />
+									<span>{label}</span>
+								</Link>
 							);
-							setOpen(true);
-						}}
-					>
-						<Grid2X2 aria-hidden="true" />
-						<span>Apps</span>
-					</button>
-				</nav>
+						})}
+						<button
+							ref={trigger}
+							type="button"
+							className="resora-nav-item"
+							aria-expanded={open}
+							aria-controls="resora-apps"
+							aria-haspopup="dialog"
+							data-current={open || appsCurrent || undefined}
+							onClick={() => {
+								if (open) {
+									close();
+									return;
+								}
+								historyEntry.current = true;
+								window.history.pushState(
+									{ ...window.history.state, resoraApps: true },
+									"",
+								);
+								setOpen(true);
+							}}
+						>
+							<Grip aria-hidden="true" />
+							<span>Apps</span>
+						</button>
+					</nav>
+				</div>
 				{isSr && (
 					<Link
 						href="/scan"
 						className="resora-scan-action"
 						aria-label="Scan QR"
 					>
-						<ScanLine aria-hidden="true" />
+						<QrCode aria-hidden="true" />
 					</Link>
 				)}
 			</div>
-			<Sheet
-				open={open}
-				onOpenChange={(next) => {
-					if (!next) close();
-				}}
-			>
-				<SheetContent
-					id="resora-apps"
-					side="bottom"
-					showCloseButton={false}
-					initialFocus={title}
-					finalFocus={trigger}
-					className="resora-apps-sheet"
-				>
-					<SheetHeader className="flex-row items-start justify-between gap-4 p-0">
-						<div className="space-y-1">
-							<SheetTitle ref={title} tabIndex={-1} className="text-xl">
-								Apps
-							</SheetTitle>
-							<SheetDescription>
-								Pilih modul yang tersedia untuk kamu.
-							</SheetDescription>
-						</div>
-						<Button
-							variant="ghost"
-							size="icon"
-							aria-label="Tutup Apps"
-							onClick={close}
-						>
-							<X aria-hidden="true" />
-						</Button>
-					</SheetHeader>
-					{items.length ? (
-						<div className="resora-apps-grid">
-							{items.map(({ title: label, href, icon }) => {
-								const Icon = navigationIcons[icon];
-								return (
-									<Link
-										key={href}
-										href={href as Route}
-										onClick={(event) => {
-											if (
-												event.metaKey ||
-												event.ctrlKey ||
-												event.shiftKey ||
-												event.altKey
-											)
-												return;
-											event.preventDefault();
-											setOpen(false);
-											historyEntry.current = false;
-											if (window.history.state?.resoraApps) {
-												// Convert the temporary overlay entry into the destination;
-												// Back then returns directly to the page behind Apps.
-												const state = { ...window.history.state };
-												delete state.resoraApps;
-												window.history.replaceState(state, "");
-												router.replace(href as Route);
-											} else {
-												router.push(href as Route);
-											}
-										}}
-									>
-										<span className="resora-app-icon">
-											<Icon aria-hidden="true" />
-										</span>
-										<span>{label}</span>
-									</Link>
-								);
-							})}
-						</div>
-					) : (
-						<p role="status" className="py-6 text-sm">
-							Belum ada modul lain yang tersedia untuk akun kamu.
-						</p>
-					)}
-				</SheetContent>
-			</Sheet>
 		</>
 	);
 }

@@ -27,7 +27,7 @@
 	padding-bottom: max(1.75rem, env(safe-area-inset-bottom, 0px));
 }
 .resora-camera-surface [aria-hidden="true"] > span {
-	border-color: var(--primary);
+	border-color: var(--secondary);
 }
 .resora-camera-surface .resora-scan-line {
 	background: var(--primary);
@@ -37,13 +37,15 @@
 	outline-color: var(--scanner-foreground);
 }
 .resora-camera-zoom {
-	background: var(--scanner-canvas);
-	padding-block: 0.75rem;
-	border-radius: var(--workspace-radius-control);
+	background: rgb(24 24 24 / 0.88);
+	border: 1px solid rgb(255 255 255 / 0.14);
+	padding: 0.875rem 1rem;
+	border-radius: var(--workspace-radius-card);
+	backdrop-filter: blur(8px);
 }
 :root:has(.resora-workspace) .resora-camera-zoom input[type="range"] {
 	width: 100%;
-	accent-color: var(--primary);
+	accent-color: var(--secondary);
 }
 .resora-scanner > :is(p, details) {
 	max-width: 40rem;

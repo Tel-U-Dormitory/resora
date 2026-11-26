@@ -14,18 +14,18 @@ const messages: Record<string, string> = {
 		"QR telah dibatalkan atau diganti. Minta HCO menampilkan QR terbaru.",
 	SESSION_INACTIVE: "Sesi kehadiran belum aktif. Hubungi HCO.",
 	SESSION_CLOSED: "Sesi kehadiran sudah ditutup.",
-	NOT_INVITED: "Anda tidak termasuk dalam daftar undangan event ini.",
+	NOT_INVITED: "Kamu tidak termasuk dalam daftar undangan kegiatan ini.",
 	NOT_ELIGIBLE:
-		"Akun Anda tidak memenuhi syarat check-in SR. Hubungi pengelola akun.",
+		"Akun kamu belum memenuhi syarat check-in SR. Hubungi pengelola akun.",
 	PASSWORD_CHANGE_REQUIRED:
 		"Ganti password terlebih dahulu untuk melakukan check-in.",
-	GPS_DENIED: `Izin lokasi ditolak. Aktifkan lokasi untuk RESORA melalui pengaturan browser/perangkat, lalu coba Perbarui Lokasi atau buka kamera kembali. ${gpsHelp}`,
+	GPS_DENIED: `Izin lokasi ditolak. Aktifkan lokasi untuk RESORA di pengaturan browser atau perangkat, lalu ketuk Perbarui Lokasi. ${gpsHelp}`,
 	GPS_INTERRUPTED: `Pengambilan lokasi terhenti setelah berpindah aplikasi. Kembali ke RESORA dan pilih Perbarui Lokasi. ${gpsHelp}`,
 	GPS_TIMEOUT: `Pengambilan lokasi terlalu lama. Pilih Perbarui Lokasi di tempat dengan sinyal lebih baik. ${gpsHelp}`,
 	GPS_UNAVAILABLE: `Lokasi tidak tersedia. ${gpsHelp}`,
 	INVALID_LOCATION: `Lokasi yang diterima tidak valid. ${gpsHelp}`,
 	GPS_INACCURATE: `Akurasi GPS belum mencapai 40 meter. Coba Perbarui Lokasi di area terbuka. ${gpsHelp}`,
-	OUTSIDE_GEOFENCE: `Titik lokasi perangkat terdeteksi di luar radius event. Jika Anda sudah di lokasi, pilih Perbarui Lokasi untuk mencoba lagi tanpa scan ulang. ${gpsHelp}`,
+	OUTSIDE_GEOFENCE: `Titik lokasi perangkat terdeteksi di luar radius kegiatan. Jika kamu sudah di lokasi, pilih Perbarui Lokasi untuk mencoba lagi tanpa scan ulang. ${gpsHelp}`,
 	HTTPS_REQUIRED:
 		"Kamera dan lokasi memerlukan koneksi aman. Gunakan alamat HTTPS RESORA.",
 	CAMERA_DENIED:
@@ -33,7 +33,7 @@ const messages: Record<string, string> = {
 	CAMERA_UNAVAILABLE:
 		"Kamera tidak tersedia atau sedang digunakan aplikasi lain. Periksa kamera dan coba lagi.",
 	VIDEO_NOT_READY:
-		"Video belum siap dipindai. Ketuk tombol kamera untuk memulai ulang pemindaian.",
+		"Kamera belum siap memindai. Ketuk tombol kamera untuk memuat ulang.",
 	STREAM_ENDED:
 		"Stream kamera berhenti. Ketuk tombol kamera untuk memulai ulang pemindaian.",
 	DECODER_FAILED:

@@ -5,6 +5,7 @@ import {
 	DialogDescription,
 	DialogTitle,
 } from "@resora/ui/components/dialog";
+import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { DashboardFixture, DashboardMetric } from "./dashboard.contracts";
 import { useDashboardPreview } from "./dashboard-preview-context";
@@ -108,14 +109,24 @@ export function DashboardExportDialog({
 		<Dialog open={open} onOpenChange={changeOpen}>
 			<DialogContent>
 				<div className="space-y-5">
-					<div className="space-y-2">
-						<DialogTitle className="font-semibold text-xl">
-							Ekspor contoh {metric.title.toLowerCase()}
-						</DialogTitle>
-						<DialogDescription className="text-muted-foreground text-sm">
-							Unduh file sintetis untuk meninjau format. File ini bukan laporan
-							operasional dan tidak berisi data anggota nyata.
-						</DialogDescription>
+					<div className="flex items-start justify-between gap-3">
+						<div className="space-y-2">
+							<DialogTitle className="font-semibold text-xl">
+								Ekspor contoh {metric.title.toLowerCase()}
+							</DialogTitle>
+							<DialogDescription className="text-muted-foreground text-sm">
+								Unduh file sintetis untuk meninjau format. File ini bukan
+								laporan operasional dan tidak berisi data anggota nyata.
+							</DialogDescription>
+						</div>
+						<button
+							type="button"
+							aria-label="Tutup dialog ekspor"
+							onClick={() => changeOpen(false)}
+							className="focus-ring inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-border bg-surface-subtle text-foreground"
+						>
+							<X size={18} aria-hidden="true" />
+						</button>
 					</div>
 					<dl className="space-y-3 text-sm">
 						<div>
@@ -173,7 +184,7 @@ export function DashboardExportDialog({
 					<div className="flex flex-wrap gap-3">
 						<button
 							type="button"
-							className="focus-ring min-h-12 rounded-xl bg-primary px-4 font-semibold text-primary-foreground text-sm"
+							className="focus-ring min-h-12 rounded-xl bg-primary px-4 font-semibold text-sm text-white"
 							disabled={pending || !formats.length}
 							onClick={() => void download()}
 						>

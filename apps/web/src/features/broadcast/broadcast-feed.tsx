@@ -37,6 +37,7 @@ export default function BroadcastFeed({
 	const [page, setPage] = useState(0);
 	const [search, setSearch] = useState("");
 	const [action, setAction] = useState<BroadcastAction | null>(null);
+	const [deckExpanded, setDeckExpanded] = useState(false);
 	const latest = useQuery({
 		...trpc.broadcast.latest.queryOptions(),
 		enabled: !synthetic && view === "LATEST",
@@ -94,29 +95,48 @@ export default function BroadcastFeed({
 	return (
 		<section
 			className={
-				view === "LATEST" ? "space-y-4" : "resora-page resora-inbox space-y-6"
+				view === "LATEST" ? "space-y-3" : "resora-page resora-inbox space-y-4"
 			}
 			aria-label={heading}
 		>
-			<div className="flex flex-wrap items-start justify-between gap-3">
-				<div className="space-y-2">
+			<div className="flex items-center justify-between gap-2">
+				<div className="min-w-0">
 					{view === "LATEST" ? (
-						<h2 className="font-semibold text-lg">{heading}</h2>
+						<h2 className="font-bold text-base">{heading}</h2>
 					) : (
-						<h1 className="font-bold text-2xl tracking-tight">{heading}</h1>
-					)}
-					{view !== "LATEST" && (
-						<p className="text-muted-foreground text-sm">
-							{view === "HISTORY"
-								? "Pengumuman kedaluwarsa atau diarsipkan, tersedia untuk dibaca kembali."
-								: "Informasi terbaru untuk seluruh Senior Resident."}
-						</p>
+						<div className="space-y-0.5">
+							<h1 className="font-bold text-xl tracking-tight sm:text-2xl">
+								{heading}
+							</h1>
+							<p className="hidden text-muted-foreground text-xs sm:block">
+								{view === "HISTORY"
+									? "Arsip pengumuman kedaluwarsa dan yang diarsipkan."
+									: "Informasi terbaru untuk Senior Resident."}
+							</p>
+						</div>
 					)}
 				</div>
-				<div className="flex flex-wrap items-center gap-2">
+				<div className="flex shrink-0 items-center gap-2">
+					{view === "LATEST" && deckExpanded && Boolean(displayed?.length) && (
+						<button
+							type="button"
+							onClick={() => setDeckExpanded(false)}
+							className="focus-ring rounded-lg px-2 py-1 font-bold text-foreground text-xs hover:bg-surface-subtle"
+						>
+							Tampilkan ringkas
+						</button>
+					)}
+					{!synthetic &&
+						canManage &&
+						view !== "HISTORY" &&
+						Boolean(displayed?.length) && (
+							<Button onClick={() => setAction({ kind: "create" })}>
+								Buat Pengumuman
+							</Button>
+						)}
 					{!synthetic && (
 						<Link
-							className="focus-ring inline-flex min-h-11 items-center rounded-lg px-3 font-semibold text-primary text-sm"
+							className="focus-ring inline-flex min-h-9 items-center rounded-xl border border-border bg-surface px-3 font-semibold text-foreground text-xs hover:bg-surface-subtle"
 							href={
 								view === "LATEST" || view === "HISTORY"
 									? "/broadcasts"
@@ -132,34 +152,34 @@ export default function BroadcastFeed({
 					)}
 				</div>
 			</div>
-			{!synthetic && canManage && view !== "HISTORY" && (
-				<section
-					aria-label="Kelola pengumuman"
-					className="resora-inbox-management rounded-xl border border-border p-4"
-				>
-					<div className="space-y-1">
-						<h2 className="font-semibold text-sm">Kelola pengumuman</h2>
-						<p className="text-muted-foreground text-sm">
-							Terbitkan informasi untuk seluruh Senior Resident.
-						</p>
+			{view !== "LATEST" && (Boolean(items?.length) || Boolean(keyword)) && (
+				<div className="space-y-1">
+					<Label htmlFor="inbox-search" className="sr-only">
+						Cari di halaman ini
+					</Label>
+					<div className="relative">
+						<svg
+							aria-hidden="true"
+							viewBox="0 0 20 20"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="1.75"
+							className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground"
+						>
+							<circle cx="9" cy="9" r="6" />
+							<path d="m14 14 3.5 3.5" />
+						</svg>
+						<Input
+							id="inbox-search"
+							type="search"
+							value={search}
+							onChange={(event) => setSearch(event.target.value)}
+							placeholder="Cari pengumuman…"
+							aria-describedby="inbox-search-hint"
+							className="rounded-xl pl-10"
+						/>
 					</div>
-					<Button onClick={() => setAction({ kind: "create" })}>
-						Buat Pengumuman
-					</Button>
-				</section>
-			)}
-			{view !== "LATEST" && (
-				<div className="space-y-2">
-					<Label htmlFor="inbox-search">Cari di halaman ini</Label>
-					<Input
-						id="inbox-search"
-						type="search"
-						value={search}
-						onChange={(event) => setSearch(event.target.value)}
-						placeholder="Judul, isi, atau pengirim"
-						aria-describedby="inbox-search-hint"
-					/>
-					<p id="inbox-search-hint" className="text-muted-foreground text-sm">
+					<p id="inbox-search-hint" className="sr-only">
 						Pencarian hanya mencakup maksimal 10 pengumuman di halaman yang
 						sedang dibuka.
 					</p>
@@ -184,140 +204,386 @@ export default function BroadcastFeed({
 				</div>
 			) : (
 				<>
-					{view !== "LATEST" && (
-						<p role="status" className="text-muted-foreground text-sm">
+					{view !== "LATEST" && total > 0 && (
+						<p role="status" className="text-muted-foreground text-xs">
 							{keyword
-								? `${displayed?.length ?? 0} hasil di halaman ini. `
+								? `${displayed?.length ?? 0} hasil di halaman ini · `
 								: ""}
-							{total} pengumuman dalam daftar.
+							{total} pengumuman
 						</p>
 					)}
 					{!displayed?.length ? (
 						<Card>
-							<CardContent className="space-y-3">
-								<p>
+							<CardContent className="flex flex-col items-center justify-center px-4 py-6 text-center">
+								<svg
+									aria-hidden="true"
+									viewBox="0 0 96 80"
+									fill="none"
+									className="mx-auto mb-3 h-16 w-20 shrink-0"
+								>
+									<rect
+										x="16"
+										y="20"
+										width="64"
+										height="44"
+										rx="12"
+										fill="#EBE9FE"
+										stroke="#A58BFF"
+										strokeWidth="2"
+									/>
+									<path
+										d="M18 26l30 20 30-20"
+										stroke="#5B4FE9"
+										strokeWidth="2.5"
+										strokeLinecap="round"
+										strokeLinejoin="round"
+									/>
+									<circle cx="72" cy="22" r="9" fill="#FF6F6F" />
+									<path
+										d="M72 18v5m0 3h.01"
+										stroke="#FFFFFF"
+										strokeWidth="2.2"
+										strokeLinecap="round"
+									/>
+								</svg>
+								<p className="font-bold text-foreground text-sm">
 									{items?.length && keyword
 										? "Tidak ada pengumuman yang cocok di halaman ini."
 										: view === "HISTORY"
 											? "Belum ada riwayat pengumuman."
 											: "Belum ada pengumuman aktif."}
 								</p>
-								{keyword && (
-									<Button variant="outline" onClick={() => setSearch("")}>
-										Hapus pencarian
-									</Button>
+								<p className="mt-1 max-w-xs text-muted-foreground text-xs">
+									{items?.length && keyword
+										? "Ubah kata kunci atau hapus pencarian untuk melihat semua pengumuman."
+										: view === "HISTORY"
+											? "Pengumuman yang kedaluwarsa atau diarsipkan akan tampil di sini."
+											: !synthetic && canManage
+												? "Mulai terbitkan pengumuman baru untuk seluruh Senior Resident."
+												: "Informasi terbaru dari pengurus akan muncul di sini."}
+								</p>
+								{keyword ? (
+									<div className="mt-4">
+										<Button variant="outline" onClick={() => setSearch("")}>
+											Hapus pencarian
+										</Button>
+									</div>
+								) : (
+									!synthetic &&
+									canManage &&
+									view !== "HISTORY" && (
+										<div className="mt-4">
+											<Button onClick={() => setAction({ kind: "create" })}>
+												Buat Pengumuman
+											</Button>
+										</div>
+									)
 								)}
 							</CardContent>
 						</Card>
 					) : (
-						<div
-							className={
-								view === "LATEST"
-									? "grid min-w-0 gap-4 lg:grid-cols-2 xl:grid-cols-3"
-									: "resora-inbox-list grid min-w-0 gap-4"
-							}
-						>
-							{displayed?.map((item) => {
-								const link = safeBroadcastLink(item.linkUrl);
-								return (
-									<Card key={item.id} className="min-w-0">
-										<CardContent className="flex h-full min-w-0 flex-col gap-4">
-											<div className="space-y-2">
-												<ItemHeading className="break-words font-semibold [overflow-wrap:anywhere]">
-													{item.title}
-												</ItemHeading>
-												{view === "HISTORY" && (
-													<p className="text-muted-foreground text-sm">
-														{item.archivedAt ? "Diarsipkan" : "Kedaluwarsa"}
-													</p>
-												)}
-												<p className="line-clamp-4 whitespace-pre-wrap break-words text-sm [overflow-wrap:anywhere]">
-													{item.content}
-												</p>
-											</div>
-											<div className="space-y-1 text-muted-foreground text-sm">
-												<p className="break-words">Oleh {item.creatorName}</p>
-												<p>Diterbitkan: {formatEventTime(item.publishedAt)}</p>
-												<p>Berlaku hingga: {formatEventTime(item.expiresAt)}</p>
-												{item.archivedAt && (
-													<p>Diarsipkan: {formatEventTime(item.archivedAt)}</p>
-												)}
-											</div>
-											<div className="mt-auto flex flex-wrap items-center gap-2">
-												{synthetic ? (
-													<details className="w-full">
-														<summary className="focus-ring min-h-11 cursor-pointer rounded-xl border border-border px-3 py-3 text-sm">
-															Baca selengkapnya
-														</summary>
-														<p className="mt-3 whitespace-pre-wrap text-sm">
-															{item.content}
-														</p>
-													</details>
-												) : (
-													<Button
-														variant="outline"
-														onClick={() =>
-															setAction({ kind: "detail", id: item.id })
-														}
+						<>
+							<div
+								className={
+									view === "LATEST"
+										? "resora-broadcast-deck"
+										: "resora-inbox-list grid min-w-0 gap-2.5"
+								}
+								data-collapsed={
+									view === "LATEST" && !deckExpanded ? "true" : undefined
+								}
+							>
+								{displayed?.map((item, index) => {
+									const link = safeBroadcastLink(item.linkUrl);
+									if (view === "LATEST") {
+										return (
+											<Card
+												key={item.id}
+												className="resora-broadcast-card min-w-0"
+											>
+												<CardContent className="flex flex-col gap-3 p-3.5 sm:p-4">
+													<div className="flex items-center justify-between gap-3.5">
+														<div className="min-w-0 flex-1 space-y-1">
+															<ItemHeading className="line-clamp-1 font-bold text-foreground text-sm leading-snug">
+																{item.title}
+															</ItemHeading>
+															<p
+																className={
+																	deckExpanded
+																		? "whitespace-pre-wrap break-words text-muted-foreground text-xs [overflow-wrap:anywhere]"
+																		: "line-clamp-1 text-muted-foreground text-xs"
+																}
+															>
+																{item.content}
+															</p>
+														</div>
+														<span
+															className="resora-broadcast-badge"
+															data-tone={index % 3}
+															aria-hidden="true"
+														>
+															<svg
+																aria-hidden="true"
+																viewBox="0 0 24 24"
+																fill="none"
+																stroke="currentColor"
+																strokeWidth="2"
+																strokeLinecap="round"
+																strokeLinejoin="round"
+																className="size-5"
+															>
+																{index % 3 === 1 ? (
+																	<>
+																		<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+																		<path d="M13.73 21a2 2 0 0 1-3.46 0" />
+																	</>
+																) : index % 3 === 2 ? (
+																	<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+																) : (
+																	<>
+																		<path d="m3 11 18-5v12L3 14v-3z" />
+																		<path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+																	</>
+																)}
+															</svg>
+														</span>
+													</div>
+													{deckExpanded && (
+														<div className="space-y-2 border-border border-t pt-2.5">
+															<div className="flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground text-xs">
+																<span>Oleh {item.creatorName}</span>
+																<span>
+																	Diterbitkan:{" "}
+																	{formatEventTime(item.publishedAt)}
+																</span>
+																<span>
+																	Berlaku hingga:{" "}
+																	{formatEventTime(item.expiresAt)}
+																</span>
+															</div>
+															<div className="flex flex-wrap items-center gap-2">
+																{synthetic ? (
+																	<details className="w-full">
+																		<summary className="focus-ring min-h-10 cursor-pointer rounded-xl border border-border px-3 py-2 text-xs">
+																			Baca selengkapnya
+																		</summary>
+																		<p className="mt-2 whitespace-pre-wrap text-xs">
+																			{item.content}
+																		</p>
+																	</details>
+																) : (
+																	<Button
+																		variant="outline"
+																		onClick={() =>
+																			setAction({ kind: "detail", id: item.id })
+																		}
+																	>
+																		Baca Selengkapnya
+																	</Button>
+																)}
+																{link && (
+																	<a
+																		href={link}
+																		target="_blank"
+																		rel="noopener noreferrer"
+																		className="focus-ring inline-flex min-h-10 items-center rounded-lg px-2 font-semibold text-primary text-xs"
+																	>
+																		Informasi tambahan
+																	</a>
+																)}
+															</div>
+															{item.status === "ACTIVE" &&
+																(item.canEdit || item.canArchive) && (
+																	<div className="flex flex-wrap gap-2 pt-1">
+																		{item.canEdit && (
+																			<Button
+																				variant="outline"
+																				onClick={() =>
+																					setAction({
+																						kind: "edit",
+																						id: item.id,
+																					})
+																				}
+																			>
+																				Edit
+																			</Button>
+																		)}
+																		{item.canArchive && (
+																			<Button
+																				variant="outline"
+																				onClick={() =>
+																					setAction({
+																						kind: "archive",
+																						id: item.id,
+																					})
+																				}
+																			>
+																				Arsipkan
+																			</Button>
+																		)}
+																	</div>
+																)}
+														</div>
+													)}
+												</CardContent>
+											</Card>
+										);
+									}
+									return (
+										<Card key={item.id} className="min-w-0">
+											<CardContent className="flex min-w-0 flex-col gap-2.5">
+												<div className="flex items-start gap-3">
+													<span
+														className="resora-broadcast-badge"
+														data-tone={index % 3}
+														aria-hidden="true"
 													>
-														Baca Selengkapnya
-													</Button>
-												)}
-												{link && (
-													<a
-														href={link}
-														target="_blank"
-														rel="noopener noreferrer"
-														className="focus-ring inline-flex min-h-11 items-center rounded-lg px-2 font-semibold text-primary text-sm"
-													>
-														Informasi tambahan
-													</a>
-												)}
-											</div>
-											{view !== "HISTORY" &&
-												item.status === "ACTIVE" &&
-												(item.canEdit || item.canArchive) && (
-													<details className="border-border border-t pt-2">
-														<summary className="focus-ring cursor-pointer rounded-lg py-3 font-semibold text-sm">
-															Kelola pengumuman ini
-														</summary>
-														<div className="flex flex-wrap gap-2">
-															{item.canEdit && (
-																<Button
-																	variant="outline"
-																	onClick={() =>
-																		setAction({ kind: "edit", id: item.id })
-																	}
-																>
-																	Edit
-																</Button>
+														<svg
+															aria-hidden="true"
+															viewBox="0 0 24 24"
+															fill="none"
+															stroke="currentColor"
+															strokeWidth="2"
+															strokeLinecap="round"
+															strokeLinejoin="round"
+															className="size-5"
+														>
+															{index % 3 === 1 ? (
+																<>
+																	<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+																	<path d="M13.73 21a2 2 0 0 1-3.46 0" />
+																</>
+															) : index % 3 === 2 ? (
+																<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+															) : (
+																<>
+																	<path d="m3 11 18-5v12L3 14v-3z" />
+																	<path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+																</>
 															)}
-															{item.canArchive && (
-																<Button
-																	variant="outline"
-																	onClick={() =>
-																		setAction({
-																			kind: "archive",
-																			id: item.id,
-																		})
-																	}
-																>
-																	Arsipkan
-																</Button>
+														</svg>
+													</span>
+													<div className="min-w-0 flex-1 space-y-0.5">
+														<div className="flex items-center justify-between gap-2">
+															<ItemHeading className="truncate font-bold text-foreground text-sm">
+																{item.title}
+															</ItemHeading>
+															{view === "HISTORY" && (
+																<span className="shrink-0 rounded-full bg-surface-subtle px-2 py-0.5 font-medium text-[11px] text-muted-foreground">
+																	{item.archivedAt
+																		? "Diarsipkan"
+																		: "Kedaluwarsa"}
+																</span>
 															)}
 														</div>
-													</details>
-												)}
-										</CardContent>
-									</Card>
-								);
-							})}
-						</div>
+														<p className="truncate text-muted-foreground text-xs">
+															{item.creatorName} ·{" "}
+															{formatEventTime(item.publishedAt)}
+														</p>
+													</div>
+												</div>
+												<p className="line-clamp-2 whitespace-pre-line break-words text-muted-foreground text-xs [overflow-wrap:anywhere]">
+													{item.content}
+												</p>
+												<div className="sr-only">
+													<p>
+														Berlaku hingga: {formatEventTime(item.expiresAt)}
+													</p>
+													{item.archivedAt && (
+														<p>
+															Diarsipkan: {formatEventTime(item.archivedAt)}
+														</p>
+													)}
+												</div>
+												<div className="flex flex-wrap items-center justify-between gap-2 border-border border-t pt-2">
+													<div className="flex flex-wrap items-center gap-2">
+														{synthetic ? (
+															<details className="w-full">
+																<summary className="focus-ring min-h-9 cursor-pointer rounded-xl border border-border px-3 py-2 text-xs">
+																	Baca selengkapnya
+																</summary>
+																<p className="mt-2 whitespace-pre-wrap text-xs">
+																	{item.content}
+																</p>
+															</details>
+														) : (
+															<Button
+																variant="outline"
+																onClick={() =>
+																	setAction({ kind: "detail", id: item.id })
+																}
+															>
+																Baca Selengkapnya
+															</Button>
+														)}
+														{link && (
+															<a
+																href={link}
+																target="_blank"
+																rel="noopener noreferrer"
+																className="focus-ring inline-flex min-h-9 items-center rounded-lg px-2 font-semibold text-primary text-xs"
+															>
+																Tautan
+															</a>
+														)}
+													</div>
+													{view !== "HISTORY" &&
+														item.status === "ACTIVE" &&
+														(item.canEdit || item.canArchive) && (
+															<details>
+																<summary className="focus-ring inline-flex min-h-9 cursor-pointer list-none items-center rounded-lg border border-border px-2.5 py-1.5 font-semibold text-muted-foreground text-xs hover:bg-surface-subtle hover:text-foreground">
+																	Kelola
+																</summary>
+																<div className="mt-2 flex flex-wrap gap-2">
+																	{item.canEdit && (
+																		<Button
+																			variant="outline"
+																			onClick={() =>
+																				setAction({ kind: "edit", id: item.id })
+																			}
+																		>
+																			Edit
+																		</Button>
+																	)}
+																	{item.canArchive && (
+																		<Button
+																			variant="outline"
+																			onClick={() =>
+																				setAction({
+																					kind: "archive",
+																					id: item.id,
+																				})
+																			}
+																		>
+																			Arsipkan
+																		</Button>
+																	)}
+																</div>
+															</details>
+														)}
+												</div>
+											</CardContent>
+										</Card>
+									);
+								})}
+							</div>
+							{view === "LATEST" && !deckExpanded && (
+								<button
+									type="button"
+									onClick={() => setDeckExpanded(true)}
+									className="resora-broadcast-more-btn focus-ring"
+								>
+									{displayed.length > 1
+										? `Tampilkan ${displayed.length - 1} lainnya`
+										: "Tampilkan detail"}
+								</button>
+							)}
+						</>
 					)}
-					{view !== "LATEST" && (
+					{view !== "LATEST" && total > 0 && (
 						<nav
 							aria-label="Halaman pengumuman"
-							className="flex flex-wrap items-center justify-between gap-3"
+							className="flex items-center justify-between gap-2"
 						>
 							<Button
 								variant="outline"
@@ -329,7 +595,7 @@ export default function BroadcastFeed({
 							>
 								Sebelumnya
 							</Button>
-							<span className="text-sm">
+							<span className="whitespace-nowrap text-muted-foreground text-xs">
 								Halaman {Math.min(page, lastPage) + 1} dari {lastPage + 1}
 							</span>
 							<Button

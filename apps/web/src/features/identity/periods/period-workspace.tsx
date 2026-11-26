@@ -41,11 +41,11 @@ export default function PeriodWorkspace() {
 	return (
 		<section className="resora-page resora-administration resora-admin-periods space-y-6">
 			<header className="flex flex-wrap justify-between gap-4">
-				<div className="space-y-2">
+				<div className="space-y-1.5">
 					<h1 className="font-bold text-2xl tracking-tight">
 						Periode menjabat
 					</h1>
-					<p className="text-muted-foreground text-sm">
+					<p className="hidden text-muted-foreground text-sm sm:block">
 						Buat periode, pilih anggota, lalu tinjau penetapan sebelum
 						menyimpan.
 					</p>

@@ -283,13 +283,35 @@ export function BroadcastDialog({
 				className="resora-admin-dialog resora-broadcast-dialog"
 				initialFocus={titleRef}
 			>
-				<DialogTitle
-					ref={titleRef}
-					tabIndex={-1}
-					className="break-words font-semibold text-xl outline-none [overflow-wrap:anywhere]"
-				>
-					{title}
-				</DialogTitle>
+				<div className="flex items-start justify-between gap-3">
+					<DialogTitle
+						ref={titleRef}
+						tabIndex={-1}
+						className="break-words font-semibold text-xl outline-none [overflow-wrap:anywhere]"
+					>
+						{title}
+					</DialogTitle>
+					<Button
+						type="button"
+						variant="outline"
+						size="icon"
+						aria-label="Tutup dialog pengumuman"
+						disabled={submitting.current}
+						onClick={onClose}
+						className="size-10 shrink-0 rounded-full"
+					>
+						<svg
+							aria-hidden="true"
+							viewBox="0 0 16 16"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="1.75"
+							className="size-4"
+						>
+							<path d="m4 4 8 8M12 4l-8 8" />
+						</svg>
+					</Button>
+				</div>
 				<DialogDescription className="mt-2 break-words text-muted-foreground text-sm [overflow-wrap:anywhere]">
 					{action.kind === "archive"
 						? `Arsipkan pengumuman “${initial?.title ?? "…"}”? Pengumuman akan hilang dari daftar aktif dan tetap tersedia dalam riwayat. Tindakan ini tidak dapat dibatalkan.`

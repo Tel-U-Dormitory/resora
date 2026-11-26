@@ -57,7 +57,7 @@ export function AppSidebar({
 	}, [isMobile, setOpenMobile]);
 	return (
 		<Sidebar id="resora-sidebar" collapsible="icon" className="border-border">
-			<SidebarHeader className="h-20 justify-center px-3">
+			<SidebarHeader className="h-16 justify-center border-border border-b px-3">
 				<Link
 					href="/dashboard"
 					onClick={() => setOpenMobile(false)}

@@ -54,8 +54,8 @@ export function safeBroadcastLink(value: string | null) {
 }
 
 const messages: Record<string, string> = {
-	BROADCAST_ACCESS_DENIED: "Anda tidak memiliki akses ke pengumuman ini.",
-	BROADCAST_NOT_OWNER: "Anda tidak lagi berhak mengelola pengumuman ini.",
+	BROADCAST_ACCESS_DENIED: "Kamu belum memiliki akses ke pengumuman ini.",
+	BROADCAST_NOT_OWNER: "Kamu tidak lagi berhak mengelola pengumuman ini.",
 	BROADCAST_NOT_FOUND: "Pengumuman tidak ditemukan atau tidak tersedia.",
 	BROADCAST_EXPIRATION_INVALID:
 		"Waktu berakhir harus valid dan masih di masa depan. Gunakan waktu WIB.",
@@ -76,7 +76,7 @@ export function broadcastError(error: unknown) {
 		if (error.data?.code === "UNAUTHORIZED")
 			return "Sesi telah berakhir. Silakan masuk kembali.";
 		if (error.data?.code === "FORBIDDEN")
-			return "Anda tidak memiliki akses untuk tindakan ini.";
+			return "Kamu belum memiliki akses untuk tindakan ini.";
 		if (error.data?.code === "BAD_REQUEST")
 			return messages.BROADCAST_INPUT_INVALID;
 		if (error.data?.code === "CONFLICT")

@@ -15,7 +15,7 @@ export function committeeError(error: unknown) {
 		COMMITTEE_BULK_ASSIGNMENT_INVALID:
 			"Pilih divisi dan jabatan kepanitiaan yang valid untuk seluruh pilihan.",
 		COMMITTEE_ACCESS_DENIED:
-			"Anda tidak memiliki izin mengelola kepanitiaan. Muat ulang untuk memeriksa akses terbaru.",
+			"Kamu belum memiliki izin mengelola kepanitiaan. Muat ulang untuk memeriksa akses terbaru.",
 		COMMITTEE_NOT_FOUND:
 			"Kepanitiaan tidak ditemukan. Muat ulang daftar kepanitiaan.",
 		COMMITTEE_DUPLICATE:

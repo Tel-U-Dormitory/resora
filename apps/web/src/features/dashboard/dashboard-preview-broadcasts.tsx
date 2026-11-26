@@ -1,5 +1,6 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
+import { Skeleton } from "@/components/ui/skeleton";
 import { BroadcastFeed } from "@/features/broadcast/public";
 import {
 	previewFailureState,
@@ -30,19 +31,25 @@ export function DashboardPreviewBroadcasts() {
 		return (
 			<section aria-label="Pengumuman SR" className="space-y-3">
 				<h2 className="font-semibold text-lg">Pengumuman SR</h2>
-				<p role={query.error ? "alert" : "status"}>
-					{query.error
-						? previewFailureState(query.error).message
-						: "Memuat pengumuman…"}
-				</p>
-				{query.error && (
-					<button
-						type="button"
-						className="focus-ring min-h-11 rounded-xl border border-border bg-surface px-3 text-sm"
-						onClick={() => void query.refetch()}
-					>
-						Muat ulang pengumuman
-					</button>
+				{query.isPending ? (
+					<div role="status" className="space-y-3">
+						<p className="sr-only">Memuat pengumuman…</p>
+						<Skeleton className="h-28 w-full rounded-2xl" />
+						<Skeleton className="h-28 w-full rounded-2xl" />
+					</div>
+				) : (
+					<>
+						<p role="alert" className="text-destructive text-sm">
+							{previewFailureState(query.error).message}
+						</p>
+						<button
+							type="button"
+							className="focus-ring min-h-11 rounded-xl border border-border bg-surface px-3 text-sm"
+							onClick={() => void query.refetch()}
+						>
+							Muat ulang pengumuman
+						</button>
+					</>
 				)}
 			</section>
 		);

@@ -6,7 +6,7 @@ export function DashboardHeader({
 	isSystem?: boolean;
 }) {
 	return (
-		<header className="space-y-2">
+		<header className="hidden space-y-2 min-[1200px]:block">
 			<h1 className="font-bold text-2xl tracking-tight">Halo, {name}.</h1>
 			<p className="text-muted-foreground text-sm">
 				{isSystem

@@ -325,8 +325,8 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 			)}
 			{canManage && <InvitationsPanel view={view} />}
 			{!canManage && (
-				<p className="rounded-xl border border-primary/20 bg-primary-soft p-5 text-primary-soft-foreground text-sm">
-					Anda diundang pada event ini. Gunakan Scan QR untuk check-in dan
+				<p className="rounded-xl border border-border bg-surface-subtle p-5 text-foreground text-sm">
+					Kamu diundang pada kegiatan ini. Gunakan Scan QR untuk check-in dan
 					riwayat kehadiran untuk melihat status pribadi.
 				</p>
 			)}

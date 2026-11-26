@@ -52,7 +52,7 @@ export function Avatar({
 		<span className={cn("relative inline-flex shrink-0", className)}>
 			<span
 				className={cn(
-					"inline-flex items-center justify-center overflow-hidden bg-gradient-to-br from-primary to-warning font-bold text-white ring-2 ring-surface",
+					"inline-flex items-center justify-center overflow-hidden bg-primary font-bold text-white ring-2 ring-surface",
 					shape === "circle" ? "rounded-full" : "rounded-[35%]",
 					sizes[size],
 				)}

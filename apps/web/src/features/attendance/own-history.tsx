@@ -9,10 +9,9 @@ import {
 	ChevronLeft,
 	ChevronRight,
 	Clock3,
-	History,
 } from "lucide-react";
-import Link from "next/link";
 import { useState } from "react";
+import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { getPersonalTrpc } from "@/utils/trpc";
 import {
@@ -48,16 +47,12 @@ export default function OwnHistory({ userId }: { userId: string }) {
 		},
 	});
 	return (
-		<section className="resora-page resora-history space-y-6">
-			<Link
-				href="/profile"
-				className="focus-ring inline-flex min-h-11 items-center rounded-lg py-2 font-semibold text-primary text-sm"
-			>
-				Kembali ke profil
-			</Link>
-			<div className="space-y-2">
-				<h1 className="font-bold text-2xl tracking-tight">Riwayat kehadiran</h1>
-				<p className="text-muted-foreground text-sm">
+		<section className="resora-page resora-history space-y-4 sm:space-y-5">
+			<div className="space-y-1">
+				<h1 className="font-bold text-xl tracking-tight sm:text-2xl">
+					Riwayat kehadiran
+				</h1>
+				<p className="hidden text-muted-foreground text-sm sm:block">
 					Lihat status dan waktu kehadiran kamu di setiap kegiatan.
 				</p>
 			</div>
@@ -84,135 +79,142 @@ export default function OwnHistory({ userId }: { userId: string }) {
 				</div>
 			)}
 			{!history.error && history.data?.items.length === 0 && (
-				<Card className="resora-panel">
-					<CardContent className="space-y-2 py-10 text-center">
-						<History
-							className="mx-auto mb-4 size-8 text-muted-foreground"
-							aria-hidden="true"
+				<Card className="resora-panel py-0">
+					<CardContent className="p-2">
+						<EmptyState
+							variant="history"
+							title="Belum ada riwayat kegiatan"
+							description="Kegiatan yang mengundang kamu akan tampil di sini beserta status kehadirannya."
 						/>
-						<h2 className="font-semibold">Belum ada riwayat kegiatan</h2>
-						<p className="text-muted-foreground text-sm">
-							Kegiatan yang mengundang kamu akan tampil di sini beserta status
-							kehadirannya.
-						</p>
 					</CardContent>
 				</Card>
 			)}
 			{!history.error && Boolean(history.data?.items.length) && (
-				<Card
-					className="resora-panel gap-0 py-0"
+				<div
+					className="space-y-2.5 sm:space-y-3"
 					aria-busy={history.isFetching}
 				>
-					<CardContent className="divide-y divide-border px-4 sm:px-6">
-						{history.data?.items.map((item) => (
-							<article
-								key={item.event.id}
-								className="resora-history-row grid gap-4 py-5"
-							>
-								<div className="min-w-0 space-y-2.5">
-									<h2 className="break-words font-semibold text-base leading-snug">
-										{item.event.title}
-									</h2>
-									<p className="flex items-start gap-2 text-muted-foreground text-sm leading-relaxed sm:text-sm">
-										<CalendarDays
-											className="mt-0.5 size-4 shrink-0"
-											aria-hidden="true"
-										/>
-										<span>
-											{formatEventSchedule(
-												item.event.startsAt,
-												item.event.endsAt,
-											)}
-										</span>
-									</p>
-								</div>
-								<div className="resora-history-status">
-									<StatusBadge status={item.presence} />
-								</div>
-								<div className="resora-history-time flex items-start gap-3 rounded-xl bg-muted p-3">
-									{item.attendanceAt ? (
-										<CheckCheck
-											className="mt-0.5 size-4 shrink-0 text-success"
-											aria-hidden="true"
-										/>
-									) : (
-										<Clock3
-											className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-											aria-hidden="true"
-										/>
-									)}
-									<div className="min-w-0 space-y-1">
-										<p className="text-sm">
-											<span className="text-muted-foreground">Check-in </span>
-											{item.attendanceAt ? (
-												<>
-													<time
-														dateTime={item.attendanceAt}
-														className="font-semibold tabular-nums"
-													>
-														{checkInFormatter.format(
-															new Date(item.attendanceAt),
-														)}
-													</time>
-													<span className="text-muted-foreground"> WIB</span>
-												</>
-											) : (
-												<span className="text-muted-foreground">
-													Belum tercatat
+					{history.data?.items.map((item) => (
+						<Card key={item.event.id} className="resora-panel py-0">
+							<CardContent className="p-3.5 sm:p-4">
+								<article className="space-y-2.5">
+									<div className="flex items-start justify-between gap-2.5 sm:gap-4">
+										<div className="min-w-0 flex-1 space-y-1">
+											<h2 className="truncate font-semibold text-foreground text-sm leading-snug sm:text-base">
+												{item.event.title}
+											</h2>
+											<p className="flex min-w-0 items-center gap-1.5 text-muted-foreground text-xs">
+												<CalendarDays
+													className="size-3.5 shrink-0"
+													aria-hidden="true"
+												/>
+												<span className="truncate">
+													{formatEventSchedule(
+														item.event.startsAt,
+														item.event.endsAt,
+													)}
 												</span>
+											</p>
+										</div>
+										<div className="resora-history-status shrink-0">
+											<StatusBadge status={item.presence} />
+										</div>
+									</div>
+
+									<div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-subtle px-3 py-2 text-xs">
+										<div className="flex min-w-0 items-center gap-2">
+											{item.attendanceAt ? (
+												<CheckCheck
+													className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400"
+													aria-hidden="true"
+												/>
+											) : (
+												<Clock3
+													className="size-3.5 shrink-0 text-amber-500 dark:text-amber-400"
+													aria-hidden="true"
+												/>
 											)}
-										</p>
-										{item.attendanceAt && (
-											<p className="text-muted-foreground text-sm">
-												{checkInDateFormatter.format(
-													new Date(item.attendanceAt),
+											<p className="truncate text-foreground">
+												{item.attendanceAt ? (
+													<>
+														<span className="text-muted-foreground">
+															Check-in{" "}
+														</span>
+														<time
+															dateTime={item.attendanceAt}
+															className="font-semibold tabular-nums"
+														>
+															{checkInFormatter.format(
+																new Date(item.attendanceAt),
+															)}
+														</time>
+														<span className="text-muted-foreground">
+															{" "}
+															WIB ·{" "}
+															{checkInDateFormatter.format(
+																new Date(item.attendanceAt),
+															)}
+														</span>
+													</>
+												) : (
+													<span className="font-medium text-amber-600 dark:text-amber-400">
+														Check-in Belum tercatat
+													</span>
 												)}
 											</p>
-										)}
+										</div>
 										{item.timingClass && (
-											<p
-												className={`text-sm ${item.timingClass === "LATE" ? "text-warning" : "text-muted-foreground"}`}
+											<span
+												className={`shrink-0 font-medium ${item.timingClass === "LATE" ? "text-warning" : "text-muted-foreground"}`}
 											>
 												{item.timingClass === "LATE"
 													? item.lateMinutes == null
-														? "Terlambat; durasi belum tersedia"
-														: `Terlambat ${item.lateMinutes} menit setelah toleransi`
+														? "Terlambat"
+														: `Terlambat ${item.lateMinutes} mnt`
 													: item.timingClass === "EARLY"
 														? "Datang lebih awal"
 														: "Tepat waktu"}
-											</p>
+											</span>
 										)}
 									</div>
-								</div>
-								<details className="resora-history-details border-border border-t pt-2">
-									<summary className="focus-ring cursor-pointer rounded-lg py-2 font-semibold text-sm">
-										Detail kehadiran
-									</summary>
-									<dl className="mt-2 grid gap-3 text-sm">
-										<div>
-											<dt className="text-muted-foreground">Status kegiatan</dt>
-											<dd className="mt-1">
-												<StatusBadge status={item.event.status} />
-											</dd>
-										</div>
-										<div>
-											<dt className="text-muted-foreground">
-												Metode pencatatan
-											</dt>
-											<dd className="mt-1">
-												{item.source === "QR"
-													? "Scan QR"
-													: item.source === "MANUAL"
-														? "Dicatat manual"
-														: "Belum tercatat"}
-											</dd>
-										</div>
-									</dl>
-								</details>
-							</article>
-						))}
-					</CardContent>
-				</Card>
+
+									<details className="group border-border border-t pt-2 text-xs">
+										<summary className="focus-ring flex w-full cursor-pointer list-none items-center justify-between rounded-md py-1 font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
+											<span>Detail kehadiran</span>
+											<ChevronLeft
+												size={16}
+												aria-hidden="true"
+												className="shrink-0 transition-transform duration-150 group-open:-rotate-90"
+											/>
+										</summary>
+										<dl className="mt-2 grid grid-cols-2 gap-3 text-xs sm:max-w-md">
+											<div>
+												<dt className="text-muted-foreground">
+													Status kegiatan
+												</dt>
+												<dd className="mt-1">
+													<StatusBadge status={item.event.status} />
+												</dd>
+											</div>
+											<div>
+												<dt className="text-muted-foreground">
+													Metode pencatatan
+												</dt>
+												<dd className="mt-1 font-medium text-foreground">
+													{item.source === "QR"
+														? "Scan QR"
+														: item.source === "MANUAL"
+															? "Dicatat manual"
+															: "Belum tercatat"}
+												</dd>
+											</div>
+										</dl>
+									</details>
+								</article>
+							</CardContent>
+						</Card>
+					))}
+				</div>
 			)}
 
 			{!history.error &&

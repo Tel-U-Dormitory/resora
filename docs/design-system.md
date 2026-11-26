@@ -55,10 +55,10 @@ Baseline semantic token berikut dipetakan ke token kode pada tahap implementasi;
 | text.secondary | `#626262` | `#BDBDBD` |
 | border.decorative | `#E2E2E2` | `#424242` |
 | border.control | `#808080` | `#969696` |
-| action.primary / on-primary | `#FF6F6F` / `#333333` | sama |
+| action.primary / on-primary | `#FF6F6F` / `#FFFFFF` | sama |
 | action.hover / action.pressed | `#FF8585` / `#FF7474` | sama |
 | action.secondary / on-secondary | `#FFF46E` / `#333333` | sama |
-| action.accent / on-accent | `#A58BFF` / `#333333` | sama |
+| action.accent / on-accent | `#A58BFF` / `#FFFFFF` | sama |
 | link / focus | `#8C3434` | `#FF9A9A` |
 | success.text | `#166534` | `#86EFAC` |
 | warning.text | `#854D0E` | `#FDE047` |
@@ -68,7 +68,7 @@ Baseline semantic token berikut dipetakan ke token kode pada tahap implementasi;
 
 Semantic status text digunakan pada surface tema terkait, dengan ikon/teks. Tint status baru harus diverifikasi sebagai pasangan sendiri. Disabled menggunakan surface.subtle dan text.secondary disertai semantik disabled; tidak hanya opacity. Border dekoratif tidak cukup untuk batas input atau focus. Focus ring 2px dengan offset 2px; untuk kontrol berwarna gunakan ring netral kontras atau lapisan pemisah sesuai hasil ukur.
 
-Aksesibilitas mengalahkan estetika: teks normal ≥4.5:1; teks besar menurut definisi WCAG ≥3:1; batas kontrol, indikator state dan visual penting ≥3:1. Pastel brand memakai teks `#333333`, bukan putih. Semua pasangan/state/transparansi tetap diperiksa pada render aktual. Target WCAG 2.2 AA berlaku untuk seluruh kriteria yang relevan, tidak terbatas pada daftar ringkas ini ([W3C](https://www.w3.org/TR/WCAG22/)).
+Aksesibilitas mengalahkan estetika: teks normal ≥4.5:1; teks besar menurut definisi WCAG ≥3:1; batas kontrol, indikator state dan visual penting ≥3:1. Elemen dengan latar belakang merah/coral (`#FF6F6F` / `#B91C1C`) dan ungu (`#A58BFF`) memakai teks dan ikon `#FFFFFF`; sorotan kuning (`#FFF46E`) memakai teks `#333333`. Semua pasangan/state/transparansi tetap diperiksa pada render aktual. Target WCAG 2.2 AA berlaku untuk seluruh kriteria yang relevan, tidak terbatas pada daftar ringkas ini ([W3C](https://www.w3.org/TR/WCAG22/)).
 
 ## 4. Tipografi, geometri, layout
 

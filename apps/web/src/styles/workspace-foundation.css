@@ -12,21 +12,27 @@
 	--border: #e2e2e2;
 	--border-control: #808080;
 	--primary: #ff6f6f;
-	--primary-foreground: #333333;
+	--primary-foreground: #ffffff;
 	--primary-hover: #ff8585;
 	--primary-pressed: #ff7474;
 	--secondary: #fff46e;
 	--secondary-foreground: #333333;
 	--accent: #a58bff;
-	--accent-foreground: #333333;
+	--accent-foreground: #ffffff;
 	--link: #8c3434;
 	--ring: var(--link);
 	--success: #166534;
+	--success-tint: #dcfce7;
 	--warning: #854d0e;
+	--warning-tint: #fef9c3;
 	--danger: #b91c1c;
+	--danger-tint: #fee2e2;
 	--info: #1e40af;
+	--info-tint: #dbeafe;
 	--destructive: #b91c1c;
 	--destructive-foreground: #ffffff;
+	--workspace-radius-sm: 0.5rem;
+	--workspace-radius-md: 0.5rem;
 	--workspace-radius-control: 0.75rem;
 	--workspace-radius-card: 1rem;
 	--workspace-radius-overlay: 1.5rem;
@@ -41,6 +47,7 @@
 	--type-caption: 0.75rem;
 	--type-metric: clamp(1.75rem, 3vw, 2.25rem);
 	--elevation-overlay: 0 0.5rem 1.5rem rgb(0 0 0 / 0.16);
+	--nav-shadow: 0 12px 32px rgb(0 0 0 / 0.12), 0 2px 8px rgb(0 0 0 / 0.06);
 	/* Compatibility aliases: reuse the existing shadcn and app primitives. */
 	--card: var(--surface);
 	--card-foreground: var(--foreground);
@@ -72,11 +79,18 @@
 	--text-secondary: #bdbdbd;
 	--border: #424242;
 	--border-control: #969696;
+	--primary-foreground: #ffffff;
+	--accent-foreground: #ffffff;
 	--link: #ff9a9a;
 	--success: #86efac;
+	--success-tint: #14291e;
 	--warning: #fde047;
+	--warning-tint: #2e2410;
 	--danger: #fca5a5;
+	--danger-tint: #331717;
 	--info: #93c5fd;
+	--info-tint: #15243d;
+	--nav-shadow: 0 14px 36px rgb(0 0 0 / 0.55), 0 2px 10px rgb(0 0 0 / 0.4);
 }
 
 @theme inline {
@@ -116,10 +130,22 @@ body:has(.resora-workspace) {
 :root:has(.resora-workspace) :is(button, [data-slot="button"]) {
 	font-size: var(--type-small);
 }
-:root:has(.resora-workspace) :is(button, [data-slot="button"]).bg-primary {
+:root:has(.resora-workspace)
+	:is(button, [data-slot="button"]).bg-primary:not([role="tab"]):not(
+		[aria-pressed]
+	) {
 	min-height: 3rem;
 	background: var(--primary);
 	color: var(--primary-foreground);
+}
+:root:has(.resora-workspace)
+	:is(button[role="tab"], fieldset button[aria-pressed]) {
+	min-height: 2.25rem;
+	border-radius: var(--workspace-radius-sm);
+}
+:root:has(.resora-workspace) :is(button, [data-slot="button"]).bg-primary svg {
+	color: var(--primary-foreground);
+	stroke: currentColor;
 }
 :root:has(.resora-workspace) :is(button, [data-slot="button"]):disabled {
 	background: var(--surface-subtle);
@@ -142,7 +168,8 @@ body:has(.resora-workspace) {
 :root:has(.resora-workspace) [data-slot="button"].text-destructive {
 	color: var(--danger);
 }
-:root:has(.resora-workspace) :is([data-slot="card"], .resora-panel) {
+:root:has(.resora-workspace)
+	:is([data-slot="card"], .resora-panel, .resora-inbox-management) {
 	border-radius: var(--workspace-radius-card);
 	box-shadow: none;
 }
@@ -157,11 +184,11 @@ body:has(.resora-workspace) {
 	box-shadow: var(--elevation-overlay);
 }
 .resora-workspace main#workspace-content {
-	max-width: var(--page-max-width);
-	padding-inline: var(--page-gutter);
+	max-width: none;
 }
 .resora-workspace .resora-page {
-	max-width: var(--page-max-width);
+	width: 100%;
+	max-width: none;
 }
 .resora-workspace main#workspace-content h1:not(.text-xs) {
 	font-size: var(--type-page);
@@ -169,7 +196,7 @@ body:has(.resora-workspace) {
 	font-weight: 700;
 	letter-spacing: -0.025em;
 }
-.resora-workspace main#workspace-content h2 {
+.resora-workspace main#workspace-content h2:not([class*="text-"]) {
 	font-size: var(--type-section);
 	line-height: 1.35;
 	font-weight: 600;
@@ -178,45 +205,115 @@ body:has(.resora-workspace) {
 	max-width: var(--form-max-width);
 	margin-inline: auto;
 }
+:root:has(.resora-workspace) [data-resora-button].bg-danger,
+:root:has(.resora-workspace)
+	:is(button, [data-slot="button"], a):is(.bg-danger, .bg-destructive) {
+	background: var(--destructive);
+	color: #ffffff;
+}
+:root:has(.resora-workspace) [data-resora-button].bg-danger svg,
+:root:has(.resora-workspace)
+	:is(button, [data-slot="button"], a):is(.bg-danger, .bg-destructive)
+	svg {
+	color: #ffffff;
+	stroke: currentColor;
+}
+
+/* WCAG 2.2 AA contrast rule: #333333 on pastel brand (#FF6F6F / #A58BFF), #FFFFFF on destructive (#B91C1C). */
+:root:has(.resora-workspace)
+:is(button, [data-slot="button"], a, [data-resora-button]):is(
+	.bg-primary,
+	.bg-accent,
+	[data-active="true"]
+) {
+	color: var(--primary-foreground);
+}
+:root:has(.resora-workspace)
+	:is(button, [data-slot="button"], a, [data-resora-button]):is(
+		.bg-primary,
+		.bg-accent,
+		[data-active="true"]
+	)
+	svg {
+	color: var(--primary-foreground);
+	stroke: currentColor;
+}
+
 @media (hover: hover) {
 	:root:has(.resora-workspace)
-		:is(button, [data-slot="button"]).bg-primary:not(:disabled):hover {
+		:is(button, [data-slot="button"], a).bg-primary:not(:disabled):hover {
 		background: var(--primary-hover);
+		color: var(--primary-foreground);
+	}
+	:root:has(.resora-workspace)
+		:is(button, [data-slot="button"], a).bg-primary:not(:disabled):hover
+		svg {
+		color: var(--primary-foreground);
+		stroke: currentColor;
+	}
+	:root:has(.resora-workspace)
+		:is(button, [data-slot="button"], a, [data-resora-button]):not(
+			:disabled
+		):hover:is(
+			.bg-primary,
+			.bg-accent,
+			.hover\:bg-primary,
+			.hover\:bg-primary-hover,
+			.hover\:bg-accent
+		) {
+		color: var(--primary-foreground);
+	}
+	:root:has(.resora-workspace)
+		:is(button, [data-slot="button"], a, [data-resora-button]):not(
+			:disabled
+		):hover:is(
+			.bg-primary,
+			.bg-accent,
+			.hover\:bg-primary,
+			.hover\:bg-primary-hover,
+			.hover\:bg-accent
+		)
+		svg {
+		color: var(--primary-foreground);
+		stroke: currentColor;
+	}
+	:root:has(.resora-workspace)
+		:is(button, [data-slot="button"], a, [data-resora-button]):not(
+			:disabled
+		):hover:is(
+			.bg-danger,
+			.bg-destructive,
+			.hover\:bg-danger,
+			.hover\:bg-destructive,
+			.hover\:bg-red-700
+		) {
+		color: #ffffff;
+	}
+	:root:has(.resora-workspace)
+		:is(button, [data-slot="button"], a, [data-resora-button]):not(
+			:disabled
+		):hover:is(
+			.bg-danger,
+			.bg-destructive,
+			.hover\:bg-danger,
+			.hover\:bg-destructive,
+			.hover\:bg-red-700
+		)
+		svg {
+		color: #ffffff;
+		stroke: currentColor;
 	}
 }
 :root:has(.resora-workspace)
-	:is(button, [data-slot="button"]).bg-primary:not(:disabled):active {
+	:is(button, [data-slot="button"], a).bg-primary:not(:disabled):active {
 	background: var(--primary-pressed);
+	color: var(--primary-foreground);
 }
-@media (min-width: 768px) {
-	:root:has(.resora-workspace) {
-		--page-gutter: 1.5rem;
-	}
-}
-@media (min-width: 1200px) {
-	:root:has(.resora-workspace) {
-		--page-gutter: 2rem;
-		--type-page: 1.75rem;
-	}
-}
-
-:root:has(.resora-workspace) [data-slot="dropdown-menu-item"] {
-	min-height: 2.75rem;
-	font-size: var(--type-small);
-}
-
-:root:has(.resora-workspace) :is(button, [data-slot="button"]) {
-	min-width: 2.75rem;
-}
-:root:has(.resora-workspace) .resora-primary-action {
-	min-height: 3rem;
-}
-:root:has(.resora-workspace) :is(button, [data-slot="button"], a).bg-primary {
-	border-color: var(--border-control);
-}
-:root:has(.resora-workspace) [data-resora-button].bg-danger {
-	background: var(--destructive);
-	color: var(--destructive-foreground);
+:root:has(.resora-workspace)
+	:is(button, [data-slot="button"], a).bg-primary:not(:disabled):active
+	svg {
+	color: var(--primary-foreground);
+	stroke: currentColor;
 }
 
 :root:has(.resora-workspace) .resora-clock-picker .tp-ui-modal {

@@ -60,6 +60,21 @@ function manualError(error: unknown) {
 	return eventErrorMessage(error);
 }
 
+function formatRecapTiming(timing: string | null) {
+	if (!timing) return "—";
+	if (timing === "ON_TIME") return "Tepat waktu";
+	if (timing === "EARLY") return "Lebih awal";
+	if (timing === "LATE") return "Terlambat";
+	return timing;
+}
+
+function formatRecapSource(source: string | null) {
+	if (!source) return "—";
+	if (source === "QR") return "Scan QR";
+	if (source === "MANUAL") return "Manual";
+	return source;
+}
+
 function RecapDialog({
 	title,
 	busy = false,
@@ -596,9 +611,9 @@ export default function EventRecap({ eventId }: { eventId: string }) {
 									committeeMode
 										? "Divisi / Jabatan panitia"
 										: "Departemen / Jabatan struktural",
-									"Presence",
+									"Status Kehadiran",
 									"Waktu (WIB)",
-									"Timing / Terlambat",
+									"Ketepatan Waktu",
 									"Sumber",
 									...(canManual ? ["Tindakan"] : []),
 								].map((label) => (
@@ -644,12 +659,12 @@ export default function EventRecap({ eventId }: { eventId: string }) {
 												: "—"}
 										</td>
 										<td className="p-3">
-											{row.timingClass ?? "—"}
+											{formatRecapTiming(row.timingClass)}
 											{row.lateMinutes !== null && (
 												<p>{row.lateMinutes} menit</p>
 											)}
 										</td>
-										<td className="p-3">{row.source ?? "—"}</td>
+										<td className="p-3">{formatRecapSource(row.source)}</td>
 										{canManual && (
 											<td className="p-3">
 												<div className="flex items-center gap-2">

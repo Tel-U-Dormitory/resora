@@ -102,7 +102,7 @@ export default function UserMenu({
 	const triggerContents = (
 		<>
 			<Avatar aria-label={displayName}>
-				<AvatarFallback className="bg-primary-soft font-semibold text-primary-soft-foreground">
+				<AvatarFallback className="bg-accent font-extrabold text-accent-foreground">
 					{initials}
 				</AvatarFallback>
 			</Avatar>

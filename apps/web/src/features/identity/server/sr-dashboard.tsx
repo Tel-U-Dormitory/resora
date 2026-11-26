@@ -1,5 +1,3 @@
-import { buttonVariants } from "@resora/ui/components/button";
-import { Card, CardContent } from "@resora/ui/components/card";
 import {
 	ArrowRight,
 	CalendarDays,
@@ -20,9 +18,7 @@ import {
 	DashboardActivities,
 	DashboardMetrics,
 	DashboardPreviewProvider,
-	getDashboardPreviewFixtures,
 } from "@/features/dashboard/public";
-import { cn } from "@/lib/utils";
 import { getSrSession } from "./server-session";
 
 export default async function SrDashboard() {
@@ -31,19 +27,31 @@ export default async function SrDashboard() {
 	if (session.requiresPasswordChange) redirect("/change-password");
 	const isSr = session.actor === "SR";
 	const canManageDashboard = session.canManageBroadcast || session.isSuperadmin;
-	const previewFixtures = await getDashboardPreviewFixtures(canManageDashboard);
+	// Backend KPI modules are not integrated yet; real /dashboard renders all 4 cards as "Segera hadir".
+	const previewFixtures = null;
 	const actions = [
 		...(isSr
 			? [
 					{
+						href: "/scan" as const,
+						title: "Scan QR kehadiran",
+						shortTitle: "Scan QR",
+						icon: ScanLine,
+						highlight: true,
+					},
+					{
 						href: "/events" as const,
 						title: "Kegiatan",
+						shortTitle: "Kegiatan",
 						icon: CalendarDays,
+						highlight: false,
 					},
 					{
 						href: "/attendance/history" as const,
 						title: "Riwayat kehadiran",
+						shortTitle: "Riwayat",
 						icon: History,
+						highlight: false,
 					},
 				]
 			: []),
@@ -52,7 +60,9 @@ export default async function SrDashboard() {
 					{
 						href: "/events?view=manage" as const,
 						title: "Kelola kegiatan",
+						shortTitle: "Kelola event",
 						icon: ListChecks,
+						highlight: false,
 					},
 				]
 			: []),
@@ -61,13 +71,26 @@ export default async function SrDashboard() {
 					{
 						href: "/admin/users" as const,
 						title: "Kelola akun SR",
+						shortTitle: "Kelola akun",
 						icon: Users,
+						highlight: false,
 					},
+					...(isSr
+						? []
+						: [
+								{
+									href: "/admin/users/new" as const,
+									title: "Tambah akun SR",
+									shortTitle: "Tambah akun",
+									icon: Plus,
+									highlight: true,
+								},
+							]),
 				]
 			: []),
 	];
 	return (
-		<section className="resora-page resora-dashboard space-y-6">
+		<section className="resora-page resora-dashboard space-y-5">
 			<DashboardHeader
 				name={session.name}
 				isSystem={session.actor === "SYSTEM_ADMIN"}
@@ -81,121 +104,73 @@ export default async function SrDashboard() {
 				initialMode={canManageDashboard ? "management" : "personal"}
 			>
 				<DashboardMetrics showCleanliness={isSr} />
-				<div className="resora-dashboard-broadcasts">
-					<BroadcastFeed view="LATEST" canManage={session.canManageBroadcast} />
-				</div>
-				<div className="resora-dashboard-activities">
-					<DashboardActivities personalSr={isSr} />
-				</div>
 				<section
 					aria-label="Akses cepat"
-					className="resora-dashboard-quick space-y-3"
+					className="resora-dashboard-quick resora-dashboard-section space-y-3"
 				>
-					<h2 className="font-semibold text-lg">Akses cepat</h2>
-					{(isSr || session.isSuperadmin) && (
-						<Card className="resora-panel resora-feature-panel">
-							<CardContent className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-								<div className="flex items-start gap-4">
-									<span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-surface text-primary shadow-sm">
-										{isSr ? (
-											<ScanLine size={24} aria-hidden="true" />
-										) : (
-											<Users size={24} aria-hidden="true" />
-										)}
-									</span>
-									<div className="space-y-1">
-										<h3 className="font-semibold text-lg">
-											{isSr ? "Absen kegiatan" : "Manajemen Senior Resident"}
-										</h3>
-										<p className="max-w-md text-muted-foreground text-sm">
-											{isSr
-												? "Scan QR di lokasi kegiatan untuk mencatat kehadiran kamu."
-												: "Buat akun untuk memberikan akses kepada Senior Resident."}
-										</p>
-									</div>
-								</div>
+					<div className="flex items-center justify-between gap-2">
+						<h2 className="font-bold text-base">Akses cepat</h2>
+						<Link
+							href="/events"
+							className="focus-ring inline-flex items-center gap-1 rounded-lg px-2 py-1 font-semibold text-primary text-xs hover:underline"
+						>
+							Semua modul
+							<ArrowRight size={14} aria-hidden="true" />
+						</Link>
+					</div>
+					<div className="resora-quick-launchers">
+						{actions.map(({ href, title, shortTitle, icon: Icon }, index) => {
+							const tone =
+								href === "/scan" || href === "/events?view=manage"
+									? "coral"
+									: href === "/attendance/history"
+										? "purple"
+										: index === 1 || href === "/events"
+											? "yellow"
+											: "purple";
+							return (
 								<Link
-									href={isSr ? "/scan" : "/admin/users/new"}
-									className={cn(
-										buttonVariants(),
-										"resora-primary-action w-full sm:w-auto",
-									)}
+									key={href}
+									href={href}
+									aria-label={title}
+									data-tone={tone}
+									className={`resora-quick-launcher focus-ring ${href === "/scan" ? "hidden min-[1200px]:flex" : ""}`}
 								>
-									{isSr ? (
-										<ScanLine aria-hidden="true" />
-									) : (
-										<Plus aria-hidden="true" />
-									)}
-									<span className="min-w-0 break-words">
-										{isSr ? "Scan QR kehadiran" : "Tambah akun SR"}
+									<span className="resora-quick-circle">
+										<Icon size={20} aria-hidden="true" />
 									</span>
-									<ArrowRight data-action-arrow aria-hidden="true" />
+									<span className="resora-quick-label">{shortTitle}</span>
 								</Link>
-							</CardContent>
-						</Card>
-					)}
-					<div className="grid gap-3 sm:grid-cols-2 min-[1200px]:grid-cols-4">
-						{actions.map(({ href, title, icon: Icon }) => (
-							<Card
-								key={href}
-								className="resora-panel resora-action-card relative"
-							>
-								<CardContent>
-									<Link
-										href={href}
-										className="focus-ring group flex items-center gap-4 rounded-lg after:absolute after:inset-0 after:rounded-2xl"
-									>
-										<span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-muted text-primary">
-											<Icon size={22} aria-hidden="true" />
-										</span>
-										<span className="font-semibold text-sm">{title}</span>
-										<ArrowRight
-											size={18}
-											data-action-arrow
-											className="ml-auto shrink-0 text-muted-foreground"
-											aria-hidden="true"
-										/>
-									</Link>
-								</CardContent>
-							</Card>
-						))}
+							);
+						})}
 					</div>
 				</section>
+				<div className="resora-dashboard-activities resora-dashboard-section">
+					<DashboardActivities personalSr={isSr} />
+				</div>
+				<div className="resora-dashboard-broadcasts resora-dashboard-section">
+					<BroadcastFeed view="LATEST" canManage={session.canManageBroadcast} />
+				</div>
 			</DashboardPreviewProvider>
-			<section aria-label="Modul mendatang" className="space-y-3">
-				<h2 className="font-semibold text-lg">Modul mendatang</h2>
-				<p className="text-muted-foreground text-sm">
-					Modul berikut sedang direncanakan dan belum bisa digunakan.
-				</p>
-				<div className="resora-dashboard-upcoming grid gap-3">
+			<section aria-label="Modul mendatang" className="sr-only">
+				<h2>Modul mendatang</h2>
+				<div>
 					{[
 						{ title: "Penilaian & Analitik", icon: ChartNoAxesCombined },
 						{ title: "Pelanggaran", icon: FileWarning },
 						{ title: "Kebersihan Kamar", icon: ClipboardCheck },
 					].map(({ title, icon: Icon }) => (
-						<Card key={title} className="resora-panel">
-							<CardContent className="flex items-start gap-3 p-4">
-								<Icon
-									size={22}
-									aria-hidden="true"
-									className="shrink-0 text-muted-foreground"
-								/>
-								<div className="min-w-0 space-y-1">
-									<h3 className="font-semibold text-sm">{title}</h3>
-									<p className="text-muted-foreground text-sm">Segera hadir</p>
-								</div>
-							</CardContent>
-						</Card>
+						<div key={title}>
+							<Icon size={18} aria-hidden="true" />
+							<span>{title}</span>
+							<span>Segera hadir</span>
+						</div>
 					))}
 				</div>
 			</section>
-			<details className="text-sm">
-				<summary className="focus-ring w-fit cursor-pointer rounded-lg py-3 text-muted-foreground">
-					Informasi akun
-				</summary>
-				<p className="mt-1">
-					{isSr ? `NIM: ${session.nim}` : `Username: ${session.username}`}
-				</p>
+			<details className="sr-only">
+				<summary>Informasi akun</summary>
+				<p>{isSr ? `NIM: ${session.nim}` : `Username: ${session.username}`}</p>
 			</details>
 		</section>
 	);

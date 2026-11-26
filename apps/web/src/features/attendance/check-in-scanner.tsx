@@ -34,6 +34,13 @@ import {
 	scannerErrorMessage,
 } from "./check-in-ui";
 
+function formatTimingLabel(timing: string) {
+	if (timing === "ON_TIME") return "Tepat waktu";
+	if (timing === "EARLY") return "Lebih awal";
+	if (timing === "LATE") return "Terlambat";
+	return timing;
+}
+
 export default function CheckInScanner() {
 	const mutation = useMutation({
 		...trpc.attendance.checkIn.mutationOptions(),
@@ -107,6 +114,7 @@ export default function CheckInScanner() {
 		error?: string;
 	} | null>(null);
 	const [gpsStatus, setGpsStatus] = useState("");
+	const [gpsDeniedModalOpen, setGpsDeniedModalOpen] = useState(false);
 	const [phase, setPhase] = useState<
 		| "idle"
 		| "starting"
@@ -130,6 +138,21 @@ export default function CheckInScanner() {
 	}, []);
 	// Layout changes can resize the visible camera preview.
 	useEffect(updateRegion);
+	useEffect(() => {
+		if (phase === "camera" && gpsStatus === "GPS_DENIED") {
+			setGpsDeniedModalOpen(true);
+		} else if (gpsStatus !== "GPS_DENIED") {
+			setGpsDeniedModalOpen(false);
+		}
+	}, [phase, gpsStatus]);
+	useEffect(() => {
+		if (phase === "camera" && cameraIssue === "VIDEO_NOT_READY") {
+			toast.warning(scannerErrorMessage("VIDEO_NOT_READY"), {
+				id: "scanner-video-not-ready",
+				position: "top-center",
+			});
+		}
+	}, [phase, cameraIssue]);
 	const report = useCallback(
 		(event: ScannerDiagnostic, attempt = generation.current) => {
 			if (attempt !== generation.current || diagnostics.current.has(event))
@@ -756,12 +779,12 @@ export default function CheckInScanner() {
 						aria-hidden="true"
 						className="relative aspect-square w-full max-w-72 rounded-3xl border border-white/15 bg-white/5"
 					>
-						<span className="absolute top-0 left-0 size-7 rounded-tl-3xl border-red-500 border-t-[3px] border-l-[3px]" />
-						<span className="absolute top-0 right-0 size-7 rounded-tr-3xl border-red-500 border-t-[3px] border-r-[3px]" />
-						<span className="absolute bottom-0 left-0 size-7 rounded-bl-3xl border-red-500 border-b-[3px] border-l-[3px]" />
-						<span className="absolute right-0 bottom-0 size-7 rounded-br-3xl border-red-500 border-r-[3px] border-b-[3px]" />
+						<span className="absolute top-0 left-0 size-8 rounded-tl-3xl border-[#FFF46E] border-t-[3px] border-l-[3px]" />
+						<span className="absolute top-0 right-0 size-8 rounded-tr-3xl border-[#FFF46E] border-t-[3px] border-r-[3px]" />
+						<span className="absolute bottom-0 left-0 size-8 rounded-bl-3xl border-[#FFF46E] border-b-[3px] border-l-[3px]" />
+						<span className="absolute right-0 bottom-0 size-8 rounded-br-3xl border-[#FFF46E] border-r-[3px] border-b-[3px]" />
 						{phase === "camera" ? (
-							<span className="resora-scan-line absolute right-2 left-2 h-px bg-red-500 shadow-[0_0_12px_#ef4444]" />
+							<span className="resora-scan-line absolute right-2 left-2 h-0.5 bg-[#FF6F6F] shadow-[0_0_12px_#FF6F6F]" />
 						) : null}
 					</div>
 					{processing && (
@@ -790,14 +813,16 @@ export default function CheckInScanner() {
 						}
 					>
 						{zoom ? (
-							<label className="block space-y-2 text-sm">
-								<span>
-									Zoom kamera ·{" "}
-									{zoom.value.toLocaleString("id-ID", {
-										maximumFractionDigits: 2,
-									})}
-									×
-								</span>
+							<div className="space-y-2.5 text-sm">
+								<div className="flex items-center justify-between gap-2">
+									<span className="font-semibold text-white">Zoom kamera</span>
+									<span className="rounded-full bg-[#FFF46E] px-2.5 py-0.5 font-bold text-[#333333] text-xs tabular-nums">
+										{zoom.value.toLocaleString("id-ID", {
+											maximumFractionDigits: 2,
+										})}
+										×
+									</span>
+								</div>
 								<input
 									type="range"
 									aria-label="Zoom kamera"
@@ -838,7 +863,50 @@ export default function CheckInScanner() {
 										}
 									}}
 								/>
-							</label>
+								<div className="flex items-center gap-1.5">
+									{[1, 1.5, 2]
+										.filter(
+											(preset) => preset >= zoom.min && preset <= zoom.max,
+										)
+										.map((preset) => (
+											<button
+												key={preset}
+												type="button"
+												disabled={zoomPending}
+												onClick={async () => {
+													const stream = video.current?.srcObject;
+													const track =
+														stream && "getVideoTracks" in stream
+															? stream.getVideoTracks()[0]
+															: undefined;
+													if (!track || zoomBusy.current) return;
+													const attempt = generation.current;
+													zoomBusy.current = true;
+													setZoomPending(true);
+													setZoomIssue("");
+													try {
+														await setCameraZoom(track, preset, zoom);
+														if (attempt === generation.current)
+															setZoom(cameraZoom(track));
+													} catch {
+														if (attempt === generation.current)
+															setZoomIssue(
+																"Zoom belum bisa diubah. Coba lagi atau dekatkan kamera ke QR.",
+															);
+													} finally {
+														if (attempt === generation.current) {
+															zoomBusy.current = false;
+															setZoomPending(false);
+														}
+													}
+												}}
+												className="min-h-8 flex-1 rounded-lg border border-white/20 bg-white/10 px-2 font-semibold text-white text-xs tabular-nums hover:bg-white/20 disabled:opacity-50"
+											>
+												{preset}×
+											</button>
+										))}
+								</div>
+							</div>
 						) : (
 							<p className="sr-only">
 								Kamera ini belum menyediakan kontrol zoom. Dekatkan kamera ke
@@ -855,7 +923,12 @@ export default function CheckInScanner() {
 				<div className="relative flex flex-col items-center gap-3 px-5 pt-4 pb-7">
 					{phase === "camera" && gpsStatus.startsWith("GPS_") && (
 						<>
-							<p role="status" className="text-center text-sm">
+							<p
+								role="status"
+								className={
+									gpsStatus === "GPS_DENIED" ? "sr-only" : "text-center text-sm"
+								}
+							>
 								{scannerErrorMessage(gpsStatus)}
 							</p>
 							<Button
@@ -869,7 +942,14 @@ export default function CheckInScanner() {
 						</>
 					)}
 					{phase === "camera" && cameraIssue && (
-						<p role="status" className="text-center text-sm">
+						<p
+							role="status"
+							className={
+								cameraIssue === "VIDEO_NOT_READY"
+									? "sr-only"
+									: "text-center text-sm"
+							}
+						>
 							{scannerErrorMessage(cameraIssue)}
 						</p>
 					)}
@@ -894,9 +974,17 @@ export default function CheckInScanner() {
 				</div>
 			</div>
 			<ActionDialog
-				open={phase === "error" || phase === "result"}
+				open={
+					phase === "error" ||
+					phase === "result" ||
+					(phase === "camera" && gpsDeniedModalOpen)
+				}
 				onOpenChange={(open) => {
 					if (!open) {
+						if (phase === "camera" && gpsDeniedModalOpen) {
+							setGpsDeniedModalOpen(false);
+							return;
+						}
 						stop();
 						void startCamera();
 					}
@@ -906,9 +994,11 @@ export default function CheckInScanner() {
 						? unconfirmed
 							? "Status kehadiran belum terkonfirmasi"
 							: "Kehadiran belum tercatat"
-						: mutation.data?.status === "ALREADY_CHECKED_IN"
-							? "Anda sudah melakukan check-in"
-							: "Check-in berhasil"
+						: phase === "result"
+							? mutation.data?.status === "ALREADY_CHECKED_IN"
+								? "Kamu sudah melakukan check-in"
+								: "Check-in berhasil"
+							: "Akses lokasi diperlukan"
 				}
 				onRetry={
 					phase === "error" && !qrToken.current
@@ -919,7 +1009,24 @@ export default function CheckInScanner() {
 						: undefined
 				}
 			>
-				{phase === "error" ? (
+				{phase === "camera" && gpsDeniedModalOpen ? (
+					<>
+						<p role="alert" className="text-sm leading-relaxed">
+							{scannerErrorMessage("GPS_DENIED")}
+						</p>
+						<Button
+							className="w-full"
+							onClick={() => {
+								setGpsDeniedModalOpen(false);
+								if (!gps.current?.pending && !busy.current) {
+									prepareLocation(generation.current);
+								}
+							}}
+						>
+							Perbarui Lokasi
+						</Button>
+					</>
+				) : phase === "error" ? (
 					<>
 						<p role="alert">{error}</p>
 						{locationError && (
@@ -951,7 +1058,9 @@ export default function CheckInScanner() {
 									new Date(mutation.data.attendanceAt).toISOString(),
 								)}
 							</p>
-							<p>Klasifikasi: {mutation.data.timingClass}</p>
+							<p>
+								Ketepatan waktu: {formatTimingLabel(mutation.data.timingClass)}
+							</p>
 						</>
 					)
 				)}

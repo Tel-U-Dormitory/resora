@@ -39,6 +39,7 @@ export default function PointsRecap() {
 	const [exporting, setExporting] = useState(false);
 	const [feedback, setFeedback] = useState("");
 	const [error, setError] = useState("");
+	const [mobileView, setMobileView] = useState<"cards" | "matrix">("cards");
 	const exportLock = useRef(false);
 	const periods = useQuery({
 		...trpc.attendance.pointsPeriods.queryOptions(),
@@ -97,7 +98,7 @@ export default function PointsRecap() {
 				<h1 className="font-bold text-2xl tracking-tight">
 					Rekap Poin Kehadiran SR
 				</h1>
-				<p className="text-muted-foreground text-sm">
+				<p className="hidden text-muted-foreground text-sm sm:block">
 					Rekap akumulasi poin kehadiran berdasarkan kegiatan yang telah
 					selesai.
 				</p>
@@ -256,7 +257,7 @@ export default function PointsRecap() {
 														<span className="text-muted-foreground text-xs">
 															{event.scoringMode === null
 																? "Belum diklasifikasikan"
-																: "INCLUDED"}
+																: "Masukkan dalam penilaian"}
 															{event.visibility === "ARCHIVED"
 																? " - Diarsipkan"
 																: ""}
@@ -405,14 +406,43 @@ export default function PointsRecap() {
 											}}
 										/>
 									</label>
-									<p className="text-muted-foreground text-sm">
-										{visible.matching} hasil dari {report.participants.length}{" "}
-										SR. CSV selalu mencakup seluruh anggota periode. Geser tabel
-										untuk melihat semua event.
-									</p>
+									<div className="flex flex-wrap items-center justify-between gap-3">
+										<p className="text-muted-foreground text-sm">
+											{visible.matching} hasil dari {report.participants.length}{" "}
+											SR. CSV selalu mencakup seluruh anggota periode. Geser
+											tabel untuk melihat semua event.
+										</p>
+										<fieldset className="inline-flex rounded-xl border border-border bg-surface-subtle p-1 min-[1200px]:hidden">
+											<legend className="sr-only">Mode tampilan rekap</legend>
+											<button
+												type="button"
+												onClick={() => setMobileView("cards")}
+												aria-pressed={mobileView === "cards"}
+												className={`min-h-9 rounded-lg px-3 font-semibold text-xs ${
+													mobileView === "cards"
+														? "bg-primary text-white"
+														: "text-text-secondary"
+												}`}
+											>
+												Ringkasan Kartu
+											</button>
+											<button
+												type="button"
+												onClick={() => setMobileView("matrix")}
+												aria-pressed={mobileView === "matrix"}
+												className={`min-h-9 rounded-lg px-3 font-semibold text-xs ${
+													mobileView === "matrix"
+														? "bg-primary text-white"
+														: "text-text-secondary"
+												}`}
+											>
+												Tabel Matriks
+											</button>
+										</fieldset>
+									</div>
 									<section
 										aria-label="Ringkasan poin per SR"
-										className="resora-points-cards grid gap-3"
+										className={`resora-points-cards grid gap-3 ${mobileView === "matrix" ? "hidden" : ""}`}
 									>
 										{visible.rows.map((row) => (
 											<article
@@ -448,9 +478,9 @@ export default function PointsRecap() {
 										aria-label="Matriks poin kehadiran SR"
 										// biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard access is required for horizontal scrolling.
 										tabIndex={0}
-										className="focus-ring overflow-x-auto rounded-xl border border-border"
+										className={`focus-ring overflow-x-auto rounded-xl border border-border ${mobileView === "cards" ? "hidden min-[1200px]:block" : ""}`}
 									>
-										<table className="w-full border-collapse text-left text-sm">
+										<table className="w-max min-w-full border-collapse text-left text-sm">
 											<caption className="sr-only">
 												Rekap {report.period.name}; — berarti tidak diundang, 0
 												berarti tidak hadir pada event yang dinilai.
@@ -461,7 +491,7 @@ export default function PointsRecap() {
 														<th
 															key={column}
 															scope="col"
-															className="min-w-28 border-border border-b p-3"
+															className="min-w-28 whitespace-normal border-border border-b p-3 align-top"
 														>
 															{column}
 														</th>
@@ -470,7 +500,7 @@ export default function PointsRecap() {
 														<th
 															key={event.eventId}
 															scope="col"
-															className="min-w-48 max-w-64 break-words border-border border-b p-3 align-top"
+															className="min-w-52 max-w-60 whitespace-normal break-words border-border border-b p-3 align-top"
 														>
 															{pointsEventHeading(event)}
 														</th>
@@ -479,7 +509,7 @@ export default function PointsRecap() {
 														<th
 															key={label}
 															scope="col"
-															className="min-w-28 border-border border-b p-3"
+															className="min-w-28 whitespace-normal border-border border-b p-3 align-top"
 														>
 															{label}
 														</th>

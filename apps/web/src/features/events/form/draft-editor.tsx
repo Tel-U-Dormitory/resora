@@ -12,6 +12,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { attendanceQueryKeys, queryClient } from "@/utils/trpc";
 import {
 	eventErrorMessage,
+	formatEventTime,
 	parseWibDateTimeInput,
 	toWibDateTimeInput,
 } from "../../../components/event-feedback";
@@ -51,6 +52,10 @@ export function DraftEditor(props: DraftEditorProps) {
 		setEndError,
 		saving,
 		setSaving,
+		restoredAt,
+		confirmDiscard,
+		setConfirmDiscard,
+		discardLocalDraft,
 		formRef,
 		errorRef,
 		invalidFieldId,
@@ -91,6 +96,50 @@ export function DraftEditor(props: DraftEditorProps) {
 						: "Siapkan informasi event dan undangan. Peserta dapat ditinjau setelah draft disimpan."}
 				</p>
 			</div>
+			{restoredAt && (
+				<div
+					role="status"
+					className="resora-event-form flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-subtle p-4 text-sm"
+				>
+					<div className="min-w-0 space-y-1">
+						<p className="font-semibold text-foreground">
+							Draf di perangkat ini dipulihkan. Belum dikirim.
+						</p>
+						<p className="text-muted-foreground text-xs">
+							Disimpan lokal: {formatEventTime(restoredAt)}
+						</p>
+					</div>
+					{confirmDiscard ? (
+						<div className="flex flex-wrap items-center gap-2">
+							<Button
+								type="button"
+								variant="danger"
+								size="sm"
+								onClick={discardLocalDraft}
+							>
+								Ya, hapus draf
+							</Button>
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								onClick={() => setConfirmDiscard(false)}
+							>
+								Batal
+							</Button>
+						</div>
+					) : (
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							onClick={() => setConfirmDiscard(true)}
+						>
+							Hapus draf
+						</Button>
+					)}
+				</div>
+			)}
 			<form
 				ref={formRef}
 				aria-busy={saving}

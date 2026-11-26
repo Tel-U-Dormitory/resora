@@ -55,7 +55,9 @@
 	overscroll-behavior-inline: contain;
 }
 .resora-points table :is(th, td) {
-	overflow-wrap: anywhere;
+	white-space: normal;
+	overflow-wrap: break-word;
+	word-break: normal;
 }
 @media (max-width: 767px) {
 	.resora-events .grid:not(.resora-points-cards) {
