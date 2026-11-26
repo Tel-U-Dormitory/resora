@@ -16,6 +16,8 @@ PRD menjelaskan perilaku dan batas persetujuan. Rencana fase, kontribusi tim, da
 
 **Batas dengan Dashboard RESORA:** P1-04 adalah satu modul **frontend** untuk overview utama RESORA. Frontend itu mengonsumsi ringkasan dari API modul sumber dan menautkan pengguna ke modul tujuan. Ia tidak membuat backend dashboard agregator dan tidak menggantikan analitik detail di modul Pelanggaran. RSA-26 tetap membutuhkan statistik/tren Pelanggaran; API itu menjadi sumber ringkasan Pelanggaran untuk kartu P1-04. Integrasi frontend P1-04 bukan assignment backend Nafi di RSA-22–RSA-26.
 
+UI target untuk modul ini mengikuti [Design System RESORA](../../design-system.md). PRD modul ini tetap menguasai scope, permission, perilaku bisnis dan kontrak API; perubahan visual tidak mengubah aturan server. API baru harus melalui review Architecture/PRD sebelum implementasi.
+
 ## 2. Tujuan dan hasil yang diharapkan
 
 SR aktif dapat mencatat pelanggaran penghuni secara manual, melihat catatan lintas gedung, mengoreksi atau menghapus catatan sendiri dengan alasan, dan membaca analitik berdasarkan laporan aktif. SUPERADMIN sah memiliki akses penuh lintas periode sesuai gate identitas existing.

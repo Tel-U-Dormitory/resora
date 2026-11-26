@@ -31,9 +31,9 @@ const unavailableMetrics: DashboardMetric[] = [
 	},
 	{
 		id: "violations",
-		title: "Pelanggaran aktif",
+		title: "Pelanggaran",
 		period: {
-			label: "Periode menjabat belum tersedia",
+			label: "Periode belum tersedia",
 			startsAt: null,
 			endsAt: null,
 		},
@@ -99,7 +99,11 @@ function addAttendancePercentage(metric: DashboardMetric): DashboardMetric {
 	};
 }
 
-export function DashboardMetrics() {
+export function DashboardMetrics({
+	showCleanliness = true,
+}: {
+	showCleanliness?: boolean;
+}) {
 	const { fixture, previewMode, setPreviewMode, canManage } =
 		useDashboardPreview();
 	const metrics =
@@ -118,41 +122,49 @@ export function DashboardMetrics() {
 					export: null,
 				}))
 			: unavailableMetrics);
-	const displayMetrics = metrics.map(addAttendancePercentage);
+	const displayMetrics = metrics
+		.filter((metric) => showCleanliness || metric.id !== "cleanliness")
+		.map(addAttendancePercentage);
 	return (
-		<section aria-labelledby="dashboard-kpi-title" className="space-y-3">
-			<div className="flex items-end justify-between gap-3">
+		<section
+			aria-labelledby="dashboard-kpi-title"
+			className="resora-dashboard-kpis space-y-4"
+		>
+			<div className="flex flex-wrap items-end justify-between gap-3">
 				<h2 id="dashboard-kpi-title" className="font-semibold text-lg">
 					{previewMode === "management" ? "Ringkasan Manajemen" : "Ringkasan"}
 				</h2>
 				{canManage && (
-					<select
-						aria-label={fixture ? "Mode preview dashboard" : "Mode dashboard"}
-						className="min-h-10 max-w-48 rounded-lg border border-border bg-surface px-3 text-foreground text-xs"
-						value={previewMode}
-						onChange={(event) =>
-							setPreviewMode(event.target.value as "personal" | "management")
-						}
-					>
-						<option value="personal">Personal</option>
-						<option value="management">
-							{fixture ? "Manajemen (sintetis)" : "Manajemen"}
-						</option>
-					</select>
+					<label className="flex flex-wrap items-center gap-2 text-sm">
+						<span>Cakupan ringkasan</span>
+						<select
+							id="dashboard-mode"
+							className="min-h-11 max-w-full rounded-lg border border-border bg-surface px-3 text-foreground text-sm"
+							value={previewMode}
+							onChange={(event) =>
+								setPreviewMode(event.target.value as "personal" | "management")
+							}
+						>
+							<option value="personal">Personal</option>
+							<option value="management">
+								{fixture ? "Manajemen (sintetis)" : "Manajemen"}
+							</option>
+						</select>
+					</label>
 				)}
 			</div>
 			{previewMode === "management" && (
-				<p className="text-muted-foreground text-xs">
+				<p className="text-muted-foreground text-sm">
 					Cakupan: seluruh departemen. Data mengikuti izin tiap modul sumber.
 				</p>
 			)}
 			{fixture && (
-				<p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-muted-foreground text-xs">
+				<p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-muted-foreground text-sm">
 					<strong className="text-foreground">Preview sintetis.</strong> Bukan
 					data nyata dan bukan bukti hak akses.
 				</p>
 			)}
-			<div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
+			<div className="resora-dashboard-metrics">
 				{displayMetrics.map((metric) => (
 					<DashboardMetricCard
 						key={metric.id}

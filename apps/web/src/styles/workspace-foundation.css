@@ -1,0 +1,224 @@
+/* Design System 1.1. Root scope includes body portals, only while the workspace
+   is mounted; public routes keep the legacy tokens even after client navigation. */
+:root:has(.resora-workspace) {
+	--workspace-font: var(--font-plus-jakarta-sans);
+	--canvas: #f6f6f6;
+	--background: var(--canvas);
+	--surface: #ffffff;
+	--surface-raised: #ffffff;
+	--surface-subtle: #f6f6f6;
+	--foreground: #333333;
+	--text-secondary: #626262;
+	--border: #e2e2e2;
+	--border-control: #808080;
+	--primary: #ff6f6f;
+	--primary-foreground: #333333;
+	--primary-hover: #ff8585;
+	--primary-pressed: #ff7474;
+	--secondary: #fff46e;
+	--secondary-foreground: #333333;
+	--accent: #a58bff;
+	--accent-foreground: #333333;
+	--link: #8c3434;
+	--ring: var(--link);
+	--success: #166534;
+	--warning: #854d0e;
+	--danger: #b91c1c;
+	--info: #1e40af;
+	--destructive: #b91c1c;
+	--destructive-foreground: #ffffff;
+	--workspace-radius-control: 0.75rem;
+	--workspace-radius-card: 1rem;
+	--workspace-radius-overlay: 1.5rem;
+	--radius: var(--workspace-radius-control);
+	--page-gutter: 1rem;
+	--page-max-width: 90rem;
+	--form-max-width: 40rem;
+	--type-page: 1.5rem;
+	--type-section: 1.25rem;
+	--type-body: 1rem;
+	--type-small: 0.875rem;
+	--type-caption: 0.75rem;
+	--type-metric: clamp(1.75rem, 3vw, 2.25rem);
+	--elevation-overlay: 0 0.5rem 1.5rem rgb(0 0 0 / 0.16);
+	/* Compatibility aliases: reuse the existing shadcn and app primitives. */
+	--card: var(--surface);
+	--card-foreground: var(--foreground);
+	--popover: var(--surface-raised);
+	--popover-foreground: var(--foreground);
+	--muted: var(--surface-subtle);
+	--muted-foreground: var(--text-secondary);
+	--input: var(--border-control);
+	--primary-soft: var(--surface-subtle);
+	--primary-soft-foreground: var(--link);
+	--ink: var(--foreground);
+	--ink-foreground: var(--canvas);
+	--sidebar: var(--surface);
+	--sidebar-foreground: var(--foreground);
+	--sidebar-primary: var(--primary);
+	--sidebar-primary-foreground: var(--primary-foreground);
+	--sidebar-accent: var(--surface-subtle);
+	--sidebar-accent-foreground: var(--foreground);
+	--sidebar-border: var(--border);
+	--sidebar-ring: var(--ring);
+}
+
+:root.dark:has(.resora-workspace) {
+	--canvas: #181818;
+	--surface: #222222;
+	--surface-raised: #2c2c2c;
+	--surface-subtle: #303030;
+	--foreground: #f6f6f6;
+	--text-secondary: #bdbdbd;
+	--border: #424242;
+	--border-control: #969696;
+	--link: #ff9a9a;
+	--success: #86efac;
+	--warning: #fde047;
+	--danger: #fca5a5;
+	--info: #93c5fd;
+}
+
+@theme inline {
+	--color-canvas: var(--canvas);
+	--color-surface-raised: var(--surface-raised);
+	--color-surface-subtle: var(--surface-subtle);
+	--color-border-control: var(--border-control);
+	--color-link: var(--link);
+	--color-info: var(--info);
+	--color-primary-pressed: var(--primary-pressed);
+	--color-destructive-foreground: var(--destructive-foreground);
+}
+
+body:has(.resora-workspace) {
+	line-height: 1.5;
+}
+
+/* Shared control baseline, including controls rendered through body portals. */
+:root:has(.resora-workspace)
+:is(button, input, select, textarea, [data-slot="button"]) {
+	border-radius: var(--workspace-radius-control);
+}
+:root:has(.resora-workspace)
+	:is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+	border-color: var(--border-control);
+	font-size: var(--type-body);
+}
+:root:has(.resora-workspace)
+	:is(
+		button,
+		input:not([type="checkbox"]):not([type="radio"]),
+		select,
+		[data-slot="button"]
+	) {
+	min-height: 2.75rem;
+}
+:root:has(.resora-workspace) :is(button, [data-slot="button"]) {
+	font-size: var(--type-small);
+}
+:root:has(.resora-workspace) :is(button, [data-slot="button"]).bg-primary {
+	min-height: 3rem;
+	background: var(--primary);
+	color: var(--primary-foreground);
+}
+:root:has(.resora-workspace) :is(button, [data-slot="button"]):disabled {
+	background: var(--surface-subtle);
+	color: var(--text-secondary);
+	opacity: 1;
+	cursor: not-allowed;
+}
+:root:has(.resora-workspace) :focus-visible {
+	outline: 2px solid var(--ring);
+	outline-offset: 2px;
+}
+/* Coral is an action fill, not readable small text on a neutral surface. */
+:root:has(.resora-workspace) .text-primary {
+	color: var(--link);
+}
+:root:has(.resora-workspace)
+	:is([data-slot="button"], a).text-primary:not(.bg-primary) {
+	color: var(--link);
+}
+:root:has(.resora-workspace) [data-slot="button"].text-destructive {
+	color: var(--danger);
+}
+:root:has(.resora-workspace) :is([data-slot="card"], .resora-panel) {
+	border-radius: var(--workspace-radius-card);
+	box-shadow: none;
+}
+:root:has(.resora-workspace)
+	:is(
+		[role="dialog"],
+		[data-slot="sheet-content"],
+		[data-slot="popover-content"],
+		[data-slot="dropdown-menu-content"]
+	) {
+	border-radius: var(--workspace-radius-overlay);
+	box-shadow: var(--elevation-overlay);
+}
+.resora-workspace main#workspace-content {
+	max-width: var(--page-max-width);
+	padding-inline: var(--page-gutter);
+}
+.resora-workspace .resora-page {
+	max-width: var(--page-max-width);
+}
+.resora-workspace main#workspace-content h1:not(.text-xs) {
+	font-size: var(--type-page);
+	line-height: 1.25;
+	font-weight: 700;
+	letter-spacing: -0.025em;
+}
+.resora-workspace main#workspace-content h2 {
+	font-size: var(--type-section);
+	line-height: 1.35;
+	font-weight: 600;
+}
+.resora-workspace .resora-event-form {
+	max-width: var(--form-max-width);
+	margin-inline: auto;
+}
+@media (hover: hover) {
+	:root:has(.resora-workspace)
+		:is(button, [data-slot="button"]).bg-primary:not(:disabled):hover {
+		background: var(--primary-hover);
+	}
+}
+:root:has(.resora-workspace)
+	:is(button, [data-slot="button"]).bg-primary:not(:disabled):active {
+	background: var(--primary-pressed);
+}
+@media (min-width: 768px) {
+	:root:has(.resora-workspace) {
+		--page-gutter: 1.5rem;
+	}
+}
+@media (min-width: 1200px) {
+	:root:has(.resora-workspace) {
+		--page-gutter: 2rem;
+		--type-page: 1.75rem;
+	}
+}
+
+:root:has(.resora-workspace) [data-slot="dropdown-menu-item"] {
+	min-height: 2.75rem;
+	font-size: var(--type-small);
+}
+
+:root:has(.resora-workspace) :is(button, [data-slot="button"]) {
+	min-width: 2.75rem;
+}
+:root:has(.resora-workspace) .resora-primary-action {
+	min-height: 3rem;
+}
+:root:has(.resora-workspace) :is(button, [data-slot="button"], a).bg-primary {
+	border-color: var(--border-control);
+}
+:root:has(.resora-workspace) [data-resora-button].bg-danger {
+	background: var(--destructive);
+	color: var(--destructive-foreground);
+}
+
+:root:has(.resora-workspace) .resora-clock-picker .tp-ui-modal {
+	--tp-primary-rgb: 255, 111, 111;
+}

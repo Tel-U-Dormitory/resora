@@ -1,7 +1,13 @@
+import type { Viewport } from "next";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
 import { getSrSession } from "@/features/identity/server";
+export const viewport: Viewport = {
+	width: "device-width",
+	initialScale: 1,
+	viewportFit: "cover",
+};
 export default async function AuthenticatedLayout({
 	children,
 }: {
@@ -15,6 +21,7 @@ export default async function AuthenticatedLayout({
 			name={session.name}
 			canManageEvents={session.canManageInternalEvents}
 			canManageCommittee={session.canManageCommittee}
+			canReadAttendancePoints={session.canReadAttendancePoints}
 			isSuperadmin={session.isSuperadmin}
 			isSr={session.actor === "SR"}
 		>

@@ -2,16 +2,19 @@
 
 import { SidebarProvider, SidebarTrigger } from "@resora/ui/components/sidebar";
 import { TooltipProvider } from "@resora/ui/components/tooltip";
+import { ChevronRight, UserRound } from "lucide-react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
-import { MobileQuickActions } from "./mobile-quick-actions";
+import { AppNavigation } from "./app-navigation";
 import { ModeToggle } from "./mode-toggle";
 
 export function AppShell({
 	name,
 	canManageEvents,
 	canManageCommittee,
+	canReadAttendancePoints,
 	isSuperadmin,
 	isSr,
 	children,
@@ -19,59 +22,120 @@ export function AppShell({
 	name: string;
 	canManageEvents: boolean;
 	canManageCommittee?: boolean;
+	canReadAttendancePoints?: boolean;
 	isSuperadmin: boolean;
 	isSr: boolean;
 	children: ReactNode;
 }) {
 	const pathname = usePathname();
+	const [sidebarOpen, setSidebarOpen] = useState(true);
+	useEffect(() => {
+		try {
+			setSidebarOpen(
+				localStorage.getItem("resora-sidebar-collapsed") !== "true",
+			);
+		} catch {
+			/* Storage is optional. */
+		}
+	}, []);
 	const sectionTitle = pathname.startsWith("/committees")
-		? "Kelola kepanitiaan"
+		? "Kepanitiaan"
 		: pathname.startsWith("/admin/users")
-			? "Manajemen akun"
+			? "Kelola akun"
 			: pathname.startsWith("/admin/periods")
 				? "Periode menjabat"
-				: pathname.startsWith("/events")
-					? "Kegiatan internal"
-					: pathname.startsWith("/attendance")
-						? "Riwayat kehadiran"
-						: pathname === "/scan"
-							? "Scan kehadiran"
-							: pathname === "/profile"
-								? "Profil saya"
-								: "Dashboard";
+				: pathname === "/events/points"
+					? "Rekap poin kehadiran"
+					: pathname.startsWith("/events")
+						? "Kegiatan"
+						: pathname.startsWith("/attendance")
+							? "Riwayat kehadiran"
+							: pathname === "/scan"
+								? "Scan QR"
+								: pathname.startsWith("/broadcasts")
+									? "Inbox"
+									: pathname === "/profile"
+										? "Profil"
+										: "Beranda";
+	const capabilities = {
+		isSr,
+		canManageEvents,
+		canManageCommittee,
+		canReadAttendancePoints,
+		isSuperadmin,
+	};
+	if (pathname === "/scan") {
+		return (
+			<div className="resora-workspace resora-scanner-workspace min-h-dvh">
+				<main id="workspace-content" tabIndex={-1}>
+					{children}
+				</main>
+			</div>
+		);
+	}
 	return (
 		<TooltipProvider delay={150}>
-			<SidebarProvider className="resora-workspace min-h-dvh">
+			<SidebarProvider
+				className="resora-workspace min-h-dvh"
+				open={sidebarOpen}
+				onOpenChange={(next) => {
+					setSidebarOpen(next);
+					try {
+						localStorage.setItem("resora-sidebar-collapsed", String(!next));
+					} catch {
+						/* Keep navigation usable without storage. */
+					}
+				}}
+			>
 				<a
 					href="#workspace-content"
 					className="focus-ring sr-only fixed top-4 left-4 z-50 rounded-xl bg-surface p-3 focus:not-sr-only"
 				>
 					Lewati navigasi
 				</a>
-				<AppSidebar
-					name={name}
-					canManageEvents={canManageEvents}
-					canManageCommittee={canManageCommittee}
-					isSuperadmin={isSuperadmin}
-					isSr={isSr}
-				/>
+				<AppSidebar name={name} {...capabilities} />
 				<div className="min-w-0 flex-1">
-					<header className="sticky top-0 z-20 flex min-h-16 items-center gap-3 border-border/70 border-b bg-surface/95 px-4 py-3 backdrop-blur-md sm:px-6 lg:px-8">
-						<SidebarTrigger className="resora-sidebar-trigger size-11 cursor-pointer rounded-xl" />
-						<p className="min-w-0 flex-1 truncate font-semibold text-sm">
-							{sectionTitle}
-						</p>
-						<ModeToggle />
+					<header className="resora-utility-bar">
+						<SidebarTrigger className="resora-sidebar-trigger hidden size-11 cursor-pointer rounded-xl min-[1200px]:inline-flex" />
+						<nav aria-label="Breadcrumb" className="min-w-0 flex-1 text-sm">
+							<ol className="flex min-w-0 items-center gap-2">
+								{pathname !== "/dashboard" && (
+									<li className="hidden items-center gap-2 min-[768px]:flex">
+										<Link
+											href="/dashboard"
+											className="focus-ring rounded-lg py-3 text-muted-foreground"
+										>
+											Beranda
+										</Link>
+										<ChevronRight size={16} aria-hidden="true" />
+									</li>
+								)}
+								<li aria-current="page" className="truncate font-semibold">
+									{sectionTitle}
+								</li>
+							</ol>
+						</nav>
+						<ModeToggle allowSystem={false} />
+						<Link
+							href="/profile"
+							className="resora-utility-profile focus-ring"
+							aria-label={`Profil ${name}`}
+						>
+							<UserRound size={20} aria-hidden="true" />
+							<span className="hidden max-w-40 truncate min-[1200px]:block">
+								{name}
+							</span>
+						</Link>
 					</header>
 					<main
 						id="workspace-content"
 						tabIndex={-1}
-						className="mx-auto max-w-7xl p-4 pb-28 outline-none sm:p-6 sm:pb-28 lg:p-8"
+						className="resora-shell-content mx-auto p-4 outline-none"
 					>
 						{children}
 					</main>
 				</div>
-				{isSr && <MobileQuickActions canManageEvents={canManageEvents} />}
+				<AppNavigation {...capabilities} />
 			</SidebarProvider>
 		</TooltipProvider>
 	);

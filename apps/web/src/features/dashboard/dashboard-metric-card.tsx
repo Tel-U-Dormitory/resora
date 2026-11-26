@@ -1,12 +1,25 @@
 import { Card, CardContent } from "@resora/ui/components/card";
+import { ClipboardCheck, House, ShieldAlert, UserCheck } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type {
 	DashboardMetric,
 	DashboardMetricState,
 } from "./dashboard.contracts";
 
-const numberFormat = new Intl.NumberFormat("id-ID");
-
+const numberFormat = new Intl.NumberFormat("id-ID", {
+	maximumFractionDigits: 1,
+});
+const icons = {
+	assessment: ClipboardCheck,
+	attendance: UserCheck,
+	violations: ShieldAlert,
+	cleanliness: House,
+};
+const scopes = {
+	individual: "Pribadi",
+	department: "Departemen",
+	organization: "Seluruh departemen",
+};
 function stateLabel(state: DashboardMetricState) {
 	switch (state.kind) {
 		case "loading":
@@ -23,7 +36,6 @@ function stateLabel(state: DashboardMetricState) {
 			return state.note;
 	}
 }
-
 export function DashboardMetricCard({
 	metric,
 	preview = false,
@@ -32,21 +44,25 @@ export function DashboardMetricCard({
 	preview?: boolean;
 }) {
 	const { state } = metric;
-	const value =
-		state.kind === "ready" ? numberFormat.format(state.value) : null;
+	const Icon = icons[metric.id];
 	const ready = state.kind === "ready" || state.kind === "ready_summary";
 	return (
-		<Card className="resora-panel h-full min-w-0">
-			<CardContent className="flex h-full min-h-36 flex-col gap-3 p-4 sm:p-5">
-				<div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
-					<h3 className="min-w-0 break-words font-medium text-muted-foreground text-sm">
-						{metric.title}
-					</h3>
-					{metric.scope !== "individual" && (
-						<span className="max-w-full break-words rounded-full bg-primary-soft px-2 py-1 text-[10px] text-primary leading-4">
-							Lintas departemen
-						</span>
-					)}
+		<Card
+			className="resora-panel resora-metric-card h-full min-w-0"
+			data-metric={metric.id}
+			data-state={state.kind}
+		>
+			<CardContent className="flex h-full flex-col gap-4 p-4">
+				<div className="flex min-w-0 items-start gap-3">
+					<span className="resora-metric-icon" data-tone={metric.id}>
+						<Icon size={20} aria-hidden="true" />
+					</span>
+					<div className="min-w-0 space-y-1">
+						<h3 className="font-semibold text-sm">{metric.title}</h3>
+						<p className="text-muted-foreground text-xs">
+							{scopes[metric.scope]}
+						</p>
+					</div>
 				</div>
 				{state.kind === "loading" ? (
 					<div role="status" aria-label={state.message} className="space-y-3">
@@ -54,8 +70,8 @@ export function DashboardMetricCard({
 						<Skeleton className="h-4 w-full" />
 					</div>
 				) : state.kind === "ready" ? (
-					<p className="break-words font-bold text-3xl tracking-tight sm:text-4xl">
-						{value}
+					<p className="resora-metric-value">
+						{numberFormat.format(state.value)}
 						{state.unit && (
 							<span className="ml-1 font-medium text-muted-foreground text-sm">
 								{state.unit}
@@ -63,14 +79,20 @@ export function DashboardMetricCard({
 						)}
 					</p>
 				) : state.kind === "ready_summary" ? (
-					<dl className="grid grid-cols-2 gap-x-3 gap-y-4">
-						{state.values.map((item) => (
-							<div key={item.label} className="min-w-0 space-y-1">
-								<dt className="text-muted-foreground text-xs">{item.label}</dt>
-								<dd className="break-words font-bold text-xl tracking-tight sm:text-2xl">
+					<dl className="space-y-3">
+						{state.values.map((item, index) => (
+							<div key={item.label} className="space-y-1">
+								<dt className="text-muted-foreground text-sm">{item.label}</dt>
+								<dd
+									className={
+										index === 0
+											? "resora-metric-value"
+											: "font-semibold text-lg tabular-nums"
+									}
+								>
 									{numberFormat.format(item.value)}
 									{item.unit && (
-										<span className="ml-1 font-medium text-muted-foreground text-xs">
+										<span className="ml-1 font-medium text-muted-foreground text-sm">
 											{item.unit}
 										</span>
 									)}
@@ -85,26 +107,35 @@ export function DashboardMetricCard({
 								? "alert"
 								: "status"
 						}
-						className={`font-semibold text-sm ${state.kind === "coming_soon" ? "text-muted-foreground" : "text-foreground"}`}
+						className="text-sm leading-relaxed"
 					>
 						{stateLabel(state)}
 					</p>
 				)}
-				<div className="mt-auto space-y-1 border-border/70 border-t pt-3">
-					<p className="text-muted-foreground text-xs">{metric.period.label}</p>
-					{ready && state.note && (
-						<p className="text-muted-foreground text-xs">{state.note}</p>
-					)}
-					{metric.export && (
-						<button
-							type="button"
-							disabled
-							className="min-h-9 cursor-not-allowed rounded-lg border border-border px-3 text-muted-foreground text-xs"
-						>
-							{preview ? "Ekspor (simulasi)" : "Ekspor"}
-						</button>
-					)}
-				</div>
+				{metric.id !== "cleanliness" && (
+					<div className="mt-auto space-y-2 border-border border-t pt-3">
+						<p className="text-muted-foreground text-xs">
+							{metric.period.label}
+						</p>
+						{ready && state.note && (
+							<p className="text-muted-foreground text-xs">{state.note}</p>
+						)}
+						{metric.export && preview && (
+							<>
+								<button
+									type="button"
+									disabled
+									className="min-h-11 rounded-lg border border-border px-3 text-sm"
+								>
+									Ekspor (simulasi)
+								</button>
+								<p className="text-muted-foreground text-xs">
+									Ekspor belum tersedia pada preview.
+								</p>
+							</>
+						)}
+					</div>
+				)}
 			</CardContent>
 		</Card>
 	);

@@ -1,6 +1,8 @@
 // Presentational links only. Protected pages and Express enforce access.
 export const MAIN_NAVIGATION = [
-	{ title: "Dashboard", href: "/dashboard", icon: "dashboard" },
+	{ title: "Beranda", href: "/dashboard", icon: "dashboard" },
+	{ title: "Inbox", href: "/broadcasts", icon: "inbox" },
+	{ title: "Profil", href: "/profile", icon: "profile" },
 	{ title: "Event internal", href: "/events", icon: "events" },
 	{ title: "Scan QR", href: "/scan", icon: "scan" },
 	{ title: "Riwayat kehadiran", href: "/attendance/history", icon: "history" },
@@ -19,20 +21,34 @@ export function getSidebarGroups({
 	isSr,
 	canManageEvents,
 	canManageCommittee = false,
+	canReadAttendancePoints = false,
 	isSuperadmin,
 }: {
 	isSr: boolean;
 	canManageEvents: boolean;
 	canManageCommittee?: boolean;
+	canReadAttendancePoints?: boolean;
 	isSuperadmin: boolean;
 }) {
 	return [
 		{
 			id: "global",
 			title: "Umum",
-			items: MAIN_NAVIGATION.filter(
-				({ href }) => isSr || href === "/dashboard",
-			),
+			items: [
+				...MAIN_NAVIGATION.filter(
+					({ href }) =>
+						isSr || ["/dashboard", "/broadcasts", "/profile"].includes(href),
+				),
+				...(canReadAttendancePoints
+					? [
+							{
+								title: "Rekap poin kehadiran",
+								href: "/events/points",
+								icon: "points",
+							} as const,
+						]
+					: []),
+			],
 		},
 		...(canManageEvents || canManageCommittee
 			? [
@@ -66,6 +82,34 @@ export function getSidebarGroups({
 	];
 }
 
+export type NavigationItem = ReturnType<
+	typeof getSidebarGroups
+>[number]["items"][number];
+
+export function getAppItems(
+	capabilities: Parameters<typeof getSidebarGroups>[0],
+) {
+	return getSidebarGroups(capabilities)
+		.flatMap<NavigationItem>((group) => group.items)
+		.filter(
+			({ href }) =>
+				!["/dashboard", "/broadcasts", "/profile", "/scan"].includes(href),
+		);
+}
+
+export function getPrimaryDestination(pathname: string) {
+	if (pathname === "/dashboard") return "/dashboard";
+	if (pathname === "/broadcasts" || pathname.startsWith("/broadcasts/"))
+		return "/broadcasts";
+	if (
+		pathname === "/profile" ||
+		pathname.startsWith("/profile/") ||
+		pathname === "/attendance/history"
+	)
+		return "/profile";
+	return null;
+}
+
 export function isSidebarLinkActive(
 	href: string,
 	pathname: string,
@@ -73,11 +117,16 @@ export function isSidebarLinkActive(
 ) {
 	const managingEvents =
 		pathname.startsWith("/events") &&
+		pathname !== "/events/points" &&
 		(managementView ||
 			pathname === "/events/new" ||
 			pathname.endsWith("/edit"));
 	if (href === "/events?view=manage") return managingEvents;
 	if (href === "/events")
-		return pathname.startsWith("/events") && !managingEvents;
+		return (
+			pathname.startsWith("/events") &&
+			pathname !== "/events/points" &&
+			!managingEvents
+		);
 	return pathname === href || pathname.startsWith(`${href}/`);
 }

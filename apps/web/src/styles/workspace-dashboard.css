@@ -1,0 +1,150 @@
+/* F4: dashboard composition only; shared feeds keep their own contracts. */
+.resora-dashboard-layout {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 1.5rem;
+	align-items: start;
+}
+.resora-dashboard-layout > * {
+	min-width: 0;
+}
+.resora-dashboard-metrics {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+	gap: 0.75rem;
+}
+.resora-metric-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 2rem;
+	height: 2rem;
+	flex-shrink: 0;
+	border-radius: var(--workspace-radius-control);
+	background: var(--secondary);
+	color: var(--secondary-foreground);
+}
+.resora-metric-icon[data-tone="assessment"] {
+	background: var(--primary);
+	color: var(--primary-foreground);
+}
+.resora-metric-icon[data-tone="violations"] {
+	background: var(--accent);
+	color: var(--accent-foreground);
+}
+.resora-metric-icon[data-tone="cleanliness"] {
+	background: var(--surface-subtle);
+	color: var(--foreground);
+}
+.resora-metric-value {
+	font-size: var(--type-metric);
+	font-weight: 600;
+	line-height: 1.2;
+	font-variant-numeric: tabular-nums;
+	overflow-wrap: anywhere;
+}
+.resora-dashboard-quick .resora-feature-panel {
+	margin-bottom: 0.75rem;
+}
+.resora-dashboard-quick .resora-action-card [data-slot="card-content"] {
+	padding: 1rem;
+}
+.resora-dashboard
+	:is(.resora-dashboard-activities, .resora-dashboard-broadcasts)
+	section
+	> div:first-child {
+	flex-wrap: wrap;
+	align-items: center;
+}
+.resora-dashboard-activities a {
+	overflow-wrap: anywhere;
+}
+.resora-dashboard-activities article {
+	grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 768px) {
+	.resora-dashboard-metrics {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 1rem;
+	}
+}
+@media (min-width: 1200px) {
+	.resora-dashboard-layout {
+		grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+		gap: 2rem;
+	}
+	.resora-dashboard-kpis,
+	.resora-dashboard-quick {
+		grid-column: 1 / -1;
+	}
+	.resora-dashboard-metrics {
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+	}
+	.resora-dashboard-activities .grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.resora-dashboard-broadcasts .grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+.resora-dashboard-quick > .grid {
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+}
+.resora-dashboard-broadcasts section > div:first-child > div {
+	min-width: 0;
+	max-width: 100%;
+}
+.resora-dashboard .resora-panel {
+	padding-block: 0;
+}
+.resora-dashboard
+	:is(.resora-dashboard-activities, .resora-feature-panel)
+	[data-slot="card-content"] {
+	padding: 1rem;
+}
+/* Let text reflow beside decorative icons when users enlarge text. */
+.resora-dashboard :is(.resora-panel, .resora-dashboard-broadcasts) :is(p, h3) {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.resora-dashboard .resora-feature-panel [data-slot="card-content"] > div > div,
+.resora-dashboard-quick .resora-action-card a > span:not(:first-child) {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.resora-dashboard-quick .resora-action-card a > span:first-child {
+	width: min(2.75rem, 44px);
+	height: min(2.75rem, 44px);
+}
+.resora-dashboard
+	.resora-feature-panel
+	[data-slot="card-content"]
+	> div
+	> span {
+	width: min(3rem, 48px);
+	height: min(3rem, 48px);
+}
+@media (max-width: 399px) {
+	.resora-dashboard-quick [data-action-arrow] {
+		display: none;
+	}
+}
+.resora-dashboard .resora-primary-action {
+	height: auto;
+	white-space: normal;
+	padding-block: 0.75rem;
+}
+.resora-dashboard-activities h3 {
+	font-size: var(--type-small);
+}
+
+.resora-dashboard-upcoming {
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+}
+.resora-dashboard-broadcasts button {
+	max-width: 100%;
+	height: auto;
+	min-height: 44px;
+	white-space: normal;
+	overflow-wrap: anywhere;
+}

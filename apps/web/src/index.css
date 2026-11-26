@@ -1,4 +1,9 @@
 @import "@resora/ui/globals.css";
+@import "./styles/workspace-foundation.css";
+@import "./styles/workspace-shell.css";
+@import "./styles/workspace-scanner.css";
+@import "./styles/workspace-dashboard.css";
+@import "./styles/workspace-inbox.css";
 
 .resora-scan-line {
 	animation: resora-scan-line 2.4s ease-in-out infinite;
@@ -69,7 +74,8 @@
 }
 
 @theme inline {
-	--font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+	--font-sans:
+		var(--workspace-font, var(--font-geist-sans)), system-ui, sans-serif;
 	--font-mono: var(--font-geist-mono), ui-monospace, monospace;
 	--color-surface: var(--surface);
 	--color-primary-hover: var(--primary-hover);
@@ -80,11 +86,11 @@
 	--color-danger: var(--danger);
 	--color-success: var(--success);
 	--color-warning: var(--warning);
-	--radius-sm: 6px;
-	--radius-md: 10px;
-	--radius-lg: 14px;
-	--radius-xl: 20px;
-	--radius-2xl: 28px;
+	--radius-sm: var(--workspace-radius-control, 6px);
+	--radius-md: var(--workspace-radius-control, 10px);
+	--radius-lg: var(--workspace-radius-card, 14px);
+	--radius-xl: var(--workspace-radius-overlay, 20px);
+	--radius-2xl: var(--workspace-radius-overlay, 28px);
 	--shadow-xs: 0 1px 2px rgb(15 23 42 / 0.05);
 	--shadow-sm: 0 1px 3px rgb(15 23 42 / 0.08);
 	--shadow-brand: 0 10px 24px -8px rgb(225 59 48 / 0.45);
@@ -182,13 +188,7 @@
 	--sidebar-accent-foreground: var(--primary-soft-foreground);
 	--sidebar-border: var(--border);
 	--sidebar-ring: var(--ring);
-	--success: #087f5b;
-	--warning: #946200;
 	background: var(--background);
-}
-.dark .resora-workspace {
-	--success: #6ee7b7;
-	--warning: #fcd34d;
 }
 .resora-workspace main {
 	line-height: 1.6;

@@ -60,7 +60,7 @@ module boundaries dan enforcement arsitektur. Jangan scaffolding ulang, mengambi
 tabel privat modul lain, menambah dependency atau abstraction tanpa kebutuhan nyata.
 Tes menggunakan data sintetis dan lingkungan lokal terisolasi; fake storage untuk
 offline. Jangan membaca/menampilkan secret, signed URL atau data mahasiswa asli.
-Jangan menjalankan browser, screenshot, atau computer-use tanpa permintaan eksplisit.
+Otorisasi PM tetap (2026-11-26): jalankan browser/screenshot lokal dengan data sintetis untuk setiap perubahan UI yang berdampak visual sesuai [gate verifikasi pusat](../../design/verification.md). Ini tidak memberi izin ke deployment, database Production, kredensial/akun nyata atau layanan eksternal; aturan lingkungan Development DB/R2 di bawah tetap berlaku.
 User telah mengizinkan pengujian dan mutasi pada Development DB serta bucket R2
 Development khusus dengan kredensial `.env` lokal; verifikasi target Development
 sebelum menulis. Kredensial Production hanya ada di server dan Production tidak
@@ -250,7 +250,7 @@ Jalankan focused tests, check:architecture, relevant lint/typecheck dan build;
 cek script aktual sebelum memilih command atau menggunakan verify:pr. Hindari
 check --write seluruh repo. Pisahkan baseline failure dari regresi perubahan.
 
-Jangan jalankan browser tanpa permintaan eksplisit. Live DB/R2/config/deployment
+Uji browser UI lokal dengan data sintetis mengikuti otorisasi tetap PM dan gate design system; live DB/R2/config/deployment
 memerlukan izin terpisah; bila belum ada, tes lokal/fake tetap berjalan dan gap
 live dicatat. Siapkan ringkasan PR/diff, hasil command, checklist AC, bug dan
 kesiapan lingkungan untuk review Fariza. Jangan push/update Jira/merge otomatis.

@@ -1,0 +1,54 @@
+/* Broadcast remains a reading list; management is explicitly separated. */
+.resora-inbox {
+	max-width: 52rem;
+	margin-inline: auto;
+}
+.resora-inbox-list [data-slot="card"] {
+	padding-block: 0;
+}
+.resora-inbox-list [data-slot="card-content"] {
+	padding: 1rem;
+}
+.resora-inbox-management {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	background: var(--surface);
+}
+:is(.resora-inbox, .resora-broadcast-dialog)
+	:is(p, h1, h2, h3, label, summary, a) {
+	overflow-wrap: anywhere;
+	min-width: 0;
+}
+:is(.resora-inbox, .resora-broadcast-dialog) :is(button, a) {
+	max-width: 100%;
+	min-height: 44px;
+	height: auto;
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+.resora-inbox-management > div,
+.resora-inbox > div,
+.resora-inbox > div > div {
+	min-width: 0;
+	max-width: 100%;
+}
+.resora-inbox-list h2 {
+	font-size: var(--type-body);
+	line-height: 1.5;
+}
+.resora-inbox input[type="search"] {
+	font-size: max(1rem, 16px);
+}
+@media (min-width: 768px) {
+	.resora-inbox-list [data-slot="card-content"] {
+		padding: 1.5rem;
+	}
+}
+/* Decorative gutters should not consume the reading area when text is enlarged. */
+.resora-broadcast-dialog {
+	width: calc(100% - 32px);
+	padding: min(1.5rem, 24px);
+}

@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import { getSidebarGroups, isSidebarLinkActive } from "./navigation";
+import {
+	getAppItems,
+	getPrimaryDestination,
+	getSidebarGroups,
+	isSidebarLinkActive,
+	type NavigationItem,
+} from "./navigation";
 
 test("global, HCO and administration groups follow independent backend capabilities", () => {
 	for (const isSr of [false, true]) {
@@ -13,8 +19,15 @@ test("global, HCO and administration groups follow independent backend capabilit
 				expect(groups[0]?.id).toBe("global");
 				expect(groups[0]?.items.map((item) => item.href)).toEqual(
 					isSr
-						? ["/dashboard", "/events", "/scan", "/attendance/history"]
-						: ["/dashboard"],
+						? [
+								"/dashboard",
+								"/broadcasts",
+								"/profile",
+								"/events",
+								"/scan",
+								"/attendance/history",
+							]
+						: ["/dashboard", "/broadcasts", "/profile"],
 				);
 				expect(groups.some((group) => group.id === "hco")).toBe(
 					canManageEvents,
@@ -30,6 +43,44 @@ test("global, HCO and administration groups follow independent backend capabilit
 				expect(groups.every((group) => group.items.length > 0)).toBe(true);
 			}
 		}
+	}
+});
+
+test("points and committee links follow their own capabilities, including system actors", () => {
+	for (const isSr of [false, true]) {
+		for (const canReadAttendancePoints of [false, true]) {
+			for (const canManageCommittee of [false, true]) {
+				const items = getSidebarGroups({
+					isSr,
+					canManageEvents: false,
+					isSuperadmin: false,
+					canReadAttendancePoints,
+					canManageCommittee,
+				}).flatMap<NavigationItem>((group) => group.items);
+				expect(items.some((item) => item.href === "/events/points")).toBe(
+					canReadAttendancePoints,
+				);
+				expect(items.some((item) => item.href === "/committees")).toBe(
+					canManageCommittee,
+				);
+				expect(items.some((item) => item.href === "/scan")).toBe(isSr);
+			}
+		}
+	}
+	for (const managementView of [false, true]) {
+		expect(
+			isSidebarLinkActive("/events", "/events/points", managementView),
+		).toBe(false);
+		expect(
+			isSidebarLinkActive(
+				"/events?view=manage",
+				"/events/points",
+				managementView,
+			),
+		).toBe(false);
+		expect(
+			isSidebarLinkActive("/events/points", "/events/points", managementView),
+		).toBe(true);
 	}
 });
 
@@ -69,4 +120,51 @@ test("period settings and accounts highlight independently", () => {
 	expect(isSidebarLinkActive("/admin/periods", "/admin/users", false)).toBe(
 		false,
 	);
+});
+
+test("Apps reuses sidebar capabilities and excludes primary destinations and QR", () => {
+	const participant = getAppItems({
+		isSr: true,
+		canManageEvents: false,
+		isSuperadmin: false,
+	});
+	expect(participant.map((item) => item.href)).toEqual([
+		"/events",
+		"/attendance/history",
+	]);
+	const admin = getAppItems({
+		isSr: false,
+		canManageEvents: false,
+		isSuperadmin: true,
+	});
+	expect(admin.map((item) => item.href)).toEqual([
+		"/admin/users",
+		"/admin/periods",
+	]);
+	const empty = getAppItems({
+		isSr: false,
+		canManageEvents: false,
+		isSuperadmin: false,
+	});
+	expect(empty).toEqual([]);
+	for (const items of [participant, admin]) {
+		expect(
+			items.some((item) =>
+				["/dashboard", "/broadcasts", "/profile", "/scan"].includes(item.href),
+			),
+		).toBe(false);
+	}
+});
+
+test("primary destinations include Inbox history and personal attendance under Profil", () => {
+	expect(getPrimaryDestination("/dashboard")).toBe("/dashboard");
+	expect(getPrimaryDestination("/broadcasts/history")).toBe("/broadcasts");
+	expect(getPrimaryDestination("/attendance/history")).toBe("/profile");
+	for (const route of [
+		"/events/item",
+		"/events/points",
+		"/admin/users/new",
+		"/scan",
+	])
+		expect(getPrimaryDestination(route)).toBeNull();
 });

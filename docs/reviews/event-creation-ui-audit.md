@@ -1,5 +1,7 @@
 # Audit UI/UX form pembuatan event — 2026-10-19
 
+> **Temuan historis:** layout, sticky footer/floating-action dan rekomendasi komponen pada audit ini mendahului [Design System](../design-system.md) 2026-11-26. Gunakan design system untuk target visual shell baru; persyaratan bisnis/izin yang dirujuk tetap tunduk pada PRD dan acceptance criteria. Hasil audit ini bukan validasi refactor.
+
 Scope: frontend create-event flow, shared create/edit editor, participant selection and location picker/map. Source inspection only; no browser or visual acceptance testing. This report proposes changes and does not implement them.
 
 ## Findings ranked by impact

@@ -2,7 +2,7 @@
 
 import { Avatar, AvatarFallback } from "@resora/ui/components/avatar";
 import { useQuery } from "@tanstack/react-query";
-import { Monitor, Moon, Sun } from "lucide-react";
+import { Moon, Sun } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
@@ -16,7 +16,6 @@ import PasswordChangeForm from "../auth/password-change-form";
 const themes = [
 	{ value: "light", label: "Terang", icon: Sun },
 	{ value: "dark", label: "Gelap", icon: Moon },
-	{ value: "system", label: "Ikuti sistem", icon: Monitor },
 ] as const;
 
 export default function SrProfile() {
