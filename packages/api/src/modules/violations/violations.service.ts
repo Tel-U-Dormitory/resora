@@ -59,6 +59,7 @@ const reportFields = {
 	recordedBuildingId: violationsReports.recordedBuildingId,
 	recordedBuildingName: violationsReports.recordedBuildingName,
 	ktmObjectKey: violationsReports.ktmObjectKey,
+	version: violationsReports.version,
 	recordedAt: violationsReports.recordedAt,
 	updatedAt: violationsReports.updatedAt,
 	deletedAt: violationsReports.deletedAt,
@@ -524,11 +525,15 @@ export async function violationHistory(
 				.select({
 					id: violationsReports.id,
 					reporterUserId: violationsReports.reporterUserId,
+					deletedAt: violationsReports.deletedAt,
 				})
 				.from(violationsReports)
 				.where(eq(violationsReports.id, input.reportId));
 			if (!report) fail("VIOLATION_NOT_FOUND", "NOT_FOUND");
-			if (!canMutateViolation(live, report.reporterUserId))
+			if (
+				!canMutateViolation(live, report.reporterUserId) ||
+				(report.deletedAt !== null && !hasSuperadminPrivilege(live))
+			)
 				fail("VIOLATION_HISTORY_ACCESS_DENIED", "FORBIDDEN");
 			const entries = await tx
 				.select({

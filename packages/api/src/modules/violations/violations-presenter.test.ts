@@ -12,6 +12,7 @@ const deletedReport: PublicReportRow = {
 	recordedBuildingId: "synthetic-building",
 	recordedBuildingName: "Synthetic Building",
 	ktmObjectKey: "violations/ktm/synthetic-object",
+	version: 4,
 	recordedAt: new Date("2026-11-20T10:00:00Z"),
 	updatedAt: new Date("2026-11-21T10:00:00Z"),
 	deletedAt: new Date("2026-11-21T10:00:00Z"),

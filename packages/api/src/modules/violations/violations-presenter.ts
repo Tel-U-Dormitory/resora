@@ -9,6 +9,7 @@ export type PublicReportRow = {
 	recordedBuildingId: string;
 	recordedBuildingName: string;
 	ktmObjectKey: string;
+	version: number;
 	recordedAt: Date;
 	updatedAt: Date;
 	deletedAt: Date | null;
@@ -25,6 +26,7 @@ export function publicReport(
 	return {
 		id: row.id,
 		publicCode: row.publicCode,
+		version: row.version,
 		studentName: redact ? null : row.studentName,
 		studentNim: redact ? null : row.studentNim,
 		incidentDate: redact ? null : row.incidentDate,
