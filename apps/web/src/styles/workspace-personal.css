@@ -1,0 +1,76 @@
+/* Personal pages share the authenticated tokens, without organization aggregates. */
+.resora-profile {
+	max-width: 52rem;
+	margin-inline: auto;
+}
+.resora-profile :is(h1, h2, h3, p, dd, dt, a, summary, button) {
+	overflow-wrap: anywhere;
+	min-width: 0;
+}
+.resora-profile :is(button, a) {
+	max-width: 100%;
+	white-space: normal;
+	height: auto;
+	min-height: 44px;
+}
+.resora-profile [data-slot="card"] {
+	padding-block: 0;
+}
+.resora-profile :is([data-slot="card-content"], [data-slot="card-header"]) {
+	padding: 1rem;
+}
+.resora-profile [data-slot="card-header"] {
+	padding-bottom: 0;
+}
+.resora-profile [data-slot="avatar"] {
+	width: min(3.5rem, 56px);
+	height: min(3.5rem, 56px);
+	flex-shrink: 0;
+}
+.resora-profile-security [data-slot="card"] {
+	border: 0;
+	box-shadow: none;
+}
+.resora-profile fieldset {
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+}
+.resora-history {
+	max-width: 60rem;
+	margin-inline: auto;
+}
+.resora-history :is(h1, h2, h3, p, dd, dt, a, summary, button, span, time) {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.resora-history :is(a, button, summary) {
+	max-width: 100%;
+	min-height: 44px;
+	height: auto;
+	white-space: normal;
+}
+.resora-history-row {
+	grid-template-columns: minmax(0, 1fr);
+}
+.resora-history nav > div {
+	flex-wrap: wrap;
+}
+.resora-history-status > span {
+	font-size: var(--type-small);
+}
+@media (min-width: 1200px) {
+	.resora-history-row {
+		grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
+		align-items: start;
+	}
+	.resora-history-status {
+		grid-column: 3;
+		grid-row: 1;
+	}
+	.resora-history-time {
+		grid-column: 2;
+		grid-row: 1;
+	}
+	.resora-history-details {
+		grid-column: 1 / -1;
+	}
+}

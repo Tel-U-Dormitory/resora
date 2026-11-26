@@ -2,7 +2,8 @@
 
 import { Avatar, AvatarFallback } from "@resora/ui/components/avatar";
 import { useQuery } from "@tanstack/react-query";
-import { Moon, Sun } from "lucide-react";
+import { ArrowRight, Moon, Sun } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
@@ -10,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { queryErrorMessage } from "@/utils/request-error";
-import { queryClient, trpc } from "@/utils/trpc";
+import { getPersonalTrpc, queryClient } from "@/utils/trpc";
 import PasswordChangeForm from "../auth/password-change-form";
 
 const themes = [
@@ -18,11 +19,16 @@ const themes = [
 	{ value: "dark", label: "Gelap", icon: Moon },
 ] as const;
 
-export default function SrProfile() {
+export default function SrProfile({ userId }: { userId: string }) {
 	const router = useRouter();
+	const options = getPersonalTrpc(userId).identity.profile.queryOptions();
 	const profile = useQuery({
-		...trpc.identity.profile.queryOptions(),
+		...options,
 		retry: false,
+		staleTime: 0,
+		refetchOnMount: "always",
+		placeholderData: undefined,
+		meta: { errorHandledLocally: true },
 	});
 	const { theme, setTheme } = useTheme();
 	const [mounted, setMounted] = useState(false);
@@ -46,6 +52,11 @@ export default function SrProfile() {
 		return (
 			<div role="status" className="min-w-0 space-y-4">
 				<p className="text-muted-foreground text-sm">Memuat profil…</p>
+				{profile.fetchStatus === "paused" && (
+					<p role="status">
+						Koneksi terputus. Sambungkan internet untuk memuat profil.
+					</p>
+				)}
 				<Skeleton className="h-28 w-full rounded-xl" />
 				<Skeleton className="h-64 w-full rounded-xl" />
 			</div>
@@ -78,14 +89,19 @@ export default function SrProfile() {
 					["Email", info.email],
 				] as const);
 	return (
-		<section className="resora-page min-w-0 space-y-6">
+		<section className="resora-page resora-profile min-w-0 space-y-6">
+			{profile.fetchStatus === "paused" && (
+				<p role="status">
+					Koneksi terputus. Informasi yang sudah dimuat bisa belum terbaru.
+				</p>
+			)}
 			<div>
 				<p className="font-semibold text-primary text-xs uppercase tracking-wider">
 					{info.actor === "SR" ? "Akun SR" : "Akun Sistem / SUPERADMIN"}
 				</p>
-				<h1 className="mt-2 font-bold text-2xl tracking-tight">Profil saya</h1>
+				<h1 className="mt-2 font-bold text-2xl tracking-tight">Profil</h1>
 				<p className="mt-2 text-muted-foreground text-sm">
-					Informasi akun, keamanan, dan tampilan RESORA Anda.
+					Informasi akun, keamanan, dan tampilan RESORA kamu.
 				</p>
 			</div>
 			<Card>
@@ -136,7 +152,33 @@ export default function SrProfile() {
 					</dl>
 				</CardContent>
 			</Card>
-			<PasswordChangeForm mandatory={false} />
+			{info.actor === "SR" && (
+				<section aria-label="Kehadiran pribadi" className="space-y-3">
+					<h2 className="font-bold text-lg">Kehadiran pribadi</h2>
+					<Card className="resora-profile-attendance">
+						<CardContent className="space-y-3">
+							<div className="space-y-1">
+								<h3 className="font-semibold text-base">Ringkasan kehadiran</h3>
+								<p className="text-muted-foreground text-sm">
+									Cakupan: pribadi · Periode belum tersedia
+								</p>
+							</div>
+							<p>Ringkasan kehadiran belum tersedia.</p>
+							<p className="text-muted-foreground text-sm">
+								Kamu tetap bisa melihat status dan waktu kehadiran pada setiap
+								kegiatan.
+							</p>
+							<Link
+								href="/attendance/history"
+								className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-lg py-2 font-semibold text-primary text-sm"
+							>
+								Lihat riwayat kehadiran{" "}
+								<ArrowRight size={18} aria-hidden="true" />
+							</Link>
+						</CardContent>
+					</Card>
+				</section>
+			)}
 			<Card>
 				<CardHeader>
 					<h2 className="font-bold text-lg">Pengaturan tampilan</h2>
@@ -163,6 +205,14 @@ export default function SrProfile() {
 					</fieldset>
 				</CardContent>
 			</Card>
+			<details className="resora-profile-security rounded-2xl border border-border bg-surface p-4">
+				<summary className="focus-ring cursor-pointer rounded-lg py-2 font-semibold">
+					Ganti password
+				</summary>
+				<div className="mt-3">
+					<PasswordChangeForm mandatory={false} />
+				</div>
+			</details>
 		</section>
 	);
 }
