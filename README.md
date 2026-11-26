@@ -116,7 +116,7 @@ Run standalone Node/Bun tools that use Varlock from the owning app directory so 
 
 Compose reads the external database URL from `apps/server/.env`; it does not override it or start local PostgreSQL by default. `SERVER_URL` uses container networking and the browser API URL uses `http://localhost:3000`. BuildKit secrets supply build configuration without copying env files into image layers.
 
-Local PostgreSQL is optional: `pnpm run db:start` / `pnpm run db:watch` explicitly select the `postgres` service in the `local-db` profile. Configure local URLs separately (host `localhost` for Bun, `postgres` for the server container), and wait for `pg_isready` before starting the apps. See [local setup](docs/setup.md#5-optional-local-postgresql).
+Local PostgreSQL is optional: `pnpm run db:start` / `pnpm run db:watch` explicitly select the `postgres` service in the `local-db` profile. Configure local URLs separately (host `localhost` for Bun, `postgres` for the server container), and wait for `pg_isready` before starting the apps. See [local setup](docs/setup.md#5-docker-postgresql-and-manual-downloadable-backups).
 
 For more details, see the guide on [Deploying with Docker Compose](https://www.better-t-stack.dev/docs/guides/docker).
 

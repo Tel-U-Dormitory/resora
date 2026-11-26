@@ -213,7 +213,7 @@ Alur B2: dashboard menampilkan tiga pengumuman aktif terbaru; `Lihat Semua` menu
 
 This records approved planning scope, not delivered modules. Cloudflare R2 is the
 PM-selected object-storage provider; technical realization is specified in
-[Architecture §10.3](architecture.md#103-cloudflare-r2-object-storage--planning-baseline-2026-11-24).
+[Architecture §10.3](architecture.md#103-cloudflare-r2-object-storage--foundation-2026-11-24).
 
 - **Pelanggaran:** FR-VIOL-003 requires name, NIM, date, description and exactly
   one KTM photo when creating a report. Identity is entered manually; no student

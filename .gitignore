@@ -64,3 +64,6 @@ temp
 # Safe configuration templates remain versioned.
 !**/.env.example
 !**/.env.schema
+
+# Local synthetic browser QA evidence (summaries are versioned in docs/reviews).
+/output/
