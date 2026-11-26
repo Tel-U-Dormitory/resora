@@ -1,0 +1,202 @@
+/* F2: floating four-destination pill and a separate QR action, after login only. */
+.resora-workspace {
+	--dock-clearance: calc(7.5rem + env(safe-area-inset-bottom, 0px));
+}
+.resora-workspace .resora-utility-bar {
+	position: sticky;
+	top: 0;
+	z-index: 10;
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	min-height: 4.5rem;
+	padding: max(0.75rem, env(safe-area-inset-top, 0px)) var(--page-gutter)
+		0.75rem;
+	border-bottom: 1px solid var(--border);
+	background: var(--surface);
+}
+.resora-workspace .resora-utility-profile {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	min-width: 2.75rem;
+	min-height: 2.75rem;
+	border-radius: var(--workspace-radius-control);
+	background: var(--surface-subtle);
+	padding: 0.5rem;
+}
+.resora-workspace .resora-shell-content {
+	padding-bottom: var(--dock-clearance);
+}
+.resora-workspace
+	main#workspace-content
+	:is(a, button, input, select, textarea, summary) {
+	scroll-margin-block: 6rem var(--dock-clearance);
+}
+.resora-mobile-dock {
+	position: fixed;
+	z-index: 20;
+	inset-inline: max(0.75rem, env(safe-area-inset-left, 0px))
+		max(0.75rem, env(safe-area-inset-right, 0px));
+	bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	max-width: 32rem;
+	margin-inline: auto;
+}
+.resora-bottom-nav {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	flex: 1;
+	min-width: 0;
+	min-height: 3.5rem;
+	padding: 0.25rem;
+	border: 1px solid var(--border);
+	border-radius: 999px;
+	background: var(--surface-raised);
+	box-shadow: var(--elevation-overlay);
+}
+:root:has(.resora-workspace) .resora-nav-item {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 0.125rem;
+	min-width: 0;
+	min-height: 3rem;
+	border-radius: 999px;
+	padding: 0.25rem 0.125rem;
+	font-size: var(--type-caption);
+	font-weight: 500;
+	line-height: 1.2;
+	color: var(--text-secondary);
+	background: transparent;
+	text-align: center;
+	cursor: pointer;
+	touch-action: manipulation;
+	transition:
+		background-color 150ms,
+		color 150ms;
+}
+.resora-nav-item svg {
+	width: 1.5rem;
+	height: 1.5rem;
+}
+:root:has(.resora-workspace)
+	.resora-nav-item:is([aria-current="page"], [data-current]) {
+	background: var(--primary);
+	color: var(--primary-foreground);
+	font-weight: 700;
+}
+.resora-nav-item:is([aria-current="page"], [data-current])::after {
+	content: "";
+	position: absolute;
+	bottom: 0.25rem;
+	width: 1rem;
+	height: 2px;
+	border-radius: 999px;
+	background: currentColor;
+}
+:root:has(.resora-workspace) .resora-scan-action {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	width: 3.5rem;
+	height: 3.5rem;
+	border: 1px solid var(--border-control);
+	border-radius: 50%;
+	background: var(--primary);
+	color: var(--primary-foreground);
+	box-shadow: var(--elevation-overlay);
+	touch-action: manipulation;
+}
+.resora-scan-action svg {
+	width: 1.5rem;
+	height: 1.5rem;
+}
+:root:has(.resora-workspace) .resora-apps-sheet {
+	left: max(0.5rem, env(safe-area-inset-left, 0px));
+	right: max(0.5rem, env(safe-area-inset-right, 0px));
+	bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
+	max-width: 40rem;
+	max-height: calc(85dvh - env(safe-area-inset-top, 0px));
+	margin-inline: auto;
+	gap: 1.5rem;
+	padding: 1rem;
+}
+.resora-apps-grid {
+	display: grid;
+	min-height: 0;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 1.5rem 0.75rem;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	padding: 0.25rem;
+}
+.resora-apps-grid a {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.5rem;
+	min-width: 0;
+	padding: 0.75rem 0.25rem;
+	border: 1px solid var(--border);
+	background: var(--surface-subtle);
+	border-radius: var(--workspace-radius-control);
+	text-align: center;
+	font-size: var(--type-small);
+	font-weight: 600;
+	line-height: 1.5;
+	overflow-wrap: anywhere;
+}
+.resora-app-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 3.5rem;
+	height: 3.5rem;
+	border-radius: var(--workspace-radius-card);
+	background: var(--secondary);
+	color: var(--secondary-foreground);
+}
+.resora-app-icon svg {
+	width: 1.5rem;
+	height: 1.5rem;
+}
+.resora-apps-grid a:nth-child(3n + 2) .resora-app-icon {
+	background: var(--accent);
+	color: var(--accent-foreground);
+}
+.resora-apps-grid a:nth-child(3n) .resora-app-icon {
+	background: var(--primary);
+	color: var(--primary-foreground);
+}
+.resora-apps-grid a:active,
+:root:has(.resora-workspace) .resora-nav-item:active {
+	background: var(--surface-subtle);
+	color: var(--foreground);
+}
+.resora-scan-action:active {
+	background: var(--primary-pressed);
+}
+@media (hover: hover) {
+	.resora-apps-grid a:hover {
+		background: var(--surface-subtle);
+	}
+}
+@media (min-width: 1200px) {
+	.resora-mobile-dock {
+		display: none;
+	}
+	.resora-workspace {
+		--dock-clearance: 2rem;
+	}
+}
+
+.resora-apps-sheet [data-slot="sheet-description"] {
+	font-size: var(--type-small);
+}
