@@ -4,14 +4,7 @@ import { ActionDialog } from "@resora/ui/components/action-dialog";
 import { Button, buttonVariants } from "@resora/ui/components/button";
 import { useMutation } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
-import {
-	ArrowLeft,
-	Camera,
-	CheckCircle2,
-	ImagePlus,
-	LoaderCircle,
-	ScanLine,
-} from "lucide-react";
+import { ArrowLeft, CheckCircle2, ImagePlus, Info } from "lucide-react";
 import Link from "next/link";
 import type QrScanner from "qr-scanner";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -21,8 +14,15 @@ import { cn } from "@/lib/utils";
 import { attendanceQueryKeys, queryClient, trpc } from "@/utils/trpc";
 import { formatEventTime } from "../../components/event-feedback";
 import { refreshAttendanceQueries } from "../../utils/internal-event-queries";
-import { scanRegion } from "./check-in-camera";
 import {
+	type CameraZoom,
+	cameraZoom,
+	scanRegion,
+	setCameraZoom,
+} from "./check-in-camera";
+import {
+	type DiagnosisEnvironment,
+	diagnosisEnvironment,
 	type LocationDiagnosis,
 	locationDiagnosisText,
 } from "./check-in-diagnostics";
@@ -34,6 +34,13 @@ import {
 	scannerErrorMessage,
 } from "./check-in-ui";
 
+function formatTimingLabel(timing: string) {
+	if (timing === "ON_TIME") return "Tepat waktu";
+	if (timing === "EARLY") return "Lebih awal";
+	if (timing === "LATE") return "Terlambat";
+	return timing;
+}
+
 export default function CheckInScanner() {
 	const mutation = useMutation({
 		...trpc.attendance.checkIn.mutationOptions(),
@@ -44,6 +51,43 @@ export default function CheckInScanner() {
 		},
 	});
 	const video = useRef<HTMLVideoElement>(null);
+	const [zoom, setZoom] = useState<CameraZoom | null>(null);
+	const zoomBusy = useRef(false);
+	const [zoomPending, setZoomPending] = useState(false);
+	const [zoomIssue, setZoomIssue] = useState("");
+	const [environment, setEnvironment] = useState<
+		DiagnosisEnvironment | undefined
+	>(undefined);
+	useEffect(() => {
+		let active = true;
+		let permission: PermissionStatus | undefined;
+		const labels = diagnosisEnvironment(navigator.userAgent ?? "");
+		const changed = () => {
+			if (active)
+				setEnvironment({
+					...labels,
+					permission: permission?.state ?? "unavailable",
+				});
+		};
+		changed();
+		try {
+			void navigator.permissions
+				?.query({ name: "geolocation" })
+				.then((status) => {
+					if (!active) return;
+					permission = status;
+					changed();
+					status.addEventListener?.("change", changed);
+				})
+				.catch(() => {});
+		} catch {
+			/* Permission metadata is best effort, never inferred. */
+		}
+		return () => {
+			active = false;
+			permission?.removeEventListener?.("change", changed);
+		};
+	}, []);
 	const region = useRef<QrScanner.ScanRegion>({});
 	const healthTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 	const heartbeat = useRef({ frameAt: 0, decodedAt: 0, videoTime: 0 });
@@ -70,6 +114,7 @@ export default function CheckInScanner() {
 		error?: string;
 	} | null>(null);
 	const [gpsStatus, setGpsStatus] = useState("");
+	const [gpsDeniedModalOpen, setGpsDeniedModalOpen] = useState(false);
 	const [phase, setPhase] = useState<
 		| "idle"
 		| "starting"
@@ -81,6 +126,7 @@ export default function CheckInScanner() {
 		| "result"
 		| "error"
 	>("idle");
+	const [hasProcessedQr, setHasProcessedQr] = useState(false);
 	const [error, setError] = useState("");
 	const [locationError, setLocationError] = useState(false);
 	const [locationDiagnosis, setLocationDiagnosis] = useState<LocationDiagnosis>(
@@ -92,6 +138,21 @@ export default function CheckInScanner() {
 	}, []);
 	// Layout changes can resize the visible camera preview.
 	useEffect(updateRegion);
+	useEffect(() => {
+		if (phase === "camera" && gpsStatus === "GPS_DENIED") {
+			setGpsDeniedModalOpen(true);
+		} else if (gpsStatus !== "GPS_DENIED") {
+			setGpsDeniedModalOpen(false);
+		}
+	}, [phase, gpsStatus]);
+	useEffect(() => {
+		if (phase === "camera" && cameraIssue === "VIDEO_NOT_READY") {
+			toast.warning(scannerErrorMessage("VIDEO_NOT_READY"), {
+				id: "scanner-video-not-ready",
+				position: "top-center",
+			});
+		}
+	}, [phase, cameraIssue]);
 	const report = useCallback(
 		(event: ScannerDiagnostic, attempt = generation.current) => {
 			if (attempt !== generation.current || diagnostics.current.has(event))
@@ -107,6 +168,10 @@ export default function CheckInScanner() {
 		[],
 	);
 	const stopCamera = () => {
+		setZoom(null);
+		zoomBusy.current = false;
+		setZoomPending(false);
+		setZoomIssue("");
 		if (healthTimer.current !== null) clearInterval(healthTimer.current);
 		healthTimer.current = null;
 		cameraListeners.current?.();
@@ -171,6 +236,8 @@ export default function CheckInScanner() {
 		return () => {
 			if (healthTimer.current !== null) clearInterval(healthTimer.current);
 			generation.current++;
+			startingCamera.current = null;
+			busy.current = false;
 			document.removeEventListener("visibilitychange", onVisibility);
 			window.removeEventListener?.("resize", updateRegion);
 			cameraListeners.current?.();
@@ -224,7 +291,12 @@ export default function CheckInScanner() {
 			},
 		)
 			.then((position) => {
-				if (generation.current !== attempt || gps.current !== task) return null;
+				if (
+					generation.current !== attempt ||
+					gps.current !== task ||
+					task.controller.signal.aborted
+				)
+					return null;
 				if (document.hidden) {
 					task.error = "GPS_INTERRUPTED";
 					setLocationDiagnosis({ code: task.error });
@@ -243,7 +315,12 @@ export default function CheckInScanner() {
 				return position;
 			})
 			.catch((cause: unknown) => {
-				if (generation.current !== attempt || gps.current !== task) return null;
+				if (
+					generation.current !== attempt ||
+					gps.current !== task ||
+					task.controller.signal.aborted
+				)
+					return null;
 				task.error = cause instanceof Error ? cause.message : "GPS_UNAVAILABLE";
 				setLocationDiagnosis((previous) => ({
 					...previous,
@@ -265,6 +342,7 @@ export default function CheckInScanner() {
 	) => {
 		if (busy.current || generation.current !== attempt) return;
 		busy.current = true;
+		setHasProcessedQr(true);
 		stopCamera();
 		try {
 			if (!token.startsWith("resora:v1:") || token.length > 256) {
@@ -295,6 +373,8 @@ export default function CheckInScanner() {
 			setLocationDiagnosis((previous) => ({
 				...previous,
 				code: "SUBMITTING",
+				distanceMeters: undefined,
+				radiusMeters: undefined,
 				sampleAgeMs: Math.max(0, Date.now() - position.timestamp),
 			}));
 			report("SUBMITTING", attempt);
@@ -358,6 +438,7 @@ export default function CheckInScanner() {
 		)
 			return;
 		inputMethod.current = "camera";
+		setHasProcessedQr(false);
 		if (!automatic) recovered.current = false;
 		attemptStarted.current = Date.now();
 		setSlowScan(false);
@@ -371,6 +452,9 @@ export default function CheckInScanner() {
 		setError("");
 		setCameraIssue("");
 		try {
+			// Route-entry effects must finish before flushSync replaces the video node.
+			await Promise.resolve();
+			if (generation.current !== attempt) return;
 			if (!window.isSecureContext) {
 				report("START_FAILED", attempt);
 				showError("HTTPS_REQUIRED");
@@ -441,6 +525,7 @@ export default function CheckInScanner() {
 				const stream = activeScanner.$video.srcObject;
 				if (stream && "getVideoTracks" in stream) {
 					const track = stream.getVideoTracks()[0];
+					setZoom(cameraZoom(track));
 					// Optional ideals keep working cameras usable when constraints are unsupported.
 					void track
 						?.applyConstraints({
@@ -490,13 +575,24 @@ export default function CheckInScanner() {
 				}, 1000);
 			}
 		} catch (cause) {
+			// qr-scanner may replace the original DOMException with "Camera not found".
+			let denied =
+				cause instanceof DOMException && cause.name === "NotAllowedError";
+			if (!denied) {
+				try {
+					denied =
+						(
+							await navigator.permissions?.query({
+								name: "camera" as PermissionName,
+							})
+						)?.state === "denied";
+				} catch {
+					/* Unsupported permission queries keep the unavailable fallback. */
+				}
+			}
 			if (generation.current === attempt) {
 				report("START_FAILED", attempt);
-				showError(
-					cause instanceof DOMException && cause.name === "NotAllowedError"
-						? "CAMERA_DENIED"
-						: "CAMERA_UNAVAILABLE",
-				);
+				showError(denied ? "CAMERA_DENIED" : "CAMERA_UNAVAILABLE");
 			}
 		} finally {
 			if (generation.current === attempt) startingCamera.current = null;
@@ -508,18 +604,8 @@ export default function CheckInScanner() {
 		phase === "reading-image" ||
 		phase === "locating" ||
 		phase === "submitting";
-	const scannerOpen =
-		phase === "starting" ||
-		phase === "restarting" ||
-		phase === "camera" ||
-		phase === "locating";
 	const restartCamera =
 		Boolean(cameraIssue) && (phase === "camera" || phase === "starting");
-	const cameraLabel = restartCamera
-		? "Mulai ulang pemindaian"
-		: scannerOpen
-			? "Hentikan kamera dan lokasi"
-			: "Buka kamera dan lokasi";
 	const stop = () => {
 		setLocationDiagnosis({ code: "IDLE" });
 		setCopyStatus("");
@@ -573,10 +659,22 @@ export default function CheckInScanner() {
 			if (generation.current === attempt) busy.current = false;
 		}
 	};
-	const diagnosisPanel = (
-		<details className="rounded-xl border border-border p-3 text-sm">
+	// biome-ignore lint/correctness/useExhaustiveDependencies: start camera only on route entry.
+	useEffect(() => {
+		void startCamera(); // Auto-start once on route entry; existing effect owns cleanup.
+		// Camera generation guards handle Strict Mode and late async results.
+	}, []);
+	const diagnosisText = locationDiagnosisText(locationDiagnosis, {
+		...environment,
+		timestamp: environment ? attemptStarted.current : undefined,
+	});
+	const diagnosisPanel = hasProcessedQr ? (
+		<details
+			open={phase === "error"}
+			className="resora-diagnosis rounded-xl border border-border p-3 text-sm"
+		>
 			<summary className="cursor-pointer py-2 font-medium">
-				Diagnosis lokasi
+				<Info aria-hidden="true" size={20} /> Lihat diagnosis
 			</summary>
 			<p className="my-2 text-muted-foreground text-xs">
 				Untuk pemeriksaan kendala perangkat. Tidak memuat koordinat mentah,
@@ -585,7 +683,7 @@ export default function CheckInScanner() {
 			<textarea
 				readOnly
 				aria-label="Hasil diagnosis lokasi"
-				value={locationDiagnosisText(locationDiagnosis)}
+				value={diagnosisText}
 				rows={7}
 				className="w-full rounded-md border border-border p-2 text-base"
 			/>
@@ -597,12 +695,8 @@ export default function CheckInScanner() {
 							setCopyStatus("Pilih teks diagnosis dan salin secara manual.");
 							return;
 						}
-						await navigator.clipboard.writeText(
-							locationDiagnosisText(locationDiagnosis),
-						);
-						setCopyStatus(
-							"Diagnosis disalin. Tambahkan model perangkat, versi iOS dan browser saat melaporkan.",
-						);
+						await navigator.clipboard.writeText(diagnosisText);
+						setCopyStatus("Diagnosis disalin");
 					} catch {
 						setCopyStatus(
 							"Tidak dapat menyalin otomatis. Pilih teks diagnosis dan salin secara manual.",
@@ -618,10 +712,10 @@ export default function CheckInScanner() {
 				</p>
 			)}
 		</details>
-	);
+	) : null;
 	return (
-		<section className="mx-auto max-w-lg space-y-4">
-			<div className="relative isolate flex min-h-[min(72dvh,44rem)] flex-col overflow-hidden rounded-3xl bg-slate-950 text-white shadow-xl">
+		<section className="resora-scanner space-y-4">
+			<div className="resora-camera-surface relative isolate flex min-h-dvh flex-col overflow-hidden">
 				<video
 					key={cameraAttempt}
 					ref={video}
@@ -652,7 +746,7 @@ export default function CheckInScanner() {
 					}}
 				/>
 				<div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/90" />
-				<div className="relative flex items-center justify-between p-4">
+				<div className="resora-scanner-header relative p-4">
 					<Link
 						href="/dashboard"
 						onClick={stop}
@@ -660,123 +754,211 @@ export default function CheckInScanner() {
 							buttonVariants({ variant: "ghost", size: "icon" }),
 							"size-11 rounded-full bg-black/40 text-white hover:bg-black/60",
 						)}
-						aria-label="Kembali ke dashboard"
+						aria-label="Kembali ke Beranda"
 					>
 						<ArrowLeft />
 					</Link>
-					<h1 className="flex items-center gap-2 rounded-full bg-black/40 px-4 py-2 font-semibold text-xs">
+					<h1 className="flex items-center gap-2 rounded-full bg-black/40 px-4 py-2 font-semibold text-sm">
 						<span
 							className={`size-2 rounded-full ${phase === "camera" ? "bg-emerald-400" : "bg-white/50"}`}
 						/>
-						Scan Presensi
+						Scan QR
 					</h1>
-					<span className="size-10" aria-hidden="true" />
+					<Button
+						size="icon"
+						onClick={openImagePicker}
+						disabled={processing || mutation.isPending}
+						aria-label="Pilih gambar QR"
+						className="size-11 rounded-full bg-black/40 text-white hover:bg-black/60"
+					>
+						<ImagePlus aria-hidden="true" />
+					</Button>
 				</div>
 				<div className="relative flex flex-1 flex-col items-center justify-center gap-5 px-8 py-10">
 					<div
 						aria-hidden="true"
 						className="relative aspect-square w-full max-w-72 rounded-3xl border border-white/15 bg-white/5"
 					>
-						<span className="absolute top-0 left-0 size-7 rounded-tl-3xl border-red-500 border-t-[3px] border-l-[3px]" />
-						<span className="absolute top-0 right-0 size-7 rounded-tr-3xl border-red-500 border-t-[3px] border-r-[3px]" />
-						<span className="absolute bottom-0 left-0 size-7 rounded-bl-3xl border-red-500 border-b-[3px] border-l-[3px]" />
-						<span className="absolute right-0 bottom-0 size-7 rounded-br-3xl border-red-500 border-r-[3px] border-b-[3px]" />
+						<span className="absolute top-0 left-0 size-8 rounded-tl-3xl border-[#FFF46E] border-t-[3px] border-l-[3px]" />
+						<span className="absolute top-0 right-0 size-8 rounded-tr-3xl border-[#FFF46E] border-t-[3px] border-r-[3px]" />
+						<span className="absolute bottom-0 left-0 size-8 rounded-bl-3xl border-[#FFF46E] border-b-[3px] border-l-[3px]" />
+						<span className="absolute right-0 bottom-0 size-8 rounded-br-3xl border-[#FFF46E] border-r-[3px] border-b-[3px]" />
 						{phase === "camera" ? (
-							<span className="resora-scan-line absolute right-2 left-2 h-px bg-red-500 shadow-[0_0_12px_#ef4444]" />
-						) : (
-							<div className="flex h-full items-center justify-center text-white/60">
-								{processing ? (
-									<LoaderCircle className="size-10 animate-spin motion-reduce:animate-none" />
-								) : (
-									<Camera className="size-12" />
-								)}
-							</div>
-						)}
+							<span className="resora-scan-line absolute right-2 left-2 h-0.5 bg-[#FF6F6F] shadow-[0_0_12px_#FF6F6F]" />
+						) : null}
 					</div>
-					<p
-						role="status"
-						className="rounded-full bg-black/50 px-4 py-2 text-center text-xs"
-					>
-						{phase === "reading-image"
-							? "Membaca QR dari gambar…"
-							: phase === "camera"
-								? "Arahkan kamera ke QR Code kegiatan"
+					{processing && (
+						<p
+							role="status"
+							className="rounded-full bg-black/50 px-4 py-2 text-center text-sm"
+						>
+							{phase === "reading-image"
+								? "Membaca QR…"
 								: phase === "locating"
-									? "QR terbaca, memverifikasi kehadiran… Menunggu lokasi (hingga 20 detik)."
+									? "QR terbaca, menunggu lokasi…"
 									: phase === "submitting"
-										? "QR terbaca, memverifikasi kehadiran… Menunggu konfirmasi server."
-										: phase === "starting"
-											? "Menyiapkan kamera…"
-											: phase === "restarting"
-												? "Memulai ulang pemindaian…"
-												: "Buka kamera atau pilih gambar QR"}
-					</p>
-					{phase === "camera" && slowScan && (
-						<div className="flex flex-col items-center gap-3">
-							<p role="status" className="text-center text-sm">
-								QR belum terbaca. Pastikan QR terlihat utuh dan cukup terang,
-								atau pilih gambar dari galeri.
-							</p>
-							{!restartCamera && (
-								<Button onClick={() => startCamera(true)}>
-									Mulai ulang pemindaian
-								</Button>
-							)}
-						</div>
-					)}
-					{phase === "camera" && gpsStatus && gpsStatus !== "ready" && (
-						<p role="status" className="text-center text-sm">
-							{gpsStatus === "locating"
-								? "Menyiapkan lokasi (maksimal 20 detik)…"
-								: scannerErrorMessage(gpsStatus)}
+										? "Menunggu konfirmasi server…"
+										: phase === "restarting"
+											? "Memulai ulang pemindaian…"
+											: "Menyiapkan kamera…"}
 						</p>
 					)}
-					{phase === "camera" && gpsStatus.startsWith("GPS_") && (
-						<Button
-							onClick={() => {
-								if (!gps.current?.pending && !busy.current)
-									prepareLocation(generation.current);
-							}}
-						>
-							Perbarui Lokasi
-						</Button>
-					)}
 				</div>
+				{phase === "camera" && (
+					<div
+						className={
+							zoom
+								? "resora-camera-zoom relative mx-auto w-full max-w-xs px-4"
+								: "sr-only"
+						}
+					>
+						{zoom ? (
+							<div className="space-y-2.5 text-sm">
+								<div className="flex items-center justify-between gap-2">
+									<span className="font-semibold text-white">Zoom kamera</span>
+									<span className="rounded-full bg-[#FFF46E] px-2.5 py-0.5 font-bold text-[#333333] text-xs tabular-nums">
+										{zoom.value.toLocaleString("id-ID", {
+											maximumFractionDigits: 2,
+										})}
+										×
+									</span>
+								</div>
+								<input
+									type="range"
+									aria-label="Zoom kamera"
+									min={zoom.min}
+									max={zoom.max}
+									step={zoom.step}
+									value={zoom.value}
+									disabled={zoomPending}
+									onChange={async (event) => {
+										const stream = video.current?.srcObject;
+										const track =
+											stream && "getVideoTracks" in stream
+												? stream.getVideoTracks()[0]
+												: undefined;
+										if (!track || zoomBusy.current) return;
+										const attempt = generation.current;
+										zoomBusy.current = true;
+										setZoomPending(true);
+										setZoomIssue("");
+										try {
+											await setCameraZoom(
+												track,
+												Number(event.currentTarget.value),
+												zoom,
+											);
+											if (attempt === generation.current)
+												setZoom(cameraZoom(track));
+										} catch {
+											if (attempt === generation.current)
+												setZoomIssue(
+													"Zoom belum bisa diubah. Coba lagi atau dekatkan kamera ke QR.",
+												);
+										} finally {
+											if (attempt === generation.current) {
+												zoomBusy.current = false;
+												setZoomPending(false);
+											}
+										}
+									}}
+								/>
+								<div className="flex items-center gap-1.5">
+									{[1, 1.5, 2]
+										.filter(
+											(preset) => preset >= zoom.min && preset <= zoom.max,
+										)
+										.map((preset) => (
+											<button
+												key={preset}
+												type="button"
+												disabled={zoomPending}
+												onClick={async () => {
+													const stream = video.current?.srcObject;
+													const track =
+														stream && "getVideoTracks" in stream
+															? stream.getVideoTracks()[0]
+															: undefined;
+													if (!track || zoomBusy.current) return;
+													const attempt = generation.current;
+													zoomBusy.current = true;
+													setZoomPending(true);
+													setZoomIssue("");
+													try {
+														await setCameraZoom(track, preset, zoom);
+														if (attempt === generation.current)
+															setZoom(cameraZoom(track));
+													} catch {
+														if (attempt === generation.current)
+															setZoomIssue(
+																"Zoom belum bisa diubah. Coba lagi atau dekatkan kamera ke QR.",
+															);
+													} finally {
+														if (attempt === generation.current) {
+															zoomBusy.current = false;
+															setZoomPending(false);
+														}
+													}
+												}}
+												className="min-h-8 flex-1 rounded-lg border border-white/20 bg-white/10 px-2 font-semibold text-white text-xs tabular-nums hover:bg-white/20 disabled:opacity-50"
+											>
+												{preset}×
+											</button>
+										))}
+								</div>
+							</div>
+						) : (
+							<p className="sr-only">
+								Kamera ini belum menyediakan kontrol zoom. Dekatkan kamera ke
+								QR.
+							</p>
+						)}
+						{(zoomPending || zoomIssue) && (
+							<p role="status" className="mt-2 text-sm">
+								{zoomPending ? "Menyesuaikan zoom…" : zoomIssue}
+							</p>
+						)}
+					</div>
+				)}
 				<div className="relative flex flex-col items-center gap-3 px-5 pt-4 pb-7">
+					{phase === "camera" && gpsStatus.startsWith("GPS_") && (
+						<>
+							<p
+								role="status"
+								className={
+									gpsStatus === "GPS_DENIED" ? "sr-only" : "text-center text-sm"
+								}
+							>
+								{scannerErrorMessage(gpsStatus)}
+							</p>
+							<Button
+								onClick={() => {
+									if (!gps.current?.pending && !busy.current)
+										prepareLocation(generation.current);
+								}}
+							>
+								Perbarui Lokasi
+							</Button>
+						</>
+					)}
 					{phase === "camera" && cameraIssue && (
-						<p role="status" className="text-center text-sm">
+						<p
+							role="status"
+							className={
+								cameraIssue === "VIDEO_NOT_READY"
+									? "sr-only"
+									: "text-center text-sm"
+							}
+						>
 							{scannerErrorMessage(cameraIssue)}
 						</p>
 					)}
-					<Button
-						size="icon"
-						disabled={
-							phase === "reading-image" ||
-							phase === "locating" ||
-							phase === "submitting" ||
-							mutation.isPending
-						}
-						onClick={() => {
-							if (busy.current || mutation.isPending) return;
-							if (restartCamera) return startCamera(true);
-							if (scannerOpen) return stop();
-							return startCamera();
-						}}
-						aria-label={cameraLabel}
-						aria-describedby="scan-privacy"
-						className="size-16 rounded-full border-4 border-slate-950 bg-red-500 text-white ring-2 ring-white/80 hover:bg-red-600"
-					>
-						<ScanLine className="size-7" />
-					</Button>
-					<span className="text-white/80 text-xs">
-						{phase === "locating" || phase === "submitting"
-							? "Tunggu proses kehadiran selesai"
-							: restartCamera
-								? "Ketuk untuk memulai ulang pemindaian"
-								: scannerOpen
-									? "Ketuk untuk menghentikan kamera dan lokasi"
-									: "Ketuk untuk membuka kamera dan lokasi"}
-					</span>
+					{(restartCamera || slowScan) && phase === "camera" && (
+						<Button onClick={() => startCamera(true)}>
+							Mulai ulang pemindaian
+						</Button>
+					)}
+
 					<input
 						ref={imageInput}
 						type="file"
@@ -789,45 +971,34 @@ export default function CheckInScanner() {
 							void scanImage(file);
 						}}
 					/>
-					<Button
-						onClick={openImagePicker}
-						disabled={processing || mutation.isPending}
-						aria-describedby="scan-privacy scan-image-help"
-						className="min-h-11 bg-white/10 text-white hover:bg-white/20"
-					>
-						<ImagePlus aria-hidden="true" />
-						Pilih gambar QR
-					</Button>
-					<p id="scan-image-help" className="text-center text-white/80 text-xs">
-						Galeri atau Files, maksimal 10 MB. Gambar dibaca di perangkat.
-					</p>
 				</div>
 			</div>
-			<p
-				id="scan-privacy"
-				className="px-2 text-muted-foreground text-xs leading-relaxed"
-			>
-				Kamera dan izin lokasi dimulai saat Anda menekan Buka Kamera. Untuk
-				gambar, izin lokasi diminta setelah QR terbaca; gambar tidak dikirim
-				atau disimpan di server. GPS diambil hingga 20 detik per percobaan dan
-				dihentikan setelah lokasi valid atau scanner ditutup. Lokasi dikirim dan
-				disimpan bersama kehadiran hanya ketika check-in. RESORA tidak melacak
-				lokasi secara terus-menerus.
-			</p>
-			{phase !== "error" && phase !== "result" && diagnosisPanel}
 			<ActionDialog
-				open={phase === "error" || phase === "result"}
+				open={
+					phase === "error" ||
+					phase === "result" ||
+					(phase === "camera" && gpsDeniedModalOpen)
+				}
 				onOpenChange={(open) => {
-					if (!open) stop();
+					if (!open) {
+						if (phase === "camera" && gpsDeniedModalOpen) {
+							setGpsDeniedModalOpen(false);
+							return;
+						}
+						stop();
+						void startCamera();
+					}
 				}}
 				title={
 					phase === "error"
 						? unconfirmed
 							? "Status kehadiran belum terkonfirmasi"
 							: "Kehadiran belum tercatat"
-						: mutation.data?.status === "ALREADY_CHECKED_IN"
-							? "Anda sudah melakukan check-in"
-							: "Check-in berhasil"
+						: phase === "result"
+							? mutation.data?.status === "ALREADY_CHECKED_IN"
+								? "Kamu sudah melakukan check-in"
+								: "Check-in berhasil"
+							: "Akses lokasi diperlukan"
 				}
 				onRetry={
 					phase === "error" && !qrToken.current
@@ -838,7 +1009,24 @@ export default function CheckInScanner() {
 						: undefined
 				}
 			>
-				{phase === "error" ? (
+				{phase === "camera" && gpsDeniedModalOpen ? (
+					<>
+						<p role="alert" className="text-sm leading-relaxed">
+							{scannerErrorMessage("GPS_DENIED")}
+						</p>
+						<Button
+							className="w-full"
+							onClick={() => {
+								setGpsDeniedModalOpen(false);
+								if (!gps.current?.pending && !busy.current) {
+									prepareLocation(generation.current);
+								}
+							}}
+						>
+							Perbarui Lokasi
+						</Button>
+					</>
+				) : phase === "error" ? (
 					<>
 						<p role="alert">{error}</p>
 						{locationError && (
@@ -870,7 +1058,9 @@ export default function CheckInScanner() {
 									new Date(mutation.data.attendanceAt).toISOString(),
 								)}
 							</p>
-							<p>Klasifikasi: {mutation.data.timingClass}</p>
+							<p>
+								Ketepatan waktu: {formatTimingLabel(mutation.data.timingClass)}
+							</p>
 						</>
 					)
 				)}

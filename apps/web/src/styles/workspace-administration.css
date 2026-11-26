@@ -1,0 +1,134 @@
+.resora-administration {
+	width: 100%;
+	min-width: 0;
+	max-width: none;
+}
+:is(.resora-administration, .resora-administration-dialog)
+	:is(h1, h2, h3, p, span, dt, dd, label, legend, summary, a, button) {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+:is(.resora-administration, .resora-administration-dialog)
+	:is(button, a, summary) {
+	max-width: 100%;
+	min-height: 44px;
+	height: auto;
+	white-space: normal;
+	transition-property: background-color, border-color, color, box-shadow;
+}
+:is(.resora-administration, .resora-administration-dialog)
+	.flex:not(.flex-col) {
+	flex-wrap: wrap;
+}
+.resora-administration
+	:is([data-resora-card-content], [data-resora-card-header]) {
+	padding: 1rem;
+}
+.resora-administration :is(form, fieldset, label, input, select, textarea) {
+	min-width: 0;
+	max-width: 100%;
+}
+.resora-admin-account-region {
+	max-width: 100%;
+	overscroll-behavior-inline: contain;
+}
+.resora-workspace .resora-administration .resora-account-table :is(th, td) {
+	font-size: var(--type-small);
+	white-space: nowrap;
+	word-break: normal;
+	overflow-wrap: normal;
+}
+.resora-workspace
+	.resora-administration
+	.resora-account-table
+	td:is(
+		[data-label="Nama"],
+		[data-label="Departemen"],
+		[data-label="Jabatan"],
+		[data-label="Gedung"]
+	) {
+	white-space: normal;
+	min-width: 9.5rem;
+}
+.resora-workspace .resora-administration .resora-account-table td::before {
+	font-size: var(--type-caption);
+}
+@media (max-width: 767px) {
+	.resora-workspace .resora-administration .resora-account-table thead {
+		clip-path: inset(50%);
+		white-space: nowrap;
+		width: 1px;
+		height: 1px;
+		margin: -1px;
+		position: absolute;
+		overflow: hidden;
+	}
+	.resora-workspace
+		.resora-administration
+		.resora-account-table
+		:is(tbody, tr, td) {
+		width: 100%;
+		display: block;
+	}
+	.resora-workspace .resora-administration .resora-account-table tbody tr {
+		display: grid;
+		gap: 0.5rem;
+		padding: 1rem 0;
+		border-bottom: 1px solid var(--border);
+	}
+	.resora-workspace .resora-administration .resora-account-table td {
+		min-width: 0;
+		padding: 0;
+		white-space: normal;
+		overflow-wrap: anywhere;
+	}
+	.resora-workspace
+		.resora-administration
+		.resora-account-table
+		td:is(
+			[data-label="Departemen"],
+			[data-label="Jabatan"],
+			[data-label="Gedung"]
+		) {
+		display: none;
+	}
+	.resora-workspace .resora-administration .resora-account-table td::before {
+		content: attr(data-label);
+		display: block;
+		color: var(--text-secondary);
+		font-weight: 600;
+		margin-bottom: 0.125rem;
+	}
+}
+.resora-administration .text-xs {
+	font-size: var(--type-small);
+}
+.resora-administration-dialog {
+	width: calc(100% - 32px);
+	padding: min(1.5rem, 24px);
+}
+.resora-administration-dialog :is(fieldset, form, input, select, textarea, ul) {
+	min-width: 0;
+	max-width: 100%;
+}
+.resora-administration-dialog input:not([type="checkbox"]) {
+	font-size: max(1rem, 16px);
+}
+.resora-admin-period-actions {
+	position: static;
+	box-shadow: none;
+}
+@media (max-width: 767px) {
+	:is(.resora-administration, .resora-administration-dialog) .grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	:is(.resora-administration, .resora-administration-dialog) .grid > * {
+		grid-column: auto;
+	}
+}
+@media (min-width: 1200px) {
+	.resora-admin-period-actions {
+		position: sticky;
+		bottom: 1rem;
+	}
+}

@@ -1,13 +1,26 @@
 "use client";
 
-import { createContext, type ReactNode, useContext, useState } from "react";
-import type { DashboardFixture, DashboardMode } from "./dashboard.contracts";
+import {
+	createContext,
+	type ReactNode,
+	useContext,
+	useState,
+	useSyncExternalStore,
+} from "react";
+import type {
+	DashboardFixture,
+	DashboardMode,
+	DashboardScenarios,
+} from "./dashboard.contracts";
 
 type DashboardPreviewValue = {
 	fixture: DashboardFixture | null;
 	previewMode: DashboardMode;
 	setPreviewMode: (mode: DashboardMode) => void;
 	canManage: boolean;
+	identityKey: string;
+	simulateRequests: boolean;
+	scenarios: DashboardScenarios;
 };
 
 const DashboardPreviewContext = createContext<DashboardPreviewValue>({
@@ -15,22 +28,48 @@ const DashboardPreviewContext = createContext<DashboardPreviewValue>({
 	previewMode: "personal",
 	setPreviewMode: () => {},
 	canManage: false,
+	identityKey: "preview",
+	simulateRequests: false,
+	scenarios: {},
 });
+
+function subscribeConnection(change: () => void) {
+	window.addEventListener("online", change);
+	window.addEventListener("offline", change);
+	return () => {
+		window.removeEventListener("online", change);
+		window.removeEventListener("offline", change);
+	};
+}
+const connectionSnapshot = () => navigator.onLine;
+const serverConnectionSnapshot = () => true;
 
 export function DashboardPreviewProvider({
 	fixtures,
 	canManage,
 	initialMode,
 	children,
+	identityKey = "preview",
+	simulateRequests = false,
+	scenarios = {},
 }: {
 	fixtures: Partial<Record<DashboardMode, DashboardFixture>> | null;
 	canManage: boolean;
 	initialMode: DashboardMode;
 	children: ReactNode;
+	identityKey?: string;
+	simulateRequests?: boolean;
+	scenarios?: DashboardScenarios;
 }) {
-	const [previewMode, setPreviewMode] = useState<DashboardMode>(
+	const online = useSyncExternalStore(
+		subscribeConnection,
+		connectionSnapshot,
+		serverConnectionSnapshot,
+	);
+	const [selectedMode, setPreviewMode] = useState<DashboardMode>(
 		initialMode === "management" && !canManage ? "personal" : initialMode,
 	);
+	const previewMode = canManage ? selectedMode : "personal";
 	const selectMode = (mode: DashboardMode) => {
 		if (mode === "personal" || canManage) setPreviewMode(mode);
 	};
@@ -38,9 +77,26 @@ export function DashboardPreviewProvider({
 
 	return (
 		<DashboardPreviewContext.Provider
-			value={{ fixture, previewMode, setPreviewMode: selectMode, canManage }}
+			value={{
+				fixture,
+				previewMode,
+				setPreviewMode: selectMode,
+				canManage,
+				identityKey,
+				simulateRequests: simulateRequests && fixtures !== null,
+				scenarios,
+			}}
 		>
-			<div className="space-y-8">{children}</div>
+			{!online && (
+				<p
+					role="status"
+					className="rounded-xl border border-border bg-surface p-4 text-sm"
+				>
+					Kamu sedang offline. Informasi yang sudah dimuat bisa belum terbaru.
+					Sambungkan internet untuk memperbarui.
+				</p>
+			)}
+			<div className="resora-dashboard-layout">{children}</div>
 		</DashboardPreviewContext.Provider>
 	);
 }

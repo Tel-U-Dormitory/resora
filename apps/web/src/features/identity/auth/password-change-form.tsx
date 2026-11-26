@@ -46,7 +46,7 @@ export default function PasswordChangeForm({
 				<p className="mt-3 text-muted-foreground text-sm">
 					{mandatory
 						? "Ganti password awal untuk mengakses RESORA."
-						: "Ganti password Anda. Sesi di perangkat lain akan diakhiri."}
+						: "Ganti password kamu. Sesi di perangkat lain akan diakhiri."}
 				</p>
 			</CardHeader>
 			<CardContent>

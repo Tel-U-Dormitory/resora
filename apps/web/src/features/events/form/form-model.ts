@@ -116,6 +116,71 @@ export function useDraftEditor(props: DraftEditorProps) {
 	const [search, setSearch] = useState("");
 	const [page, setPage] = useState(1);
 	const [saving, setSaving] = useState(false);
+	const [restoredAt, setRestoredAt] = useState<string | null>(null);
+	const [confirmDiscard, setConfirmDiscard] = useState(false);
+	const storageKey = `resora_event_draft_v1_${eventId ?? "new"}`;
+	const hydratedDraft = useRef(false);
+	const clearStoredDraft = useCallback(() => {
+		setRestoredAt(null);
+		setConfirmDiscard(false);
+		try {
+			window.localStorage.removeItem(storageKey);
+		} catch {
+			/* Storage is optional. */
+		}
+	}, [storageKey]);
+	const discardLocalDraft = useCallback(() => {
+		clearStoredDraft();
+		setDraft(initial);
+		setStart(initial.startsAt ? toWibDateTimeInput(initial.startsAt) : "");
+		setEnd(initial.endsAt ? toWibDateTimeInput(initial.endsAt) : "");
+	}, [clearStoredDraft, initial]);
+	useEffect(() => {
+		if (advancedMode) {
+			hydratedDraft.current = true;
+			return;
+		}
+		try {
+			const raw = window.localStorage.getItem(storageKey);
+			if (raw) {
+				const parsed = JSON.parse(raw) as {
+					draft?: Draft;
+					start?: string;
+					end?: string;
+					savedAt?: string;
+				};
+				if (parsed.draft && parsed.savedAt) {
+					setDraft(parsed.draft);
+					if (typeof parsed.start === "string") setStart(parsed.start);
+					if (typeof parsed.end === "string") setEnd(parsed.end);
+					setRestoredAt(parsed.savedAt);
+				}
+			}
+		} catch {
+			/* Ignore malformed or unavailable storage. */
+		} finally {
+			hydratedDraft.current = true;
+		}
+	}, [advancedMode, storageKey]);
+	useEffect(() => {
+		if (!hydratedDraft.current || advancedMode) return;
+		const timer = setTimeout(() => {
+			try {
+				window.localStorage.setItem(
+					storageKey,
+					JSON.stringify({
+						draft,
+						start,
+						end,
+						savedAt: new Date().toISOString(),
+					}),
+				);
+			} catch {
+				/* Storage is optional. */
+			}
+		}, 300);
+		return () => clearTimeout(timer);
+	}, [advancedMode, draft, end, start, storageKey]);
 	const formRef = useRef<HTMLFormElement>(null);
 	const errorRef = useRef<HTMLDivElement>(null);
 	const [invalidFieldId, setInvalidFieldId] = useState("");
@@ -123,8 +188,14 @@ export function useDraftEditor(props: DraftEditorProps) {
 		if (error || endError) errorRef.current?.focus();
 	}, [error, endError]);
 	const router = useRouter();
-	const create = useMutation(trpc.attendance.create.mutationOptions());
-	const edit = useMutation(trpc.attendance.editDraft.mutationOptions());
+	const create = useMutation({
+		...trpc.attendance.create.mutationOptions(),
+		onSuccess: clearStoredDraft,
+	});
+	const edit = useMutation({
+		...trpc.attendance.editDraft.mutationOptions(),
+		onSuccess: clearStoredDraft,
+	});
 	const advanced = useMutation(trpc.attendance.advancedEdit.mutationOptions());
 	const criteria = draft.rosterCriteria ?? empty.rosterCriteria;
 	const session = draft.session;
@@ -203,6 +274,10 @@ export function useDraftEditor(props: DraftEditorProps) {
 		setPage,
 		saving,
 		setSaving,
+		restoredAt,
+		confirmDiscard,
+		setConfirmDiscard,
+		discardLocalDraft,
 		formRef,
 		errorRef,
 		invalidFieldId,

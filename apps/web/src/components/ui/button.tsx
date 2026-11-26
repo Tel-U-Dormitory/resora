@@ -13,14 +13,13 @@ import { Spinner } from "./spinner";
  */
 const variants = {
 	primary:
-		"bg-primary text-primary-foreground shadow-xs hover:bg-primary-hover",
-	secondary:
-		"bg-primary-soft text-primary-soft-foreground hover:bg-[color-mix(in_srgb,var(--primary-soft),var(--primary)_8%)]",
+		"bg-primary text-primary-foreground shadow-xs hover:bg-primary-hover hover:text-primary-foreground",
+	secondary: "bg-secondary text-secondary-foreground hover:opacity-90",
 	outline:
-		"border border-border bg-surface text-foreground shadow-xs hover:bg-muted",
+		"border border-border-control bg-surface text-foreground shadow-xs hover:bg-muted",
 	ghost: "text-foreground hover:bg-muted",
 	dark: "bg-ink text-ink-foreground shadow-sm hover:bg-slate-800",
-	danger: "bg-danger text-white shadow-sm hover:bg-red-700",
+	danger: "bg-danger text-white shadow-sm hover:bg-red-700 hover:text-white",
 	link: "text-primary underline-offset-4 hover:underline px-0 h-auto",
 } as const;
 

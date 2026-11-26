@@ -4,9 +4,10 @@ import { Input } from "@resora/ui/components/input";
 import { Label } from "@resora/ui/components/label";
 import { Select } from "@resora/ui/components/select";
 import { useQuery } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { ChevronLeft, Plus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { queryErrorMessage } from "@/utils/request-error";
@@ -47,7 +48,9 @@ export default function AccountList() {
 		retry: false,
 		meta: { errorHandledLocally: true },
 	});
-	const filtered = (accounts.data?.accounts ?? []).filter(
+	const filtered = (
+		accounts.error ? [] : (accounts.data?.accounts ?? [])
+	).filter(
 		(account) =>
 			(!search.trim() ||
 				`${account.name} ${account.nim ?? ""}`
@@ -61,17 +64,17 @@ export default function AccountList() {
 	const visible = filtered.slice((currentPage - 1) * 20, currentPage * 20);
 
 	return (
-		<section className="resora-page space-y-6">
+		<section className="resora-page resora-admin-accounts space-y-6">
 			<div className="flex flex-wrap items-start justify-between gap-4">
-				<div className="space-y-2">
+				<div className="space-y-1.5">
 					<h1 className="font-bold text-2xl tracking-tight">Kelola akun SR</h1>
-					<p className="text-muted-foreground text-sm">
+					<p className="hidden text-muted-foreground text-sm sm:block">
 						Kelola identitas, akses, dan keamanan akun Senior Resident.
 					</p>
 				</div>
 				<Link
 					href="/admin/users/new"
-					className="focus-ring inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 font-semibold text-primary-foreground text-sm hover:bg-primary-hover sm:w-auto"
+					className="focus-ring inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 font-semibold text-sm text-white hover:bg-primary-hover hover:text-white sm:w-auto"
 				>
 					<Plus size={17} aria-hidden="true" /> Tambah akun
 				</Link>
@@ -167,6 +170,11 @@ export default function AccountList() {
 					)}
 				</CardContent>
 			</Card>
+			{accounts.fetchStatus === "paused" && (
+				<p role="status">
+					Koneksi terputus. Data akun yang sudah dimuat bisa belum terbaru.
+				</p>
+			)}
 			{accounts.isPending && (
 				<p role="status" className="text-muted-foreground text-sm">
 					Memuat akun SR…
@@ -189,136 +197,239 @@ export default function AccountList() {
 					</CardContent>
 				</Card>
 			)}
-			{accounts.data && (
+			{!accounts.error && accounts.data && (
 				<>
 					<Card>
-						<CardContent className="overflow-x-auto">
-							{total === 0 ? (
-								<p className="py-8 text-center text-muted-foreground text-sm">
-									Tidak ada akun yang sesuai pencarian.
-								</p>
-							) : (
-								<table className="resora-account-table w-full text-left text-sm">
-									<caption className="sr-only">
-										Daftar akun Senior Resident
-									</caption>
-									<thead>
-										<tr className="border-border border-b">
-											{[
-												"NIM",
-												"Nama / Email",
-												"Departemen",
-												"Jabatan",
-												"Gedung",
-												"Periode",
-												"Status",
-												"Tindakan",
-											].map((heading) => (
-												<th
-													key={heading}
-													scope="col"
-													className="px-3 py-3 font-semibold"
+						<CardContent className="min-w-0">
+							<section
+								aria-label="Daftar akun SR"
+								// biome-ignore lint/a11y/noNoninteractiveTabindex: The desktop account table supports keyboard horizontal scrolling.
+								tabIndex={0}
+								className="focus-ring resora-admin-account-region overflow-x-auto rounded-xl"
+							>
+								{total === 0 ? (
+									<EmptyState
+										variant="folder"
+										title="Tidak ada akun ditemukan"
+										description="Tidak ada akun Senior Resident yang sesuai pencarian atau filter."
+										action={
+											search || departmentCode || status ? (
+												<Button
+													variant="outline"
+													onClick={() => {
+														setSearch("");
+														setDepartmentCode("");
+														setStatus("");
+														setPage(1);
+													}}
 												>
-													{heading}
-												</th>
-											))}
-										</tr>
-									</thead>
-									<tbody>
-										{visible.map((account) => (
-											<tr
-												key={account.userId}
-												className="border-border border-b last:border-0"
-											>
-												<td
-													data-label="NIM"
-													className="whitespace-nowrap px-3 py-4"
+													Hapus filter
+												</Button>
+											) : (
+												<Link
+													href="/admin/users/new"
+													className="focus-ring inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-primary px-4 py-2 font-semibold text-primary-foreground text-xs hover:bg-primary-hover"
 												>
-													{account.nim ?? "—"}
-												</td>
-												<td data-label="Nama" className="px-3 py-4">
-													<p className="font-medium">
-														{account.name}
-														{account.isSuperadmin && (
-															<span className="ml-2 rounded-full bg-primary-soft px-2 py-1 font-semibold text-primary-soft-foreground text-xs">
-																SUPERADMIN
-															</span>
-														)}
+													<Plus size={15} aria-hidden="true" />
+													Tambah akun
+												</Link>
+											)
+										}
+									/>
+								) : (
+									<>
+										<div className="space-y-2.5 md:hidden">
+											{visible.map((account) => (
+												<article
+													key={account.userId}
+													className="space-y-2.5 rounded-xl border border-border bg-surface p-3.5"
+												>
+													<div className="flex items-start justify-between gap-2">
+														<div className="min-w-0 flex-1">
+															<p className="truncate font-bold text-foreground text-sm">
+																{account.name}
+															</p>
+															<p className="truncate text-muted-foreground text-xs tabular-nums">
+																NIM: {account.nim ?? "—"}
+															</p>
+														</div>
+														<span
+															className={`shrink-0 whitespace-nowrap rounded-full px-2.5 py-0.5 font-semibold text-xs ${accountStatus(account, today) === "active" ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}
+														>
+															{
+																accountStatusLabels[
+																	accountStatus(account, today)
+																]
+															}
+														</span>
+													</div>
+													<p className="truncate text-muted-foreground text-xs">
+														{account.department ?? account.departmentCode} ·{" "}
+														{account.building ?? account.buildingCode ?? "—"} ·{" "}
+														{account.periods?.length
+															? account.periods.map((p) => p.name).join(", ")
+															: "Belum ditetapkan"}
 													</p>
-													<p className="hidden text-muted-foreground sm:block">
-														{account.email}
-													</p>
-													<details className="mt-1 sm:hidden">
-														<summary className="focus-ring w-fit cursor-pointer rounded-lg py-2 text-primary">
-															Detail akun
+													<details className="group border-border border-t pt-2 text-xs">
+														<summary className="focus-ring flex w-full cursor-pointer list-none items-center justify-between rounded-md py-1 font-medium text-primary">
+															<span>Detail akun</span>
+															<ChevronLeft
+																size={15}
+																aria-hidden="true"
+																className="shrink-0 transition-transform duration-150 group-open:-rotate-90"
+															/>
 														</summary>
-														<dl className="space-y-2 py-2 text-sm">
-															{[
-																["Email", account.email],
-																[
-																	"Departemen",
-																	account.department ?? account.departmentCode,
-																],
-																[
-																	"Jabatan",
-																	account.position ?? account.positionCode,
-																],
-																[
-																	"Gedung",
-																	account.building ??
-																		account.buildingCode ??
-																		"—",
-																],
-															].map(([label, value]) => (
-																<div key={label}>
-																	<dt className="text-muted-foreground text-xs">
-																		{label}
-																	</dt>
-																	<dd>{value}</dd>
-																</div>
-															))}
+														<dl className="mt-2 grid grid-cols-2 gap-2 text-xs">
+															<div>
+																<dt className="text-muted-foreground">Email</dt>
+																<dd className="truncate font-medium">
+																	{account.email}
+																</dd>
+															</div>
+															<div>
+																<dt className="text-muted-foreground">
+																	Jabatan
+																</dt>
+																<dd className="truncate font-medium">
+																	{account.position ?? account.positionCode}
+																</dd>
+															</div>
 														</dl>
 													</details>
-												</td>
-												<td data-label="Departemen" className="px-3 py-4">
-													{account.department ?? account.departmentCode}
-												</td>
-												<td data-label="Jabatan" className="px-3 py-4">
-													{account.position ?? account.positionCode}
-												</td>
-												<td
-													data-label="Gedung"
-													className="whitespace-nowrap px-3 py-4"
-												>
-													{account.building ?? account.buildingCode ?? "—"}
-												</td>
-												<td data-label="Periode" className="px-3 py-4">
-													{account.periods?.length
-														? account.periods.map((period) => (
-																<p key={period.id}>
-																	{period.name}
-																	<span className="block text-muted-foreground text-xs">
-																		{period.startsOn} – {period.endsOn}
-																	</span>
-																</p>
-															))
-														: "Belum ditetapkan"}
-												</td>
-												<td data-label="Status" className="px-3 py-4">
-													<span
-														className={`whitespace-nowrap rounded-full px-2.5 py-1 font-semibold text-xs ${accountStatus(account, today) === "active" ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}
+													<div className="border-border border-t pt-2">
+														<AccountActions account={account} />
+													</div>
+												</article>
+											))}
+										</div>
+										<table className="resora-account-table hidden w-full text-left text-sm md:table">
+											<caption className="sr-only">
+												Daftar akun Senior Resident
+											</caption>
+											<thead>
+												<tr className="border-border border-b">
+													{[
+														"NIM",
+														"Nama / Email",
+														"Departemen",
+														"Jabatan",
+														"Gedung",
+														"Periode",
+														"Status",
+														"Tindakan",
+													].map((heading) => (
+														<th
+															key={heading}
+															scope="col"
+															className="px-3 py-3 font-semibold"
+														>
+															{heading}
+														</th>
+													))}
+												</tr>
+											</thead>
+											<tbody>
+												{visible.map((account) => (
+													<tr
+														key={account.userId}
+														className="border-border border-b last:border-0"
 													>
-														{accountStatusLabels[accountStatus(account, today)]}
-													</span>
-												</td>
-												<td data-label="Tindakan" className="px-3 py-4">
-													<AccountActions account={account} />
-												</td>
-											</tr>
-										))}
-									</tbody>
-								</table>
-							)}
+														<td
+															data-label="NIM"
+															className="whitespace-nowrap px-3 py-4"
+														>
+															{account.nim ?? "—"}
+														</td>
+														<td data-label="Nama" className="px-3 py-4">
+															<p className="font-medium">
+																{account.name}
+																{account.isSuperadmin && (
+																	<span className="ml-2 rounded-full bg-primary-soft px-2 py-1 font-semibold text-primary-soft-foreground text-xs">
+																		SUPERADMIN
+																	</span>
+																)}
+															</p>
+															<p className="hidden text-muted-foreground sm:block">
+																{account.email}
+															</p>
+															<details className="mt-1 sm:hidden">
+																<summary className="focus-ring w-fit cursor-pointer rounded-lg py-2 text-primary">
+																	Detail akun
+																</summary>
+																<dl className="space-y-2 py-2 text-sm">
+																	{[
+																		["Email", account.email],
+																		[
+																			"Departemen",
+																			account.department ??
+																				account.departmentCode,
+																		],
+																		[
+																			"Jabatan",
+																			account.position ?? account.positionCode,
+																		],
+																		[
+																			"Gedung",
+																			account.building ??
+																				account.buildingCode ??
+																				"—",
+																		],
+																	].map(([label, value]) => (
+																		<div key={label}>
+																			<dt className="text-muted-foreground text-xs">
+																				{label}
+																			</dt>
+																			<dd>{value}</dd>
+																		</div>
+																	))}
+																</dl>
+															</details>
+														</td>
+														<td data-label="Departemen" className="px-3 py-4">
+															{account.department ?? account.departmentCode}
+														</td>
+														<td data-label="Jabatan" className="px-3 py-4">
+															{account.position ?? account.positionCode}
+														</td>
+														<td
+															data-label="Gedung"
+															className="whitespace-nowrap px-3 py-4"
+														>
+															{account.building ?? account.buildingCode ?? "—"}
+														</td>
+														<td data-label="Periode" className="px-3 py-4">
+															{account.periods?.length
+																? account.periods.map((period) => (
+																		<p key={period.id}>
+																			{period.name}
+																			<span className="block text-muted-foreground text-xs">
+																				{period.startsOn} – {period.endsOn}
+																			</span>
+																		</p>
+																	))
+																: "Belum ditetapkan"}
+														</td>
+														<td data-label="Status" className="px-3 py-4">
+															<span
+																className={`whitespace-nowrap rounded-full px-2.5 py-1 font-semibold text-xs ${accountStatus(account, today) === "active" ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}
+															>
+																{
+																	accountStatusLabels[
+																		accountStatus(account, today)
+																	]
+																}
+															</span>
+														</td>
+														<td data-label="Tindakan" className="px-3 py-4">
+															<AccountActions account={account} />
+														</td>
+													</tr>
+												))}
+											</tbody>
+										</table>
+									</>
+								)}
+							</section>
 						</CardContent>
 					</Card>
 					<div className="flex flex-wrap items-center justify-between gap-3">

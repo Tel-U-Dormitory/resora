@@ -6,7 +6,7 @@
 			"id": "assessment",
 			"title": "Penilaian",
 			"period": {
-				"label": "Periode 2026/2027",
+				"label": "Periode evaluasi 2026/2027",
 				"startsAt": "2026-08-01T00:00:00+07:00",
 				"endsAt": "2027-07-31T23:59:59+07:00"
 			},
@@ -14,17 +14,33 @@
 			"state": {
 				"kind": "ready_summary",
 				"values": [
-					{ "label": "Rata-rata nilai SR", "value": 84.6, "unit": "/100" },
-					{ "label": "Kelengkapan penilaian", "value": 92, "unit": "%" },
-					{ "label": "Sudah dinilai", "value": 46, "unit": "SR" },
-					{ "label": "Belum dinilai", "value": 4, "unit": "SR" }
+					{
+						"label": "Rata-rata nilai SR",
+						"value": 84.6,
+						"unit": "/100"
+					},
+					{
+						"label": "Kelengkapan penilaian",
+						"value": 92,
+						"unit": "%"
+					},
+					{
+						"label": "Sudah dinilai",
+						"value": 46,
+						"unit": "SR"
+					},
+					{
+						"label": "Belum dinilai",
+						"value": 4,
+						"unit": "SR"
+					}
 				],
 				"note": "Data sintetis untuk preview"
 			},
 			"export": {
 				"report": "assessment",
 				"formats": ["xlsx", "pdf"],
-				"filters": ["period", "department"]
+				"filters": ["period"]
 			}
 		},
 		{
@@ -44,18 +60,30 @@
 						"value": 812,
 						"unit": "kegiatan"
 					},
-					{ "label": "Hadir", "value": 752, "unit": "kegiatan" },
-					{ "label": "Tidak hadir", "value": 60, "unit": "kegiatan" }
+					{
+						"label": "Hadir",
+						"value": 752,
+						"unit": "kegiatan"
+					},
+					{
+						"label": "Tidak hadir",
+						"value": 60,
+						"unit": "kegiatan"
+					}
 				],
 				"note": "Data sintetis untuk preview"
 			},
-			"export": null
+			"export": {
+				"report": "attendance",
+				"formats": ["xlsx", "pdf"],
+				"filters": ["period"]
+			}
 		},
 		{
 			"id": "violations",
 			"title": "Pelanggaran aktif",
 			"period": {
-				"label": "Periode 2026/2027",
+				"label": "Periode menjabat 2026/2027",
 				"startsAt": "2026-08-01T00:00:00+07:00",
 				"endsAt": "2027-07-31T23:59:59+07:00"
 			},
@@ -63,13 +91,29 @@
 			"state": {
 				"kind": "ready_summary",
 				"values": [
-					{ "label": "Total laporan aktif", "value": 7, "unit": "laporan" },
-					{ "label": "Gedung A", "value": 3, "unit": "laporan" },
-					{ "label": "Gedung B", "value": 4, "unit": "laporan" }
+					{
+						"label": "Total laporan aktif",
+						"value": 7,
+						"unit": "laporan"
+					},
+					{
+						"label": "Gedung A",
+						"value": 3,
+						"unit": "laporan"
+					},
+					{
+						"label": "Gedung B",
+						"value": 4,
+						"unit": "laporan"
+					}
 				],
 				"note": "Data sintetis untuk preview"
 			},
-			"export": null
+			"export": {
+				"report": "violations",
+				"formats": ["xlsx", "pdf"],
+				"filters": ["period"]
+			}
 		},
 		{
 			"id": "cleanliness",
@@ -92,8 +136,20 @@
 			"id": "fixture-management-activity-1",
 			"title": "Koordinasi Pengelola Asrama",
 			"startsAt": "2026-12-03T10:00:00+07:00",
-			"endsAt": "2026-12-03T11:30:00+07:00"
+			"endsAt": "2026-12-03T11:30:00+07:00",
+			"status": "PUBLISHED",
+			"visible": true
 		}
 	],
-	"attendanceHistory": []
+	"attendanceHistory": [],
+	"broadcasts": [
+		{
+			"id": "fixture-broadcast-1",
+			"title": "Jadwal koordinasi Senior Resident",
+			"content": "Koordinasi rutin membahas kesiapan kegiatan dan informasi operasional asrama. Ini contoh pengumuman sintetis untuk meninjau dashboard, bukan pengumuman yang diterbitkan.",
+			"creatorName": "Pengurus sintetis",
+			"publishedAt": "2026-11-26T08:00:00+07:00",
+			"expiresAt": "2026-12-02T23:00:00+07:00"
+		}
+	]
 }

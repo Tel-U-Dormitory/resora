@@ -304,7 +304,7 @@ export function RosterFields({ view }: { view: DraftEditorView }) {
 			<div className="border-border border-t pt-5">
 				<h3 className="font-semibold text-sm">Tinjau peserta</h3>
 				<p className="mt-1 text-muted-foreground text-xs">
-					Pilihan individu menyesuaikan kelompok yang Anda pilih.
+					Pilihan individu menyesuaikan kelompok yang kamu pilih.
 				</p>
 			</div>
 			{invalidCount > 0 && (

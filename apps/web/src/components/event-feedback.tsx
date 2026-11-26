@@ -1,32 +1,169 @@
 import { TRPCClientError } from "@trpc/client";
 
-const statuses: Record<string, { label: string; style: string }> = {
-	VISIBLE: { label: "Ditampilkan", style: "bg-success/10 text-success" },
-	HIDDEN: { label: "Disembunyikan", style: "bg-warning/10 text-warning" },
-	ARCHIVED: { label: "Diarsipkan", style: "bg-muted text-muted-foreground" },
-	PRESENT: { label: "Hadir", style: "bg-success/10 text-success" },
-	PENDING: { label: "Belum hadir", style: "bg-warning/10 text-warning" },
-	ABSENT: { label: "Tidak hadir", style: "bg-danger/10 text-danger" },
-	DRAFT: { label: "Draft", style: "bg-muted text-muted-foreground" },
+type BadgeTone = "success" | "warning" | "danger" | "info" | "neutral";
+
+const statuses: Record<
+	string,
+	{ label: string; tone: BadgeTone; style: string }
+> = {
+	VISIBLE: {
+		label: "Ditampilkan",
+		tone: "success",
+		style: "bg-[var(--success-tint)] text-success border-border",
+	},
+	HIDDEN: {
+		label: "Disembunyikan",
+		tone: "warning",
+		style: "bg-[var(--warning-tint)] text-warning border-border",
+	},
+	ARCHIVED: {
+		label: "Diarsipkan",
+		tone: "neutral",
+		style: "bg-surface-subtle text-text-secondary border-border",
+	},
+	PRESENT: {
+		label: "Hadir",
+		tone: "success",
+		style: "bg-[var(--success-tint)] text-success border-border",
+	},
+	PENDING: {
+		label: "Belum hadir",
+		tone: "warning",
+		style: "bg-[var(--warning-tint)] text-warning border-border",
+	},
+	ABSENT: {
+		label: "Tidak hadir",
+		tone: "danger",
+		style: "bg-[var(--danger-tint)] text-danger border-border",
+	},
+	DRAFT: {
+		label: "Draft",
+		tone: "neutral",
+		style: "bg-surface-subtle text-text-secondary border-border",
+	},
 	PUBLISHED: {
 		label: "Dipublikasikan",
-		style: "bg-primary-soft text-primary-soft-foreground",
+		tone: "info",
+		style: "bg-[var(--info-tint)] text-info border-border",
 	},
-	CLOSED: { label: "Ditutup", style: "bg-muted text-muted-foreground" },
-	INACTIVE: { label: "Belum aktif", style: "bg-muted text-muted-foreground" },
-	ACTIVE: { label: "Aktif", style: "bg-success/10 text-success" },
-	EXPIRED: { label: "Kedaluwarsa", style: "bg-warning/10 text-warning" },
-	REVOKED: { label: "Dibatalkan", style: "bg-danger/10 text-danger" },
-	NONE: { label: "Belum tersedia", style: "bg-muted text-muted-foreground" },
+	CLOSED: {
+		label: "Ditutup",
+		tone: "neutral",
+		style: "bg-surface-subtle text-text-secondary border-border",
+	},
+	INACTIVE: {
+		label: "Belum aktif",
+		tone: "neutral",
+		style: "bg-surface-subtle text-text-secondary border-border",
+	},
+	ACTIVE: {
+		label: "Aktif",
+		tone: "success",
+		style: "bg-[var(--success-tint)] text-success border-border",
+	},
+	EXPIRED: {
+		label: "Kedaluwarsa",
+		tone: "warning",
+		style: "bg-[var(--warning-tint)] text-warning border-border",
+	},
+	REVOKED: {
+		label: "Dibatalkan",
+		tone: "danger",
+		style: "bg-[var(--danger-tint)] text-danger border-border",
+	},
+	NONE: {
+		label: "Belum tersedia",
+		tone: "neutral",
+		style: "bg-surface-subtle text-text-secondary border-border",
+	},
 };
 
+function StatusToneIcon({ tone }: { tone: BadgeTone }) {
+	if (tone === "success") {
+		return (
+			<svg
+				aria-hidden="true"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.75"
+				className="size-3.5 shrink-0"
+			>
+				<circle cx="8" cy="8" r="6" />
+				<path d="M5.5 8.2 7.2 9.9 10.7 6.4" />
+			</svg>
+		);
+	}
+	if (tone === "warning") {
+		return (
+			<svg
+				aria-hidden="true"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.75"
+				className="size-3.5 shrink-0"
+			>
+				<path d="M8 2.4 14 13H2L8 2.4Z" />
+				<path d="M8 6.5v3.2" />
+				<circle cx="8" cy="11.4" r="0.6" fill="currentColor" stroke="none" />
+			</svg>
+		);
+	}
+	if (tone === "danger") {
+		return (
+			<svg
+				aria-hidden="true"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.75"
+				className="size-3.5 shrink-0"
+			>
+				<circle cx="8" cy="8" r="6" />
+				<path d="m5.8 5.8 4.4 4.4M10.2 5.8l-4.4 4.4" />
+			</svg>
+		);
+	}
+	if (tone === "info") {
+		return (
+			<svg
+				aria-hidden="true"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.75"
+				className="size-3.5 shrink-0"
+			>
+				<circle cx="8" cy="8" r="6" />
+				<path d="M8 7.2v3.6" />
+				<circle cx="8" cy="5.2" r="0.7" fill="currentColor" stroke="none" />
+			</svg>
+		);
+	}
+	return (
+		<svg
+			aria-hidden="true"
+			viewBox="0 0 16 16"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.75"
+			className="size-3.5 shrink-0"
+		>
+			<circle cx="8" cy="8" r="6" />
+			<path d="M8 5v3l2 1.2" />
+		</svg>
+	);
+}
+
 export function StatusBadge({ status }: { status: string }) {
-	const { label, style } = statuses[status] ?? statuses.NONE;
+	const { label, tone, style } = statuses[status] ?? statuses.NONE;
 	return (
 		<span
-			className={`inline-flex items-center rounded-full px-3 py-1 font-semibold text-xs ${style}`}
+			className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-bold text-xs ${style}`}
 		>
-			{label}
+			<StatusToneIcon tone={tone} />
+			<span>{label}</span>
 		</span>
 	);
 }
@@ -87,11 +224,11 @@ export function eventErrorMessage(error: unknown) {
 			case "UNAUTHORIZED":
 				return "Sesi telah berakhir. Silakan masuk kembali.";
 			case "FORBIDDEN":
-				return "Anda tidak memiliki akses untuk tindakan ini.";
+				return "Kamu belum memiliki akses untuk tindakan ini.";
 			case "BAD_REQUEST":
 				return "Periksa kembali informasi event, jadwal, dan konfigurasi yang diisi.";
 			case "NOT_FOUND":
-				return "Event tidak tersedia atau Anda tidak memiliki akses.";
+				return "Event tidak tersedia atau kamu belum memiliki akses.";
 			case "CONFLICT":
 				return "Status event atau QR telah berubah. Muat ulang sebelum mencoba kembali.";
 		}

@@ -30,13 +30,13 @@ export default function CommitteeList() {
 		}
 	}, [data, page]);
 	return (
-		<section className="resora-page space-y-6">
+		<section className="resora-page resora-committee resora-committee-list space-y-6">
 			<div className="flex flex-wrap items-start justify-between gap-4">
-				<div className="space-y-2">
+				<div className="space-y-1.5">
 					<h1 className="font-bold text-2xl tracking-tight">
 						Kelola kepanitiaan
 					</h1>
-					<p className="text-muted-foreground text-sm">
+					<p className="hidden text-muted-foreground text-sm sm:block">
 						Kelola divisi dinamis dan penugasan anggota Senior Resident.
 					</p>
 				</div>
@@ -57,6 +57,12 @@ export default function CommitteeList() {
 							}}
 						/>
 					</div>
+					{query.fetchStatus === "paused" && (
+						<p role="status">
+							Koneksi terputus. Sambungkan internet untuk memperbarui daftar
+							kepanitiaan.
+						</p>
+					)}
 					{query.isPending ? (
 						<p role="status">Memuat kepanitiaan…</p>
 					) : query.isError ? (
@@ -73,7 +79,44 @@ export default function CommitteeList() {
 									{data.total} kepanitiaan ditemukan.
 								</p>
 								{!data.committees.length ? (
-									<p>Belum ada kepanitiaan yang sesuai.</p>
+									<div className="flex flex-col items-center justify-center px-4 py-8 text-center">
+										<svg
+											aria-hidden="true"
+											viewBox="0 0 96 80"
+											fill="none"
+											className="mx-auto mb-3 h-16 w-20 shrink-0"
+										>
+											<circle cx="38" cy="32" r="11" fill="#A58BFF" />
+											<path
+												d="M20 62c0-9.9 8.1-18 18-18s18 8.1 18 18H20Z"
+												fill="#EBE9FE"
+											/>
+											<circle cx="62" cy="36" r="9" fill="#FFF46E" />
+											<path
+												d="M48 62c0-7.7 6.3-14 14-14s14 6.3 14 14H48Z"
+												fill="#FF6F6F"
+											/>
+										</svg>
+										<h2 className="font-bold text-foreground text-sm sm:text-base">
+											Belum ada kepanitiaan yang sesuai.
+										</h2>
+										<p className="mt-1 max-w-xs text-muted-foreground text-xs sm:text-sm">
+											{search
+												? "Ubah kata pencarian atau hapus pencarian untuk melihat semua kepanitiaan."
+												: "Mulai buat kepanitiaan untuk mengatur divisi dan anggota Senior Resident."}
+										</p>
+										<div className="mt-4">
+											{search ? (
+												<Button variant="outline" onClick={() => setSearch("")}>
+													Hapus pencarian
+												</Button>
+											) : (
+												<Button onClick={() => setCreating(true)}>
+													+ Tambah kepanitiaan
+												</Button>
+											)}
+										</div>
+									</div>
 								) : (
 									<ul className="grid gap-4 md:grid-cols-2">
 										{data.committees.map((row) => (
@@ -81,10 +124,8 @@ export default function CommitteeList() {
 												key={row.id}
 												className="min-w-0 space-y-3 rounded-xl border border-border p-4"
 											>
-												<h2 className="break-words font-semibold">
-													{row.name}
-												</h2>
-												<p className="line-clamp-3 whitespace-pre-wrap break-words text-muted-foreground text-sm">
+												<h2 className="truncate font-semibold">{row.name}</h2>
+												<p className="line-clamp-2 whitespace-pre-wrap break-words text-muted-foreground text-sm">
 													{row.description || "Belum ada deskripsi."}
 												</p>
 												<p className="text-sm">

@@ -34,7 +34,7 @@ test("zero is a ready value and distinct from empty", () => {
 		state: { kind: "ready" as const, value: 0, unit: " kegiatan", note: null },
 	};
 	expect(zero.state).toMatchObject({ kind: "ready", value: 0 });
-	expect(empty?.state.kind).toBe("empty");
+	expect(empty?.state).toMatchObject({ kind: "ready", value: 0 });
 	expect(
 		renderToStaticMarkup(jsxRuntime.jsx(DashboardMetricCard, { metric: zero })),
 	).toContain(">0<");
@@ -115,7 +115,7 @@ test("management mode is capability-gated and production KPIs fail closed", () =
 	expect(managementMarkup).toContain("Cakupan: seluruh departemen.");
 	expect(managementMarkup).toContain("Data belum tersedia.");
 	expect(managementMarkup).toContain("Segera hadir");
-	expect(managementMarkup).toContain("Mode dashboard");
+	expect(managementMarkup).toContain("Cakupan ringkasan");
 
 	const personalMarkup = renderToStaticMarkup(
 		jsxRuntime.jsx(DashboardPreviewProvider, {
@@ -127,7 +127,7 @@ test("management mode is capability-gated and production KPIs fail closed", () =
 	);
 	expect(personalMarkup).toContain("Ringkasan");
 	expect(personalMarkup).not.toContain("Ringkasan Manajemen");
-	expect(personalMarkup).not.toContain("Mode dashboard");
+	expect(personalMarkup).not.toContain("Cakupan ringkasan");
 });
 
 test("management preview fixture is not sent to sessions without capability", async () => {
@@ -228,4 +228,86 @@ test("attendance percentage is omitted for zero or inconsistent counts", () => {
 		);
 		expect(markup).not.toContain("Persentase kehadiran");
 	}
+});
+
+test("metric cards keep scope and period explicit without exposing a fake production export", () => {
+	const metric = dashboardFixtures.management.metrics[0];
+	const production = renderToStaticMarkup(
+		jsxRuntime.jsx(DashboardMetricCard, { metric }),
+	);
+	expect(production).toContain("Seluruh departemen");
+	expect(production).toContain(metric.period.label);
+	expect(production).not.toContain("<button");
+	expect(production).not.toContain("<a ");
+	const preview = renderToStaticMarkup(
+		jsxRuntime.jsx(DashboardMetricCard, { metric, preview: true }),
+	);
+	expect(preview).toContain("Ekspor belum tersedia pada preview.");
+	expect(preview).toContain("disabled");
+});
+
+test("non participant dashboard omits the SR cleanliness placeholder", () => {
+	const markup = renderToStaticMarkup(
+		jsxRuntime.jsx(DashboardPreviewProvider, {
+			fixtures: null,
+			canManage: true,
+			initialMode: "management",
+			children: jsxRuntime.jsx(DashboardMetrics, { showCleanliness: false }),
+		}),
+	);
+	expect(markup).not.toContain("Kebersihan Kamar");
+	expect(markup).toContain('data-metric="assessment"');
+	expect(markup).toContain('data-state="unavailable"');
+	expect(markup).not.toContain("Ekspor");
+});
+
+test("all approved metric display states retain their distinct meaning", () => {
+	const metric = dashboardFixtures.personal.metrics[0];
+	for (const kind of [
+		"empty",
+		"not_assessed",
+		"missing_period",
+		"coming_soon",
+		"unavailable",
+		"error",
+		"forbidden",
+	] as const) {
+		const markup = renderToStaticMarkup(
+			jsxRuntime.jsx(DashboardMetricCard, {
+				metric: { ...metric, state: { kind, message: `State ${kind}` } },
+			}),
+		);
+		expect(markup).toContain(`data-state="${kind}"`);
+		expect(markup).toContain(`State ${kind}`);
+		expect(markup).not.toContain('class="resora-metric-value"');
+	}
+});
+
+test("unavailable, forbidden and missing-period cards never expose export controls", () => {
+	const metric = dashboardFixtures.management.metrics[0];
+	for (const kind of [
+		"empty",
+		"not_assessed",
+		"missing_period",
+		"unavailable",
+		"forbidden",
+		"error",
+		"stale",
+	] as const) {
+		const markup = renderToStaticMarkup(
+			jsxRuntime.jsx(DashboardMetricCard, {
+				metric: { ...metric, state: { kind, message: "State" } },
+				preview: true,
+			}),
+		);
+		expect(markup).not.toContain("<button");
+	}
+	const cleanliness = { ...metric, id: "cleanliness" as const };
+	const markup = renderToStaticMarkup(
+		jsxRuntime.jsx(DashboardMetricCard, { metric: cleanliness, preview: true }),
+	);
+	expect(markup).toContain("Segera hadir");
+	expect(markup).not.toContain("<button");
+	expect(markup).not.toContain("<dl");
+	expect(markup).not.toContain("<a ");
 });

@@ -12,6 +12,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { attendanceQueryKeys, queryClient } from "@/utils/trpc";
 import {
 	eventErrorMessage,
+	formatEventTime,
 	parseWibDateTimeInput,
 	toWibDateTimeInput,
 } from "../../../components/event-feedback";
@@ -51,6 +52,10 @@ export function DraftEditor(props: DraftEditorProps) {
 		setEndError,
 		saving,
 		setSaving,
+		restoredAt,
+		confirmDiscard,
+		setConfirmDiscard,
+		discardLocalDraft,
 		formRef,
 		errorRef,
 		invalidFieldId,
@@ -62,7 +67,7 @@ export function DraftEditor(props: DraftEditorProps) {
 		invitedCount,
 	} = view;
 	return (
-		<section className="resora-page min-w-0 space-y-6">
+		<section className="resora-page resora-events resora-events-editor min-w-0 space-y-6">
 			<nav aria-label="Breadcrumb event" className="text-sm">
 				<ol className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
 					<li>
@@ -91,6 +96,50 @@ export function DraftEditor(props: DraftEditorProps) {
 						: "Siapkan informasi event dan undangan. Peserta dapat ditinjau setelah draft disimpan."}
 				</p>
 			</div>
+			{restoredAt && (
+				<div
+					role="status"
+					className="resora-event-form flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-subtle p-4 text-sm"
+				>
+					<div className="min-w-0 space-y-1">
+						<p className="font-semibold text-foreground">
+							Draf di perangkat ini dipulihkan. Belum dikirim.
+						</p>
+						<p className="text-muted-foreground text-xs">
+							Disimpan lokal: {formatEventTime(restoredAt)}
+						</p>
+					</div>
+					{confirmDiscard ? (
+						<div className="flex flex-wrap items-center gap-2">
+							<Button
+								type="button"
+								variant="danger"
+								size="sm"
+								onClick={discardLocalDraft}
+							>
+								Ya, hapus draf
+							</Button>
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								onClick={() => setConfirmDiscard(false)}
+							>
+								Batal
+							</Button>
+						</div>
+					) : (
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							onClick={() => setConfirmDiscard(true)}
+						>
+							Hapus draf
+						</Button>
+					)}
+				</div>
+			)}
 			<form
 				ref={formRef}
 				aria-busy={saving}
@@ -316,7 +365,7 @@ export function DraftEditor(props: DraftEditorProps) {
 						</label>
 					)}
 				</fieldset>
-				<div className="sticky bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-10 flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 shadow-md sm:flex-row sm:items-center sm:justify-between lg:bottom-4">
+				<div className="resora-event-form-actions z-10 flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 shadow-md sm:flex-row sm:items-center sm:justify-between">
 					<div className="min-w-0 text-sm">
 						<p className="font-semibold">
 							{fullEditing

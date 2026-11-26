@@ -1,0 +1,88 @@
+:root:has(.resora-workspace) {
+	--scanner-canvas: #111111;
+	--scanner-foreground: #ffffff;
+}
+.resora-scanner-workspace main#workspace-content {
+	max-width: none;
+	padding: 0;
+}
+.resora-scanner {
+	width: 100%;
+	min-height: 100dvh;
+}
+.resora-camera-surface {
+	background: var(--scanner-canvas);
+	color: var(--scanner-foreground);
+}
+.resora-scanner-header {
+	display: grid;
+	grid-template-columns: 44px minmax(0, 1fr) 44px;
+	align-items: center;
+	gap: 0.5rem;
+	padding-top: max(1rem, env(safe-area-inset-top, 0px));
+	padding-inline: max(1rem, env(safe-area-inset-left, 0px))
+		max(1rem, env(safe-area-inset-right, 0px));
+}
+.resora-camera-surface > div:last-child {
+	padding-bottom: max(1.75rem, env(safe-area-inset-bottom, 0px));
+}
+.resora-camera-surface [aria-hidden="true"] > span {
+	border-color: var(--secondary);
+}
+.resora-camera-surface .resora-scan-line {
+	background: var(--primary);
+	box-shadow: 0 0 0.75rem var(--primary);
+}
+:root:has(.resora-workspace) .resora-camera-surface :focus-visible {
+	outline-color: var(--scanner-foreground);
+}
+.resora-camera-zoom {
+	background: rgb(24 24 24 / 0.88);
+	border: 1px solid rgb(255 255 255 / 0.14);
+	padding: 0.875rem 1rem;
+	border-radius: var(--workspace-radius-card);
+	backdrop-filter: blur(8px);
+}
+:root:has(.resora-workspace) .resora-camera-zoom input[type="range"] {
+	width: 100%;
+	accent-color: var(--secondary);
+}
+.resora-scanner > :is(p, details) {
+	max-width: 40rem;
+	margin-inline: auto;
+	padding-inline: 1rem;
+}
+.resora-scanner > details {
+	margin-bottom: 1.5rem;
+}
+.resora-diagnosis summary {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	min-height: 2.75rem;
+	border-radius: var(--workspace-radius-control);
+}
+.resora-diagnosis textarea {
+	min-height: 12rem;
+	font-variant-numeric: tabular-nums;
+}
+
+:root:has(.resora-workspace) .resora-scanner-header > :is(a, button) {
+	width: 44px;
+	min-width: 44px;
+	height: 44px;
+	min-height: 44px;
+}
+:root:has(.resora-workspace)
+	.resora-scanner-workspace
+	main#workspace-content
+	.resora-scanner-header
+	h1 {
+	justify-self: center;
+	max-width: 100%;
+	padding: 0.5rem;
+	font-size: 0.875rem;
+	line-height: 1.5;
+	word-break: normal;
+	overflow-wrap: normal;
+}

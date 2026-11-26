@@ -1,0 +1,403 @@
+/* F2: floating four-destination pill and a separate QR action, after login only. */
+:root:has(.resora-workspace),
+body:has(.resora-workspace),
+.resora-workspace {
+	--dock-clearance: calc(8.5rem + env(safe-area-inset-bottom, 0px));
+	overflow-x: clip;
+}
+.resora-workspace .resora-utility-bar {
+	position: sticky;
+	top: 0;
+	z-index: 10;
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	min-height: 4rem;
+	padding: max(0.75rem, env(safe-area-inset-top, 0px)) var(--page-gutter)
+		0.75rem;
+	border-bottom: 1px solid var(--border);
+	background: var(--surface);
+}
+@media (max-width: 1199px) {
+	.resora-workspace .resora-utility-bar {
+		background: var(--canvas);
+		border-bottom-color: transparent;
+		padding-top: max(0.875rem, env(safe-area-inset-top, 0px));
+	}
+	:root:has([data-testid="dashboard-metric-detail"])
+		.resora-workspace
+		.resora-utility-bar {
+		display: none;
+	}
+}
+.resora-workspace .resora-utility-profile {
+	display: none;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	min-width: 2.75rem;
+	min-height: 2.75rem;
+	border-radius: 999px;
+	background: var(--surface-subtle);
+	border: 1px solid var(--border);
+	padding: 0.25rem;
+}
+@media (min-width: 1200px) {
+	.resora-workspace .resora-utility-profile {
+		display: inline-flex;
+		padding: 0.25rem 0.75rem 0.25rem 0.25rem;
+	}
+}
+.resora-sidebar-link {
+	border-radius: var(--workspace-radius-control);
+	min-height: 2.75rem;
+	font-weight: 600;
+	transition:
+		background-color 200ms cubic-bezier(0.2, 0, 0, 1),
+		color 200ms cubic-bezier(0.2, 0, 0, 1),
+		transform 160ms cubic-bezier(0.2, 0, 0, 1);
+}
+.resora-sidebar-link:active {
+	transform: scale(0.98);
+}
+.resora-sidebar-link[data-active],
+.resora-sidebar-link[aria-current="page"] {
+	background: var(--primary);
+	color: var(--primary-foreground);
+	font-weight: 700;
+	box-shadow: none;
+}
+.resora-sidebar-link[data-active] svg,
+.resora-sidebar-link[aria-current="page"] svg {
+	color: var(--primary-foreground);
+	stroke: currentColor;
+}
+@media (hover: hover) {
+	.resora-sidebar-link[data-active]:hover,
+	.resora-sidebar-link[aria-current="page"]:hover {
+		background: var(--primary-hover);
+		color: var(--primary-foreground);
+	}
+	.resora-sidebar-link[data-active]:hover svg,
+	.resora-sidebar-link[aria-current="page"]:hover svg {
+		color: var(--primary-foreground);
+		stroke: currentColor;
+	}
+}
+.resora-workspace .resora-shell-content {
+	background: transparent;
+	min-height: calc(100dvh - 4rem);
+	max-width: 100%;
+	overflow-x: clip;
+	padding: 1rem var(--page-gutter) var(--dock-clearance);
+}
+@media (min-width: 1200px) {
+	.resora-workspace .resora-shell-content {
+		background: transparent;
+		border: 0;
+		border-radius: 0;
+		width: auto;
+		max-width: none;
+		margin: 0;
+		min-height: auto;
+		padding: 1.5rem 2rem 2.5rem;
+	}
+}
+.resora-workspace
+	main#workspace-content
+	:is(a, button, input, select, textarea, summary) {
+	scroll-margin-block: 6rem var(--dock-clearance);
+}
+.resora-apps-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 19;
+	background: transparent;
+}
+.resora-mobile-dock {
+	position: fixed;
+	z-index: 20;
+	inset-inline: max(min(0.75rem, 12px), env(safe-area-inset-left, 0px))
+		max(min(0.75rem, 12px), env(safe-area-inset-right, 0px));
+	bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+	display: flex;
+	align-items: flex-end;
+	gap: min(0.5rem, 8px);
+	max-width: 30rem;
+	margin-inline: auto;
+}
+.resora-nav-shell {
+	flex: 1;
+	min-width: 0;
+	border: 1px solid var(--border);
+	border-radius: 1.25rem;
+	background: var(--surface-raised);
+	box-shadow: var(--nav-shadow);
+	overflow: hidden;
+	transition: border-radius 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+.resora-nav-shell[data-open="true"] {
+	border-radius: 1.5rem;
+}
+@keyframes resoraAppsRise {
+	from {
+		opacity: 0;
+		transform: translateY(14px) scale(0.97);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+}
+.resora-apps-panel {
+	display: flex;
+	flex-direction: column;
+	max-height: min(68dvh, 29rem);
+	padding: 1.25rem 0.875rem 0.75rem;
+	transform-origin: bottom center;
+	animation: resoraAppsRise 220ms cubic-bezier(0.2, 0, 0, 1);
+}
+.resora-apps-grid {
+	display: grid;
+	min-height: 0;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 1.125rem 0.5rem;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	padding: 0.125rem;
+}
+.resora-app-item {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.4375rem;
+	min-width: 0;
+	padding: 0.125rem;
+	border-radius: var(--workspace-radius-control);
+	text-align: center;
+	text-decoration: none;
+	transition: opacity 140ms ease;
+}
+.resora-app-upcoming {
+	opacity: 0.58;
+	cursor: default;
+	pointer-events: none;
+}
+.resora-app-tile {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: clamp(3.5rem, 17vw, 4.25rem);
+	height: clamp(3.5rem, 17vw, 4.25rem);
+	border-radius: 1.25rem;
+	background: #f2f2f3;
+	transition: transform 140ms ease;
+}
+:root.dark:has(.resora-workspace) .resora-app-tile {
+	background: var(--surface-subtle);
+}
+.resora-app-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.125rem;
+	height: 2.125rem;
+	border-radius: 0.625rem;
+	background: #3b82f6;
+	color: #ffffff;
+}
+.resora-app-icon[data-icon="events"] {
+	background: #2563eb;
+}
+.resora-app-icon[data-icon="manage"] {
+	background: #5b21b6;
+}
+.resora-app-icon[data-icon="points"] {
+	background: #9333ea;
+}
+.resora-app-icon[data-icon="committees"] {
+	background: var(--primary);
+	color: var(--primary-foreground);
+}
+.resora-app-icon[data-icon="accounts"] {
+	background: #0d9488;
+}
+.resora-app-icon[data-icon="periods"] {
+	background: #db2777;
+}
+.resora-app-icon[data-icon="history"] {
+	background: var(--accent);
+	color: var(--accent-foreground);
+}
+.resora-app-icon[data-icon="cleanliness"] {
+	background: #f59e0b;
+}
+.resora-app-icon[data-icon="violations"] {
+	background: #ef4444;
+}
+.resora-app-label {
+	display: block;
+	max-width: 100%;
+	font-family: var(--workspace-font);
+	font-size: clamp(0.75rem, 2.7vw, 0.8125rem);
+	font-weight: 500;
+	line-height: 1.25;
+	letter-spacing: -0.01em;
+	color: var(--text-secondary);
+	text-align: center;
+	text-wrap: balance;
+	word-break: normal;
+	overflow-wrap: break-word;
+}
+.resora-app-soon {
+	display: inline-flex;
+	align-items: center;
+	border-radius: 999px;
+	background: var(--surface-subtle);
+	padding: 0.0625rem 0.4375rem;
+	font-size: 0.625rem;
+	font-weight: 600;
+	color: var(--text-secondary);
+}
+.resora-bottom-nav {
+	position: relative;
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	min-width: 0;
+	min-height: 3.5rem;
+	padding: min(0.25rem, 4px);
+}
+.resora-nav-indicator {
+	position: absolute;
+	top: 4px;
+	bottom: 4px;
+	left: 4px;
+	width: calc((100% - 8px) / 4);
+	border-radius: 0.875rem;
+	background: var(--primary);
+	pointer-events: none;
+	z-index: 0;
+	opacity: 0;
+	transition:
+		transform 240ms cubic-bezier(0.2, 0, 0, 1),
+		opacity 180ms ease;
+}
+.resora-nav-indicator[data-visible="true"] {
+	opacity: 1;
+}
+:root:has(.resora-workspace) .resora-nav-item {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 0.125rem;
+	min-width: 0;
+	min-height: 3rem;
+	border-radius: 0.875rem;
+	padding: 0.25rem 0.125rem;
+	font-size: var(--type-caption);
+	font-weight: 600;
+	line-height: 1.2;
+	color: var(--text-secondary);
+	background: transparent;
+	text-align: center;
+	cursor: pointer;
+	touch-action: manipulation;
+	transition:
+		color 200ms cubic-bezier(0.2, 0, 0, 1),
+		transform 140ms ease;
+}
+.resora-nav-item > span {
+	min-width: 0;
+	max-width: 100%;
+	font-size: clamp(0.625rem, 2.8vw, 0.75rem);
+	white-space: nowrap;
+	word-break: normal;
+	overflow-wrap: normal;
+}
+:root:has(.resora-workspace) .resora-nav-item svg {
+	width: min(1.5rem, 24px);
+	height: min(1.5rem, 24px);
+}
+:root:has(.resora-workspace) .resora-app-icon svg {
+	width: 1.25rem;
+	height: 1.25rem;
+	color: currentColor;
+	stroke: currentColor;
+}
+:root:has(.resora-workspace) .resora-scan-action {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	min-width: 56px;
+	width: min(3.5rem, 56px);
+	height: min(3.5rem, 56px);
+	border: 1px solid rgb(51 51 51 / 0.16);
+	border-radius: 1.125rem;
+	background: var(--primary);
+	color: var(--primary-foreground);
+	box-shadow: var(--nav-shadow);
+	touch-action: manipulation;
+}
+:root:has(.resora-workspace) .resora-scan-action svg {
+	width: 1.5rem;
+	height: 1.5rem;
+	color: var(--primary-foreground);
+	stroke: currentColor;
+}
+:root:has(.resora-workspace)
+	.resora-nav-item:is([aria-current="page"], [data-current]) {
+	background: transparent;
+	color: var(--primary-foreground);
+	font-weight: 700;
+}
+@media (prefers-reduced-motion: reduce) {
+	.resora-nav-shell,
+	.resora-nav-indicator,
+	.resora-nav-item,
+	.resora-sidebar-link,
+	.resora-apps-panel {
+		animation: none;
+		transition: none;
+	}
+}
+:root:has(.resora-workspace)
+	.resora-nav-item:is([aria-current="page"], [data-current])
+	svg {
+	color: var(--primary-foreground);
+	stroke: currentColor;
+}
+:root:has(.resora-workspace) .resora-app-item:active .resora-app-tile {
+	transform: scale(0.95);
+}
+:root:has(.resora-workspace) .resora-nav-item:active {
+	background: var(--surface-subtle);
+	color: var(--foreground);
+}
+.resora-scan-action:active {
+	background: var(--primary-pressed);
+}
+@media (hover: hover) {
+	:root:has(.resora-workspace)
+		.resora-app-item:not(.resora-app-upcoming):hover
+		.resora-app-tile {
+		transform: translateY(-1px);
+	}
+	:root:has(.resora-workspace)
+		.resora-app-item:not(.resora-app-upcoming):hover
+		.resora-app-label {
+		color: var(--foreground);
+	}
+}
+@media (min-width: 1200px) {
+	.resora-mobile-dock,
+	.resora-apps-backdrop {
+		display: none;
+	}
+	.resora-workspace {
+		--dock-clearance: 2rem;
+	}
+}

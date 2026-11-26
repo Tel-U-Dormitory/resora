@@ -1,12 +1,14 @@
 "use client";
 
 import { Card, CardContent } from "@resora/ui/components/card";
+import { Input } from "@resora/ui/components/input";
 import { Select } from "@resora/ui/components/select";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, CalendarDays, Plus } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
+import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { trpc } from "@/utils/trpc";
@@ -30,6 +32,8 @@ export default function EventList({
 	canReadPoints?: boolean;
 } = {}) {
 	const params = useSearchParams();
+	const [search, setSearch] = useState("");
+	const [page, setPage] = useState(0);
 	const [visibility, setVisibility] =
 		useState<(typeof visibilityFilters)[number][0]>("NON_ARCHIVED");
 	const query = useQuery({
@@ -41,29 +45,40 @@ export default function EventList({
 		meta: { errorHandledLocally: true },
 	});
 	const management = query.data?.canManage && params.get("view") === "manage";
-	const events =
+	const eligibleEvents =
 		query.data?.events.filter(
 			(event) =>
 				management ||
 				(event.status === "PUBLISHED" && event.visibility === "VISIBLE"),
 		) ?? [];
+	const keyword = search.trim().toLocaleLowerCase("id-ID");
+	const matching = eligibleEvents.filter(
+		(event) =>
+			!keyword ||
+			`${event.title} ${event.description ?? ""}`
+				.toLocaleLowerCase("id-ID")
+				.includes(keyword),
+	);
+	const lastPage = Math.max(0, Math.ceil(matching.length / 25) - 1);
+	const currentPage = Math.min(page, lastPage);
+	const events = matching.slice(currentPage * 25, (currentPage + 1) * 25);
 	return (
-		<section className="resora-page space-y-6">
+		<section className="resora-page resora-events resora-events-list space-y-6">
 			<div className="flex flex-wrap items-start justify-between gap-4">
-				<div className="space-y-2">
+				<div className="space-y-1.5">
 					<h1 className="font-bold text-2xl tracking-tight">
-						{management ? "Kelola event internal" : "Event internal SR"}
+						{management ? "Kelola kegiatan" : "Kegiatan"}
 					</h1>
-					<p className="text-muted-foreground text-sm">
+					<p className="hidden text-muted-foreground text-sm sm:block">
 						{management
 							? "Atur kegiatan dan kehadiran Senior Resident."
-							: "Kegiatan yang mengundang Anda."}
+							: "Kegiatan yang mengundang kamu."}
 					</p>
 				</div>
 				{management && (
 					<Link
 						href="/events/new"
-						className="focus-ring inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 font-semibold text-primary-foreground text-sm hover:bg-primary-hover sm:w-auto"
+						className="focus-ring inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 font-semibold text-sm text-white hover:bg-primary-hover hover:text-white sm:w-auto"
 					>
 						<Plus size={18} aria-hidden="true" />
 						Buat event
@@ -88,9 +103,10 @@ export default function EventList({
 						id="event-visibility"
 						value={visibility}
 						disabled={query.isFetching}
-						onChange={(event) =>
-							setVisibility(event.target.value as typeof visibility)
-						}
+						onChange={(event) => {
+							setVisibility(event.target.value as typeof visibility);
+							setPage(0);
+						}}
 					>
 						{visibilityFilters.map(([value, label]) => (
 							<option key={value} value={value}>
@@ -99,6 +115,23 @@ export default function EventList({
 						))}
 					</Select>
 				</label>
+			)}
+			<label htmlFor="event-search" className="block space-y-2 text-sm">
+				Cari judul atau deskripsi kegiatan
+				<Input
+					id="event-search"
+					type="search"
+					value={search}
+					onChange={(event) => {
+						setSearch(event.target.value);
+						setPage(0);
+					}}
+				/>
+			</label>
+			{query.fetchStatus === "paused" && (
+				<p role="status">
+					Koneksi terputus. Daftar yang sudah dimuat bisa belum terbaru.
+				</p>
 			)}
 			{(query.isPending || query.isPlaceholderData) && (
 				<div role="status" className="grid gap-3">
@@ -137,25 +170,46 @@ export default function EventList({
 				!query.error &&
 				!query.isPlaceholderData &&
 				events.length === 0 && (
-					<Card className="resora-panel">
-						<CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-							<span className="rounded-2xl bg-primary-soft p-4 text-primary">
-								<CalendarDays size={28} aria-hidden="true" />
-							</span>
-							<h2 className="font-semibold text-lg">Belum ada event</h2>
-							<p className="max-w-md text-muted-foreground text-sm">
-								{management && visibility !== "NON_ARCHIVED"
-									? "Tidak ada event yang sesuai dengan filter visibilitas ini."
-									: management
-										? "Mulai dengan membuat draft event, lalu pilih peserta yang ingin diundang."
-										: "Event akan muncul di sini setelah Anda menerima undangan."}
-							</p>
+					<Card className="resora-panel py-0">
+						<CardContent className="p-2">
+							<EmptyState
+								variant="calendar"
+								title={
+									keyword
+										? "Tidak ada kegiatan yang cocok"
+										: "Belum ada kegiatan"
+								}
+								description={
+									keyword
+										? "Ubah kata pencarian atau hapus pencarian untuk melihat daftar semula."
+										: management && visibility !== "NON_ARCHIVED"
+											? "Tidak ada event yang sesuai dengan filter visibilitas ini."
+											: management
+												? "Mulai dengan membuat draft event, lalu pilih peserta yang ingin diundang."
+												: "Kegiatan akan muncul di sini setelah kamu menerima undangan."
+								}
+								action={
+									keyword ? (
+										<Button variant="outline" onClick={() => setSearch("")}>
+											Hapus pencarian
+										</Button>
+									) : management && visibility === "NON_ARCHIVED" ? (
+										<Link
+											href="/events/new"
+											className="focus-ring inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-primary px-4 py-2 font-semibold text-primary-foreground text-xs hover:bg-primary-hover"
+										>
+											<Plus size={15} aria-hidden="true" />
+											Buat event
+										</Link>
+									) : undefined
+								}
+							/>
 						</CardContent>
 					</Card>
 				)}
 			{!query.error && !query.isPlaceholderData && events.length > 0 && (
 				<Card className="resora-panel gap-0 py-0" aria-busy={query.isFetching}>
-					<div className="hidden grid-cols-[minmax(0,1fr)_180px_140px] items-center gap-6 border-border border-b bg-muted/30 px-6 py-3 font-medium text-muted-foreground text-xs lg:grid">
+					<div className="resora-event-list-head hidden grid-cols-[minmax(0,1fr)_180px_140px] items-center gap-6 border-border border-b bg-muted/30 px-6 py-3 font-medium text-muted-foreground text-xs min-[1200px]:grid">
 						<span>Kegiatan & jadwal</span>
 						<span>Status</span>
 						<span className="text-right">Detail kegiatan</span>
@@ -164,10 +218,10 @@ export default function EventList({
 						{events.map((event) => (
 							<article
 								key={event.id}
-								className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-4 py-5 sm:py-6 lg:grid-cols-[minmax(0,1fr)_180px_140px] lg:items-center lg:gap-6"
+								className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-4 py-5 sm:py-6 min-[1200px]:grid-cols-[minmax(0,1fr)_180px_140px] min-[1200px]:items-center min-[1200px]:gap-6"
 							>
-								<div className="min-w-0 space-y-2.5">
-									<h2 className="break-words font-semibold text-base leading-snug">
+								<div className="min-w-0 space-y-2">
+									<h2 className="truncate font-semibold text-base leading-snug">
 										<Link
 											className="focus-ring rounded-md transition-colors hover:text-primary"
 											href={`/events/${event.id}`}
@@ -175,24 +229,24 @@ export default function EventList({
 											{event.title}
 										</Link>
 									</h2>
-									<p className="flex items-start gap-2 text-muted-foreground text-xs leading-relaxed sm:text-sm">
+									<p className="flex min-w-0 items-center gap-2 text-muted-foreground text-xs leading-relaxed sm:text-sm">
 										<CalendarDays
-											className="mt-0.5 size-4 shrink-0"
+											className="size-4 shrink-0"
 											aria-hidden="true"
 										/>
-										<span>
+										<span className="truncate">
 											{formatEventSchedule(event.startsAt, event.endsAt)}
 										</span>
 									</p>
 								</div>
-								<div className="flex max-w-36 flex-col items-end gap-2 self-start lg:max-w-none lg:items-start lg:self-center">
+								<div className="flex max-w-36 flex-col items-end gap-2 self-start min-[1200px]:max-w-none min-[1200px]:items-start min-[1200px]:self-center">
 									<StatusBadge status={event.status} />
 									{event.visibility !== "VISIBLE" && (
 										<StatusBadge status={event.visibility} />
 									)}
 								</div>
 								<Link
-									className="focus-ring col-span-2 inline-flex min-h-11 items-center justify-between gap-2 rounded-xl bg-muted/40 px-3.5 font-medium text-sm transition-colors hover:bg-muted lg:col-span-1"
+									className="focus-ring col-span-2 inline-flex min-h-11 items-center justify-between gap-2 rounded-xl bg-muted/40 px-3.5 font-medium text-sm transition-colors hover:bg-muted min-[1200px]:col-span-1"
 									href={`/events/${event.id}`}
 									aria-label={`Lihat detail ${event.title}`}
 								>
@@ -206,6 +260,36 @@ export default function EventList({
 			)}
 
 			{management && query.data?.isSuperadmin && <DeletedDraftHistory />}
+			{!query.error &&
+				!query.isPending &&
+				!query.isPlaceholderData &&
+				matching.length > 25 && (
+					<nav
+						aria-label="Halaman kegiatan"
+						className="flex flex-wrap items-center justify-between gap-3"
+					>
+						<p className="text-sm">
+							Halaman {currentPage + 1} dari {lastPage + 1} · {matching.length}{" "}
+							hasil pada daftar ini
+						</p>
+						<div className="flex flex-wrap gap-2">
+							<Button
+								variant="outline"
+								disabled={currentPage === 0 || query.isFetching}
+								onClick={() => setPage(currentPage - 1)}
+							>
+								Sebelumnya
+							</Button>
+							<Button
+								variant="outline"
+								disabled={currentPage === lastPage || query.isFetching}
+								onClick={() => setPage(currentPage + 1)}
+							>
+								Berikutnya
+							</Button>
+						</div>
+					</nav>
+				)}
 		</section>
 	);
 }

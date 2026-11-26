@@ -20,7 +20,8 @@ export type DashboardMetricState =
 	| { kind: "coming_soon"; message: string }
 	| { kind: "unavailable"; message: string }
 	| { kind: "error"; message: string }
-	| { kind: "forbidden"; message: string };
+	| { kind: "forbidden"; message: string }
+	| { kind: "stale"; message: string };
 
 export type DashboardExportCapability = {
 	report: "assessment" | "attendance" | "violations";
@@ -52,6 +53,41 @@ export type DashboardFixture = {
 	mode: DashboardMode;
 	scope: DashboardScope;
 	metrics: DashboardMetric[];
-	activities: DashboardActivity[];
+	activities: Array<
+		DashboardActivity & {
+			status: "PUBLISHED" | "CANCELLED" | "ARCHIVED" | "CLOSED";
+			visible: boolean;
+		}
+	>;
+	broadcasts: Array<{
+		id: string;
+		title: string;
+		content: string;
+		creatorName: string;
+		publishedAt: string;
+		expiresAt: string;
+	}>;
 	attendanceHistory: DashboardAttendanceActivity[];
 };
+
+export type DashboardScenario =
+	| "ready"
+	| "zero"
+	| "empty"
+	| "not_assessed"
+	| "missing_period"
+	| "unavailable"
+	| "stale"
+	| "slow"
+	| "401"
+	| "403"
+	| "429"
+	| "500"
+	| "503"
+	| "timeout";
+export type DashboardScenarios = Partial<
+	Record<
+		DashboardMetric["id"] | "activities" | "broadcasts" | "export",
+		DashboardScenario
+	>
+>;

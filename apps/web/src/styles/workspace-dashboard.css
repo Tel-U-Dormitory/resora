@@ -1,0 +1,495 @@
+/* F4: dashboard composition only; shared feeds keep their own contracts. */
+.resora-dashboard,
+.resora-dashboard > * {
+	min-width: 0;
+	max-width: 100%;
+}
+.resora-dashboard-layout {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 1.25rem;
+	align-items: start;
+}
+.resora-dashboard-layout > * {
+	min-width: 0;
+}
+.resora-metrics-surface {
+	min-width: 0;
+	max-width: 100%;
+}
+.resora-dashboard-metrics {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.625rem;
+}
+:root:has([data-testid="dashboard-metric-detail"])
+	.resora-dashboard
+	> :not(:has([data-testid="dashboard-metric-detail"])),
+:root:has([data-testid="dashboard-metric-detail"])
+	.resora-dashboard-layout
+	> :not(:has([data-testid="dashboard-metric-detail"])) {
+	display: none;
+}
+:root:has([data-testid="dashboard-metric-detail"]) .resora-dashboard-layout {
+	grid-template-columns: minmax(0, 1fr);
+}
+:root:has(.resora-workspace) .resora-metric-card[data-slot="card"],
+.resora-metric-card {
+	--tile-bg: var(--surface);
+	position: relative;
+	overflow: hidden;
+	border: 1px solid var(--border);
+	border-radius: 1.125rem;
+	background: var(--tile-bg);
+	box-shadow: none;
+	transition:
+		transform 140ms ease,
+		border-color 140ms ease,
+		filter 140ms ease;
+}
+:root:has(.resora-workspace)
+	.resora-metric-card:is(
+		[data-state="coming_soon"],
+		[data-state="unavailable"]
+	)[data-slot="card"],
+.resora-metric-card:is([data-state="coming_soon"], [data-state="unavailable"]) {
+	--tile-bg: transparent;
+	border: 1.5px dashed var(--border-control);
+}
+:root.dark:has(.resora-workspace) .resora-metric-card[data-slot="card"],
+:root.dark .resora-metric-card {
+	--tile-bg: var(--surface);
+}
+:root.dark:has(.resora-workspace)
+	.resora-metric-card:is(
+		[data-state="coming_soon"],
+		[data-state="unavailable"]
+	)[data-slot="card"],
+:root.dark
+	.resora-metric-card:is(
+		[data-state="coming_soon"],
+		[data-state="unavailable"]
+	) {
+	--tile-bg: transparent;
+	border: 1.5px dashed var(--border-control);
+}
+.resora-metric-drill {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.875rem;
+	height: 1.875rem;
+	border-radius: 999px;
+	border: 1px solid var(--border);
+	background: var(--surface-subtle);
+	color: var(--text-secondary);
+}
+.resora-metric-card[role="button"] {
+	cursor: pointer;
+	touch-action: manipulation;
+}
+.resora-metric-card[role="button"]:active {
+	transform: scale(0.98);
+}
+@media (hover: hover) {
+	.resora-metric-card[role="button"]:hover {
+		filter: brightness(0.97);
+	}
+	:root.dark .resora-metric-card[role="button"]:hover {
+		filter: brightness(1.08);
+	}
+}
+.resora-metric-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.25rem;
+	height: 2.25rem;
+	flex-shrink: 0;
+	border-radius: 0.6875rem;
+	background: var(--surface-subtle);
+	color: var(--text-secondary);
+}
+.resora-metric-icon[data-tone="assessment"] {
+	background: var(--accent);
+	color: var(--accent-foreground);
+}
+.resora-metric-icon[data-tone="attendance"] {
+	background: var(--secondary);
+	color: var(--secondary-foreground);
+}
+.resora-metric-icon[data-tone="violations"] {
+	background: var(--danger-tint);
+	color: var(--danger);
+}
+.resora-metric-icon[data-tone="cleanliness"] {
+	background: var(--surface-subtle);
+	border: 1px solid var(--border);
+	color: var(--text-secondary);
+}
+.resora-metric-icon[data-tone="assessment"] svg {
+	color: var(--accent-foreground);
+	stroke: currentColor;
+}
+.resora-metric-title {
+	font-size: 0.8125rem;
+	font-weight: 600;
+	line-height: 1.3;
+	color: var(--text-secondary);
+}
+.resora-metric-card[data-metric="assessment"] .resora-metric-title {
+	color: #3730a3;
+}
+:root.dark .resora-metric-card[data-metric="assessment"] .resora-metric-title {
+	color: #c7d2fe;
+}
+.resora-metric-value {
+	font-size: 1.625rem;
+	font-weight: 700;
+	line-height: 1.15;
+	letter-spacing: -0.025em;
+	font-variant-numeric: tabular-nums;
+	color: var(--foreground);
+}
+.resora-metric-card[data-metric="assessment"] .resora-metric-value {
+	color: #312e81;
+}
+.resora-metric-card[data-alert="true"] .resora-metric-value {
+	color: #dc3545;
+}
+:root.dark .resora-metric-card[data-metric="assessment"] .resora-metric-value {
+	color: #e0e7ff;
+}
+:root.dark .resora-metric-card[data-alert="true"] .resora-metric-value {
+	color: #fca5a5;
+}
+.resora-tabs-scroll {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+	scroll-snap-type: x proximity;
+	-webkit-overflow-scrolling: touch;
+}
+.resora-tabs-scroll::-webkit-scrollbar {
+	display: none;
+}
+.resora-metric-substat {
+	font-size: 0.75rem;
+	font-weight: 500;
+	line-height: 1.25;
+	color: var(--text-secondary);
+}
+.resora-metric-card[data-metric="assessment"] .resora-metric-substat {
+	color: #4338ca;
+}
+:root.dark
+	.resora-metric-card[data-metric="assessment"]
+	.resora-metric-substat {
+	color: #a5b4fc;
+}
+.resora-metric-alert-text {
+	color: #dc3545;
+}
+:root.dark .resora-metric-alert-text {
+	color: #fca5a5;
+}
+.resora-dashboard-section {
+	border-top: 1px solid var(--border);
+	padding-top: 1.125rem;
+}
+.resora-quick-launchers {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 0.625rem;
+}
+.resora-quick-launcher {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	padding: 0.875rem 0.5rem;
+	border: 1px solid var(--border);
+	border-radius: 1rem;
+	background: var(--surface);
+	text-align: center;
+	text-decoration: none;
+	transition:
+		transform 140ms ease,
+		border-color 140ms ease;
+}
+@media (max-width: 1199px) {
+	.resora-quick-launcher[href="/scan"] {
+		display: none;
+	}
+}
+.resora-quick-circle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.625rem;
+	height: 2.625rem;
+	border-radius: 999px;
+	background: var(--surface-subtle);
+	color: var(--foreground);
+	transition: transform 140ms ease;
+}
+.resora-quick-launcher[data-tone="yellow"] .resora-quick-circle {
+	background: var(--secondary);
+	color: var(--secondary-foreground);
+}
+.resora-quick-launcher[data-tone="purple"] .resora-quick-circle {
+	background: var(--accent);
+	color: var(--accent-foreground);
+}
+.resora-quick-launcher[data-tone="coral"] .resora-quick-circle {
+	background: var(--primary);
+	color: var(--primary-foreground);
+}
+.resora-quick-launcher[data-tone="coral"] .resora-quick-circle svg,
+.resora-quick-launcher[data-tone="purple"] .resora-quick-circle svg {
+	color: #ffffff;
+	stroke: currentColor;
+}
+.resora-quick-launcher:active .resora-quick-circle {
+	transform: scale(0.95);
+}
+.resora-quick-label {
+	font-size: 0.75rem;
+	font-weight: 600;
+	line-height: 1.25;
+	color: var(--foreground);
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.resora-native-list {
+	display: flex;
+	flex-direction: column;
+}
+.resora-native-row {
+	display: flex;
+	align-items: center;
+	gap: 0.875rem;
+	padding-block: 0.625rem;
+	min-height: 2.75rem;
+}
+.resora-native-row + .resora-native-row {
+	border-top: 1px solid color-mix(in oklch, var(--border), transparent 45%);
+}
+.resora-dashboard-quick .resora-feature-panel {
+	margin-bottom: 0.75rem;
+}
+.resora-dashboard-quick .resora-action-card [data-slot="card-content"] {
+	padding: 1rem;
+}
+.resora-dashboard
+	:is(.resora-dashboard-activities, .resora-dashboard-broadcasts)
+	section
+	> div:first-child {
+	flex-wrap: wrap;
+	align-items: center;
+}
+.resora-dashboard-activities a {
+	overflow-wrap: anywhere;
+}
+.resora-dashboard-activities article {
+	grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 1200px) {
+	:root:has(.resora-workspace)
+		.resora-metric-card:not([data-state="coming_soon"]):not(
+			[data-metric="assessment"]
+		)[data-slot="card"],
+	.resora-metric-card:not([data-state="coming_soon"]):not(
+		[data-metric="assessment"]
+	) {
+		--tile-bg: var(--surface);
+		border-color: var(--border);
+	}
+	:root:has(.resora-workspace)
+		.resora-metric-card[data-metric="assessment"][data-slot="card"],
+	.resora-metric-card[data-metric="assessment"] {
+		border-color: rgb(99 102 241 / 0.28);
+	}
+	.resora-metric-value {
+		font-size: 1.875rem;
+	}
+	.resora-quick-launchers {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+		gap: 0.75rem;
+		overflow-x: visible;
+	}
+	.resora-quick-launcher {
+		flex-direction: row;
+		align-items: center;
+		justify-content: flex-start;
+		gap: 0.75rem;
+		width: auto;
+		padding: 0.625rem 0.875rem;
+		border: 1px solid var(--border);
+		border-radius: 0.875rem;
+		background: var(--surface);
+		text-align: left;
+		transition:
+			background-color 140ms ease,
+			border-color 140ms ease;
+	}
+	.resora-quick-launcher:hover {
+		background: var(--surface-raised);
+		border-color: var(--border-control);
+	}
+	.resora-quick-circle {
+		width: 2.375rem;
+		height: 2.375rem;
+		flex-shrink: 0;
+		border-radius: 0.625rem;
+	}
+	.resora-quick-label {
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: var(--foreground);
+	}
+	.resora-dashboard-layout {
+		grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+		gap: 2rem;
+	}
+	.resora-dashboard-kpis,
+	.resora-dashboard-quick {
+		grid-column: 1 / -1;
+	}
+	.resora-metrics-surface {
+		margin-inline: 0;
+	}
+	.resora-dashboard-metrics {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 1rem;
+	}
+	.resora-dashboard-activities .grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.resora-dashboard-broadcasts .grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+.resora-dashboard .resora-panel {
+	padding-block: 0;
+}
+.resora-dashboard
+	:is(.resora-dashboard-activities, .resora-feature-panel)
+	[data-slot="card-content"] {
+	padding: 1rem;
+}
+.resora-dashboard :is(.resora-panel, .resora-dashboard-broadcasts) :is(p, h3) {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.resora-dashboard-broadcasts button {
+	max-width: 100%;
+	height: auto;
+	min-height: 44px;
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+.resora-broadcast-deck {
+	position: relative;
+	isolation: isolate;
+	display: flex;
+	flex-direction: column;
+	gap: 0.625rem;
+}
+.resora-broadcast-deck[data-collapsed="true"] {
+	margin-bottom: 1rem;
+}
+.resora-broadcast-deck[data-collapsed="true"]::before,
+.resora-broadcast-deck[data-collapsed="true"]::after {
+	content: "";
+	position: absolute;
+	border: 1px solid var(--border);
+	border-radius: var(--workspace-radius-card);
+	background: var(--surface);
+	pointer-events: none;
+}
+.resora-broadcast-deck[data-collapsed="true"]::after {
+	inset-inline: 1.5rem;
+	bottom: -0.875rem;
+	height: 2rem;
+	z-index: 0;
+	opacity: 0.72;
+}
+.resora-broadcast-deck[data-collapsed="true"]::before {
+	inset-inline: 0.75rem;
+	bottom: -0.4375rem;
+	height: 2rem;
+	z-index: 1;
+	opacity: 0.94;
+}
+.resora-broadcast-deck[data-collapsed="true"] > [data-resora-card] {
+	position: relative;
+	z-index: 2;
+}
+.resora-broadcast-deck[data-collapsed="true"]
+	> [data-resora-card]:nth-child(n + 2) {
+	display: none;
+}
+.resora-broadcast-card[data-slot="card"],
+.resora-broadcast-card {
+	box-shadow: 0 2px 8px rgb(0 0 0 / 0.04);
+}
+:root.dark .resora-broadcast-card[data-slot="card"],
+:root.dark .resora-broadcast-card {
+	box-shadow: 0 2px 10px rgb(0 0 0 / 0.28);
+}
+.resora-broadcast-badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.75rem;
+	height: 2.75rem;
+	flex-shrink: 0;
+	border-radius: 0.75rem;
+	background: #ebe9fe;
+	color: #5b4fe9;
+}
+.resora-broadcast-badge[data-tone="1"] {
+	background: #fce7f3;
+	color: #e11d48;
+}
+.resora-broadcast-badge[data-tone="2"] {
+	background: #d1fae5;
+	color: #059669;
+}
+:root.dark .resora-broadcast-badge {
+	background: #2b2847;
+	color: #a5b4fc;
+}
+:root.dark .resora-broadcast-badge[data-tone="1"] {
+	background: #3f1d2b;
+	color: #fda4af;
+}
+:root.dark .resora-broadcast-badge[data-tone="2"] {
+	background: #143328;
+	color: #6ee7b7;
+}
+.resora-dashboard-broadcasts .resora-broadcast-more-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 2.375rem;
+	margin-inline: auto;
+	margin-top: 1.25rem;
+	border: 1px solid var(--border);
+	border-radius: 0.75rem;
+	background: var(--surface-subtle);
+	padding: 0.375rem 1rem;
+	font-size: 0.8125rem;
+	font-weight: 600;
+	color: var(--text-secondary);
+}
+@media (hover: hover) {
+	.resora-dashboard-broadcasts .resora-broadcast-more-btn:hover {
+		color: var(--foreground);
+		background: var(--surface-raised);
+	}
+}

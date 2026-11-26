@@ -2,8 +2,9 @@
 
 import { Card, CardContent } from "@resora/ui/components/card";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, CalendarDays, History } from "lucide-react";
+import { CalendarDays } from "lucide-react";
 import Link from "next/link";
+import { EmptyState } from "@/components/empty-state";
 import {
 	eventErrorMessage,
 	formatEventSchedule,
@@ -16,6 +17,10 @@ import type {
 	DashboardActivity,
 	DashboardAttendanceActivity,
 } from "./dashboard.contracts";
+import {
+	previewFailureState,
+	requestDashboardActivities,
+} from "./dashboard-preview-api";
 import { useDashboardPreview } from "./dashboard-preview-context";
 
 function ActivityCard({
@@ -26,26 +31,33 @@ function ActivityCard({
 	href?: `/events/${string}`;
 }) {
 	return (
-		<Card className="resora-panel min-w-0">
-			<CardContent className="flex min-h-32 flex-col gap-3 p-4 sm:p-5">
-				<h3 className="break-words font-semibold leading-snug">
-					{href ? (
-						<Link
-							className="focus-ring rounded-md hover:text-primary"
-							href={href}
-						>
-							{activity.title}
-						</Link>
-					) : (
-						activity.title
-					)}
-				</h3>
-				<p className="flex items-start gap-2 text-muted-foreground text-sm">
-					<CalendarDays aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-					<span>{formatEventSchedule(activity.startsAt, activity.endsAt)}</span>
-				</p>
-			</CardContent>
-		</Card>
+		<div className="flex min-w-0 items-start justify-between gap-3 rounded-xl border border-border bg-surface-subtle/50 p-3">
+			<div className="flex min-w-0 flex-1 items-start gap-3">
+				<span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-surface text-foreground">
+					<CalendarDays aria-hidden="true" className="size-4" />
+				</span>
+				<div className="min-w-0 flex-1 space-y-1">
+					<h3 className="line-clamp-2 font-bold text-sm leading-snug">
+						{href ? (
+							<Link
+								className="focus-ring rounded-md hover:text-primary"
+								href={href}
+							>
+								{activity.title}
+							</Link>
+						) : (
+							activity.title
+						)}
+					</h3>
+					<p className="text-muted-foreground text-xs">
+						{formatEventSchedule(activity.startsAt, activity.endsAt)}
+					</p>
+				</div>
+			</div>
+			<span className="shrink-0 rounded-full border border-info/25 bg-info-tint px-2.5 py-0.5 font-semibold text-[11px] text-info">
+				Terjadwal
+			</span>
+		</div>
 	);
 }
 
@@ -91,22 +103,39 @@ function AttendanceHistoryCard({
 
 function EmptyAttendance() {
 	return (
-		<Card className="resora-panel">
-			<CardContent className="flex min-h-24 items-center gap-3 p-4 sm:p-5">
-				<History
-					aria-hidden="true"
-					className="size-5 shrink-0 text-muted-foreground"
+		<Card className="resora-panel py-0">
+			<CardContent className="p-2">
+				<EmptyState
+					compact
+					variant="history"
+					title="Belum ada riwayat kehadiran."
+					description="Catatan kehadiran kamu akan muncul setelah mengikuti kegiatan."
 				/>
-				<p className="text-muted-foreground text-sm">
-					Belum ada riwayat kehadiran.
-				</p>
 			</CardContent>
 		</Card>
 	);
 }
 
 export function DashboardActivities({ personalSr }: { personalSr: boolean }) {
-	const { fixture, previewMode } = useDashboardPreview();
+	const { fixture, previewMode, identityKey, scenarios } =
+		useDashboardPreview();
+	const preview = useQuery({
+		queryKey: [
+			"dashboard-preview",
+			identityKey,
+			previewMode,
+			"activities",
+			scenarios.activities ?? "ready",
+		],
+		queryFn: ({ signal }) => {
+			if (!fixture) throw new Error("Preview disabled");
+			return requestDashboardActivities(fixture, scenarios.activities, signal);
+		},
+		enabled: !!fixture,
+		retry: false,
+		gcTime: 0,
+		meta: { errorHandledLocally: true },
+	});
 	const query = useQuery({
 		...trpc.attendance.list.queryOptions({ visibility: "NON_ARCHIVED" }),
 		enabled: !fixture,
@@ -134,11 +163,11 @@ export function DashboardActivities({ personalSr }: { personalSr: boolean }) {
 					new Date(second.startsAt).getTime(),
 			)
 			.slice(0, 5) ?? [];
-	const fixtureActivities = fixture?.activities.slice(0, 5) ?? [];
+	const fixtureActivities = preview.data?.activities ?? [];
 	const forbidden = query.error?.data?.code === "FORBIDDEN";
 	const showPersonalHistory = personalSr && previewMode === "personal";
 	const historyItems = fixture
-		? fixture.attendanceHistory.slice(0, 3)
+		? (preview.data?.attendanceHistory ?? [])
 		: ownHistory.data?.items.slice(0, 3).map((item) => ({
 				id: item.event.id,
 				title: item.event.title,
@@ -149,23 +178,43 @@ export function DashboardActivities({ personalSr }: { personalSr: boolean }) {
 	const historyForbidden = ownHistory.error?.data?.code === "FORBIDDEN";
 
 	return (
-		<section aria-labelledby="dashboard-activities-title" className="space-y-3">
-			<div className="flex items-end justify-between gap-3">
-				<h2 id="dashboard-activities-title" className="font-semibold text-lg">
+		<section
+			aria-labelledby="dashboard-activities-title"
+			className="space-y-3 rounded-2xl border border-border bg-surface p-4"
+		>
+			<div className="flex items-center justify-between gap-2">
+				<h2 id="dashboard-activities-title" className="font-bold text-base">
 					Kegiatan mendatang
 				</h2>
 				{!fixture && (
 					<Link
-						className="focus-ring inline-flex min-h-10 items-center gap-1 rounded-lg px-2 font-semibold text-primary text-sm"
+						className="focus-ring inline-flex shrink-0 items-center rounded-lg px-2 py-1 font-semibold text-primary text-xs hover:underline"
 						href="/events"
 					>
-						Semua kegiatan <ArrowRight aria-hidden="true" className="size-4" />
+						Lihat jadwal
 					</Link>
 				)}
 			</div>
 			{fixture ? (
-				fixtureActivities.length ? (
-					<div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+				preview.isPending ? (
+					<div
+						role="status"
+						className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
+					>
+						<span className="sr-only">Memuat kegiatan…</span>
+						{[1, 2].map((item) => (
+							<Skeleton key={item} className="h-32 w-full rounded-2xl" />
+						))}
+					</div>
+				) : preview.error ? (
+					<div role="alert" className="space-y-3">
+						<p>{previewFailureState(preview.error).message}</p>
+						<Button variant="outline" onClick={() => void preview.refetch()}>
+							Muat ulang kegiatan
+						</Button>
+					</div>
+				) : fixtureActivities.length ? (
+					<div className="space-y-2.5">
 						{fixtureActivities.map((activity) => (
 							<ActivityCard key={activity.id} activity={activity} />
 						))}
@@ -230,7 +279,7 @@ export function DashboardActivities({ personalSr }: { personalSr: boolean }) {
 					</CardContent>
 				</Card>
 			) : events.length ? (
-				<div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+				<div className="space-y-2.5">
 					{events.map((event) => (
 						<ActivityCard
 							key={event.id}
@@ -258,7 +307,16 @@ export function DashboardActivities({ personalSr }: { personalSr: boolean }) {
 						Riwayat kehadiran
 					</h3>
 					{fixture ? (
-						historyItems?.length ? (
+						preview.isPending ? (
+							<div role="status" className="space-y-2">
+								<span className="sr-only">Memuat riwayat kehadiran…</span>
+								<Skeleton className="h-24 w-full rounded-2xl" />
+							</div>
+						) : preview.error ? (
+							<p role="alert">
+								Riwayat kehadiran tidak ditampilkan karena sumber gagal dimuat.
+							</p>
+						) : historyItems?.length ? (
 							<AttendanceHistoryCard items={historyItems} linkEvents={false} />
 						) : (
 							<EmptyAttendance />
@@ -298,16 +356,11 @@ export function DashboardActivities({ personalSr }: { personalSr: boolean }) {
 
 function EmptyActivities() {
 	return (
-		<Card className="resora-panel">
-			<CardContent className="flex min-h-32 items-center gap-3 p-4 sm:p-5">
-				<CalendarDays
-					aria-hidden="true"
-					className="size-5 shrink-0 text-muted-foreground"
-				/>
-				<p className="text-muted-foreground text-sm">
-					Belum ada kegiatan mendatang.
-				</p>
-			</CardContent>
-		</Card>
+		<EmptyState
+			compact
+			variant="calendar"
+			title="Belum ada kegiatan mendatang."
+			description="Jadwal kegiatan terbaru akan tampil di sini."
+		/>
 	);
 }

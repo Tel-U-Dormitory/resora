@@ -78,14 +78,39 @@ export function CommitteeDialog({
 				if (!open && !submitting.current) onClose();
 			}}
 		>
-			<DialogContent className="resora-admin-dialog" initialFocus={titleRef}>
-				<DialogTitle
-					ref={titleRef}
-					tabIndex={-1}
-					className="font-semibold text-xl outline-none"
-				>
-					{title}
-				</DialogTitle>
+			<DialogContent
+				className="resora-admin-dialog resora-committee-dialog"
+				initialFocus={titleRef}
+			>
+				<div className="flex items-start justify-between gap-3">
+					<DialogTitle
+						ref={titleRef}
+						tabIndex={-1}
+						className="font-semibold text-xl outline-none"
+					>
+						{title}
+					</DialogTitle>
+					<Button
+						type="button"
+						variant="outline"
+						size="icon"
+						aria-label="Tutup dialog"
+						disabled={busy}
+						onClick={onClose}
+						className="size-10 shrink-0 rounded-full"
+					>
+						<svg
+							aria-hidden="true"
+							viewBox="0 0 16 16"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="1.75"
+							className="size-4"
+						>
+							<path d="m4 4 8 8M12 4l-8 8" />
+						</svg>
+					</Button>
+				</div>
 				<DialogDescription className="mt-2 text-muted-foreground text-sm">
 					{description}
 				</DialogDescription>

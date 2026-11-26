@@ -26,7 +26,9 @@ export default function PeriodWorkspace() {
 		retry: false,
 		meta: { errorHandledLocally: true },
 	});
-	const filtered = (accounts.data?.accounts ?? []).filter((a) =>
+	const filtered = (
+		accounts.error ? [] : (accounts.data?.accounts ?? [])
+	).filter((a) =>
 		`${a.name} ${a.nim ?? ""}`
 			.toLowerCase()
 			.includes(search.trim().toLowerCase()),
@@ -37,13 +39,13 @@ export default function PeriodWorkspace() {
 	);
 	const visible = filtered.slice((currentPage - 1) * 20, currentPage * 20);
 	return (
-		<section className="resora-page space-y-6">
+		<section className="resora-page resora-administration resora-admin-periods space-y-6">
 			<header className="flex flex-wrap justify-between gap-4">
-				<div className="space-y-2">
+				<div className="space-y-1.5">
 					<h1 className="font-bold text-2xl tracking-tight">
 						Periode menjabat
 					</h1>
-					<p className="text-muted-foreground text-sm">
+					<p className="hidden text-muted-foreground text-sm sm:block">
 						Buat periode, pilih anggota, lalu tinjau penetapan sebelum
 						menyimpan.
 					</p>
@@ -129,77 +131,82 @@ export default function PeriodWorkspace() {
 								</Button>
 							</div>
 						)}
-						{accounts.data && !filtered.length && (
-							<p className="py-8 text-center text-muted-foreground">
-								Tidak ada anggota yang sesuai pencarian.
-							</p>
-						)}
-						<ul className="divide-y divide-border">
-							{visible.map((a) => (
-								<li key={a.userId} className="flex items-start gap-4 py-4">
-									<Checkbox
-										id={`member-${a.userId}`}
-										className="mt-1 rounded"
-										checked={selected.includes(a.userId)}
-										disabled={
-											!periodId ||
-											a.periods.some((p) => p.id === periodId) ||
-											(!selected.includes(a.userId) && selected.length >= 200)
-										}
-										onCheckedChange={(checked) =>
-											setSelected((current) =>
-												checked
-													? [...current, a.userId]
-													: current.filter((id) => id !== a.userId),
-											)
-										}
-									/>
-									<label
-										htmlFor={`member-${a.userId}`}
-										className="flex flex-1 cursor-pointer flex-wrap justify-between gap-2 text-sm"
-									>
-										<span>
-											<span className="block font-medium">{a.name}</span>
-											<span className="text-muted-foreground">
-												{a.nim} · {a.department ?? a.departmentCode}
-												{!a.isActive && " · Diarsipkan manual"}
-											</span>
-										</span>
-										<span className="text-muted-foreground">
-											{a.periods.some((p) => p.id === periodId) && (
-												<span className="block font-medium text-primary">
-													Sudah ditetapkan
+						{!accounts.error && accounts.data && (
+							<>
+								{!filtered.length && (
+									<p className="py-8 text-center text-muted-foreground">
+										Tidak ada anggota yang sesuai pencarian.
+									</p>
+								)}
+								<ul className="divide-y divide-border">
+									{visible.map((a) => (
+										<li key={a.userId} className="flex items-start gap-4 py-4">
+											<Checkbox
+												id={`member-${a.userId}`}
+												className="mt-1 rounded"
+												checked={selected.includes(a.userId)}
+												disabled={
+													!periodId ||
+													a.periods.some((p) => p.id === periodId) ||
+													(!selected.includes(a.userId) &&
+														selected.length >= 200)
+												}
+												onCheckedChange={(checked) =>
+													setSelected((current) =>
+														checked
+															? [...current, a.userId]
+															: current.filter((id) => id !== a.userId),
+													)
+												}
+											/>
+											<label
+												htmlFor={`member-${a.userId}`}
+												className="flex flex-1 cursor-pointer flex-wrap justify-between gap-2 text-sm"
+											>
+												<span>
+													<span className="block font-medium">{a.name}</span>
+													<span className="text-muted-foreground">
+														{a.nim} · {a.department ?? a.departmentCode}
+														{!a.isActive && " · Diarsipkan manual"}
+													</span>
 												</span>
-											)}
-											{a.periods.length
-												? a.periods.map((p) => p.name).join(", ")
-												: "Belum ada periode"}
-										</span>
-									</label>
-								</li>
-							))}
-						</ul>
-						<div className="flex items-center justify-between gap-3 text-sm">
-							<span>
-								{filtered.length} anggota · Halaman {currentPage}
-							</span>
-							<div className="flex gap-2">
-								<Button
-									variant="outline"
-									disabled={currentPage === 1}
-									onClick={() => setPage(currentPage - 1)}
-								>
-									Sebelumnya
-								</Button>
-								<Button
-									variant="outline"
-									disabled={currentPage * 20 >= filtered.length}
-									onClick={() => setPage(currentPage + 1)}
-								>
-									Berikutnya
-								</Button>
-							</div>
-						</div>
+												<span className="text-muted-foreground">
+													{a.periods.some((p) => p.id === periodId) && (
+														<span className="block font-medium text-primary">
+															Sudah ditetapkan
+														</span>
+													)}
+													{a.periods.length
+														? a.periods.map((p) => p.name).join(", ")
+														: "Belum ada periode"}
+												</span>
+											</label>
+										</li>
+									))}
+								</ul>
+								<div className="flex items-center justify-between gap-3 text-sm">
+									<span>
+										{filtered.length} anggota · Halaman {currentPage}
+									</span>
+									<div className="flex gap-2">
+										<Button
+											variant="outline"
+											disabled={currentPage === 1}
+											onClick={() => setPage(currentPage - 1)}
+										>
+											Sebelumnya
+										</Button>
+										<Button
+											variant="outline"
+											disabled={currentPage * 20 >= filtered.length}
+											onClick={() => setPage(currentPage + 1)}
+										>
+											Berikutnya
+										</Button>
+									</div>
+								</div>
+							</>
+						)}
 					</CardContent>
 				</Card>
 			</AccountPeriodManager>

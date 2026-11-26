@@ -652,3 +652,60 @@ test("B2 uses session capability and preserves SSR guards, dashboard shortcuts a
 			expect(source).not.toContain(forbidden);
 	}
 });
+
+test("inbox search filters only loaded title/content/sender and preserves server pagination", () => {
+	const f = fixture("./broadcast-feed.tsx");
+	f.setQuery("list", {
+		data: {
+			items: [
+				item,
+				{
+					...item,
+					id: "second",
+					title: "Other",
+					content: "Different",
+					creatorName: "Another",
+				},
+			],
+			total: 21,
+		},
+	});
+	let tree = f.render({ view: "ACTIVE", canManage: true });
+	expect(text(tree)).toContain("Inbox");
+	const search = nodes(tree).find((node) => node.props.id === "inbox-search");
+	if (!search) throw Error("Search input missing");
+	(search.props.onChange as (event: unknown) => void)({
+		target: { value: "SYNTHETIC" },
+	});
+	tree = f.render({ view: "ACTIVE", canManage: true });
+	expect(text(tree)).toContain("1 hasil di halaman ini");
+	expect(text(tree)).not.toContain("Different");
+	expect(f.queries.at(-1)?.input).toEqual({
+		view: "ACTIVE",
+		limit: 10,
+		offset: 0,
+	});
+	const input = nodes(tree).find((node) => node.props.id === "inbox-search");
+	if (!input) throw Error("Search input missing");
+	(input.props.onChange as (event: unknown) => void)({
+		target: { value: "no-match" },
+	});
+	tree = f.render({ view: "ACTIVE", canManage: true });
+	expect(text(tree)).toContain(
+		"Tidak ada pengumuman yang cocok di halaman ini.",
+	);
+	click(button(tree, "Hapus pencarian"));
+	tree = f.render({ view: "ACTIVE", canManage: true });
+	expect(text(tree)).toContain("Different");
+	expect(nodes(tree).filter((node) => node.type === "details")).toHaveLength(2);
+	click(button(tree, "Berikutnya"));
+	tree = f.render({ view: "ACTIVE", canManage: true });
+	expect(f.queries.at(-1)?.input).toEqual({
+		view: "ACTIVE",
+		limit: 10,
+		offset: 10,
+	});
+	expect(
+		nodes(tree).find((node) => node.props.id === "inbox-search")?.props.value,
+	).toBe("");
+});

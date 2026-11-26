@@ -24,3 +24,62 @@ export function scanRegion(video: HTMLVideoElement): QrScanner.ScanRegion {
 		downScaledHeight: Math.max(1, Math.round(cropHeight * downscale)),
 	};
 }
+
+export type CameraZoom = {
+	min: number;
+	max: number;
+	step: number;
+	value: number;
+};
+type ZoomTrack = MediaStreamTrack & {
+	getCapabilities: () => MediaTrackCapabilities & {
+		zoom?: Omit<CameraZoom, "value">;
+	};
+	getSettings: () => MediaTrackSettings & { zoom?: number };
+};
+
+export function cameraZoom(
+	track: MediaStreamTrack | undefined,
+): CameraZoom | null {
+	try {
+		const zoomTrack = track as ZoomTrack | undefined;
+		const capabilities = zoomTrack?.getCapabilities?.() as
+			| (MediaTrackCapabilities & { zoom?: Omit<CameraZoom, "value"> })
+			| undefined;
+		const range = capabilities?.zoom;
+		const value = zoomTrack?.getSettings?.().zoom;
+		if (!range || typeof value !== "number") return null;
+		const { min, max, step } = range;
+		if (
+			![min, max, step, value].every(Number.isFinite) ||
+			min <= 0 ||
+			max <= min ||
+			step <= 0 ||
+			value < min ||
+			value > max
+		)
+			return null;
+		return { min, max, step, value };
+	} catch {
+		return null;
+	}
+}
+
+export async function setCameraZoom(
+	track: MediaStreamTrack,
+	value: number,
+	range: CameraZoom,
+) {
+	if (!Number.isFinite(value)) throw new Error("INVALID_ZOOM");
+	const bounded = Math.min(
+		range.max,
+		Math.max(
+			range.min,
+			range.min + Math.round((value - range.min) / range.step) * range.step,
+		),
+	);
+	const constraint: MediaTrackConstraintSet & { zoom: number } = {
+		zoom: bounded,
+	};
+	await track.applyConstraints({ advanced: [constraint] });
+}

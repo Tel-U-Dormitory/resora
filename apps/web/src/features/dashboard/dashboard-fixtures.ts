@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { DashboardFixture, DashboardMode } from "./dashboard.contracts";
 import management from "./fixtures/management.json";
 import personal from "./fixtures/personal.json";
+import states from "./fixtures/states.json";
 
 const dashboardFixtureSchema = z.object({
 	mode: z.enum(["personal", "management"]),
@@ -44,6 +45,7 @@ const dashboardFixtureSchema = z.object({
 						"unavailable",
 						"error",
 						"forbidden",
+						"stale",
 					] as const
 				).map((kind) =>
 					z.object({ kind: z.literal(kind), message: z.string() }),
@@ -58,12 +60,24 @@ const dashboardFixtureSchema = z.object({
 				.nullable(),
 		}),
 	),
+	broadcasts: z.array(
+		z.object({
+			id: z.string(),
+			title: z.string(),
+			content: z.string(),
+			creatorName: z.string(),
+			publishedAt: z.iso.datetime({ offset: true }),
+			expiresAt: z.iso.datetime({ offset: true }),
+		}),
+	),
 	activities: z.array(
 		z.object({
 			id: z.string(),
 			title: z.string(),
 			startsAt: z.string(),
 			endsAt: z.string(),
+			status: z.enum(["PUBLISHED", "CANCELLED", "ARCHIVED", "CLOSED"]),
+			visible: z.boolean(),
 		}),
 	),
 	attendanceHistory: z.array(
@@ -93,3 +107,7 @@ export function dashboardFixturesFor(
 		? dashboardFixtures
 		: { personal: dashboardFixtures.personal };
 }
+
+export const dashboardStateFixtures = z
+	.record(z.string(), dashboardFixtureSchema.shape.metrics.element.shape.state)
+	.parse(states);

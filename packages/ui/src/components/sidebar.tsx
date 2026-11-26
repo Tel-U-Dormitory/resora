@@ -203,7 +203,7 @@ function Sidebar({
 
 	return (
 		<div
-			className="group peer hidden text-sidebar-foreground lg:block"
+			className="group peer hidden text-sidebar-foreground min-[1200px]:block"
 			data-state={state}
 			data-collapsible={state === "collapsed" ? collapsible : ""}
 			data-variant={variant}
@@ -226,7 +226,7 @@ function Sidebar({
 				data-slot="sidebar-container"
 				data-side={side}
 				className={cn(
-					"fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear data-[side=right]:right-0 data-[side=left]:left-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] lg:flex",
+					"fixed inset-y-0 z-10 hidden h-dvh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear data-[side=right]:right-0 data-[side=left]:left-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] min-[1200px]:flex",
 					// Adjust the padding for floating and inset variants.
 					variant === "floating" || variant === "inset"
 						? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
@@ -238,7 +238,7 @@ function Sidebar({
 				<div
 					data-sidebar="sidebar"
 					data-slot="sidebar-inner"
-					className="flex size-full flex-col bg-sidebar group-data-[variant=floating]:rounded-none group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-sidebar-border"
+					className="flex size-full flex-col bg-sidebar group-data-[variant=floating]:rounded-xl group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-sidebar-border"
 				>
 					{children}
 				</div>
@@ -342,7 +342,7 @@ function SidebarGroupLabel({
 		props: mergeProps<"div">(
 			{
 				className: cn(
-					"flex h-8 shrink-0 items-center rounded-none px-2 text-sidebar-foreground/70 text-xs outline-hidden ring-sidebar-ring transition-[margin,opacity] duration-200 ease-linear focus-visible:ring-2 group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0 [&>svg]:size-4 [&>svg]:shrink-0",
+					"flex h-8 shrink-0 items-center rounded-xl px-2 text-sidebar-foreground/70 text-xs outline-hidden ring-sidebar-ring transition-[margin,opacity] duration-200 ease-linear focus-visible:ring-2 group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0 [&>svg]:size-4 [&>svg]:shrink-0",
 					className,
 				),
 			},
@@ -393,7 +393,7 @@ function SidebarMenuItem({ className, ...props }: React.ComponentProps<"li">) {
 }
 
 const sidebarMenuButtonVariants = cva(
-	"peer/menu-button group/menu-button flex w-full items-center gap-2 overflow-hidden rounded-none p-2 text-left text-xs outline-hidden ring-sidebar-ring transition-[width,height,padding] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 group-has-data-[sidebar=menu-action]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-active:bg-sidebar-accent data-active:font-medium data-active:text-sidebar-accent-foreground data-open:hover:bg-sidebar-accent data-open:hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:size-11! group-data-[collapsible=icon]:p-2! [&>span:last-child]:truncate [&_svg]:size-4 [&_svg]:shrink-0",
+	"peer/menu-button group/menu-button flex w-full items-center gap-2.5 overflow-hidden rounded-xl p-2 text-left text-xs outline-hidden ring-sidebar-ring transition-[width,height,padding,background-color,color] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 group-has-data-[sidebar=menu-action]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-active:bg-primary data-active:font-bold data-active:text-sidebar-primary-foreground data-active:hover:bg-primary data-open:hover:bg-sidebar-accent data-active:hover:text-sidebar-primary-foreground data-open:hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:size-11! group-data-[collapsible=icon]:p-2! [&>span:last-child]:truncate [&_svg]:size-5 [&_svg]:shrink-0 data-active:[&_svg]:text-sidebar-primary-foreground data-active:hover:[&_svg]:text-sidebar-primary-foreground",
 	{
 		variants: {
 			variant: {

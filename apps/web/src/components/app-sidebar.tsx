@@ -13,15 +13,6 @@ import {
 	SidebarMenuItem,
 	useSidebar,
 } from "@resora/ui/components/sidebar";
-import {
-	CalendarDays,
-	CalendarRange,
-	History,
-	LayoutDashboard,
-	ListChecks,
-	ScanLine,
-	Users,
-} from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
@@ -29,28 +20,20 @@ import { useEffect } from "react";
 import { getSidebarGroups, isSidebarLinkActive } from "@/config/navigation";
 import { UserMenu } from "@/features/identity/public";
 
-const icons = {
-	dashboard: LayoutDashboard,
-	events: CalendarDays,
-	CalendarRange,
-	scan: ScanLine,
-	history: History,
-	manage: ListChecks,
-	accounts: Users,
-	committees: Users,
-	periods: CalendarRange,
-};
+import { navigationIcons as icons } from "./navigation-icons";
 
 export function AppSidebar({
 	name,
 	canManageEvents,
 	canManageCommittee,
+	canReadAttendancePoints,
 	isSuperadmin,
 	isSr,
 }: {
 	name: string;
 	canManageEvents: boolean;
 	canManageCommittee?: boolean;
+	canReadAttendancePoints?: boolean;
 	isSuperadmin: boolean;
 	isSr: boolean;
 }) {
@@ -62,6 +45,7 @@ export function AppSidebar({
 		isSr,
 		canManageEvents,
 		canManageCommittee,
+		canReadAttendancePoints,
 		isSuperadmin,
 	});
 	const routeKey = `${pathname}?${params.toString()}`;
@@ -73,11 +57,11 @@ export function AppSidebar({
 	}, [isMobile, setOpenMobile]);
 	return (
 		<Sidebar id="resora-sidebar" collapsible="icon" className="border-border">
-			<SidebarHeader className="h-20 justify-center px-3">
+			<SidebarHeader className="h-16 justify-center border-border border-b px-3">
 				<Link
 					href="/dashboard"
 					onClick={() => setOpenMobile(false)}
-					aria-label="RESORA · Dashboard"
+					aria-label="RESORA · Beranda"
 					className="focus-ring flex h-12 items-center gap-2.5 overflow-hidden rounded-xl px-1 font-extrabold text-lg tracking-tight group-data-[collapsible=icon]:justify-center"
 				>
 					<Image

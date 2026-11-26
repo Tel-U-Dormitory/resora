@@ -14,16 +14,20 @@
 			"state": {
 				"kind": "ready_summary",
 				"values": [
-					{ "label": "Nilai akhir pribadi", "value": 86, "unit": "/100" },
-					{ "label": "Kelengkapan penilaian", "value": 91, "unit": "%" }
+					{
+						"label": "Nilai akhir pribadi",
+						"value": 86,
+						"unit": "/100"
+					},
+					{
+						"label": "Kelengkapan penilaian",
+						"value": 91,
+						"unit": "%"
+					}
 				],
 				"note": "Data sintetis untuk preview"
 			},
-			"export": {
-				"report": "assessment",
-				"formats": ["xlsx", "pdf"],
-				"filters": ["period"]
-			}
+			"export": null
 		},
 		{
 			"id": "attendance",
@@ -37,33 +41,42 @@
 			"state": {
 				"kind": "ready_summary",
 				"values": [
-					{ "label": "Total kegiatan relevan", "value": 8, "unit": "kegiatan" },
-					{ "label": "Hadir", "value": 7, "unit": "kegiatan" },
-					{ "label": "Tidak hadir", "value": 1, "unit": "kegiatan" }
+					{
+						"label": "Total kegiatan relevan",
+						"value": 8,
+						"unit": "kegiatan"
+					},
+					{
+						"label": "Hadir",
+						"value": 7,
+						"unit": "kegiatan"
+					},
+					{
+						"label": "Tidak hadir",
+						"value": 1,
+						"unit": "kegiatan"
+					}
 				],
 				"note": "Data sintetis untuk preview"
 			},
-			"export": {
-				"report": "attendance",
-				"formats": ["xlsx"],
-				"filters": ["period"]
-			}
+			"export": null
 		},
 		{
 			"id": "violations",
 			"title": "Pelanggaran aktif",
 			"period": {
-				"label": "Periode 2026/2027",
+				"label": "Periode menjabat 2026/2027",
 				"startsAt": "2026-08-01T00:00:00+07:00",
 				"endsAt": "2027-07-31T23:59:59+07:00"
 			},
-			"scope": "individual",
-			"state": { "kind": "empty", "message": "Tidak ada pelanggaran aktif." },
-			"export": {
-				"report": "violations",
-				"formats": ["xlsx", "pdf"],
-				"filters": ["period"]
-			}
+			"scope": "organization",
+			"state": {
+				"kind": "ready",
+				"value": 0,
+				"unit": "laporan",
+				"note": "Laporan aktif yang dapat diakses; bukan jumlah pelanggaran pribadi."
+			},
+			"export": null
 		},
 		{
 			"id": "cleanliness",
@@ -86,13 +99,17 @@
 			"id": "fixture-personal-activity-1",
 			"title": "Orientasi Hunian",
 			"startsAt": "2026-12-02T09:00:00+07:00",
-			"endsAt": "2026-12-02T11:00:00+07:00"
+			"endsAt": "2026-12-02T11:00:00+07:00",
+			"status": "PUBLISHED",
+			"visible": true
 		},
 		{
 			"id": "fixture-personal-activity-2",
 			"title": "Diskusi Pengembangan SR",
 			"startsAt": "2026-12-08T13:00:00+07:00",
-			"endsAt": "2026-12-08T15:00:00+07:00"
+			"endsAt": "2026-12-08T15:00:00+07:00",
+			"status": "PUBLISHED",
+			"visible": true
 		}
 	],
 	"attendanceHistory": [
@@ -109,6 +126,16 @@
 			"startsAt": "2026-11-18T15:00:00+07:00",
 			"endsAt": "2026-11-18T16:00:00+07:00",
 			"presence": "PENDING"
+		}
+	],
+	"broadcasts": [
+		{
+			"id": "fixture-broadcast-1",
+			"title": "Jadwal koordinasi Senior Resident",
+			"content": "Koordinasi rutin membahas kesiapan kegiatan dan informasi operasional asrama. Ini contoh pengumuman sintetis untuk meninjau dashboard, bukan pengumuman yang diterbitkan.",
+			"creatorName": "Pengurus sintetis",
+			"publishedAt": "2026-11-26T08:00:00+07:00",
+			"expiresAt": "2026-12-02T23:00:00+07:00"
 		}
 	]
 }

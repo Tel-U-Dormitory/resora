@@ -1,0 +1,49 @@
+.resora-committee {
+	min-width: 0;
+	max-width: 64rem;
+	margin-inline: auto;
+}
+:is(.resora-committee, .resora-committee-dialog)
+	:is(h1, h2, h3, p, span, label, legend, a, button, summary) {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+:is(.resora-committee, .resora-committee-dialog) :is(button, a) {
+	max-width: 100%;
+	height: auto;
+	min-height: 44px;
+	white-space: normal;
+	transition-property: background-color, border-color, color, box-shadow;
+}
+:is(.resora-committee, .resora-committee-dialog) .flex:not(.flex-col) {
+	flex-wrap: wrap;
+}
+.resora-committee [data-slot="card"] {
+	padding-block: 0;
+}
+.resora-committee [data-slot="card-content"] {
+	padding: 1rem;
+}
+.resora-committee-list ul.grid {
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+}
+.resora-committee-detail ul.grid {
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+}
+.resora-committee-dialog {
+	width: calc(100% - 32px);
+	padding: min(1.5rem, 24px);
+}
+.resora-committee-dialog :is(form, fieldset, ul, li, input, select, textarea) {
+	min-width: 0;
+	max-width: 100%;
+}
+.resora-committee-dialog input:not([type="checkbox"]) {
+	font-size: max(1rem, 16px);
+}
+.resora-committee-dialog ul {
+	overscroll-behavior: contain;
+}
+.resora-committee-dialog [data-slot="label"] {
+	line-height: 1.5;
+}

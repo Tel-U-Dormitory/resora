@@ -41,6 +41,15 @@ export const trpc = createTRPCOptionsProxy<AppRouter>({
 	queryClient,
 });
 
+// Personal responses share the client, but never another account's cache entry.
+export function getPersonalTrpc(userId: string) {
+	return createTRPCOptionsProxy<AppRouter, { keyPrefix: true }>({
+		client: trpcClient,
+		queryClient,
+		keyPrefix: `personal:${userId}:v1`,
+	});
+}
+
 export const attendanceQueryKeys = {
 	all: trpc.attendance.pathKey(),
 	preview: trpc.attendance.preview.pathKey(),
