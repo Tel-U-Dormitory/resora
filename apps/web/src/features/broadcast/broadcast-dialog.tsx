@@ -36,7 +36,7 @@ export function BroadcastBody({ item }: { item: Broadcast }) {
 			<p className="whitespace-pre-wrap break-words text-sm [overflow-wrap:anywhere]">
 				{item.content}
 			</p>
-			<div className="space-y-1 text-muted-foreground text-xs">
+			<div className="space-y-1 text-muted-foreground text-sm">
 				<p className="break-words">Oleh {item.creatorName}</p>
 				<p>Diterbitkan: {formatEventTime(item.publishedAt)}</p>
 				<p>Berlaku hingga: {formatEventTime(item.expiresAt)}</p>
@@ -186,7 +186,7 @@ export function BroadcastForm({
 						/>
 						<p
 							id="broadcast-expiry-hint"
-							className="text-muted-foreground text-xs"
+							className="text-muted-foreground text-sm"
 						>
 							Pengumuman berlaku maksimal 7 hari sejak diterbitkan.{" "}
 							{initial
@@ -194,7 +194,7 @@ export function BroadcastForm({
 								: "Kosongkan untuk menggunakan masa berlaku 7 hari."}
 						</p>
 						{initial && (
-							<p className="text-muted-foreground text-xs">
+							<p className="text-muted-foreground text-sm">
 								Publikasi pertama: {formatEventTime(initial.publishedAt)}
 							</p>
 						)}
@@ -204,7 +204,7 @@ export function BroadcastForm({
 			{!permitted && (
 				<p role="alert" className="text-destructive text-sm">
 					Pengumuman tidak lagi dapat dikelola. Tutup dialog dan periksa status
-					atau akses Anda.
+					atau akses kamu.
 				</p>
 			)}
 			{error && (
@@ -279,7 +279,10 @@ export function BroadcastDialog({
 				if (!open && !submitting.current) onClose();
 			}}
 		>
-			<DialogContent className="resora-admin-dialog" initialFocus={titleRef}>
+			<DialogContent
+				className="resora-admin-dialog resora-broadcast-dialog"
+				initialFocus={titleRef}
+			>
 				<DialogTitle
 					ref={titleRef}
 					tabIndex={-1}
@@ -289,13 +292,19 @@ export function BroadcastDialog({
 				</DialogTitle>
 				<DialogDescription className="mt-2 break-words text-muted-foreground text-sm [overflow-wrap:anywhere]">
 					{action.kind === "archive"
-						? `Arsipkan pengumuman “${initial?.title ?? "…"}”? Pengumuman akan hilang dari daftar aktif dan tetap tersedia dalam History. Tindakan ini tidak dapat dibatalkan.`
+						? `Arsipkan pengumuman “${initial?.title ?? "…"}”? Pengumuman akan hilang dari daftar aktif dan tetap tersedia dalam riwayat. Tindakan ini tidak dapat dibatalkan.`
 						: action.kind === "detail"
 							? "Informasi pengumuman dan masa berlaku dalam WIB."
-							: "Tulis pengumuman plain text untuk seluruh Senior Resident."}
+							: "Tulis pengumuman teks biasa untuk seluruh Senior Resident."}
 				</DialogDescription>
 				{action.kind !== "create" && (
 					<div className="mt-4">
+						{query.fetchStatus === "paused" && (
+							<p role="status">
+								Koneksi terputus. Informasi yang sudah dimuat bisa belum
+								terbaru.
+							</p>
+						)}
 						{query.isError ? (
 							<div role="alert" className="space-y-2">
 								<p>{broadcastError(query.error)}</p>
@@ -318,7 +327,7 @@ export function BroadcastDialog({
 												: "Kedaluwarsa"}
 									</p>
 									<BroadcastBody item={current} />
-									<div className="flex flex-wrap gap-2">
+									<div className="flex flex-wrap gap-2 border-border border-t pt-4">
 										{!readOnly &&
 											current.status === "ACTIVE" &&
 											current.canEdit && (
