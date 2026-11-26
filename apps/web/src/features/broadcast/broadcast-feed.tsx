@@ -11,6 +11,7 @@ import { trpc } from "@/utils/trpc";
 import { formatEventTime } from "../../components/event-feedback";
 import { BroadcastDialog } from "./broadcast-dialog";
 import {
+	type Broadcast,
 	type BroadcastAction,
 	broadcastError,
 	safeBroadcastLink,
@@ -19,16 +20,26 @@ import {
 export default function BroadcastFeed({
 	view,
 	canManage,
+	preview,
 }: {
 	view: "LATEST" | "ACTIVE" | "HISTORY";
 	canManage: boolean;
+	preview?: Array<
+		Pick<
+			Broadcast,
+			"id" | "title" | "content" | "creatorName" | "publishedAt" | "expiresAt"
+		>
+	>;
 }) {
+	const previewItems =
+		process.env.NODE_ENV === "production" ? undefined : preview;
+	const synthetic = previewItems !== undefined;
 	const [page, setPage] = useState(0);
 	const [search, setSearch] = useState("");
 	const [action, setAction] = useState<BroadcastAction | null>(null);
 	const latest = useQuery({
 		...trpc.broadcast.latest.queryOptions(),
-		enabled: view === "LATEST",
+		enabled: !synthetic && view === "LATEST",
 		staleTime: 0,
 		refetchOnMount: "always",
 		placeholderData: undefined,
@@ -40,14 +51,25 @@ export default function BroadcastFeed({
 			limit: 10,
 			offset: page * 10,
 		}),
-		enabled: view !== "LATEST",
+		enabled: !synthetic && view !== "LATEST",
 		staleTime: 0,
 		refetchOnMount: "always",
 		placeholderData: undefined,
 		meta: { errorHandledLocally: true },
 	});
 	const query = view === "LATEST" ? latest : list;
-	const items = view === "LATEST" ? latest.data?.slice(0, 3) : list.data?.items;
+	const items = previewItems
+		? previewItems.map((item) => ({
+				...item,
+				linkUrl: null,
+				archivedAt: null,
+				status: "ACTIVE" as const,
+				canEdit: false,
+				canArchive: false,
+			}))
+		: view === "LATEST"
+			? latest.data?.slice(0, 3)
+			: list.data?.items;
 	const keyword = search.trim().toLocaleLowerCase("id-ID");
 	const displayed =
 		view === "LATEST" || !keyword
@@ -92,23 +114,25 @@ export default function BroadcastFeed({
 					)}
 				</div>
 				<div className="flex flex-wrap items-center gap-2">
-					<Link
-						className="focus-ring inline-flex min-h-11 items-center rounded-lg px-3 font-semibold text-primary text-sm"
-						href={
-							view === "LATEST" || view === "HISTORY"
-								? "/broadcasts"
-								: "/broadcasts/history"
-						}
-					>
-						{view === "LATEST"
-							? "Lihat Semua"
-							: view === "HISTORY"
-								? "Pengumuman aktif"
-								: "Riwayat pengumuman"}
-					</Link>
+					{!synthetic && (
+						<Link
+							className="focus-ring inline-flex min-h-11 items-center rounded-lg px-3 font-semibold text-primary text-sm"
+							href={
+								view === "LATEST" || view === "HISTORY"
+									? "/broadcasts"
+									: "/broadcasts/history"
+							}
+						>
+							{view === "LATEST"
+								? "Lihat Semua"
+								: view === "HISTORY"
+									? "Pengumuman aktif"
+									: "Riwayat pengumuman"}
+						</Link>
+					)}
 				</div>
 			</div>
-			{canManage && view !== "HISTORY" && (
+			{!synthetic && canManage && view !== "HISTORY" && (
 				<section
 					aria-label="Kelola pengumuman"
 					className="resora-inbox-management rounded-xl border border-border p-4"
@@ -148,10 +172,10 @@ export default function BroadcastFeed({
 					Sambungkan internet untuk memperbarui.
 				</p>
 			)}
-			{query.isPending ||
+			{(!synthetic && query.isPending) ||
 			(view !== "LATEST" && list.data && page > lastPage) ? (
 				<p role="status">Memuat pengumuman…</p>
-			) : query.isError ? (
+			) : !synthetic && query.isError ? (
 				<div role="alert" className="space-y-3">
 					<p>{broadcastError(query.error)}</p>
 					<Button variant="outline" onClick={() => void query.refetch()}>
@@ -220,14 +244,25 @@ export default function BroadcastFeed({
 												)}
 											</div>
 											<div className="mt-auto flex flex-wrap items-center gap-2">
-												<Button
-													variant="outline"
-													onClick={() =>
-														setAction({ kind: "detail", id: item.id })
-													}
-												>
-													Baca Selengkapnya
-												</Button>
+												{synthetic ? (
+													<details className="w-full">
+														<summary className="focus-ring min-h-11 cursor-pointer rounded-xl border border-border px-3 py-3 text-sm">
+															Baca selengkapnya
+														</summary>
+														<p className="mt-3 whitespace-pre-wrap text-sm">
+															{item.content}
+														</p>
+													</details>
+												) : (
+													<Button
+														variant="outline"
+														onClick={() =>
+															setAction({ kind: "detail", id: item.id })
+														}
+													>
+														Baca Selengkapnya
+													</Button>
+												)}
 												{link && (
 													<a
 														href={link}

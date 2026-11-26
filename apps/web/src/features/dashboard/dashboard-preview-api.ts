@@ -1,4 +1,5 @@
 import type {
+	DashboardFixture,
 	DashboardMetric,
 	DashboardMetricState,
 	DashboardScenario,
@@ -118,7 +119,9 @@ export async function requestDashboardMetric(
 	};
 }
 
-export function previewFailureState(error: unknown): DashboardMetricState {
+export function previewFailureState(
+	error: unknown,
+): Extract<DashboardMetricState, { kind: "error" | "forbidden" }> {
 	return {
 		kind:
 			error instanceof DashboardPreviewError &&
@@ -130,4 +133,57 @@ export function previewFailureState(error: unknown): DashboardMetricState {
 				? error.message
 				: "Data gagal dimuat. Coba muat kembali.",
 	};
+}
+
+export async function requestDashboardActivities(
+	fixture: DashboardFixture,
+	scenario: DashboardScenario = "ready",
+	signal?: AbortSignal,
+	now = Date.now(),
+) {
+	await waitForDashboardPreview(scenario, signal);
+	return {
+		activities:
+			scenario === "empty"
+				? []
+				: fixture.activities
+						.filter(
+							(item) =>
+								item.status === "PUBLISHED" &&
+								item.visible &&
+								new Date(item.startsAt).getTime() >= now,
+						)
+						.sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt))
+						.slice(0, 5)
+						.map(({ id, title, startsAt, endsAt }) => ({
+							id,
+							title,
+							startsAt,
+							endsAt,
+						})),
+		attendanceHistory:
+			scenario === "empty"
+				? []
+				: structuredClone(fixture.attendanceHistory.slice(0, 3)),
+	};
+}
+export async function requestDashboardBroadcasts(
+	fixture: DashboardFixture,
+	scenario: DashboardScenario = "ready",
+	signal?: AbortSignal,
+	now = Date.now(),
+) {
+	await waitForDashboardPreview(scenario, signal);
+	return scenario === "empty"
+		? []
+		: structuredClone(
+				fixture.broadcasts
+					.filter(
+						(item) =>
+							Date.parse(item.publishedAt) <= now &&
+							Date.parse(item.expiresAt) > now,
+					)
+					.sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt))
+					.slice(0, 3),
+			);
 }

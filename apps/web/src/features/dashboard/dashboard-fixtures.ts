@@ -60,12 +60,24 @@ const dashboardFixtureSchema = z.object({
 				.nullable(),
 		}),
 	),
+	broadcasts: z.array(
+		z.object({
+			id: z.string(),
+			title: z.string(),
+			content: z.string(),
+			creatorName: z.string(),
+			publishedAt: z.iso.datetime({ offset: true }),
+			expiresAt: z.iso.datetime({ offset: true }),
+		}),
+	),
 	activities: z.array(
 		z.object({
 			id: z.string(),
 			title: z.string(),
 			startsAt: z.string(),
 			endsAt: z.string(),
+			status: z.enum(["PUBLISHED", "CANCELLED", "ARCHIVED", "CLOSED"]),
+			visible: z.boolean(),
 		}),
 	),
 	attendanceHistory: z.array(

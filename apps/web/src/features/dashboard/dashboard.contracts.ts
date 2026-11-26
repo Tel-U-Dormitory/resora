@@ -53,7 +53,20 @@ export type DashboardFixture = {
 	mode: DashboardMode;
 	scope: DashboardScope;
 	metrics: DashboardMetric[];
-	activities: DashboardActivity[];
+	activities: Array<
+		DashboardActivity & {
+			status: "PUBLISHED" | "CANCELLED" | "ARCHIVED" | "CLOSED";
+			visible: boolean;
+		}
+	>;
+	broadcasts: Array<{
+		id: string;
+		title: string;
+		content: string;
+		creatorName: string;
+		publishedAt: string;
+		expiresAt: string;
+	}>;
 	attendanceHistory: DashboardAttendanceActivity[];
 };
 
@@ -73,5 +86,8 @@ export type DashboardScenario =
 	| "503"
 	| "timeout";
 export type DashboardScenarios = Partial<
-	Record<DashboardMetric["id"], DashboardScenario>
+	Record<
+		DashboardMetric["id"] | "activities" | "broadcasts" | "export",
+		DashboardScenario
+	>
 >;

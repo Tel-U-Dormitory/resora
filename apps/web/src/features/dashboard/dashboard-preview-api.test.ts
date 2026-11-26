@@ -3,6 +3,8 @@ import { dashboardFixtures } from "./dashboard-fixtures";
 import {
 	DashboardPreviewError,
 	previewFailureState,
+	requestDashboardActivities,
+	requestDashboardBroadcasts,
 	requestDashboardMetric,
 } from "./dashboard-preview-api";
 
@@ -77,4 +79,54 @@ test("production rejects preview transport before reading JSON or running reques
 		{ env: { NODE_ENV: "production" } },
 	);
 	expect(child.exitCode).toBe(0);
+});
+
+test("activity preview returns at most five nearest visible published events", async () => {
+	const fixture = structuredClone(dashboardFixtures.personal);
+	const sample = fixture.activities[0];
+	fixture.activities = Array.from({ length: 7 }, (_, index) => ({
+		...sample,
+		id: `event-${index}`,
+		startsAt: `2026-12-0${7 - index}T09:00:00+07:00`,
+	}));
+	fixture.activities.push(
+		{ ...sample, id: "past", startsAt: "2025-01-01T09:00:00+07:00" },
+		{ ...sample, id: "cancelled", status: "CANCELLED" },
+		{ ...sample, id: "hidden", visible: false },
+		{ ...sample, id: "closed", status: "CLOSED" },
+		{ ...sample, id: "archived", status: "ARCHIVED" },
+	);
+	const response = await requestDashboardActivities(
+		fixture,
+		"ready",
+		undefined,
+		Date.parse("2026-11-26T00:00:00+07:00"),
+	);
+	expect(response.activities).toHaveLength(5);
+	expect(response.activities.map((event) => event.id)).toEqual([
+		"event-6",
+		"event-5",
+		"event-4",
+		"event-3",
+		"event-2",
+	]);
+	expect(
+		(await requestDashboardActivities(fixture, "empty")).activities,
+	).toEqual([]);
+});
+test("broadcast preview uses latest active synthetic summaries and excludes expired entries", async () => {
+	const fixture = structuredClone(dashboardFixtures.personal);
+	fixture.broadcasts.push({
+		...fixture.broadcasts[0],
+		id: "expired",
+		expiresAt: "2025-01-01T00:00:00Z",
+	});
+	const items = await requestDashboardBroadcasts(
+		fixture,
+		"ready",
+		undefined,
+		Date.parse("2026-11-26T12:00:00+07:00"),
+	);
+	expect(items.map((item) => item.id)).toEqual(["fixture-broadcast-1"]);
+	expect((await requestDashboardBroadcasts(fixture, "empty")).length).toBe(0);
 });

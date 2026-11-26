@@ -16,6 +16,10 @@ import type {
 	DashboardActivity,
 	DashboardAttendanceActivity,
 } from "./dashboard.contracts";
+import {
+	previewFailureState,
+	requestDashboardActivities,
+} from "./dashboard-preview-api";
 import { useDashboardPreview } from "./dashboard-preview-context";
 
 function ActivityCard({
@@ -106,7 +110,25 @@ function EmptyAttendance() {
 }
 
 export function DashboardActivities({ personalSr }: { personalSr: boolean }) {
-	const { fixture, previewMode } = useDashboardPreview();
+	const { fixture, previewMode, identityKey, scenarios } =
+		useDashboardPreview();
+	const preview = useQuery({
+		queryKey: [
+			"dashboard-preview",
+			identityKey,
+			previewMode,
+			"activities",
+			scenarios.activities ?? "ready",
+		],
+		queryFn: ({ signal }) => {
+			if (!fixture) throw new Error("Preview disabled");
+			return requestDashboardActivities(fixture, scenarios.activities, signal);
+		},
+		enabled: !!fixture,
+		retry: false,
+		gcTime: 0,
+		meta: { errorHandledLocally: true },
+	});
 	const query = useQuery({
 		...trpc.attendance.list.queryOptions({ visibility: "NON_ARCHIVED" }),
 		enabled: !fixture,
@@ -134,11 +156,11 @@ export function DashboardActivities({ personalSr }: { personalSr: boolean }) {
 					new Date(second.startsAt).getTime(),
 			)
 			.slice(0, 5) ?? [];
-	const fixtureActivities = fixture?.activities.slice(0, 5) ?? [];
+	const fixtureActivities = preview.data?.activities ?? [];
 	const forbidden = query.error?.data?.code === "FORBIDDEN";
 	const showPersonalHistory = personalSr && previewMode === "personal";
 	const historyItems = fixture
-		? fixture.attendanceHistory.slice(0, 3)
+		? (preview.data?.attendanceHistory ?? [])
 		: ownHistory.data?.items.slice(0, 3).map((item) => ({
 				id: item.event.id,
 				title: item.event.title,
@@ -164,7 +186,16 @@ export function DashboardActivities({ personalSr }: { personalSr: boolean }) {
 				)}
 			</div>
 			{fixture ? (
-				fixtureActivities.length ? (
+				preview.isPending ? (
+					<p role="status">Memuat kegiatan…</p>
+				) : preview.error ? (
+					<div role="alert" className="space-y-3">
+						<p>{previewFailureState(preview.error).message}</p>
+						<Button variant="outline" onClick={() => void preview.refetch()}>
+							Muat ulang kegiatan
+						</Button>
+					</div>
+				) : fixtureActivities.length ? (
 					<div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
 						{fixtureActivities.map((activity) => (
 							<ActivityCard key={activity.id} activity={activity} />
@@ -258,7 +289,13 @@ export function DashboardActivities({ personalSr }: { personalSr: boolean }) {
 						Riwayat kehadiran
 					</h3>
 					{fixture ? (
-						historyItems?.length ? (
+						preview.isPending ? (
+							<p role="status">Memuat riwayat kehadiran…</p>
+						) : preview.error ? (
+							<p role="alert">
+								Riwayat kehadiran tidak ditampilkan karena sumber gagal dimuat.
+							</p>
+						) : historyItems?.length ? (
 							<AttendanceHistoryCard items={historyItems} linkEvents={false} />
 						) : (
 							<EmptyAttendance />

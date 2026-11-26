@@ -111,13 +111,17 @@
 			"id": "fixture-personal-activity-1",
 			"title": "Orientasi Hunian",
 			"startsAt": "2026-12-02T09:00:00+07:00",
-			"endsAt": "2026-12-02T11:00:00+07:00"
+			"endsAt": "2026-12-02T11:00:00+07:00",
+			"status": "PUBLISHED",
+			"visible": true
 		},
 		{
 			"id": "fixture-personal-activity-2",
 			"title": "Diskusi Pengembangan SR",
 			"startsAt": "2026-12-08T13:00:00+07:00",
-			"endsAt": "2026-12-08T15:00:00+07:00"
+			"endsAt": "2026-12-08T15:00:00+07:00",
+			"status": "PUBLISHED",
+			"visible": true
 		}
 	],
 	"attendanceHistory": [
@@ -134,6 +138,16 @@
 			"startsAt": "2026-11-18T15:00:00+07:00",
 			"endsAt": "2026-11-18T16:00:00+07:00",
 			"presence": "PENDING"
+		}
+	],
+	"broadcasts": [
+		{
+			"id": "fixture-broadcast-1",
+			"title": "Jadwal koordinasi Senior Resident",
+			"content": "Koordinasi rutin membahas kesiapan kegiatan dan informasi operasional asrama. Ini contoh pengumuman sintetis untuk meninjau dashboard, bukan pengumuman yang diterbitkan.",
+			"creatorName": "Pengurus sintetis",
+			"publishedAt": "2026-11-26T08:00:00+07:00",
+			"expiresAt": "2026-12-02T23:00:00+07:00"
 		}
 	]
 }

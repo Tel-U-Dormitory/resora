@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { DashboardHeader } from "@/components/dashboard-header";
@@ -9,7 +10,9 @@ import type {
 	DashboardScenario,
 	DashboardScenarios,
 } from "./dashboard.contracts";
+import { DashboardActivities } from "./dashboard-activities";
 import { DashboardMetrics } from "./dashboard-metrics";
+import { DashboardPreviewBroadcasts } from "./dashboard-preview-broadcasts";
 import { DashboardPreviewProvider } from "./dashboard-preview-context";
 
 export function DashboardPreview({
@@ -55,13 +58,23 @@ export function DashboardPreview({
 							Simulasi respons API
 						</summary>
 						<div className="grid gap-3 sm:grid-cols-3">
-							{["assessment", "attendance", "violations"].map((id) => (
+							{[
+								"assessment",
+								"attendance",
+								"violations",
+								"broadcasts",
+								"activities",
+							].map((id) => (
 								<label key={id} className="grid gap-2 text-sm">
 									{id === "assessment"
 										? "Penilaian"
 										: id === "attendance"
 											? "Kehadiran"
-											: "Pelanggaran"}
+											: id === "violations"
+												? "Pelanggaran"
+												: id === "broadcasts"
+													? "Pengumuman"
+													: "Kegiatan"}
 									<select
 										aria-label={`Respons ${id}`}
 										className="min-h-11 min-w-0 rounded-xl border border-border bg-surface px-3"
@@ -109,6 +122,37 @@ export function DashboardPreview({
 					initialMode={canManage ? "management" : "personal"}
 				>
 					<DashboardMetrics showCleanliness={isSr} />
+					<div className="resora-dashboard-broadcasts">
+						<DashboardPreviewBroadcasts />
+					</div>
+					<div className="resora-dashboard-activities">
+						<DashboardActivities personalSr={isSr} />
+					</div>
+					<section
+						className="resora-dashboard-quick space-y-3"
+						aria-label="Akses cepat"
+					>
+						<h2 className="font-semibold text-lg">Akses cepat</h2>
+						<p className="text-muted-foreground text-sm">
+							Tujuan existing tetap memerlukan sesi dan izin yang sah.
+						</p>
+						<div className="flex flex-wrap gap-3">
+							<Link
+								href="/events"
+								className="focus-ring inline-flex min-h-11 items-center rounded-xl border border-border bg-surface px-4 text-sm"
+							>
+								Lihat kegiatan
+							</Link>
+							{isSr && (
+								<Link
+									href="/attendance/history"
+									className="focus-ring inline-flex min-h-11 items-center rounded-xl border border-border bg-surface px-4 text-sm"
+								>
+									Riwayat kehadiran
+								</Link>
+							)}
+						</div>
+					</section>
 				</DashboardPreviewProvider>
 			</section>
 		</AppShell>
