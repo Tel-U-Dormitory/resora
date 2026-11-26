@@ -30,7 +30,7 @@ export default function CommitteeList() {
 		}
 	}, [data, page]);
 	return (
-		<section className="resora-page space-y-6">
+		<section className="resora-page resora-committee resora-committee-list space-y-6">
 			<div className="flex flex-wrap items-start justify-between gap-4">
 				<div className="space-y-2">
 					<h1 className="font-bold text-2xl tracking-tight">
@@ -57,6 +57,12 @@ export default function CommitteeList() {
 							}}
 						/>
 					</div>
+					{query.fetchStatus === "paused" && (
+						<p role="status">
+							Koneksi terputus. Sambungkan internet untuk memperbarui daftar
+							kepanitiaan.
+						</p>
+					)}
 					{query.isPending ? (
 						<p role="status">Memuat kepanitiaan…</p>
 					) : query.isError ? (

@@ -69,7 +69,7 @@ function MemberFields({
 						</option>
 					))}
 				</Select>
-				<p className="text-muted-foreground text-xs">
+				<p className="text-muted-foreground text-sm">
 					Jabatan panitia tidak memberikan hak akses sistem.
 				</p>
 			</div>
@@ -156,11 +156,17 @@ function BulkMemberDialog({
 								if (event.key === "Enter") event.preventDefault();
 							}}
 						/>
-						<p className="text-muted-foreground text-xs">
+						<p className="text-muted-foreground text-sm">
 							Ketik minimal 2 karakter. Maksimal 20 hasil per pencarian, bukan
 							seluruh kandidat. Perjelas kata kunci untuk mencari SR lainnya.
 						</p>
 					</div>
+					{candidates.fetchStatus === "paused" && (
+						<p role="status">
+							Koneksi terputus. Pilihan kamu tetap tersimpan di formulir ini;
+							sambungkan internet untuk mencari SR.
+						</p>
+					)}
 					{search.trim().length >= 2 &&
 						(candidates.isPending ? (
 							<p role="status">Mencari SR…</p>
@@ -177,8 +183,7 @@ function BulkMemberDialog({
 							</div>
 						) : !candidates.data?.length ? (
 							<p role="status">
-								Tidak ada SR eligible yang sesuai atau semua hasil sudah menjadi
-								anggota.
+								Tidak ada SR yang sesuai atau semua hasil sudah menjadi anggota.
 							</p>
 						) : (
 							<fieldset className="space-y-2">
@@ -247,7 +252,7 @@ function BulkMemberDialog({
 							</ul>
 						)}
 						{selected.length === 30 && (
-							<p className="text-muted-foreground text-xs">
+							<p className="text-muted-foreground text-sm">
 								Batas 30 anggota tercapai. Batalkan pilihan sebelum memilih SR
 								lain.
 							</p>
@@ -274,7 +279,15 @@ export default function CommitteeDetail({
 		meta: { errorHandledLocally: true },
 	});
 	const data = query.data;
-	if (query.isPending) return <p role="status">Memuat kepanitiaan…</p>;
+	if (query.isPending)
+		return (
+			<div role="status">
+				<p>Memuat kepanitiaan…</p>
+				{query.fetchStatus === "paused" && (
+					<p>Koneksi terputus. Sambungkan internet untuk memuat kepanitiaan.</p>
+				)}
+			</div>
+		);
 	if (query.isError || !data)
 		return (
 			<div role="alert" className="space-y-4">
@@ -303,7 +316,12 @@ export default function CommitteeDetail({
 		data.divisions.find((row) => row.id === id)?.name ??
 		"Divisi tidak tersedia";
 	return (
-		<section className="resora-page space-y-6">
+		<section className="resora-page resora-committee resora-committee-detail space-y-6">
+			{query.fetchStatus === "paused" && (
+				<p role="status">
+					Koneksi terputus. Informasi yang sudah dimuat bisa belum terbaru.
+				</p>
+			)}
 			<nav
 				aria-label="Breadcrumb"
 				className="flex flex-wrap gap-2 text-muted-foreground text-sm"
@@ -461,8 +479,8 @@ export default function CommitteeDetail({
 											</p>
 											{!member.eligible && (
 												<p className="text-sm">
-													Tidak eligible untuk penugasan baru. Keanggotaan tetap
-													dapat dikeluarkan.
+													Tidak memenuhi syarat untuk penugasan baru.
+													Keanggotaan tetap dapat dikeluarkan.
 												</p>
 											)}
 										</div>
