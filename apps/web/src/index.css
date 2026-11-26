@@ -1,6 +1,7 @@
 @import "@resora/ui/globals.css";
 @import "./styles/workspace-foundation.css";
 @import "./styles/workspace-shell.css";
+@import "./styles/workspace-scanner.css";
 
 .resora-scan-line {
 	animation: resora-scan-line 2.4s ease-in-out infinite;

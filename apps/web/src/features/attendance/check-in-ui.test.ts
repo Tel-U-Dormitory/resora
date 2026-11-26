@@ -5,8 +5,11 @@ import QrScanner from "qr-scanner";
 import * as jsxRuntime from "react/jsx-runtime";
 import ts from "typescript";
 import { MAX_GPS_ACCURACY_M as backendAccuracy } from "../../../../../packages/api/src/modules/attendance/check-in/check-in-policy";
-import { scanRegion } from "./check-in-camera";
-import { locationDiagnosisText } from "./check-in-diagnostics";
+import { cameraZoom, scanRegion, setCameraZoom } from "./check-in-camera";
+import {
+	diagnosisEnvironment,
+	locationDiagnosisText,
+} from "./check-in-diagnostics";
 import {
 	acquireLocation,
 	freshPosition,
@@ -443,6 +446,7 @@ function scannerFixture(realCameraLifecycle = false) {
 				"Camera",
 				"CheckCircle2",
 				"ImagePlus",
+				"Info",
 				"LoaderCircle",
 				"ScanLine",
 			].map((name) => [name, name]),
@@ -459,21 +463,36 @@ function scannerFixture(realCameraLifecycle = false) {
 			refreshAttendanceQueries: async () => holdRefresh,
 		},
 		"./check-in-location": { acquireLocation, freshPosition },
-		"./check-in-camera": { scanRegion },
+		"./check-in-camera": { scanRegion, cameraZoom, setCameraZoom },
 		"./check-in-ui": {
 			releaseCamera,
 			scannerDiagnosticCode,
 			scannerErrorMessage,
 		},
-		"./check-in-diagnostics": { locationDiagnosisText },
+		"./check-in-diagnostics": { locationDiagnosisText, diagnosisEnvironment },
 		"../../components/event-feedback": {
 			formatEventTime: (value: string) => value,
 		},
 	};
-	const source = readFileSync(
+	let source = readFileSync(
 		new URL("./check-in-scanner.tsx", import.meta.url),
 		"utf8",
 	);
+	// Isolate the existing lifecycle tests from automatic route entry. Browser QA
+	// exercises real mount/permissions; this harness calls the actual controllers.
+	let controls: {
+		startCamera: (restart?: boolean) => Promise<void>;
+		stop: () => void;
+	};
+	source = source
+		.replace(
+			"void startCamera(); // Auto-start once on route entry; existing effect owns cleanup.",
+			"",
+		)
+		.replace(
+			"const diagnosisText =",
+			"captureControls({ startCamera, stop }); const diagnosisText =",
+		);
 	const js = ts.transpileModule(source, {
 		compilerOptions: {
 			module: ts.ModuleKind.CommonJS,
@@ -492,6 +511,7 @@ function scannerFixture(realCameraLifecycle = false) {
 		"setInterval",
 		"clearInterval",
 		"Date",
+		"captureControls",
 		js,
 	)(
 		(name: string) => {
@@ -509,6 +529,9 @@ function scannerFixture(realCameraLifecycle = false) {
 		},
 		(id: number) => healthChecks.delete(id),
 		Clock,
+		(value: typeof controls) => {
+			controls = value;
+		},
 	);
 	const render = () => {
 		cursor = 0;
@@ -534,7 +557,9 @@ function scannerFixture(realCameraLifecycle = false) {
 				removeEventListener: () => {},
 			} as unknown as HTMLVideoElement);
 		(video?.props.ref as { current: unknown }).current = videos.get(video?.key);
-		const input = tree.find((item) => item.type === "input");
+		const input = tree.find(
+			(item) => item.type === "input" && item.props.type === "file",
+		);
 		(input?.props.ref as { current: unknown }).current = {
 			click: () => pickerClicks++,
 		};
@@ -554,6 +579,14 @@ function scannerFixture(realCameraLifecycle = false) {
 	};
 	return {
 		...gps,
+		start: (restart = false) => {
+			render();
+			return controls.startCamera(restart);
+		},
+		stop: () => {
+			render();
+			return controls.stop();
+		},
 		requests,
 		successes,
 		render,
@@ -575,7 +608,9 @@ function scannerFixture(realCameraLifecycle = false) {
 			imageResult = value;
 		},
 		chooseImage: (file?: File) => {
-			const input = render().find((item) => item.type === "input");
+			const input = render().find(
+				(item) => item.type === "input" && item.props.type === "file",
+			);
 			if (!input) throw new Error("Image input missing");
 			const target = { files: file ? [file] : [], value: "selected-image" };
 			(input.props.onChange as (event: unknown) => void)({
@@ -611,10 +646,10 @@ async function flush() {
 	for (let i = 0; i < 12; i++) await Promise.resolve();
 }
 
-test("one healthy camera control preserves GPS progress, hides ready status and stops owned resources", async () => {
+test("camera lifecycle preserves GPS progress, keeps normal preview quiet and stops owned resources", async () => {
 	const f = scannerFixture();
 	try {
-		const open = f.button("Buka kamera dan lokasi");
+		const open = f.start;
 		const opening = open();
 		await open();
 		await opening;
@@ -632,7 +667,7 @@ test("one healthy camera control preserves GPS progress, hides ready status and 
 					(item) =>
 						item.props.children === "Arahkan kamera ke QR Code kegiatan",
 				),
-		).toBe(true);
+		).toBe(false);
 		expect(
 			f
 				.render()
@@ -640,7 +675,7 @@ test("one healthy camera control preserves GPS progress, hides ready status and 
 					(item) =>
 						item.props.children === "Menyiapkan lokasi (maksimal 20 detik)…",
 				),
-		).toBe(true);
+		).toBe(false);
 		expect(
 			f
 				.render()
@@ -653,7 +688,7 @@ test("one healthy camera control preserves GPS progress, hides ready status and 
 		await flush();
 		expect(
 			f.render().filter((item) => item.props.role === "status"),
-		).toHaveLength(1);
+		).toHaveLength(0);
 		expect(
 			f
 				.render()
@@ -663,16 +698,16 @@ test("one healthy camera control preserves GPS progress, hides ready status and 
 						item.props.children.includes("Lokasi siap"),
 				),
 		).toBe(false);
-		f.button("Hentikan kamera dan lokasi")();
-		await f.button("Buka kamera dan lokasi")();
-		f.button("Hentikan kamera dan lokasi")(); // Cancel a still-pending GPS watcher.
+		f.stop();
+		await f.start();
+		f.stop(); // Cancel a still-pending GPS watcher.
 		expect(f.cleared).toEqual([1, 2]);
 		expect(f.cameras.every((camera) => camera.destroys > 0)).toBe(true);
 		f.watches[1].success(position());
 		f.decoders[1]({ data: token });
 		await flush();
 		expect(f.requests).toHaveLength(0);
-		expect(f.button("Buka kamera dan lokasi")).toBeFunction();
+		expect(f.start).toBeFunction();
 	} finally {
 		f.unmount();
 	}
@@ -696,7 +731,7 @@ test("GPS-only errors remain actionable and retry never restarts a healthy scann
 		]) {
 			const f = scannerFixture();
 			try {
-				await f.button("Buka kamera dan lokasi")();
+				await f.start();
 				if (code === "GPS_DENIED")
 					f.watches[0].failure({ code: 1 } as GeolocationPositionError);
 				else {
@@ -711,7 +746,7 @@ test("GPS-only errors remain actionable and retry never restarts a healthy scann
 						.render()
 						.some((item) => item.props.children === scannerErrorMessage(code)),
 				).toBe(true);
-				expect(f.button("Hentikan kamera dan lokasi")).toBeFunction();
+				expect(f.stop).toBeFunction();
 				const retry = f.button("Perbarui Lokasi");
 				retry();
 				retry();
@@ -720,7 +755,7 @@ test("GPS-only errors remain actionable and retry never restarts a healthy scann
 				await flush();
 				expect(
 					f.render().filter((item) => item.props.role === "status"),
-				).toHaveLength(1);
+				).toHaveLength(0);
 				expect(f.cameras).toHaveLength(1);
 				expect(f.requests).toHaveLength(0);
 			} finally {
@@ -733,7 +768,7 @@ test("GPS-only errors remain actionable and retry never restarts a healthy scann
 	}
 });
 
-test("the primary control cannot interrupt QR processing or submission; the success dialog still resets", async () => {
+test("gallery cannot interrupt QR processing or submission; the success dialog still resets", async () => {
 	const f = scannerFixture();
 	try {
 		let release = () => {};
@@ -742,10 +777,10 @@ test("the primary control cannot interrupt QR processing or submission; the succ
 				release = resolve;
 			}),
 		);
-		await f.button("Buka kamera dan lokasi")();
-		const stop = f.button("Hentikan kamera dan lokasi");
+		await f.start();
+		const stop = f.button("Pilih gambar QR");
 		f.decoders[0]({ data: token });
-		stop(); // A handler captured before QR processing is also blocked by busy.
+		stop(); // A gallery handler captured before processing is also blocked by busy.
 		expect(
 			f
 				.render()
@@ -778,7 +813,7 @@ test("the primary control cannot interrupt QR processing or submission; the succ
 		expect(
 			f.render().find((item) => item.type === "ActionDialog")?.props.open,
 		).toBe(false);
-		expect(f.button("Buka kamera dan lokasi")).toBeFunction();
+		expect(f.start).toBeFunction();
 	} finally {
 		f.unmount();
 	}
@@ -793,7 +828,7 @@ test("initial and transient video readiness stays diagnostic until a stalled fra
 				release = resolve;
 			}),
 		);
-		const opening = f.button("Buka kamera dan lokasi")();
+		const opening = f.start();
 		await flush();
 		const video = f.cameras[0].$video;
 		Object.defineProperty(video, "readyState", {
@@ -817,7 +852,7 @@ test("initial and transient video readiness stays diagnostic until a stalled fra
 				JSON.stringify(entry).includes("VIDEO_NOT_READY"),
 			),
 		).toHaveLength(1);
-		expect(f.button("Hentikan kamera dan lokasi")).toBeFunction();
+		expect(f.stop).toBeFunction();
 		f.videoEvent("onStalled");
 		expect(
 			f
@@ -832,7 +867,7 @@ test("initial and transient video readiness stays diagnostic until a stalled fra
 			configurable: true,
 		});
 		f.videoEvent("onPlaying");
-		expect(f.button("Hentikan kamera dan lokasi")).toBeFunction();
+		expect(f.stop).toBeFunction();
 		expect(
 			f
 				.render()
@@ -850,7 +885,7 @@ test("initial and transient video readiness stays diagnostic until a stalled fra
 test("normal empty frames stay quiet; manual restart replaces decoder, ignores stale callbacks and keeps GPS distinct", async () => {
 	const f = scannerFixture();
 	try {
-		await f.button("Buka kamera dan lokasi")();
+		await f.start();
 		const emptyFrames = [
 			QrScanner.NO_QR_CODE_FOUND,
 			new Error(QrScanner.NO_QR_CODE_FOUND),
@@ -888,11 +923,7 @@ test("normal empty frames stay quiet; manual restart replaces decoder, ignores s
 		expect(
 			f
 				.render()
-				.some(
-					(item) =>
-						item.props.children ===
-						"QR terbaca, memverifikasi kehadiran… Menunggu lokasi (hingga 20 detik).",
-				),
+				.some((item) => item.props.children === "QR terbaca, menunggu lokasi…"),
 		).toBe(true);
 		expect(
 			f
@@ -936,7 +967,7 @@ test("normal empty frames stay quiet; manual restart replaces decoder, ignores s
 test("restart pending state prevents repeated startup and reports sanitized restart failure", async () => {
 	const f = scannerFixture();
 	try {
-		await f.button("Buka kamera dan lokasi")();
+		await f.start();
 		f.decodeErrors[0](new Error("synthetic-decoder-failure"));
 		let reject = (_cause: Error) => {};
 		f.holdCamera(
@@ -957,12 +988,13 @@ test("restart pending state prevents repeated startup and reports sanitized rest
 		expect(
 			f
 				.render()
-				.find(
-					(item) => item.props["aria-label"] === "Hentikan kamera dan lokasi",
-				)?.props.disabled,
-		).toBe(false); // The primary control still permits cancellation during startup.
+				.find((item) => item.props["aria-label"] === "Kembali ke Beranda")
+				?.props.disabled,
+		).toBeUndefined(); // Back remains available during startup.
 		reject(new Error("private-camera-credential-token"));
 		await pending;
+		await flush();
+		expect(f.render().find((item) => item.type === "textarea")).toBeUndefined();
 		expect(
 			f
 				.render()
@@ -985,7 +1017,7 @@ test("restart pending state prevents repeated startup and reports sanitized rest
 test("fresh prepared GPS submits once without reacquisition or a misleading waiting-GPS diagnostic", async () => {
 	const f = scannerFixture();
 	try {
-		await f.button("Buka kamera dan lokasi")();
+		await f.start();
 		f.watches[0].success(position());
 		await flush();
 		f.decoders[0]({ data: token });
@@ -1010,7 +1042,7 @@ test("unmount during pending camera startup cancels GPS and ignores late startup
 			release = resolve;
 		}),
 	);
-	const opening = f.button("Buka kamera dan lokasi")();
+	const opening = f.start();
 	await flush();
 	f.unmount();
 	const logs = f.logs.length;
@@ -1030,7 +1062,7 @@ test("unmount during pending camera startup cancels GPS and ignores late startup
 test("recovered decoder clears its warning only after a successful decode attempt, not video playback alone", async () => {
 	const f = scannerFixture();
 	try {
-		await f.button("Buka kamera dan lokasi")();
+		await f.start();
 		f.decodeErrors[0](new Error("synthetic-decoder-failure"));
 		const warning = () =>
 			f
@@ -1056,7 +1088,7 @@ test("recovered decoder clears its warning only after a successful decode attemp
 test("new live preview clears an old stream-ended warning; transient video readiness recovers without restart", async () => {
 	const f = scannerFixture();
 	try {
-		await f.button("Buka kamera dan lokasi")();
+		await f.start();
 		const video = f.cameras[0].$video;
 		const listeners = new Set<() => void>();
 		const track = {
@@ -1133,7 +1165,7 @@ test("new live preview clears an old stream-ended warning; transient video readi
 test("technical decoder/video/track diagnostics are bounded and cleanup removes listeners and stale activity", async () => {
 	const f = scannerFixture();
 	try {
-		await f.button("Buka kamera dan lokasi")();
+		await f.start();
 		const camera = f.cameras[0];
 		for (let i = 0; i < 100; i++)
 			f.decodeErrors[0](new Error("private-qr-gps-cookie-details"));
@@ -1263,12 +1295,12 @@ test.each([false, true])(
 					releaseA = resolve;
 				}),
 			);
-			const openingA = f.button("Buka kamera dan lokasi")();
+			const openingA = f.start();
 			await flush();
 			const a = f.cameras[0];
 			const streamA = new Stream();
 			a.stream = streamA as unknown as MediaStream;
-			if (!restart) f.button("Hentikan kamera dan lokasi")();
+			if (!restart) f.stop();
 			else f.videoEvent("onError"); // A startup failure makes the same control restart.
 			let releaseB = () => {};
 			f.holdCamera(
@@ -1276,9 +1308,7 @@ test.each([false, true])(
 					releaseB = resolve;
 				}),
 			);
-			const openingB = f.button(
-				restart ? "Mulai ulang pemindaian" : "Buka kamera dan lokasi",
-			)();
+			const openingB = f.start(restart);
 			await flush();
 			const b = f.cameras[1];
 			const streamB = new Stream();
@@ -1333,7 +1363,7 @@ test.each([false, true])(
 	},
 );
 
-test("Buka Kamera starts GPS immediately without blocking decoding; a pending location allows only one submission", async () => {
+test("camera startup prepares GPS before preview readiness; a pending location allows only one submission", async () => {
 	const f = scannerFixture();
 	try {
 		let release = () => {};
@@ -1342,7 +1372,8 @@ test("Buka Kamera starts GPS immediately without blocking decoding; a pending lo
 				release = resolve;
 			}),
 		);
-		const opening = f.button("Buka kamera dan lokasi")();
+		const opening = f.start();
+		await flush(); // Route-entry startup yields before replacing the video node.
 		expect(f.watches).toHaveLength(1);
 		expect(f.requests).toHaveLength(0);
 		await flush();
@@ -1381,7 +1412,7 @@ test("timeout or persistently poor accuracy can recover with a new GPS window wi
 		for (const inaccurate of [false, true]) {
 			const f = scannerFixture();
 			try {
-				await f.button("Buka kamera dan lokasi")();
+				await f.start();
 				f.decoders[0]({ data: token });
 				if (inaccurate) f.watches[0].success(position(90));
 				expire();
@@ -1406,7 +1437,7 @@ test("timeout or persistently poor accuracy can recover with a new GPS window wi
 test("permission recovery and manual fresh GPS retry preserve QR only in memory, without rescanning", async () => {
 	const f = scannerFixture();
 	try {
-		await f.button("Buka kamera dan lokasi")();
+		await f.start();
 		f.decoders[0]({ data: token });
 		f.watches[0].failure({ code: 1 } as GeolocationPositionError);
 		await flush();
@@ -1430,7 +1461,7 @@ test("permission recovery and manual fresh GPS retry preserve QR only in memory,
 test("location-only recovery never calls backend and stale prepared positions require a fresh acquisition", async () => {
 	const f = scannerFixture();
 	try {
-		await f.button("Buka kamera dan lokasi")();
+		await f.start();
 		f.watches[0].failure({ code: 1 } as GeolocationPositionError);
 		await flush();
 		f.button("Perbarui Lokasi")();
@@ -1455,9 +1486,9 @@ test("location-only recovery never calls backend and stale prepared positions re
 test("cancel/reopen and unmount suppress old GPS/scanner callbacks, pending results and duplicate submissions", async () => {
 	const f = scannerFixture();
 	try {
-		await f.button("Buka kamera dan lokasi")();
-		f.button("Hentikan kamera dan lokasi")();
-		await f.button("Buka kamera dan lokasi")();
+		await f.start();
+		f.stop();
+		await f.start();
 		f.watches[0].success(position());
 		f.decoders[0]({ data: token });
 		expect(f.requests).toHaveLength(0);
@@ -1481,7 +1512,7 @@ test("cancel/reopen and unmount suppress old GPS/scanner callbacks, pending resu
 		f.unmount();
 	}
 	const pending = scannerFixture();
-	await pending.button("Buka kamera dan lokasi")();
+	await pending.start();
 	pending.decoders[0]({ data: token });
 	pending.unmount();
 	pending.watches[0].success(position());
@@ -1495,7 +1526,7 @@ test("backend QR expiry/revocation after GPS wait discards token and requires a 
 		const f = scannerFixture();
 		try {
 			f.setFailure(new TRPCClientError(code));
-			await f.button("Buka kamera dan lokasi")();
+			await f.start();
 			f.decoders[0]({ data: token });
 			f.watches[0].success(position());
 			await flush();
@@ -1596,7 +1627,7 @@ test("gallery handles unreadable images and invalid QR without requesting locati
 test("gallery replaces camera safely, ignores duplicate input and discards decoding after unmount", async () => {
 	const f = scannerFixture();
 	try {
-		await f.button("Buka kamera dan lokasi")();
+		await f.start();
 		await f.button("Pilih gambar QR")();
 		expect(f.cameras[0].destroys).toBeGreaterThan(0);
 		expect(f.cleared).toEqual([1]);
@@ -1692,7 +1723,7 @@ test("scan covers the full visible preview in portrait and landscape, including 
 test("frozen preview recovers once automatically, then offers manual recovery without reload", async () => {
 	const f = scannerFixture();
 	try {
-		await f.button("Buka kamera dan lokasi")();
+		await f.start();
 		expect(f.cameras[0].options.maxScansPerSecond).toBe(10);
 		expect(
 			f.cameras[0].options.calculateScanRegion?.(f.cameras[0].$video),
@@ -1717,7 +1748,7 @@ test("frozen preview recovers once automatically, then offers manual recovery wi
 test("healthy empty frames show a three-second hint without restarting the camera", async () => {
 	const f = scannerFixture();
 	try {
-		await f.button("Buka kamera dan lokasi")();
+		await f.start();
 		for (let i = 1; i <= 6; i++) {
 			f.cameras[0].$video.currentTime = i;
 			f.decodeErrors[0](QrScanner.NO_QR_CODE_FOUND);
@@ -1739,7 +1770,7 @@ test("healthy empty frames show a three-second hint without restarting the camer
 test("decoder silence recovers even if the camera keeps producing frames", async () => {
 	const f = scannerFixture();
 	try {
-		await f.button("Buka kamera dan lokasi")();
+		await f.start();
 		for (let i = 1; i <= 5; i++) {
 			f.cameras[0].$video.currentTime = i;
 			f.advance(1000);
@@ -1755,7 +1786,7 @@ test("decoder silence recovers even if the camera keeps producing frames", async
 test("background pause and resume reset health deadlines without a competing camera loop", async () => {
 	const f = scannerFixture();
 	try {
-		await f.button("Buka kamera dan lokasi")();
+		await f.start();
 		f.document.hidden = true;
 		for (const run of f.visibilityListeners) run();
 		f.advance(10000);
@@ -1782,7 +1813,7 @@ test("QR acknowledgement is immediate, remains locked beyond two seconds and suc
 				release = resolve;
 			}),
 		);
-		await f.button("Buka kamera dan lokasi")();
+		await f.start();
 		f.decoders[0]({ data: token });
 		expect(f.healthChecks.size).toBe(0);
 		expect(
@@ -1791,7 +1822,7 @@ test("QR acknowledgement is immediate, remains locked beyond two seconds and suc
 				.some(
 					(item) =>
 						typeof item.props.children === "string" &&
-						item.props.children.startsWith("QR terbaca, memverifikasi"),
+						item.props.children.startsWith("QR terbaca,"),
 				),
 		).toBe(true);
 		expect(f.successes).toHaveLength(0);
@@ -1823,7 +1854,7 @@ test("lost server response stays unconfirmed and retries current location withou
 	const f = scannerFixture();
 	try {
 		f.setFailure(new TypeError("private network details"));
-		await f.button("Buka kamera dan lokasi")();
+		await f.start();
 		f.decoders[0]({ data: token });
 		f.watches[0].success(position());
 		await flush();
@@ -1854,7 +1885,7 @@ test("confirmed attendance is displayed without waiting for recap and history re
 				release = resolve;
 			}),
 		);
-		await f.button("Buka kamera dan lokasi")();
+		await f.start();
 		f.decoders[0]({ data: token });
 		f.watches[0].success(position());
 		await flush();
@@ -1913,7 +1944,7 @@ test("GPS cancellation during settling discards the candidate and clears all tim
 test("foreground recovery replaces pending GPS once, ignores hidden/stale callbacks and preserves decoded QR", async () => {
 	const f = scannerFixture();
 	try {
-		await f.button("Buka kamera dan lokasi")();
+		await f.start();
 		f.decoders[0]({ data: token });
 		f.document.hidden = true;
 		for (const run of f.visibilityListeners) run();
@@ -1940,7 +1971,7 @@ test("foreground recovery replaces pending GPS once, ignores hidden/stale callba
 test("repeated background interruptions require explicit location retry instead of looping", async () => {
 	const f = scannerFixture();
 	try {
-		await f.button("Buka kamera dan lokasi")();
+		await f.start();
 		f.decoders[0]({ data: token });
 		for (let i = 0; i < 2; i++) {
 			f.document.hidden = true;
@@ -1964,7 +1995,7 @@ test("out-of-radius response permits fresh location retry without rescanning and
 	const f = scannerFixture();
 	try {
 		f.setFailure(new TRPCClientError("OUTSIDE_GEOFENCE"));
-		await f.button("Buka kamera dan lokasi")();
+		await f.start();
 		f.decoders[0]({ data: token });
 		f.watches[0].success(position());
 		await flush();
@@ -2006,7 +2037,7 @@ test("copyable location diagnosis excludes coordinates, QR, identifiers and unkn
 			code: "private-exception-token",
 			accuracyMeters: Number.NaN,
 		}),
-	).toBe("Diagnosis lokasi RESORA\nKode: SERVER_FAILED");
+	).toContain("Kode: SERVER_FAILED");
 	expect(scannerErrorMessage("constructor")).toBe(
 		scannerErrorMessage("SERVER_FAILED"),
 	);
@@ -2028,14 +2059,14 @@ test("radius diagnostic is available inside the error dialog before dismissing i
 			},
 		});
 		f.setFailure(failure);
-		await f.button("Buka kamera dan lokasi")();
+		await f.start();
 		f.decoders[0]({ data: token });
 		f.watches[0].success(position());
 		await flush();
 		const text = f.render().find((item) => item.type === "textarea")
 			?.props.value;
 		expect(text).toContain("OUTSIDE_GEOFENCE");
-		expect(text).toContain("Jarak menurut server (m): 36");
+		expect(text).toContain("Jarak server: 36 m");
 		expect(text).not.toContain(token);
 		await f.button("Salin diagnosis")(); // No Clipboard API still allows manual text selection.
 		expect(
@@ -2104,4 +2135,95 @@ test("a stale best candidate cannot replace a fresher reading at the acquisition
 		globalThis.setTimeout = originalSet;
 		globalThis.clearTimeout = originalClear;
 	}
+});
+
+test("camera zoom requires a genuine readable capability and applies bounded step constraints", async () => {
+	expect(cameraZoom(undefined)).toBeNull();
+	expect(
+		cameraZoom({
+			getCapabilities() {
+				throw new Error("unsupported");
+			},
+		} as unknown as MediaStreamTrack),
+	).toBeNull();
+	const applied: unknown[] = [];
+	const track = {
+		getCapabilities: () => ({ zoom: { min: 1, max: 4, step: 0.5 } }),
+		getSettings: () => ({ zoom: 2 }),
+		applyConstraints: async (value: unknown) => {
+			applied.push(value);
+		},
+	} as unknown as MediaStreamTrack;
+	const range = cameraZoom(track);
+	if (!range) throw new Error("Expected supported zoom");
+	expect(range).toEqual({ min: 1, max: 4, step: 0.5, value: 2 });
+	await setCameraZoom(track, 9, range);
+	await setCameraZoom(track, 1.7, range);
+	expect(applied).toEqual([
+		{ advanced: [{ zoom: 4 }] },
+		{ advanced: [{ zoom: 1.5 }] },
+	]);
+	await expect(setCameraZoom(track, Number.NaN, range)).rejects.toThrow(
+		"INVALID_ZOOM",
+	);
+	expect(
+		cameraZoom({
+			getCapabilities: track.getCapabilities,
+			getSettings: () => ({}),
+		} as unknown as MediaStreamTrack),
+	).toBeNull();
+	expect(
+		cameraZoom({
+			getCapabilities: () => ({ zoom: { min: 1, max: 4, step: 0 } }),
+			getSettings: track.getSettings,
+		} as unknown as MediaStreamTrack),
+	).toBeNull();
+	await expect(
+		setCameraZoom(
+			{
+				applyConstraints: async () => {
+					throw new Error("denied");
+				},
+			} as unknown as MediaStreamTrack,
+			2,
+			range,
+		),
+	).rejects.toThrow("denied");
+});
+
+test("diagnosis projects available evidence without inventing server context or leaking metadata", () => {
+	const text = locationDiagnosisText(
+		{
+			code: "SERVER_CONFIRMED",
+			accuracyMeters: 0,
+			distanceMeters: 21,
+			radiusMeters: 20.5,
+			sampleAgeMs: Number.NaN,
+			acquisitionMs: -1,
+		},
+		{
+			...diagnosisEnvironment("Mozilla Android Chrome/130.0 private-marker"),
+			permission: "granted",
+			timestamp: Date.UTC(2026, 10, 26, 0, 30),
+		},
+	);
+	expect(text).toContain("26/11/2026 07:30 WIB");
+	expect(text).toContain("Perangkat: Android");
+	expect(text).toContain("Browser: Chrome/Chromium");
+	expect(text).toContain("Akurasi GPS: 0 m");
+	expect(text).toContain("Radius event: 20.5 m");
+	expect(text).toContain("Selisih batas: +0.5 m");
+	expect(text).toContain("Umur sampel: Tidak tersedia");
+	expect(text).toContain("Durasi pengambilan: Tidak tersedia");
+	expect(text).toContain("Percobaan: Tidak tersedia");
+	expect(text).toContain("ID diagnosis: Tidak tersedia");
+	expect(text).not.toContain("private-marker");
+	const missing = locationDiagnosisText({ code: "SERVER_CONFIRMED" });
+	expect(missing).toContain("Jarak server: Tidak tersedia");
+	expect(missing).toContain("Selisih batas: Tidak tersedia");
+	expect(missing).toContain("Permission: Tidak tersedia");
+	expect(diagnosisEnvironment("private-marker")).toEqual({
+		device: undefined,
+		browser: undefined,
+	});
 });

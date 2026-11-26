@@ -64,6 +64,15 @@ export function AppShell({
 		canReadAttendancePoints,
 		isSuperadmin,
 	};
+	if (pathname === "/scan") {
+		return (
+			<div className="resora-workspace resora-scanner-workspace min-h-dvh">
+				<main id="workspace-content" tabIndex={-1}>
+					{children}
+				</main>
+			</div>
+		);
+	}
 	return (
 		<TooltipProvider delay={150}>
 			<SidebarProvider
