@@ -7,13 +7,20 @@ import {
 	useState,
 	useSyncExternalStore,
 } from "react";
-import type { DashboardFixture, DashboardMode } from "./dashboard.contracts";
+import type {
+	DashboardFixture,
+	DashboardMode,
+	DashboardScenarios,
+} from "./dashboard.contracts";
 
 type DashboardPreviewValue = {
 	fixture: DashboardFixture | null;
 	previewMode: DashboardMode;
 	setPreviewMode: (mode: DashboardMode) => void;
 	canManage: boolean;
+	identityKey: string;
+	simulateRequests: boolean;
+	scenarios: DashboardScenarios;
 };
 
 const DashboardPreviewContext = createContext<DashboardPreviewValue>({
@@ -21,6 +28,9 @@ const DashboardPreviewContext = createContext<DashboardPreviewValue>({
 	previewMode: "personal",
 	setPreviewMode: () => {},
 	canManage: false,
+	identityKey: "preview",
+	simulateRequests: false,
+	scenarios: {},
 });
 
 function subscribeConnection(change: () => void) {
@@ -39,11 +49,17 @@ export function DashboardPreviewProvider({
 	canManage,
 	initialMode,
 	children,
+	identityKey = "preview",
+	simulateRequests = false,
+	scenarios = {},
 }: {
 	fixtures: Partial<Record<DashboardMode, DashboardFixture>> | null;
 	canManage: boolean;
 	initialMode: DashboardMode;
 	children: ReactNode;
+	identityKey?: string;
+	simulateRequests?: boolean;
+	scenarios?: DashboardScenarios;
 }) {
 	const online = useSyncExternalStore(
 		subscribeConnection,
@@ -61,7 +77,15 @@ export function DashboardPreviewProvider({
 
 	return (
 		<DashboardPreviewContext.Provider
-			value={{ fixture, previewMode, setPreviewMode: selectMode, canManage }}
+			value={{
+				fixture,
+				previewMode,
+				setPreviewMode: selectMode,
+				canManage,
+				identityKey,
+				simulateRequests: simulateRequests && fixtures !== null,
+				scenarios,
+			}}
 		>
 			{!online && (
 				<p

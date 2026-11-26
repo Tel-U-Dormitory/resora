@@ -74,6 +74,8 @@ export default async function SrDashboard() {
 			/>
 			<DashboardPreviewProvider
 				key={session.userId}
+				identityKey={session.userId}
+				simulateRequests={previewFixtures !== null}
 				fixtures={previewFixtures}
 				canManage={canManageDashboard}
 				initialMode={canManageDashboard ? "management" : "personal"}

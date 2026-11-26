@@ -20,7 +20,8 @@ export type DashboardMetricState =
 	| { kind: "coming_soon"; message: string }
 	| { kind: "unavailable"; message: string }
 	| { kind: "error"; message: string }
-	| { kind: "forbidden"; message: string };
+	| { kind: "forbidden"; message: string }
+	| { kind: "stale"; message: string };
 
 export type DashboardExportCapability = {
 	report: "assessment" | "attendance" | "violations";
@@ -55,3 +56,22 @@ export type DashboardFixture = {
 	activities: DashboardActivity[];
 	attendanceHistory: DashboardAttendanceActivity[];
 };
+
+export type DashboardScenario =
+	| "ready"
+	| "zero"
+	| "empty"
+	| "not_assessed"
+	| "missing_period"
+	| "unavailable"
+	| "stale"
+	| "slow"
+	| "401"
+	| "403"
+	| "429"
+	| "500"
+	| "503"
+	| "timeout";
+export type DashboardScenarios = Partial<
+	Record<DashboardMetric["id"], DashboardScenario>
+>;

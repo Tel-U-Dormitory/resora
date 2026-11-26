@@ -3,7 +3,12 @@
 import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { DashboardHeader } from "@/components/dashboard-header";
-import type { DashboardFixture, DashboardMode } from "./dashboard.contracts";
+import type {
+	DashboardFixture,
+	DashboardMode,
+	DashboardScenario,
+	DashboardScenarios,
+} from "./dashboard.contracts";
 import { DashboardMetrics } from "./dashboard-metrics";
 import { DashboardPreviewProvider } from "./dashboard-preview-context";
 
@@ -12,6 +17,7 @@ export function DashboardPreview({
 }: {
 	fixtures: Partial<Record<DashboardMode, DashboardFixture>>;
 }) {
+	const [scenarios, setScenarios] = useState<DashboardScenarios>({});
 	const [actor, setActor] = useState("management");
 	const canManage = actor === "management" || actor === "superadmin";
 	const isSr = actor !== "superadmin";
@@ -44,8 +50,59 @@ export function DashboardPreview({
 							<option value="superadmin">SUPERADMIN</option>
 						</select>
 					</label>
+					<details className="space-y-3">
+						<summary className="focus-ring min-h-11 cursor-pointer py-3 text-sm">
+							Simulasi respons API
+						</summary>
+						<div className="grid gap-3 sm:grid-cols-3">
+							{["assessment", "attendance", "violations"].map((id) => (
+								<label key={id} className="grid gap-2 text-sm">
+									{id === "assessment"
+										? "Penilaian"
+										: id === "attendance"
+											? "Kehadiran"
+											: "Pelanggaran"}
+									<select
+										aria-label={`Respons ${id}`}
+										className="min-h-11 min-w-0 rounded-xl border border-border bg-surface px-3"
+										value={scenarios[id as keyof DashboardScenarios] ?? "ready"}
+										onChange={(e) =>
+											setScenarios((previous) => ({
+												...previous,
+												[id]: e.target.value as DashboardScenario,
+											}))
+										}
+									>
+										{[
+											["ready", "Berhasil"],
+											["slow", "Lambat / loading"],
+											["zero", "Nilai nol"],
+											["empty", "Data kosong"],
+											["not_assessed", "Belum dinilai"],
+											["missing_period", "Tanpa periode"],
+											["unavailable", "Belum tersedia"],
+											["stale", "Data kedaluwarsa"],
+											["401", "401 — sesi berakhir"],
+											["403", "403 — akses ditolak"],
+											["429", "429 — terlalu banyak request"],
+											["500", "500 — gagal memuat"],
+											["503", "503 — layanan tidak tersedia"],
+											["timeout", "Timeout"],
+										].map(([value, label]) => (
+											<option key={value} value={value}>
+												{label}
+											</option>
+										))}
+									</select>
+								</label>
+							))}
+						</div>
+					</details>
 				</aside>
 				<DashboardPreviewProvider
+					identityKey={actor}
+					simulateRequests
+					scenarios={scenarios}
 					key={actor}
 					fixtures={canManage ? fixtures : { personal: fixtures.personal }}
 					canManage={canManage}

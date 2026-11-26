@@ -1,7 +1,13 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import type { DashboardMetric } from "./dashboard.contracts";
 import { DashboardMetricCard } from "./dashboard-metric-card";
+import {
+	DashboardPreviewError,
+	previewFailureState,
+	requestDashboardMetric,
+} from "./dashboard-preview-api";
 import { useDashboardPreview } from "./dashboard-preview-context";
 
 const unavailableMetrics: DashboardMetric[] = [
@@ -104,7 +110,7 @@ export function DashboardMetrics({
 }: {
 	showCleanliness?: boolean;
 }) {
-	const { fixture, previewMode, setPreviewMode, canManage } =
+	const { fixture, previewMode, setPreviewMode, canManage, simulateRequests } =
 		useDashboardPreview();
 	const metrics =
 		fixture?.metrics ??
@@ -165,14 +171,66 @@ export function DashboardMetrics({
 				</p>
 			)}
 			<div className="resora-dashboard-metrics">
-				{displayMetrics.map((metric) => (
-					<DashboardMetricCard
-						key={metric.id}
-						metric={metric}
-						preview={fixture !== null}
-					/>
-				))}
+				{displayMetrics.map((metric) =>
+					simulateRequests && fixture && metric.id !== "cleanliness" ? (
+						<DashboardMetricRequest key={metric.id} metric={metric} />
+					) : (
+						<DashboardMetricCard
+							key={metric.id}
+							metric={metric}
+							preview={fixture !== null}
+						/>
+					),
+				)}
 			</div>
 		</section>
+	);
+}
+
+function DashboardMetricRequest({ metric }: { metric: DashboardMetric }) {
+	const { identityKey, previewMode, scenarios } = useDashboardPreview();
+	const scenario = scenarios[metric.id] ?? "ready";
+	const query = useQuery({
+		queryKey: [
+			"dashboard-preview",
+			identityKey,
+			previewMode,
+			metric.id,
+			scenario,
+		],
+		queryFn: ({ signal }) => requestDashboardMetric(metric, scenario, signal),
+		retry: false,
+		gcTime: 0,
+		staleTime: 0,
+		meta: { errorHandledLocally: true },
+	});
+	const state = query.error
+		? previewFailureState(query.error)
+		: query.isPending
+			? {
+					kind: "loading" as const,
+					message: `Memuat ${metric.title.toLowerCase()}…`,
+				}
+			: null;
+	const displayed = state
+		? { ...metric, state, export: null }
+		: (query.data ?? metric);
+	const denied =
+		query.error instanceof DashboardPreviewError &&
+		[401, 403].includes(Number(query.error.status));
+	return (
+		<div className="min-w-0 space-y-2">
+			<DashboardMetricCard metric={displayed} preview />
+			{query.error && !denied && (
+				<button
+					type="button"
+					className="focus-ring min-h-11 rounded-xl border border-border bg-surface px-3 text-sm"
+					disabled={query.isFetching}
+					onClick={() => void query.refetch()}
+				>
+					Muat ulang {metric.title.toLowerCase()}
+				</button>
+			)}
+		</div>
 	);
 }

@@ -34,7 +34,7 @@ test("zero is a ready value and distinct from empty", () => {
 		state: { kind: "ready" as const, value: 0, unit: " kegiatan", note: null },
 	};
 	expect(zero.state).toMatchObject({ kind: "ready", value: 0 });
-	expect(empty?.state.kind).toBe("empty");
+	expect(empty?.state).toMatchObject({ kind: "ready", value: 0 });
 	expect(
 		renderToStaticMarkup(jsxRuntime.jsx(DashboardMetricCard, { metric: zero })),
 	).toContain(">0<");

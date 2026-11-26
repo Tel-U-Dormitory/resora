@@ -30,6 +30,7 @@ function stateLabel(state: DashboardMetricState) {
 		case "coming_soon":
 		case "unavailable":
 		case "forbidden":
+		case "stale":
 			return state.message;
 		case "ready":
 		case "ready_summary":

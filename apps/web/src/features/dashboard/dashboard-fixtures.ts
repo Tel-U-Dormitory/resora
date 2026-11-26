@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { DashboardFixture, DashboardMode } from "./dashboard.contracts";
 import management from "./fixtures/management.json";
 import personal from "./fixtures/personal.json";
+import states from "./fixtures/states.json";
 
 const dashboardFixtureSchema = z.object({
 	mode: z.enum(["personal", "management"]),
@@ -44,6 +45,7 @@ const dashboardFixtureSchema = z.object({
 						"unavailable",
 						"error",
 						"forbidden",
+						"stale",
 					] as const
 				).map((kind) =>
 					z.object({ kind: z.literal(kind), message: z.string() }),
@@ -93,3 +95,5 @@ export function dashboardFixturesFor(
 		? dashboardFixtures
 		: { personal: dashboardFixtures.personal };
 }
+
+export const dashboardStateFixtures = states;
