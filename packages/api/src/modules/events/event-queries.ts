@@ -147,3 +147,37 @@ export async function lockEventForCheckIn(
 		.where(eq(events.id, eventId))
 		.for("share");
 }
+
+export async function listEvaluatableEvents(
+	db: Db,
+	startsOn: string,
+	endsOn: string,
+) {
+	return db
+		.select({
+			eventId: events.id,
+			title: events.title,
+			status: events.status,
+			visibility: events.visibility,
+			startsAt: events.startsAt,
+			endsAt: events.endsAt,
+			organizationContext: events.organizationContext,
+			committeeName: events.snapshotCommitteeName,
+		})
+		.from(events)
+		.where(
+			and(
+				or(eq(events.status, "PUBLISHED"), eq(events.status, "CLOSED")),
+				ne(events.visibility, "ARCHIVED"),
+				gte(
+					events.startsAt,
+					sql`(${startsOn}::date::timestamp AT TIME ZONE 'Asia/Jakarta')`,
+				),
+				lt(
+					events.startsAt,
+					sql`((${endsOn}::date + 1)::timestamp AT TIME ZONE 'Asia/Jakarta')`,
+				),
+			),
+		)
+		.orderBy(asc(events.startsAt), asc(events.id));
+}

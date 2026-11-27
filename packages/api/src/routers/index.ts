@@ -2,6 +2,7 @@ import { protectedProcedure, publicProcedure, router } from "../index";
 import { broadcastRouter } from "../modules/broadcast/broadcast.public";
 import { committeeRouter } from "../modules/committee/committee.public";
 import { identityRouter } from "../modules/identity/identity-transport.public";
+import { penilaianRouter } from "../modules/penilaian/penilaian.public";
 import { violationsRouter } from "../modules/violations/violations.public";
 import { attendanceRouter } from "../transport/attendance.router";
 
@@ -10,6 +11,7 @@ export const appRouter = router({
 	attendance: attendanceRouter,
 	broadcast: broadcastRouter,
 	committee: committeeRouter,
+	penilaian: penilaianRouter,
 	violations: violationsRouter,
 	healthCheck: publicProcedure.query(() => {
 		return "OK";

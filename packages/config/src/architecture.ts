@@ -128,6 +128,15 @@ const tableOwners: Record<string, string> = {
 	system_privileges: "identity",
 	user_permission_grants: "identity",
 	account_audit_logs: "identity",
+	evaluation_periods: "penilaian",
+	evaluation_period_events: "penilaian",
+	evaluation_event_scores: "penilaian",
+	evaluation_department_scores: "penilaian",
+	evaluation_gform_responses: "penilaian",
+	evaluation_attendance_fallbacks: "penilaian",
+	evaluation_point_transactions: "penilaian",
+	evaluation_result_snapshots: "penilaian",
+	evaluation_audits: "penilaian",
 };
 function explicitSqlTables(path: string, source: string) {
 	const result = new Set<string>();

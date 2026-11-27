@@ -26,6 +26,7 @@ export {
 	closedEventsForScoring,
 	eventHasDeletionReferences,
 	eventOrganizationHint,
+	listEvaluatableEvents,
 	listInvitedEvents,
 	listManagedEvents,
 	lockEventForCheckIn,
