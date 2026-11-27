@@ -250,6 +250,107 @@ export const listGformImportsSchema = z
 	})
 	.strict();
 
+export const attendanceActivityTypeSchema = z.enum([
+	"RAPAT_ALL_PANITIA",
+	"EVENT_BESAR",
+	"EVENT_SEBAGIAN",
+	"SIDAK",
+]);
+
+// IZIN_5K intentionally omitted until 5K definition is approved (FR-EVAL-008/034).
+export const attendanceFallbackStatusSchema = z.enum([
+	"HADIR_TEPAT_WAKTU",
+	"TERLAMBAT_DENGAN_IZIN",
+	"TERLAMBAT_TANPA_IZIN_MAX_15",
+	"TERLAMBAT_DENGAN_IZIN_LEBIH_15",
+	"TERLAMBAT_TANPA_IZIN_LEBIH_15",
+	"IZIN_DI_LUAR_5K",
+	"ALFA",
+]);
+
+export const ATTENDANCE_STATUS_BASE_10: Record<
+	z.infer<typeof attendanceFallbackStatusSchema>,
+	number
+> = {
+	HADIR_TEPAT_WAKTU: 10,
+	TERLAMBAT_DENGAN_IZIN: 8,
+	TERLAMBAT_TANPA_IZIN_MAX_15: 7,
+	TERLAMBAT_DENGAN_IZIN_LEBIH_15: 6,
+	TERLAMBAT_TANPA_IZIN_LEBIH_15: 5,
+	IZIN_DI_LUAR_5K: 3,
+	ALFA: 0,
+};
+
+export function calculateFallbackAttendancePoints(
+	activityType: z.infer<typeof attendanceActivityTypeSchema>,
+	status: z.infer<typeof attendanceFallbackStatusSchema>,
+	sidakMaxPoints: number,
+) {
+	const maxPoints =
+		activityType === "EVENT_SEBAGIAN"
+			? 6
+			: activityType === "SIDAK"
+				? sidakMaxPoints
+				: 10;
+	const base = ATTENDANCE_STATUS_BASE_10[status];
+	return {
+		maxPoints,
+		earnedPoints: Math.round((base / 10) * maxPoints * 100) / 100,
+	};
+}
+
+export const recordAttendanceFallbackSchema = z
+	.object({
+		evaluationPeriodId: z.uuid(),
+		targetUserId: z.string().trim().min(1).max(128),
+		activityType: attendanceActivityTypeSchema,
+		activityTitle: plainEvaluationText(1, 160),
+		activityDate: isoDate,
+		attendanceStatus: attendanceFallbackStatusSchema,
+		sourceKind: z
+			.enum(["MANUAL_FALLBACK", "IMPORT_FALLBACK"])
+			.default("MANUAL_FALLBACK"),
+		sourceReference: plainEvaluationText(1, 160).nullable().optional(),
+		notes: plainEvaluationText(1, 500, true),
+	})
+	.strict();
+
+export const listAttendancePointsSchema = z
+	.object({
+		evaluationPeriodId: z.uuid(),
+		targetUserId: z.string().trim().min(1).max(128).optional(),
+	})
+	.strict();
+
+export const proposePointTransactionSchema = z
+	.object({
+		evaluationPeriodId: z.uuid(),
+		targetUserId: z.string().trim().min(1).max(128),
+		transactionType: z.enum(["ADDITION", "DEDUCTION"]),
+		points: z.number().finite().positive().max(1000),
+		category: plainEvaluationText(1, 100),
+		reason: plainEvaluationText(1, 1000, true),
+		occurredOn: isoDate,
+	})
+	.strict();
+
+export const decidePointTransactionSchema = z
+	.object({
+		evaluationPeriodId: z.uuid(),
+		transactionId: z.uuid(),
+		decision: z.enum(["APPROVED", "REJECTED"]),
+		decisionNote: plainEvaluationText(1, 500, true).nullable().optional(),
+	})
+	.strict();
+
+export const listPointTransactionsSchema = z
+	.object({
+		evaluationPeriodId: z.uuid(),
+		targetUserId: z.string().trim().min(1).max(128).optional(),
+		status: z.enum(["PENDING", "APPROVED", "REJECTED"]).optional(),
+	})
+	.strict();
+
 export function parseCsvLine(line: string): string[] {
 	const cells: string[] = [];
 	let current = "";

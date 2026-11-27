@@ -1,5 +1,5 @@
 import type { ActiveIdentity } from "@resora/auth/sr-access";
-import type { Database } from "@resora/db";
+import type { Database, DatabaseTransaction } from "@resora/db";
 import {
 	attendanceRecords,
 	attendanceSessions,
@@ -153,6 +153,76 @@ export function aggregateAttendancePoints(
 	};
 }
 
+export async function readPeriodAttendancePoints(
+	tx: Database | DatabaseTransaction,
+	periodId: string,
+	selectedEventIds?: string[],
+) {
+	const period = await readSrPeriod(tx, periodId);
+	if (!period)
+		throw new TRPCError({ code: "NOT_FOUND", message: "PERIOD_NOT_FOUND" });
+	const roster = await readSrPeriodRoster(tx, periodId);
+	const eligibleEvents = await closedEventsForScoring(
+		tx,
+		period.startsOn,
+		period.endsOn,
+	);
+	const eligibleIds = new Set(eligibleEvents.map((event) => event.eventId));
+	if (selectedEventIds?.some((id) => !eligibleIds.has(id)))
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "POINTS_EVENT_SELECTION_INVALID",
+		});
+	const selectedIds =
+		selectedEventIds === undefined ? null : new Set(selectedEventIds);
+	const events = eligibleEvents.filter((event) =>
+		selectedIds === null
+			? event.visibility !== "ARCHIVED"
+			: selectedIds.has(event.eventId),
+	);
+	const eventIds = events.map((row) => row.eventId);
+	const userIds = roster.map((row) => row.userId);
+	const invitations = await scoringInvitationSnapshots(tx, eventIds, userIds);
+	const attendance =
+		eventIds.length && userIds.length
+			? await tx
+					.select({
+						eventId: attendanceSessions.internalEventId,
+						session: {
+							status: attendanceSessions.status,
+							lateGraceMinutes: attendanceSessions.lateGraceMinutes,
+						},
+						record: {
+							userId: attendanceRecords.userId,
+							attendanceAt: attendanceRecords.attendanceAt,
+							timingClass: attendanceRecords.timingClass,
+						},
+					})
+					.from(attendanceSessions)
+					.leftJoin(
+						attendanceRecords,
+						and(
+							eq(attendanceRecords.sessionId, attendanceSessions.id),
+							inArray(attendanceRecords.userId, userIds),
+						),
+					)
+					.where(inArray(attendanceSessions.internalEventId, eventIds))
+			: [];
+	return {
+		period: { ...period, timeZone: "Asia/Jakarta" as const },
+		availableEvents: eligibleEvents.map(
+			({ eventId, title, startsAt, scoringMode, visibility }) => ({
+				eventId,
+				title,
+				startsAt,
+				scoringMode,
+				visibility,
+			}),
+		),
+		...aggregateAttendancePoints(events, roster, invitations, attendance),
+	};
+}
+
 export async function pointsRecap(
 	db: Database,
 	identity: ActiveIdentity,
@@ -169,73 +239,7 @@ export async function pointsRecap(
 				)
 			)
 				throw new TRPCError({ code: "FORBIDDEN" });
-			const period = await readSrPeriod(tx, periodId);
-			if (!period)
-				throw new TRPCError({ code: "NOT_FOUND", message: "PERIOD_NOT_FOUND" });
-			const roster = await readSrPeriodRoster(tx, periodId);
-			const eligibleEvents = await closedEventsForScoring(
-				tx,
-				period.startsOn,
-				period.endsOn,
-			);
-			const eligibleIds = new Set(eligibleEvents.map((event) => event.eventId));
-			if (selectedEventIds?.some((id) => !eligibleIds.has(id)))
-				throw new TRPCError({
-					code: "BAD_REQUEST",
-					message: "POINTS_EVENT_SELECTION_INVALID",
-				});
-			const selectedIds =
-				selectedEventIds === undefined ? null : new Set(selectedEventIds);
-			const events = eligibleEvents.filter((event) =>
-				selectedIds === null
-					? event.visibility !== "ARCHIVED"
-					: selectedIds.has(event.eventId),
-			);
-			const eventIds = events.map((row) => row.eventId);
-			const userIds = roster.map((row) => row.userId);
-			const invitations = await scoringInvitationSnapshots(
-				tx,
-				eventIds,
-				userIds,
-			);
-			const attendance =
-				eventIds.length && userIds.length
-					? await tx
-							.select({
-								eventId: attendanceSessions.internalEventId,
-								session: {
-									status: attendanceSessions.status,
-									lateGraceMinutes: attendanceSessions.lateGraceMinutes,
-								},
-								record: {
-									userId: attendanceRecords.userId,
-									attendanceAt: attendanceRecords.attendanceAt,
-									timingClass: attendanceRecords.timingClass,
-								},
-							})
-							.from(attendanceSessions)
-							.leftJoin(
-								attendanceRecords,
-								and(
-									eq(attendanceRecords.sessionId, attendanceSessions.id),
-									inArray(attendanceRecords.userId, userIds),
-								),
-							)
-							.where(inArray(attendanceSessions.internalEventId, eventIds))
-					: [];
-			return {
-				period: { ...period, timeZone: "Asia/Jakarta" as const },
-				availableEvents: eligibleEvents.map(
-					({ eventId, title, startsAt, scoringMode, visibility }) => ({
-						eventId,
-						title,
-						startsAt,
-						scoringMode,
-						visibility,
-					}),
-				),
-				...aggregateAttendancePoints(events, roster, invitations, attendance),
-			};
+			return readPeriodAttendancePoints(tx, periodId, selectedEventIds);
 		},
 		{ isolationLevel: "repeatable read", accessMode: "read only" },
 	);

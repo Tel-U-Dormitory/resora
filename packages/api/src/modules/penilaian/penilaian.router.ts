@@ -4,10 +4,15 @@ import {
 	configurePeriodEventSchema,
 	confirmGformImportSchema,
 	createEvaluationPeriodSchema,
+	decidePointTransactionSchema,
 	evaluationPeriodIdSchema,
+	listAttendancePointsSchema,
 	listDepartmentTasksSchema,
 	listGformImportsSchema,
+	listPointTransactionsSchema,
 	previewGformImportSchema,
+	proposePointTransactionSchema,
+	recordAttendanceFallbackSchema,
 	setActiveEvaluationPeriodSchema,
 	submitDepartmentEvaluationSchema,
 	submitEventEvaluationSchema,
@@ -25,6 +30,13 @@ import {
 	setActiveEvaluationPeriod,
 	updateEvaluationPeriodConfig,
 } from "./penilaian-periods.service";
+import {
+	decidePointTransaction,
+	listAttendancePointsSummary,
+	listPointTransactions,
+	proposePointTransaction,
+	recordAttendanceFallback,
+} from "./penilaian-points.service";
 import {
 	configurePeriodEvent,
 	listCandidateEventsForPeriod,
@@ -99,4 +111,29 @@ export const penilaianRouter = router({
 	listGformImports: protectedProcedure
 		.input(listGformImportsSchema)
 		.query(({ ctx, input }) => listGformImports(ctx.db, ctx.identity, input)),
+	recordAttendanceFallback: protectedProcedure
+		.input(recordAttendanceFallbackSchema)
+		.mutation(({ ctx, input }) =>
+			recordAttendanceFallback(ctx.db, ctx.identity, input),
+		),
+	attendancePointsSummary: protectedProcedure
+		.input(listAttendancePointsSchema)
+		.query(({ ctx, input }) =>
+			listAttendancePointsSummary(ctx.db, ctx.identity, input),
+		),
+	proposePointTransaction: protectedProcedure
+		.input(proposePointTransactionSchema)
+		.mutation(({ ctx, input }) =>
+			proposePointTransaction(ctx.db, ctx.identity, input),
+		),
+	decidePointTransaction: protectedProcedure
+		.input(decidePointTransactionSchema)
+		.mutation(({ ctx, input }) =>
+			decidePointTransaction(ctx.db, ctx.identity, input),
+		),
+	listPointTransactions: protectedProcedure
+		.input(listPointTransactionsSchema)
+		.query(({ ctx, input }) =>
+			listPointTransactions(ctx.db, ctx.identity, input),
+		),
 });
