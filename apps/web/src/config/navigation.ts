@@ -39,6 +39,15 @@ export function getSidebarGroups({
 					({ href }) =>
 						isSr || ["/dashboard", "/broadcasts", "/profile"].includes(href),
 				),
+				...(isSr || isSuperadmin
+					? [
+							{
+								title: "Penilaian SR",
+								href: "/penilaian",
+								icon: "manage",
+							} as const,
+						]
+					: []),
 				...((process.env.NODE_ENV === "development" ||
 					process.env.NODE_ENV === "test") &&
 				(isSr || isSuperadmin)

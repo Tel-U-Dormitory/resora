@@ -20,10 +20,18 @@ import {
 	updateEvaluationPeriodConfigSchema,
 } from "./penilaian.contracts";
 import {
+	canApprovePointTransaction,
 	canManagePeriodGovernance,
 	canManageRoutineEvaluation,
+	canProposePointTransaction,
 	canReadPenilaianModule,
+	canViewCommentsAndEvaluatorIdentity,
+	canViewFinalAllMembers,
 	canViewPreFinalResults,
+	isActiveValidSr,
+	isIntiMember,
+	isKadepHco,
+	isStructuralKadep,
 } from "./penilaian-policy";
 
 function fail(
@@ -296,4 +304,38 @@ export async function setActiveEvaluationPeriod(
 
 		return updated;
 	});
+}
+
+export async function getPenilaianCapabilities(
+	db: Database,
+	identity: ActiveIdentity,
+) {
+	if (!canReadPenilaianModule(identity))
+		fail("FORBIDDEN", "EVALUATION_ACCESS_DENIED");
+
+	return db.transaction(
+		async (tx) => {
+			const live = await readOperationalIdentity(tx, identity.userId);
+			if (!live || !canReadPenilaianModule(live))
+				fail("FORBIDDEN", "EVALUATION_ACCESS_DENIED");
+
+			return {
+				canAccessModule: canReadPenilaianModule(live),
+				canManageGovernance: canManagePeriodGovernance(live),
+				canManageRoutine: canManageRoutineEvaluation(live),
+				canViewPreFinal: canViewPreFinalResults(live),
+				canViewAllFinal: canViewFinalAllMembers(live),
+				canViewComments: canViewCommentsAndEvaluatorIdentity(live),
+				canProposePoints: canProposePointTransaction(live),
+				canApprovePoints: canApprovePointTransaction(live),
+				canEvaluateDepartment:
+					isStructuralKadep(live) || isIntiMember(live) || isKadepHco(live),
+				isSr: isActiveValidSr(live),
+				userId: live.userId,
+				departmentCode: live.actor === "SR" ? live.departmentCode : null,
+				positionCode: live.actor === "SR" ? live.positionCode : null,
+			};
+		},
+		{ isolationLevel: "repeatable read", accessMode: "read only" },
+	);
 }

@@ -13,6 +13,7 @@ import type {
 } from "./dashboard.contracts";
 
 export type DashboardDetailHref =
+	| "/penilaian"
 	| "/events/points"
 	| "/attendance/history"
 	| "/events"

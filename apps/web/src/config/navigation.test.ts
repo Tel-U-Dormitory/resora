@@ -28,6 +28,7 @@ test("global, HCO and administration groups follow independent backend capabilit
 					...(isSr
 						? (["/events", "/scan", "/attendance/history"] as const)
 						: []),
+					...(isSr || isSuperadmin ? (["/penilaian"] as const) : []),
 					...(hasViolationsPreview ? (["/pelanggaran"] as const) : []),
 				]);
 				expect(groups.some((group) => group.id === "hco")).toBe(
@@ -132,6 +133,7 @@ test("Apps reuses sidebar capabilities and excludes primary destinations and QR"
 	expect(participant.map((item) => item.href)).toEqual([
 		"/events",
 		"/attendance/history",
+		"/penilaian",
 		...(process.env.NODE_ENV === "development" ||
 		process.env.NODE_ENV === "test"
 			? (["/pelanggaran"] as const)
@@ -143,6 +145,7 @@ test("Apps reuses sidebar capabilities and excludes primary destinations and QR"
 		isSuperadmin: true,
 	});
 	expect(admin.map((item) => item.href)).toEqual([
+		"/penilaian",
 		...(process.env.NODE_ENV === "development" ||
 		process.env.NODE_ENV === "test"
 			? (["/pelanggaran"] as const)

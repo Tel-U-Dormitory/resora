@@ -16,8 +16,8 @@ import { DashboardHeader } from "@/components/dashboard-header";
 import { BroadcastFeed } from "@/features/broadcast/public";
 import {
 	DashboardActivities,
-	DashboardMetrics,
 	DashboardPreviewProvider,
+	LiveDashboardMetrics,
 } from "@/features/dashboard/public";
 import { getSrSession } from "./server-session";
 
@@ -103,7 +103,7 @@ export default async function SrDashboard() {
 				canManage={canManageDashboard}
 				initialMode={canManageDashboard ? "management" : "personal"}
 			>
-				<DashboardMetrics showCleanliness={isSr} />
+				<LiveDashboardMetrics showCleanliness={isSr} />
 				<section
 					aria-label="Akses cepat"
 					className="resora-dashboard-quick resora-dashboard-section space-y-3"

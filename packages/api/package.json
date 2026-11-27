@@ -15,6 +15,7 @@
 		"./modules/attendance/points.contracts": "./src/modules/attendance/points.contracts.ts",
 		"./modules/broadcast/broadcast.contracts": "./src/modules/broadcast/broadcast.contracts.ts",
 		"./modules/violations/violations.contracts": "./src/modules/violations/violations.contracts.ts",
+		"./modules/penilaian/penilaian.contracts": "./src/modules/penilaian/penilaian.contracts.ts",
 		"./modules/committee/committee.contracts": "./src/modules/committee/committee.contracts.ts"
 	},
 	"scripts": {

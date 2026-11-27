@@ -99,6 +99,9 @@ function metricDetailHref(
 	previewMode: DashboardMode,
 	canManage: boolean,
 ): DashboardDetailHref | undefined {
+	if (metricId === "assessment") {
+		return "/penilaian";
+	}
 	if (metricId === "attendance") {
 		return previewMode === "management" && canManage
 			? "/events/points"
@@ -154,8 +157,10 @@ function addAttendancePercentage(metric: DashboardMetric): DashboardMetric {
 
 export function DashboardMetrics({
 	showCleanliness = true,
+	liveAssessmentMetric,
 }: {
 	showCleanliness?: boolean;
+	liveAssessmentMetric?: DashboardMetric;
 }) {
 	const { fixture, previewMode, setPreviewMode, canManage, simulateRequests } =
 		useDashboardPreview();
@@ -257,19 +262,27 @@ export function DashboardMetrics({
 	const metrics =
 		fixture?.metrics ??
 		(previewMode === "management"
-			? unavailableMetrics.map((metric) => ({
-					...metric,
-					scope: "organization" as const,
-					state:
-						metric.id === "cleanliness"
-							? metric.state
-							: {
-									kind: "unavailable" as const,
-									message: "Data belum tersedia.",
-								},
-					export: null,
-				}))
-			: unavailableMetrics);
+			? unavailableMetrics.map((metric) =>
+					metric.id === "assessment" && liveAssessmentMetric
+						? liveAssessmentMetric
+						: {
+								...metric,
+								scope: "organization" as const,
+								state:
+									metric.id === "cleanliness"
+										? metric.state
+										: {
+												kind: "unavailable" as const,
+												message: "Data belum tersedia.",
+											},
+								export: null,
+							},
+				)
+			: unavailableMetrics.map((metric) =>
+					metric.id === "assessment" && liveAssessmentMetric
+						? liveAssessmentMetric
+						: metric,
+				));
 	const displayMetrics = metrics
 		.filter((metric) => showCleanliness || metric.id !== "cleanliness")
 		.map(addAttendancePercentage);

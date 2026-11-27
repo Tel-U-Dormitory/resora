@@ -42,6 +42,7 @@ import {
 } from "./penilaian-import.service";
 import {
 	createEvaluationPeriod,
+	getPenilaianCapabilities,
 	listEvaluationPeriods,
 	listSrTenureOptions,
 	setActiveEvaluationPeriod,
@@ -70,6 +71,9 @@ import {
 } from "./penilaian-scoring.service";
 
 export const penilaianRouter = router({
+	myCapabilities: protectedProcedure
+		.input(z.void())
+		.query(({ ctx }) => getPenilaianCapabilities(ctx.db, ctx.identity)),
 	srTenureOptions: protectedProcedure
 		.input(z.void())
 		.query(({ ctx }) => listSrTenureOptions(ctx.db, ctx.identity)),

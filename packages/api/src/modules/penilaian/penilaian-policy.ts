@@ -17,6 +17,12 @@ function hasValidSr(identity: Identity): identity is ActiveSrIdentity {
 	);
 }
 
+export function isActiveValidSr(
+	identity: Identity,
+): identity is ActiveSrIdentity {
+	return hasValidSr(identity);
+}
+
 export function isActiveHcoMember(
 	identity: Identity,
 ): identity is ActiveSrIdentity {
