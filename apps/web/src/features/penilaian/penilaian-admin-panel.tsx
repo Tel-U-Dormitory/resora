@@ -105,10 +105,10 @@ export function PenilaianAdminPanel({
 		"EVENT_SCORE",
 	);
 	const [corrScoreId, setCorrScoreId] = useState("");
-	const [corrCommitment, setCorrCommitment] = useState("4");
-	const [corrTeamwork, setCorrTeamwork] = useState("4");
-	const [corrAttitude, setCorrAttitude] = useState("4");
-	const [corrContribution, setCorrContribution] = useState("4");
+	const [corrCommitment, setCorrCommitment] = useState("85");
+	const [corrTeamwork, setCorrTeamwork] = useState("85");
+	const [corrAttitude, setCorrAttitude] = useState("85");
+	const [corrContribution, setCorrContribution] = useState("85");
 	const [corrReason, setCorrReason] = useState("");
 
 	const tenureQuery = useQuery({
@@ -693,8 +693,8 @@ export function PenilaianAdminPanel({
 											<Input
 												aria-label="Komitmen koreksi"
 												type="number"
-												min={1}
-												max={5}
+												min={0}
+												max={100}
 												className="min-h-11"
 												value={corrCommitment}
 												onChange={(event) =>
@@ -704,8 +704,8 @@ export function PenilaianAdminPanel({
 											<Input
 												aria-label="Teamwork koreksi"
 												type="number"
-												min={1}
-												max={5}
+												min={0}
+												max={100}
 												className="min-h-11"
 												value={corrTeamwork}
 												onChange={(event) =>
@@ -715,8 +715,8 @@ export function PenilaianAdminPanel({
 											<Input
 												aria-label="Sikap koreksi"
 												type="number"
-												min={1}
-												max={5}
+												min={0}
+												max={100}
 												className="min-h-11"
 												value={corrAttitude}
 												onChange={(event) =>
@@ -726,8 +726,8 @@ export function PenilaianAdminPanel({
 											<Input
 												aria-label="Kontribusi koreksi"
 												type="number"
-												min={1}
-												max={5}
+												min={0}
+												max={100}
 												className="min-h-11"
 												value={corrContribution}
 												onChange={(event) =>

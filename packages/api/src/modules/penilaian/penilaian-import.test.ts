@@ -266,7 +266,7 @@ test("confirmGformImport blocks non-HCO, rejects partial invalid imports, and sa
 	expect(insertedRows).toHaveLength(2);
 });
 
-test("listGformImports redacts respondentKey and comment for SUPERADMIN (D07)", async () => {
+test("listGformImports allows respondentKey and comment for active HCO and SUPERADMIN, redacting others (D07)", async () => {
 	const tx = {
 		select: () => ({
 			from: () => ({
@@ -298,8 +298,8 @@ test("listGformImports redacts respondentKey and comment for SUPERADMIN (D07)", 
 	const adminRows = await listGformImports(db, superAdmin, {
 		evaluationPeriodId: periodId,
 	});
-	expect(adminRows[0]?.respondentKey).toBeNull();
-	expect(adminRows[0]?.comment).toBeNull();
+	expect(adminRows[0]?.respondentKey).toBe("maba-secret-nim");
+	expect(adminRows[0]?.comment).toBe("Komentar privat");
 
 	liveIdentity = hcoMember;
 	const hcoRows = await listGformImports(db, hcoMember, {

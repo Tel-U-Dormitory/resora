@@ -229,7 +229,6 @@ export function PenilaianWorkspace() {
 					canProposePoints={caps.canProposePoints}
 					canApprovePoints={caps.canApprovePoints}
 					canViewPreFinal={caps.canViewPreFinal}
-					canEvaluateDepartment={caps.canEvaluateDepartment}
 				/>
 			)}
 

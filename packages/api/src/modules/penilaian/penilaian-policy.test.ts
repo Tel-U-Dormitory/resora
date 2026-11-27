@@ -92,10 +92,10 @@ test("pre-final, final, and comment visibility enforce privacy & D07", () => {
 	expect(canViewFinalAllMembers(rndSekdep)).toBe(false);
 	expect(canViewFinalAllMembers(rndMember)).toBe(false);
 
-	// FR-EVAL-036 Pending: even SUPERADMIN cannot view comments/raw identities yet.
+	// FR-EVAL-036 / D07 confirmed: active HCO and SUPERADMIN view comments/raw identities; others cannot.
 	expect(canViewCommentsAndEvaluatorIdentity(hcoMember)).toBe(true);
 	expect(canViewCommentsAndEvaluatorIdentity(hcoKadep)).toBe(true);
-	expect(canViewCommentsAndEvaluatorIdentity(systemAdmin)).toBe(false);
+	expect(canViewCommentsAndEvaluatorIdentity(systemAdmin)).toBe(true);
 	expect(canViewCommentsAndEvaluatorIdentity(intiKetum)).toBe(false);
 	expect(canViewCommentsAndEvaluatorIdentity(rndKadep)).toBe(false);
 });

@@ -66,7 +66,6 @@ export function PenilaianPointsPanel({
 	canProposePoints,
 	canApprovePoints,
 	canViewPreFinal,
-	canEvaluateDepartment,
 }: {
 	evaluationPeriodId: string;
 	periodStatus: "OPEN" | "FINAL" | "REVISING";
@@ -75,7 +74,6 @@ export function PenilaianPointsPanel({
 	canProposePoints: boolean;
 	canApprovePoints: boolean;
 	canViewPreFinal: boolean;
-	canEvaluateDepartment: boolean;
 }) {
 	const queryClient = useQueryClient();
 	const [feedback, setFeedback] = useState("");
@@ -124,16 +122,11 @@ export function PenilaianPointsPanel({
 		meta: { errorHandledLocally: true },
 	});
 
-	const deptRosterQuery = useQuery({
-		...trpc.penilaian.myDepartmentTasks.queryOptions({
+	const proposalTargetsQuery = useQuery({
+		...trpc.penilaian.listPointProposalTargets.queryOptions({
 			evaluationPeriodId,
-			quarterNumber: 1,
 		}),
-		enabled:
-			Boolean(evaluationPeriodId) &&
-			canEvaluateDepartment &&
-			!canLoadSummary &&
-			canProposePoints,
+		enabled: Boolean(evaluationPeriodId) && canProposePoints && !canLoadSummary,
 		retry: false,
 		meta: { errorHandledLocally: true },
 	});
@@ -186,9 +179,9 @@ export function PenilaianPointsPanel({
 			userId: row.userId,
 			label: `${row.name} (${row.nim})`,
 		})) ??
-		deptRosterQuery.data?.targets.map((row) => ({
+		proposalTargetsQuery.data?.map((row) => ({
 			userId: row.userId,
-			label: `${row.name} (${row.nim})`,
+			label: `${row.name} (${row.nim} · ${row.departmentCode})`,
 		})) ??
 		[];
 

@@ -65,10 +65,10 @@ export function canViewFinalAllMembers(identity: Identity) {
 	return canViewPreFinalResults(identity) || isStructuralKadep(identity);
 }
 
-// FR-EVAL-030/033/036 (D07): Raw respondent/evaluator identity and comments are HCO-only
-// until PM decides the SUPERADMIN exception for FR-EVAL-036.
+// FR-EVAL-030/033/036 (D07): Raw respondent/evaluator identity and comments are
+// restricted to active HCO members and SUPERADMIN (PM decision 2026-11-27).
 export function canViewCommentsAndEvaluatorIdentity(identity: Identity) {
-	return isActiveHcoMember(identity);
+	return hasSuperadminPrivilege(identity) || isActiveHcoMember(identity);
 }
 
 // FR-EVAL-035: KADEP (including KADEP HCO) and SUPERADMIN propose point transactions.

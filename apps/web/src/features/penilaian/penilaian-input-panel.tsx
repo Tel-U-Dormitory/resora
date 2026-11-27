@@ -22,10 +22,10 @@ type IndicatorState = {
 };
 
 const defaultIndicators: IndicatorState = {
-	commitment: 4,
-	teamwork: 4,
-	attitude: 4,
-	contribution: 4,
+	commitment: 85,
+	teamwork: 85,
+	attitude: 85,
+	contribution: 85,
 	comment: "",
 };
 
@@ -47,10 +47,10 @@ function IndicatorGrid({
 	disabled: boolean;
 }) {
 	const fields = [
-		{ key: "commitment" as const, label: "Komitmen (1–5)" },
-		{ key: "teamwork" as const, label: "Teamwork (1–5)" },
-		{ key: "attitude" as const, label: "Sikap (1–5)" },
-		{ key: "contribution" as const, label: "Kontribusi (1–5)" },
+		{ key: "commitment" as const, label: "Komitmen (0–100)" },
+		{ key: "teamwork" as const, label: "Teamwork (0–100)" },
+		{ key: "attitude" as const, label: "Sikap (0–100)" },
+		{ key: "contribution" as const, label: "Kontribusi (0–100)" },
 	];
 	return (
 		<div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
@@ -67,8 +67,8 @@ function IndicatorGrid({
 						<Input
 							id={id}
 							type="number"
-							min={1}
-							max={5}
+							min={0}
+							max={100}
 							step={1}
 							disabled={disabled}
 							className="min-h-11"
@@ -78,8 +78,8 @@ function IndicatorGrid({
 								onChange({
 									...value,
 									[field.key]: Number.isFinite(parsed)
-										? Math.min(5, Math.max(1, Math.round(parsed)))
-										: 1,
+										? Math.min(100, Math.max(0, Math.round(parsed)))
+										: 0,
 								});
 							}}
 						/>
@@ -178,7 +178,7 @@ export function PenilaianInputPanel({
 						</h2>
 						<p className="text-muted-foreground text-xs">
 							Nilai rekan SR peserta event yang telah dikategorikan HCO (skala
-							1–5, kirim satu kali).
+							0–100, kirim satu kali).
 						</p>
 					</div>
 
@@ -274,7 +274,7 @@ export function PenilaianInputPanel({
 															/>
 															<Textarea
 																aria-label={`Catatan untuk ${target.name}`}
-																placeholder="Catatan kinerja opsional (hanya dilihat HCO)"
+																placeholder="Catatan kinerja opsional (dilihat HCO & SUPERADMIN)"
 																disabled={
 																	!task.canSubmit || submitEvent.isPending
 																}

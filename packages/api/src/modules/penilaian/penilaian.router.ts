@@ -51,6 +51,7 @@ import {
 import {
 	decidePointTransaction,
 	listAttendancePointsSummary,
+	listPointProposalTargets,
 	listPointTransactions,
 	proposePointTransaction,
 	recordAttendanceFallback,
@@ -147,6 +148,11 @@ export const penilaianRouter = router({
 		.input(listAttendancePointsSchema)
 		.query(({ ctx, input }) =>
 			listAttendancePointsSummary(ctx.db, ctx.identity, input),
+		),
+	listPointProposalTargets: protectedProcedure
+		.input(evaluationPeriodIdSchema)
+		.query(({ ctx, input }) =>
+			listPointProposalTargets(ctx.db, ctx.identity, input),
 		),
 	proposePointTransaction: protectedProcedure
 		.input(proposePointTransactionSchema)

@@ -19,6 +19,7 @@ import {
 import {
 	calculateFallbackAttendancePoints,
 	decidePointTransactionSchema,
+	evaluationPeriodIdSchema,
 	listAttendancePointsSchema,
 	listPointTransactionsSchema,
 	proposePointTransactionSchema,
@@ -39,6 +40,43 @@ function fail(
 	message: string,
 ): never {
 	throw new TRPCError({ code, message });
+}
+
+export async function listPointProposalTargets(
+	db: Database,
+	identity: ActiveIdentity,
+	input: z.input<typeof evaluationPeriodIdSchema>,
+) {
+	if (!canProposePointTransaction(identity))
+		fail("FORBIDDEN", "POINT_PROPOSAL_KADEP_REQUIRED");
+	const { evaluationPeriodId } = evaluationPeriodIdSchema.parse(input);
+
+	return db.transaction(
+		async (tx) => {
+			const live = await readOperationalIdentity(tx, identity.userId);
+			if (!live || !canProposePointTransaction(live))
+				fail("FORBIDDEN", "POINT_PROPOSAL_KADEP_REQUIRED");
+
+			const [period] = await tx
+				.select({
+					id: evaluationPeriods.id,
+					srPeriodId: evaluationPeriods.srPeriodId,
+				})
+				.from(evaluationPeriods)
+				.where(eq(evaluationPeriods.id, evaluationPeriodId));
+			if (!period) fail("NOT_FOUND", "EVALUATION_PERIOD_NOT_FOUND");
+
+			const roster = await readSrPeriodEvaluationRoster(tx, period.srPeriodId);
+			return roster.map((member) => ({
+				userId: member.userId,
+				nim: member.nim,
+				name: member.name,
+				departmentCode: member.currentDepartmentCode,
+				positionCode: member.currentPositionCode,
+			}));
+		},
+		{ isolationLevel: "repeatable read", accessMode: "read only" },
+	);
 }
 
 export async function recordAttendanceFallback(
