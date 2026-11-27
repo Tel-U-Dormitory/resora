@@ -1,8 +1,13 @@
 import { z } from "zod";
 import { protectedProcedure, router } from "../../index";
 import {
+	configurePeriodEventSchema,
 	createEvaluationPeriodSchema,
+	evaluationPeriodIdSchema,
+	listDepartmentTasksSchema,
 	setActiveEvaluationPeriodSchema,
+	submitDepartmentEvaluationSchema,
+	submitEventEvaluationSchema,
 	updateEvaluationPeriodConfigSchema,
 } from "./penilaian.contracts";
 import {
@@ -12,6 +17,14 @@ import {
 	setActiveEvaluationPeriod,
 	updateEvaluationPeriodConfig,
 } from "./penilaian-periods.service";
+import {
+	configurePeriodEvent,
+	listCandidateEventsForPeriod,
+	listMyDepartmentEvaluationTasks,
+	listMyEventEvaluationTasks,
+	submitDepartmentEvaluation,
+	submitEventEvaluation,
+} from "./penilaian-scoring.service";
 
 export const penilaianRouter = router({
 	srTenureOptions: protectedProcedure
@@ -34,5 +47,35 @@ export const penilaianRouter = router({
 		.input(setActiveEvaluationPeriodSchema)
 		.mutation(({ ctx, input }) =>
 			setActiveEvaluationPeriod(ctx.db, ctx.identity, input),
+		),
+	candidateEvents: protectedProcedure
+		.input(evaluationPeriodIdSchema)
+		.query(({ ctx, input }) =>
+			listCandidateEventsForPeriod(ctx.db, ctx.identity, input),
+		),
+	configurePeriodEvent: protectedProcedure
+		.input(configurePeriodEventSchema)
+		.mutation(({ ctx, input }) =>
+			configurePeriodEvent(ctx.db, ctx.identity, input),
+		),
+	myEventTasks: protectedProcedure
+		.input(evaluationPeriodIdSchema)
+		.query(({ ctx, input }) =>
+			listMyEventEvaluationTasks(ctx.db, ctx.identity, input),
+		),
+	submitEventScore: protectedProcedure
+		.input(submitEventEvaluationSchema)
+		.mutation(({ ctx, input }) =>
+			submitEventEvaluation(ctx.db, ctx.identity, input),
+		),
+	myDepartmentTasks: protectedProcedure
+		.input(listDepartmentTasksSchema)
+		.query(({ ctx, input }) =>
+			listMyDepartmentEvaluationTasks(ctx.db, ctx.identity, input),
+		),
+	submitDepartmentScore: protectedProcedure
+		.input(submitDepartmentEvaluationSchema)
+		.mutation(({ ctx, input }) =>
+			submitDepartmentEvaluation(ctx.db, ctx.identity, input),
 		),
 });

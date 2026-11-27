@@ -156,3 +156,56 @@ export const evaluationPeriodIdSchema = z
 		evaluationPeriodId: z.uuid(),
 	})
 	.strict();
+
+export const evaluationEventCategorySchema = z.enum([
+	"ANNUAL",
+	"MONTHLY",
+	"WEEKLY",
+]);
+
+export const indicatorScoreSchema = z.number().finite().min(0).max(100);
+
+export const configurePeriodEventSchema = z
+	.object({
+		evaluationPeriodId: z.uuid(),
+		eventId: z.uuid(),
+		category: evaluationEventCategorySchema,
+		isMandatory: z.boolean().default(true),
+		reason: plainEvaluationText(1, 500).default(
+			"Penetapan event penilaian periode",
+		),
+	})
+	.strict();
+
+export const submitEventEvaluationSchema = z
+	.object({
+		evaluationPeriodId: z.uuid(),
+		periodEventId: z.uuid(),
+		targetUserId: z.string().trim().min(1).max(128),
+		commitment: indicatorScoreSchema,
+		teamwork: indicatorScoreSchema,
+		attitude: indicatorScoreSchema,
+		contribution: indicatorScoreSchema,
+		comment: plainEvaluationText(1, 2000, true).nullable().optional(),
+	})
+	.strict();
+
+export const listDepartmentTasksSchema = z
+	.object({
+		evaluationPeriodId: z.uuid(),
+		quarterNumber: z.number().int().min(1).max(4).default(1),
+	})
+	.strict();
+
+export const submitDepartmentEvaluationSchema = z
+	.object({
+		evaluationPeriodId: z.uuid(),
+		quarterNumber: z.number().int().min(1).max(4).default(1),
+		targetUserId: z.string().trim().min(1).max(128),
+		commitment: indicatorScoreSchema,
+		teamwork: indicatorScoreSchema,
+		attitude: indicatorScoreSchema,
+		contribution: indicatorScoreSchema,
+		comment: plainEvaluationText(1, 2000, true).nullable().optional(),
+	})
+	.strict();
