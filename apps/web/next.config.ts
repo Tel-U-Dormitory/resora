@@ -13,6 +13,9 @@ const nextConfig: NextConfig = {
 	reactCompiler: true,
 	output: "standalone",
 	poweredByHeader: false,
+	experimental: {
+		agentUpgrade: "security",
+	},
 	async rewrites() {
 		return getApiRewrites(process.env.API_UPSTREAM_URL);
 	},
