@@ -43,7 +43,7 @@ RESORA is an integrated digital platform for operations and services related to 
 - This system-wide PRD covers product-wide rules and capability boundaries. Individual module PRDs describe approved feature behavior; acceptance documents describe testable outcomes; Architecture describes technical realization; ADRs preserve decisions and rationale.
 - Change control requires aligning the master FR, affected PRD, acceptance criteria, Architecture/data-model references, and ADR before development of the changed feature. Never use a stale module document to override a later explicit PM decision.
 
-**Additional module baseline reviewed 2026-11-24 and updated 2026-11-25:** The PM identified P1 as
+**Additional module baseline reviewed 2026-11-24 and updated 2026-11-27:** The PM identified P1 as
 reviewed/final for the upcoming modules in [FR Modul Sistem](https://docs.google.com/spreadsheets/d/1oDqX5oEaxT7wscJVUJHIsRL_y6rlSXeiVOiDTx2hr2Y/edit).
 P1-01 through P1-03 and P1-04 Dashboard RESORA were read; this supplements the historical master register above and
 does not renumber its NEED/FR IDs or reopen implemented attendance behavior.
@@ -58,10 +58,12 @@ Keputusan proses bisnis yang belum jelas tetap diputuskan PM.
 
 | Reviewed tab | Decision snapshot | Jira epic |
 | --- | --- | --- |
-| P1-01 Penilaian & Analitik | 28 Approved, 2 Pending (FR-EVAL-009/010) | [RSA-5](https://telkomdormitory.atlassian.net/browse/RSA-5) |
+| P1-01 Penilaian & Analitik | 36 Approved (`FR-EVAL-001`–`035`, `037`), 1 Pending (`FR-EVAL-036`) — updated 2026-11-27 | [RSA-5](https://telkomdormitory.atlassian.net/browse/RSA-5) |
 | P1-02 Landing Page & CMS | 29 Approved, 1 Rejected (FR-WEB-013) | [RSA-6](https://telkomdormitory.atlassian.net/browse/RSA-6) |
 | P1-03 Pelanggaran | 20 Approved, 1 Pending (FR-VIOL-006), 6 Rejected (007/008/009/015/016/020) | [RSA-7](https://telkomdormitory.atlassian.net/browse/RSA-7) |
 | P1-04 Dashboard RESORA | 9 Approved (FR-DASH-001–009) | Not specified in the source tab |
+
+Detail P1-01 mengikuti [PRD modul Penilaian & Analitik](modules/penilaian/prd.md) dan [rencana fase eksekusi](modules/penilaian/roadmap.md), diturunkan dari tab `P1-01 Penilaian & Analitik` (37 FR, diperbarui PM 2026-11-27) serta *Pedoman Pembuatan Website Penilaian Senior Resident (SR)* (2026-11-27); dokumen tersebut menetapkan baseline persyaratan dan paket keputusan D01–D10 sebelum implementasi runtime F1–F8 pada branch `feat/modul-penilaian-sr`.
 
 Detail P1-03 mengikuti [PRD modul Pelanggaran](modules/pelanggaran/prd.md), diturunkan dari spreadsheet backlog PM yang diperiksa 2026-11-25. [Rencana fase dan prompt Codex](modules/pelanggaran/roadmap.md) memisahkan pekerjaan Nafi, handoff tim, dan gate persetujuan; dokumen tersebut bukan bukti implementasi atau rilis.
 

@@ -1187,3 +1187,36 @@ Checks completed: targeted Biome, TypeScript checks for API/storage/DB packages,
 `bun test packages/api/src/modules/violations packages/db/src/schema/violations.test.ts`
 (15 passing across six files). DB schema integration, R2 compensation when a DB
 commit fails, frontend integration, UAT and release remain unverified.
+
+### Penilaian & Analitik — planning and domain boundary baseline (2026-11-27)
+
+Requirements and decision gates are documented in [PRD modul Penilaian](modules/penilaian/prd.md)
+and [roadmap fase F0–F8](modules/penilaian/roadmap.md) from the 2026-11-27 PM update
+to `P1-01 Penilaian & Analitik` (36 Approved, 1 Pending `FR-EVAL-036`) and the
+2026-11-27 *Pedoman Pembuatan Website Penilaian Senior Resident (SR)*.
+
+- **Module & schema ownership:** `packages/api/src/modules/penilaian` and
+  `packages/db/src/schema/penilaian.ts` own `evaluation_*` tables (evaluation periods
+  bound to `sr_periods`, category-weighted event evaluations, quarterly department
+  evaluations, imported 20-question SR/Maba GForm responses, separate 10-question
+  ASUS/Ditmawa external evaluation imports, fallback attendance entries, point
+  addition/deduction transactions, versioned finalization snapshots, and append-only
+  `evaluation_audits`). Register every `evaluation_*` table under owner `"penilaian"`
+  in `packages/config/src/architecture.ts` when F1 schema is introduced.
+- **Cross-module boundaries:** `penilaian` consumes Identity (`getLiveOperationalIdentity`,
+  `readOperationalIdentity`, `readSrPeriod`, `readSrPeriodRoster`, `readScoringPeriods`),
+  Events (`readEvent`, `invitationSnapshots`), and Attendance (`pointsRecap` or narrow
+  public attendance-points readers) strictly via `*.public.ts` in the caller's
+  transaction. It never imports foreign Drizzle schema tables or alters existing
+  NEED-001 Attendance F1–F3 scoring rules silently.
+- **Calculation, privacy, and finalization invariants:** Each evaluated event is
+  weighted individually (Annual `25%`, Monthly `10%`, Weekly `10%`) and summed with
+  Department (`25%`) and GForm (`50%`) using full internal precision and no maximum
+  cap of `100`. Missing mandatory evaluations yield `BELUM_LENGKAP` (never `0`) and
+  block finalization. Pre-final results are visible only to HCO and Inti (plus an
+  evaluator's own submitted records); raw evaluator/respondent identities and
+  comments are restricted to HCO only. Post-final score edits require opening an
+  audited revision (`version + 1`).
+- **Dashboard RESORA contract (`FR-DASH-003`):** P1-04 remains a single frontend
+  overview module that consumes authorized summary DTOs from `penilaian` without
+  recomputing scores or completion percentages in the browser.

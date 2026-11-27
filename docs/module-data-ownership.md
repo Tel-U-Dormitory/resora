@@ -14,11 +14,16 @@ public data API for domain consumers.
 | Committee | committees, committee_divisions, committee_members |
 | Broadcast | broadcasts |
 | Pelanggaran | violations_reports, violations_audits, violations_upload_intents |
+| Penilaian (planned F1) | `evaluation_*` tables (evaluation periods, event/department assessments, GForm SR/Maba & external imports, fallback attendance entries, bonus/deduction point transactions, revision versions, and append-only evaluation audits) |
 
 Identity supplies minimal display names and active SR/building facts through its
 server-only public operations for cross-domain audit and module composition.
 Pelanggaran snapshots the confirmed building in its own report record, but does not
 copy SR profiles, building catalogs, or RBAC grants into Pelanggaran tables.
+Penilaian consumes Identity (live identity, SR tenure periods, and period rosters),
+Events/Committee (published/closed event facts and participant snapshots), and
+Attendance (primary attendance point records) exclusively through narrow server-only
+`*.public.ts` operations; it must not query foreign domain tables directly.
 An existing foreign key is not permission for a consumer to query the referenced
 table. Public operations accept an internal transaction and return materialized
 DTOs; schemas/table objects and arbitrary query predicates are not public contracts.
