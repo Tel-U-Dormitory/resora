@@ -715,7 +715,9 @@ function DashboardMetricDetailView({
 								</h2>
 								<p className="text-muted-foreground text-xs">
 									{displayedMetric.id === "assessment"
-										? "Skor rata-rata (skala 0–100) dan komposisi kelengkapan SR"
+										? assessmentAverage?.unit === "/100"
+											? "Skor rata-rata (skala 0–100) dan komposisi kelengkapan SR"
+											: "Skor rata-rata nilai berbobot dan komposisi kelengkapan SR"
 										: displayedMetric.id === "attendance"
 											? "Proporsi kehadiran terhadap total kegiatan relevan"
 											: `Ringkasan tercatat (${scopes[displayedMetric.scope].toLowerCase()})`}
@@ -764,25 +766,31 @@ function DashboardMetricDetailView({
 													</span>
 													<span className="font-bold text-base text-foreground tabular-nums">
 														{numberFormat.format(assessmentAverage.value)}
-														<span className="ml-0.5 font-medium text-muted-foreground text-xs">
-															/100
-														</span>
+														{assessmentAverage.unit === "/100" && (
+															<span className="ml-0.5 font-medium text-muted-foreground text-xs">
+																/100
+															</span>
+														)}
 													</span>
 												</div>
-												<div className="h-3.5 overflow-hidden rounded-full border border-border-control/40 bg-surface">
-													<div
-														className="h-full rounded-full bg-primary transition-[width] duration-300"
-														style={{
-															width: `${Math.min(100, Math.max(0, assessmentAverage.value))}%`,
-															borderRight: "2px solid #333333",
-														}}
-													/>
-												</div>
-												<div className="flex justify-between font-medium text-[11px] text-muted-foreground tabular-nums">
-													<span>0</span>
-													<span>50</span>
-													<span>100</span>
-												</div>
+												{assessmentAverage.unit === "/100" && (
+													<>
+														<div className="h-3.5 overflow-hidden rounded-full border border-border-control/40 bg-surface">
+															<div
+																className="h-full rounded-full bg-primary transition-[width] duration-300"
+																style={{
+																	width: `${Math.min(100, Math.max(0, assessmentAverage.value))}%`,
+																	borderRight: "2px solid #333333",
+																}}
+															/>
+														</div>
+														<div className="flex justify-between font-medium text-[11px] text-muted-foreground tabular-nums">
+															<span>0</span>
+															<span>50</span>
+															<span>100</span>
+														</div>
+													</>
+												)}
 											</div>
 										)}
 

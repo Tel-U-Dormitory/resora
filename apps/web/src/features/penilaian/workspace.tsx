@@ -132,7 +132,7 @@ export function PenilaianWorkspace() {
 					</p>
 				</div>
 
-				<div className="flex flex-wrap items-center gap-2.5">
+				<div className="flex w-full flex-wrap items-center gap-2.5 sm:w-auto">
 					{activePeriod && (
 						<span
 							className={`rounded-full border px-3 py-1 font-bold text-xs ${penilaianStatusBadgeClass(activePeriod.status)}`}
@@ -142,12 +142,13 @@ export function PenilaianWorkspace() {
 						</span>
 					)}
 					{(periodsQuery.data?.length ?? 0) > 0 && (
-						<div className="w-56">
+						<div className="min-w-0 flex-1 sm:min-w-64 sm:flex-none">
 							<label htmlFor="period-selector" className="sr-only">
 								Pilih periode evaluasi
 							</label>
 							<Select
 								id="period-selector"
+								className="h-11 truncate"
 								value={activePeriod?.id ?? ""}
 								onChange={(event) => setSelectedPeriodId(event.target.value)}
 							>
@@ -166,7 +167,7 @@ export function PenilaianWorkspace() {
 			<div
 				role="tablist"
 				aria-label="Navigasi modul penilaian SR"
-				className="flex items-center gap-1.5 overflow-x-auto pb-1"
+				className="resora-tabs-scroll flex items-center gap-1.5 overflow-x-auto pb-1"
 			>
 				{availableTabs.map((tab) => {
 					const selected = activeTab === tab.id;

@@ -102,9 +102,11 @@ export function AppShell({
 								? "Scan QR"
 								: pathname.startsWith("/broadcasts")
 									? "Inbox"
-									: pathname === "/profile"
-										? "Profil"
-										: "Beranda";
+									: pathname.startsWith("/penilaian")
+										? "Penilaian SR"
+										: pathname === "/profile"
+											? "Profil"
+											: "Beranda";
 	const capabilities = {
 		isSr,
 		canManageEvents,
