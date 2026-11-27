@@ -8,8 +8,10 @@ import {
 	Inbox,
 	ListChecks,
 	ScanLine,
+	Sparkles,
 	UserRound,
 	Users,
+	Wrench,
 } from "lucide-react";
 
 export const navigationIcons = {
@@ -25,5 +27,7 @@ export const navigationIcons = {
 	periods: CalendarRange,
 	points: ChartNoAxesColumn,
 	violations: ClipboardList,
+	cleanliness: Sparkles,
+	facilities: Wrench,
 	ClipboardList,
 };

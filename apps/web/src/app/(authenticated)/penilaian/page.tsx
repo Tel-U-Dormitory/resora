@@ -6,7 +6,7 @@ export default async function PenilaianPage() {
 	const session = await getSrSession();
 	if (!session) redirect("/login?reason=session");
 	if (session.requiresPasswordChange) redirect("/change-password");
-	if (session.actor !== "SR" && !session.isSuperadmin) {
+	if (!session.canAccessPenilaianWorkspace) {
 		redirect("/dashboard");
 	}
 	return <PenilaianWorkspace />;

@@ -24,16 +24,20 @@ import { navigationIcons as icons } from "./navigation-icons";
 
 export function AppSidebar({
 	name,
+	departmentCode,
 	canManageEvents,
 	canManageCommittee,
 	canReadAttendancePoints,
+	canAccessPenilaianWorkspace,
 	isSuperadmin,
 	isSr,
 }: {
 	name: string;
+	departmentCode?: string | null;
 	canManageEvents: boolean;
 	canManageCommittee?: boolean;
 	canReadAttendancePoints?: boolean;
+	canAccessPenilaianWorkspace?: boolean;
 	isSuperadmin: boolean;
 	isSr: boolean;
 }) {
@@ -43,9 +47,11 @@ export function AppSidebar({
 	const compact = state === "collapsed" && !isMobile;
 	const groups = getSidebarGroups({
 		isSr,
+		departmentCode,
 		canManageEvents,
 		canManageCommittee,
 		canReadAttendancePoints,
+		canAccessPenilaianWorkspace,
 		isSuperadmin,
 	});
 	const routeKey = `${pathname}?${params.toString()}`;
@@ -89,8 +95,42 @@ export function AppSidebar({
 						</SidebarGroupLabel>
 						<SidebarGroupContent>
 							<SidebarMenu className="gap-1 group-data-[collapsible=icon]:items-center">
-								{items.map(({ title: label, href, icon }) => {
-									const Icon = icons[icon];
+								{items.map((item) => {
+									const Icon = icons[item.icon] ?? icons.dashboard;
+									if (item.disabled) {
+										const { title: label, href, badge } = item;
+										return (
+											<SidebarMenuItem key={href}>
+												<SidebarMenuButton
+													disabled
+													aria-disabled="true"
+													aria-label={badge ? `${label} (${badge})` : label}
+													tooltip={{
+														children: badge ? `${label} · ${badge}` : label,
+														className: "rounded-lg",
+													}}
+													className="resora-sidebar-link h-11 cursor-not-allowed rounded-xl px-3 text-muted-foreground text-sm opacity-75 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+												>
+													<Icon aria-hidden="true" />
+													<span
+														className={
+															compact
+																? "sr-only"
+																: "flex min-w-0 flex-1 items-center justify-between gap-2"
+														}
+													>
+														<span className="truncate">{label}</span>
+														{badge && (
+															<span className="shrink-0 rounded-md border border-border bg-surface-subtle px-1.5 py-0.5 font-medium text-[10px] text-muted-foreground">
+																{badge}
+															</span>
+														)}
+													</span>
+												</SidebarMenuButton>
+											</SidebarMenuItem>
+										);
+									}
+									const { title: label, href } = item;
 									const active = isSidebarLinkActive(
 										href,
 										pathname,

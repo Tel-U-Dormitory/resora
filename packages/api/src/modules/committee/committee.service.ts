@@ -7,9 +7,10 @@ import {
 	committees,
 } from "@resora/db/schema/committee";
 import { TRPCError } from "@trpc/server";
-import { and, asc, count, eq, ilike, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, sql } from "drizzle-orm";
 import type { z } from "zod";
 import {
+	canAccessPersonalSr,
 	canManageCommittee,
 	canManageInternalEvent,
 	getActiveSrCandidate,
@@ -433,5 +434,58 @@ export function removeMember(
 				message: "COMMITTEE_MEMBER_NOT_FOUND",
 			});
 		return { success: true };
+	});
+}
+
+export async function ownCommitteeMemberships(
+	db: Database,
+	identity: ActiveIdentity,
+) {
+	if (!canAccessPersonalSr(identity)) {
+		return {
+			totalCommittees: 0,
+			items: [] as Array<{
+				committeeId: string;
+				committeeName: string;
+				divisionName: string;
+				positionCode: string;
+			}>,
+		};
+	}
+
+	return db.transaction(async (tx) => {
+		const live = await getLiveOperationalIdentity(tx, identity.userId);
+		if (!canAccessPersonalSr(live)) {
+			return {
+				totalCommittees: 0,
+				items: [] as Array<{
+					committeeId: string;
+					committeeName: string;
+					divisionName: string;
+					positionCode: string;
+				}>,
+			};
+		}
+
+		const rows = await tx
+			.select({
+				committeeId: committees.id,
+				committeeName: committees.name,
+				divisionName: committeeDivisions.name,
+				positionCode: committeeMembers.positionCode,
+			})
+			.from(committeeMembers)
+			.innerJoin(committees, eq(committees.id, committeeMembers.committeeId))
+			.innerJoin(
+				committeeDivisions,
+				eq(committeeDivisions.id, committeeMembers.divisionId),
+			)
+			.where(eq(committeeMembers.userId, identity.userId))
+			.orderBy(desc(committees.updatedAt), asc(committees.name));
+
+		return {
+			totalCommittees: rows.length,
+			items: rows,
+		};
 	});
 }

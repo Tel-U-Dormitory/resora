@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EventRecap } from "@/features/attendance/public";
+import { EventEvaluationCard } from "@/features/penilaian/public";
 import {
 	eventErrorMessage,
 	formatEventTime,
@@ -283,6 +284,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 			{event.status !== "DRAFT" && (
 				<ScoringPanel key={`scoring:${eventId}`} view={view} />
 			)}
+			{event.status !== "DRAFT" && <EventEvaluationCard eventId={eventId} />}
 			{canManage && event.status === "PUBLISHED" && (
 				<>
 					<div className="grid items-stretch gap-6 xl:grid-cols-2">

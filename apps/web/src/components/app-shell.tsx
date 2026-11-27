@@ -24,17 +24,21 @@ function nameInitials(name: string) {
 
 export function AppShell({
 	name,
+	departmentCode,
 	canManageEvents,
 	canManageCommittee,
 	canReadAttendancePoints,
+	canAccessPenilaianWorkspace,
 	isSuperadmin,
 	isSr,
 	children,
 }: {
 	name: string;
+	departmentCode?: string | null;
 	canManageEvents: boolean;
 	canManageCommittee?: boolean;
 	canReadAttendancePoints?: boolean;
+	canAccessPenilaianWorkspace?: boolean;
 	isSuperadmin: boolean;
 	isSr: boolean;
 	children: ReactNode;
@@ -109,9 +113,11 @@ export function AppShell({
 											: "Beranda";
 	const capabilities = {
 		isSr,
+		departmentCode,
 		canManageEvents,
 		canManageCommittee,
 		canReadAttendancePoints,
+		canAccessPenilaianWorkspace,
 		isSuperadmin,
 	};
 	if (pathname === "/scan") {

@@ -27,6 +27,7 @@ import {
 	exportPointsCsv,
 	manualCorrect,
 	manualInsert,
+	ownAttendanceDashboardSummary,
 	ownHistory,
 	pointsPeriods,
 	pointsRecap,
@@ -38,6 +39,9 @@ import {
 } from "../modules/events/events.public";
 
 export const attendanceRouter = router({
+	ownDashboardSummary: protectedProcedure.query(({ ctx }) =>
+		ownAttendanceDashboardSummary(ctx.db, ctx.identity),
+	),
 	pointsPeriods: protectedProcedure.query(({ ctx }) =>
 		pointsPeriods(ctx.db, ctx.identity),
 	),

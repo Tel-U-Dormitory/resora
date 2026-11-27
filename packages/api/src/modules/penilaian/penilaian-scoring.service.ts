@@ -8,7 +8,7 @@ import {
 	evaluationPeriods,
 } from "@resora/db/schema/penilaian";
 import { TRPCError } from "@trpc/server";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import type { z } from "zod";
 import {
 	invitationSnapshots,
@@ -24,6 +24,7 @@ import {
 import {
 	configurePeriodEventSchema,
 	evaluationPeriodIdSchema,
+	eventEvaluationTaskSchema,
 	listDepartmentTasksSchema,
 	submitDepartmentEvaluationSchema,
 	submitEventEvaluationSchema,
@@ -289,6 +290,104 @@ export async function listMyEventEvaluationTasks(
 				});
 			}
 			return tasks;
+		},
+		{ isolationLevel: "repeatable read", accessMode: "read only" },
+	);
+}
+
+export async function getEventEvaluationTaskForEvent(
+	db: Database,
+	identity: ActiveIdentity,
+	input: z.input<typeof eventEvaluationTaskSchema>,
+) {
+	if (identity.actor !== "SR") return { isEvaluatable: false as const };
+	const { eventId } = eventEvaluationTaskSchema.parse(input);
+
+	return db.transaction(
+		async (tx) => {
+			const live = await readOperationalIdentity(tx, identity.userId);
+			if (live?.actor !== "SR") return { isEvaluatable: false as const };
+
+			const [event] = await readEvent(tx, eventId);
+			if (
+				!event ||
+				(event.status !== "PUBLISHED" && event.status !== "CLOSED")
+			) {
+				return { isEvaluatable: false as const };
+			}
+
+			const matched = await tx
+				.select({
+					evaluationPeriodId: evaluationPeriods.id,
+					periodStatus: evaluationPeriods.status,
+					isActive: evaluationPeriods.isActive,
+					periodEventId: evaluationPeriodEvents.id,
+					category: evaluationPeriodEvents.category,
+					isMandatory: evaluationPeriodEvents.isMandatory,
+				})
+				.from(evaluationPeriodEvents)
+				.innerJoin(
+					evaluationPeriods,
+					eq(evaluationPeriods.id, evaluationPeriodEvents.evaluationPeriodId),
+				)
+				.where(eq(evaluationPeriodEvents.eventId, eventId))
+				.orderBy(
+					desc(evaluationPeriods.isActive),
+					desc(evaluationPeriods.createdAt),
+				)
+				.limit(1);
+
+			const entry = matched[0];
+			if (!entry) return { isEvaluatable: false as const };
+
+			const roster = await invitationSnapshots(tx, eventId);
+			if (!roster.some((member) => member.userId === live.userId)) {
+				return { isEvaluatable: false as const };
+			}
+
+			const submitted = await tx
+				.select({
+					targetUserId: evaluationEventScores.targetUserId,
+					commitment: evaluationEventScores.commitment,
+					teamwork: evaluationEventScores.teamwork,
+					attitude: evaluationEventScores.attitude,
+					contribution: evaluationEventScores.contribution,
+					submittedAt: evaluationEventScores.submittedAt,
+				})
+				.from(evaluationEventScores)
+				.where(
+					and(
+						eq(
+							evaluationEventScores.evaluationPeriodId,
+							entry.evaluationPeriodId,
+						),
+						eq(evaluationEventScores.periodEventId, entry.periodEventId),
+						eq(evaluationEventScores.evaluatorUserId, live.userId),
+					),
+				);
+			const submittedMap = new Map(
+				submitted.map((row) => [row.targetUserId, row]),
+			);
+
+			return {
+				isEvaluatable: true as const,
+				evaluationPeriodId: entry.evaluationPeriodId,
+				periodEventId: entry.periodEventId,
+				category: entry.category,
+				isMandatory: entry.isMandatory,
+				canSubmit: entry.periodStatus !== "FINAL",
+				targets: roster
+					.filter((member) => member.userId !== live.userId)
+					.map((member) => ({
+						userId: member.userId,
+						nim: member.nim,
+						name: member.name,
+						departmentCode: member.departmentCode,
+						committeeDivision: member.committeeDivision,
+						committeePosition: member.committeePosition,
+						submission: submittedMap.get(member.userId) ?? null,
+					})),
+			};
 		},
 		{ isolationLevel: "repeatable read", accessMode: "read only" },
 	);

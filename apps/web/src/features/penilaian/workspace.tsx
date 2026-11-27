@@ -2,6 +2,7 @@
 
 import { Select } from "@resora/ui/components/select";
 import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { trpc } from "@/utils/trpc";
@@ -19,8 +20,10 @@ import {
 type TabId = "recap" | "input" | "points" | "analytics" | "manage";
 
 export function PenilaianWorkspace() {
+	const searchParams = useSearchParams();
+	const urlTab = searchParams.get("tab") as TabId | null;
 	const [selectedPeriodId, setSelectedPeriodId] = useState("");
-	const [requestedTab, setRequestedTab] = useState<TabId | null>(null);
+	const [requestedTab, setRequestedTab] = useState<TabId | null>(urlTab);
 
 	const capsQuery = useQuery({
 		...trpc.penilaian.myCapabilities.queryOptions(),

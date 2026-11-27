@@ -13,6 +13,7 @@ import {
 	scoringInvitationSnapshots,
 } from "../events/events.public";
 import {
+	canAccessPersonalSr,
 	canReadAttendancePoints,
 	readOperationalIdentity,
 	readScoringPeriods,
@@ -272,4 +273,76 @@ export async function exportPointsCsv(
 		filename: `attendance-points-${report.period.id}-${report.period.startsOn}-${report.period.endsOn}.csv`,
 		content: pointsCsv(report),
 	};
+}
+
+export async function ownAttendanceDashboardSummary(
+	db: Database,
+	identity: ActiveIdentity,
+) {
+	if (!canAccessPersonalSr(identity)) {
+		return {
+			state: "unavailable" as const,
+			periodName: null,
+			message: "Akun sistem tidak memiliki rekap kehadiran SR.",
+		};
+	}
+
+	return db.transaction(
+		async (tx) => {
+			const live = await readOperationalIdentity(tx, identity.userId);
+			if (!canAccessPersonalSr(live)) {
+				return {
+					state: "unavailable" as const,
+					periodName: null,
+					message: "Rekap kehadiran pribadi hanya tersedia untuk SR aktif.",
+				};
+			}
+
+			const periods = await readScoringPeriods(tx);
+			if (!periods.length) {
+				return {
+					state: "missing_period" as const,
+					periodName: null,
+					message: "Periode menjabat aktif belum tersedia.",
+				};
+			}
+
+			const todayJakarta = new Intl.DateTimeFormat("en-CA", {
+				timeZone: "Asia/Jakarta",
+			}).format(new Date());
+			const current =
+				periods.find(
+					(p) => p.startsOn <= todayJakarta && todayJakarta <= p.endsOn,
+				) ?? periods[periods.length - 1];
+			if (!current) {
+				return {
+					state: "missing_period" as const,
+					periodName: null,
+					message: "Periode menjabat aktif belum tersedia.",
+				};
+			}
+
+			const recap = await readPeriodAttendancePoints(tx, current.periodId);
+			const own = recap.participants.find((p) => p.userId === live.userId);
+			if (!own) {
+				return {
+					state: "not_assessed" as const,
+					periodName: current.name,
+					message: "Kamu belum terdaftar sebagai peserta pada periode ini.",
+				};
+			}
+
+			return {
+				state: "ready" as const,
+				periodName: current.name,
+				startsOn: current.startsOn,
+				endsOn: current.endsOn,
+				attendedCount: own.attendedCount,
+				absentCount: own.absentCount,
+				eventCount: own.eventCount,
+				totalPoints: own.totalPoints,
+			};
+		},
+		{ isolationLevel: "repeatable read", accessMode: "read only" },
+	);
 }

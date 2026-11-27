@@ -157,6 +157,12 @@ export const evaluationPeriodIdSchema = z
 	})
 	.strict();
 
+export const eventEvaluationTaskSchema = z
+	.object({
+		eventId: z.uuid(),
+	})
+	.strict();
+
 export const evaluationEventCategorySchema = z.enum([
 	"ANNUAL",
 	"MONTHLY",

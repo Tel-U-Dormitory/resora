@@ -46,7 +46,11 @@ import {
 	createPeriodSchema,
 	extendPeriodSchema,
 } from "./accounts/account-period.schema";
-import { canManageManualAttendance } from "./identity.public";
+import {
+	canAccessPersonalSr,
+	canManageManualAttendance,
+	isValidSrAssignment,
+} from "./identity.public";
 import {
 	canManageBroadcast,
 	canManageCommittee,
@@ -160,6 +164,15 @@ export const identityRouter = router({
 			mustChangePassword: identity.mustChangePassword,
 			requiresPasswordChange: requiresPasswordChange(identity),
 			name: ctx.session.user.name,
+			departmentCode: identity.actor === "SR" ? identity.departmentCode : null,
+			positionCode: identity.actor === "SR" ? identity.positionCode : null,
+			canAccessPenilaianWorkspace:
+				hasSuperadminPrivilege(identity) ||
+				(canAccessPersonalSr(identity) &&
+					isValidSrAssignment(identity.departmentCode, identity.positionCode) &&
+					(identity.departmentCode === "HCO" ||
+						identity.departmentCode === "INTI" ||
+						identity.positionCode === "KADEP")),
 			canManageInternalEvents: canManageInternalEvent(identity),
 			canManageBroadcast: canManageBroadcast(identity),
 			canManageCommittee: canManageCommittee(identity),

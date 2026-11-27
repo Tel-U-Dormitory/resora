@@ -6,6 +6,7 @@ export { signChallenge, verifySessionChallenge } from "./check-in/qr";
 export { manualCorrect, manualInsert } from "./manual-attendance";
 export {
 	exportPointsCsv,
+	ownAttendanceDashboardSummary,
 	pointsPeriods,
 	pointsRecap,
 	readPeriodAttendancePoints,

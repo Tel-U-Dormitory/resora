@@ -98,13 +98,16 @@ function metricDetailHref(
 	metricId: DashboardMetric["id"],
 	previewMode: DashboardMode,
 	canManage: boolean,
+	canAccessPenilaian = false,
 ): DashboardDetailHref | undefined {
 	if (metricId === "assessment") {
-		return "/penilaian";
+		return previewMode === "management" && (canManage || canAccessPenilaian)
+			? "/penilaian"
+			: undefined;
 	}
 	if (metricId === "attendance") {
 		return previewMode === "management" && canManage
-			? "/events/points"
+			? "/penilaian?tab=points"
 			: "/attendance/history";
 	}
 	return undefined;
@@ -158,9 +161,19 @@ function addAttendancePercentage(metric: DashboardMetric): DashboardMetric {
 export function DashboardMetrics({
 	showCleanliness = true,
 	liveAssessmentMetric,
+	liveAttendanceMetric,
+	canAccessPenilaian = false,
+	onDownloadPersonalAssessmentCsv,
+	personalCsvDownloading = false,
+	personalCsvError = null,
 }: {
 	showCleanliness?: boolean;
 	liveAssessmentMetric?: DashboardMetric;
+	liveAttendanceMetric?: DashboardMetric;
+	canAccessPenilaian?: boolean;
+	onDownloadPersonalAssessmentCsv?: (() => Promise<void> | void) | null;
+	personalCsvDownloading?: boolean;
+	personalCsvError?: string | null;
 }) {
 	const { fixture, previewMode, setPreviewMode, canManage, simulateRequests } =
 		useDashboardPreview();
@@ -278,11 +291,15 @@ export function DashboardMetrics({
 								export: null,
 							},
 				)
-			: unavailableMetrics.map((metric) =>
-					metric.id === "assessment" && liveAssessmentMetric
-						? liveAssessmentMetric
-						: metric,
-				));
+			: unavailableMetrics.map((metric) => {
+					if (metric.id === "assessment" && liveAssessmentMetric) {
+						return liveAssessmentMetric;
+					}
+					if (metric.id === "attendance" && liveAttendanceMetric) {
+						return liveAttendanceMetric;
+					}
+					return metric;
+				}));
 	const displayMetrics = metrics
 		.filter((metric) => showCleanliness || metric.id !== "cleanliness")
 		.map(addAttendancePercentage);
@@ -303,6 +320,10 @@ export function DashboardMetrics({
 				<DashboardMetricDetailView
 					metric={activeMetric}
 					allMetrics={displayMetrics}
+					canAccessPenilaian={canAccessPenilaian}
+					onDownloadPersonalAssessmentCsv={onDownloadPersonalAssessmentCsv}
+					personalCsvDownloading={personalCsvDownloading}
+					personalCsvError={personalCsvError}
 					onSelectMetric={openMetricDetail}
 					onBack={closeMetricDetail}
 				/>
@@ -398,11 +419,19 @@ export function DashboardMetrics({
 function DashboardMetricDetailView({
 	metric,
 	allMetrics,
+	canAccessPenilaian = false,
+	onDownloadPersonalAssessmentCsv,
+	personalCsvDownloading = false,
+	personalCsvError = null,
 	onSelectMetric,
 	onBack,
 }: {
 	metric: DashboardMetric;
 	allMetrics: DashboardMetric[];
+	canAccessPenilaian?: boolean;
+	onDownloadPersonalAssessmentCsv?: (() => Promise<void> | void) | null;
+	personalCsvDownloading?: boolean;
+	personalCsvError?: string | null;
 	onSelectMetric: (metricId: DashboardMetric["id"]) => void;
 	onBack: () => void;
 }) {
@@ -462,12 +491,20 @@ function DashboardMetricDetailView({
 		displayedMetric.id,
 		previewMode,
 		canManage,
+		canAccessPenilaian,
 	);
 	const canExport = Boolean(
 		canManage &&
 			previewMode === "management" &&
 			fixture &&
 			displayedMetric.export &&
+			(state.kind === "ready" || state.kind === "ready_summary"),
+	);
+	const canDownloadPersonalCsv = Boolean(
+		displayedMetric.id === "assessment" &&
+			previewMode === "personal" &&
+			!fixture &&
+			onDownloadPersonalAssessmentCsv &&
 			(state.kind === "ready" || state.kind === "ready_summary"),
 	);
 
@@ -638,33 +675,55 @@ function DashboardMetricDetailView({
 				</div>
 			</div>
 
-			{/* Secondary Action Row (Export simulation / Module link when genuine route exists) */}
-			{(canExport || moduleHref) && (
-				<div
-					className={
-						canExport && moduleHref
-							? "grid grid-cols-2 gap-2.5 sm:flex sm:flex-wrap sm:items-center"
-							: "flex flex-wrap items-center gap-2.5"
-					}
-				>
-					{canExport && (
-						<button
-							type="button"
-							onClick={() => setExportOpen(true)}
-							className="focus-ring inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-border-control bg-surface px-3.5 font-semibold text-foreground text-xs hover:bg-surface-subtle"
-						>
-							<Download size={14} aria-hidden="true" />
-							<span>Ekspor contoh</span>
-						</button>
-					)}
-					{moduleHref && (
-						<Link
-							href={moduleHref}
-							className="focus-ring inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-border bg-surface px-3.5 font-semibold text-foreground text-xs hover:bg-surface-subtle"
-						>
-							<span>Buka halaman modul</span>
-							<ArrowRight size={14} aria-hidden="true" />
-						</Link>
+			{/* Secondary Action Row (Export simulation / Personal CSV / Module link when genuine route exists) */}
+			{(canExport || canDownloadPersonalCsv || moduleHref) && (
+				<div className="space-y-2">
+					<div
+						className={
+							(canExport || canDownloadPersonalCsv) && moduleHref
+								? "grid grid-cols-2 gap-2.5 sm:flex sm:flex-wrap sm:items-center"
+								: "flex flex-wrap items-center gap-2.5"
+						}
+					>
+						{canExport && (
+							<button
+								type="button"
+								onClick={() => setExportOpen(true)}
+								className="focus-ring inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-border-control bg-surface px-3.5 font-semibold text-foreground text-xs hover:bg-surface-subtle"
+							>
+								<Download size={14} aria-hidden="true" />
+								<span>Ekspor contoh</span>
+							</button>
+						)}
+						{canDownloadPersonalCsv && (
+							<button
+								type="button"
+								disabled={personalCsvDownloading}
+								onClick={() => void onDownloadPersonalAssessmentCsv?.()}
+								className="focus-ring inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-border-control bg-surface px-3.5 font-semibold text-foreground text-xs hover:bg-surface-subtle disabled:opacity-60"
+							>
+								<Download size={14} aria-hidden="true" />
+								<span>
+									{personalCsvDownloading
+										? "Mengunduh CSV…"
+										: "Unduh Rekap Pribadi (CSV)"}
+								</span>
+							</button>
+						)}
+						{moduleHref && (
+							<Link
+								href={moduleHref}
+								className="focus-ring inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-border bg-surface px-3.5 font-semibold text-foreground text-xs hover:bg-surface-subtle"
+							>
+								<span>Buka halaman modul</span>
+								<ArrowRight size={14} aria-hidden="true" />
+							</Link>
+						)}
+					</div>
+					{personalCsvError && (
+						<p role="alert" className="text-danger text-xs">
+							{personalCsvError}
+						</p>
 					)}
 				</div>
 			)}
@@ -858,6 +917,69 @@ function DashboardMetricDetailView({
 												</div>
 											</div>
 										)}
+										{!assessmentAverage &&
+											totalAssessedPool === 0 &&
+											breakdownItems.length > 0 && (
+												<div className="space-y-3 rounded-xl border border-border bg-surface-subtle/60 p-3.5">
+													<div className="flex items-baseline justify-between gap-2">
+														<span className="font-semibold text-foreground text-xs sm:text-sm">
+															Distribusi Komponen Nilai Pribadi
+														</span>
+														<span className="text-muted-foreground text-xs">
+															Periode berjalan / final
+														</span>
+													</div>
+													<div className="space-y-2.5">
+														{breakdownItems
+															.filter(
+																(item) => item.label !== "Kelengkapan evaluasi",
+															)
+															.map((item) => {
+																const maxRef = Math.max(
+																	100,
+																	...breakdownItems
+																		.filter(
+																			(entry) =>
+																				entry.label !== "Kelengkapan evaluasi",
+																		)
+																		.map((entry) => Math.abs(entry.value)),
+																);
+																const pct = Math.min(
+																	100,
+																	Math.max(
+																		4,
+																		Math.round(
+																			(Math.max(0, item.value) / maxRef) * 100,
+																		),
+																	),
+																);
+																return (
+																	<div key={item.label} className="space-y-1">
+																		<div className="flex items-baseline justify-between gap-2 text-xs">
+																			<span className="font-medium text-foreground">
+																				{item.label}
+																			</span>
+																			<span className="font-bold text-foreground tabular-nums">
+																				{numberFormat.format(item.value)}
+																				{item.unit
+																					? ` ${item.unit.trim()}`
+																					: ""}
+																			</span>
+																		</div>
+																		<div className="h-2.5 overflow-hidden rounded-full border border-border-control/40 bg-surface">
+																			<div
+																				className="h-full rounded-full bg-primary transition-[width] duration-300"
+																				style={{
+																					width: `${item.value <= 0 ? 0 : pct}%`,
+																				}}
+																			/>
+																		</div>
+																	</div>
+																);
+															})}
+													</div>
+												</div>
+											)}
 									</>
 								)}
 

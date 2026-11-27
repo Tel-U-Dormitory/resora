@@ -55,6 +55,17 @@ export default async function SrDashboard() {
 					},
 				]
 			: []),
+		...(session.canAccessPenilaianWorkspace
+			? [
+					{
+						href: "/penilaian" as const,
+						title: "Penilaian SR",
+						shortTitle: "Penilaian SR",
+						icon: ChartNoAxesCombined,
+						highlight: false,
+					},
+				]
+			: []),
 		...(session.canManageInternalEvents
 			? [
 					{
@@ -103,7 +114,10 @@ export default async function SrDashboard() {
 				canManage={canManageDashboard}
 				initialMode={canManageDashboard ? "management" : "personal"}
 			>
-				<DashboardMetrics showCleanliness={isSr} />
+				<DashboardMetrics
+					showCleanliness={isSr}
+					canAccessPenilaian={session.canAccessPenilaianWorkspace}
+				/>
 				<section
 					aria-label="Akses cepat"
 					className="resora-dashboard-quick resora-dashboard-section space-y-3"

@@ -20,6 +20,7 @@ import {
 	deleteCommittee,
 	deleteDivision,
 	listCommittees,
+	ownCommitteeMemberships,
 	removeMember,
 	saveDivision,
 	saveMember,
@@ -27,6 +28,9 @@ import {
 } from "./committee.service";
 
 export const committeeRouter = router({
+	ownMemberships: protectedProcedure.query(({ ctx }) =>
+		ownCommitteeMemberships(ctx.db, ctx.identity),
+	),
 	list: protectedProcedure
 		.input(listCommitteesSchema)
 		.query(({ ctx, input }) => listCommittees(ctx.db, ctx.identity, input)),

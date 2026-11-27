@@ -13,6 +13,7 @@ import { useState } from "react";
 import type { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { PointsRecap } from "@/features/attendance/public";
 import { trpc } from "@/utils/trpc";
 import {
 	formatPenilaianScore,
@@ -76,6 +77,7 @@ export function PenilaianPointsPanel({
 	canViewPreFinal: boolean;
 }) {
 	const queryClient = useQueryClient();
+	const [showMatrix, setShowMatrix] = useState(false);
 	const [feedback, setFeedback] = useState("");
 	const [error, setError] = useState("");
 
@@ -212,14 +214,28 @@ export function PenilaianPointsPanel({
 
 			<Card>
 				<CardContent className="space-y-4 p-5">
-					<div>
-						<h2 className="font-bold text-base text-foreground">
-							Rekap Poin Kehadiran (RESORA + Fallback)
-						</h2>
-						<p className="text-muted-foreground text-xs">
-							Sumber utama berasal dari modul Attendance RESORA; input
-							manual/impor dipakai hanya sebagai fallback.
-						</p>
+					<div className="flex flex-wrap items-center justify-between gap-2">
+						<div>
+							<h2 className="font-bold text-base text-foreground">
+								Rekap Poin Kehadiran (RESORA + Fallback)
+							</h2>
+							<p className="text-muted-foreground text-xs">
+								Sumber utama berasal dari modul Attendance RESORA; input
+								manual/impor dipakai hanya sebagai fallback.
+							</p>
+						</div>
+						{canManageRoutine && (
+							<Button
+								type="button"
+								variant="outline"
+								className="min-h-11"
+								onClick={() => setShowMatrix((prev) => !prev)}
+							>
+								{showMatrix
+									? "Tutup Matriks Per-Event"
+									: "Matriks Poin Per-Event (RESORA)"}
+							</Button>
+						)}
 					</div>
 
 					{!canLoadSummary ? (
@@ -288,6 +304,14 @@ export function PenilaianPointsPanel({
 					)}
 				</CardContent>
 			</Card>
+
+			{canManageRoutine && showMatrix && (
+				<Card>
+					<CardContent className="p-4 sm:p-5">
+						<PointsRecap />
+					</CardContent>
+				</Card>
+			)}
 
 			{canManageRoutine && periodStatus !== "FINAL" && (
 				<Card>

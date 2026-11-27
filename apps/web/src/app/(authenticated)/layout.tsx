@@ -19,9 +19,11 @@ export default async function AuthenticatedLayout({
 	return (
 		<AppShell
 			name={session.name}
+			departmentCode={session.departmentCode}
 			canManageEvents={session.canManageInternalEvents}
 			canManageCommittee={session.canManageCommittee}
 			canReadAttendancePoints={session.canReadAttendancePoints}
+			canAccessPenilaianWorkspace={session.canAccessPenilaianWorkspace}
 			isSuperadmin={session.isSuperadmin}
 			isSr={session.actor === "SR"}
 		>

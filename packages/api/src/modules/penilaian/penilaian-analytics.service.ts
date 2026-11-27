@@ -731,6 +731,14 @@ export async function getEvaluationDashboardSummary(
 				attendancePointsTotal: own.attendancePointsTotal,
 				netAdjustmentPoints: own.netAdjustmentPoints,
 				thresholdStatus: own.thresholdStatus,
+				components: {
+					annualWeighted: roundDisplay(own.annualWeighted),
+					monthlyWeighted: roundDisplay(own.monthlyWeighted),
+					weeklyWeighted: roundDisplay(own.weeklyWeighted),
+					departmentWeighted: roundDisplay(own.departmentWeighted),
+					gformWeighted: roundDisplay(own.gformWeighted),
+					externalScoreAverage: roundDisplay(own.externalScoreAverage),
+				},
 			};
 		},
 		{ isolationLevel: "repeatable read", accessMode: "read only" },

@@ -87,7 +87,7 @@ export default function EventList({
 			</div>
 			{management && canReadPoints && (
 				<Link
-					href="/events/points"
+					href="/penilaian?tab=points"
 					className="focus-ring inline-flex min-h-11 items-center rounded-xl border border-border px-4 py-2 font-semibold text-sm hover:bg-muted"
 				>
 					Rekap Poin Kehadiran

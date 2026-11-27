@@ -471,7 +471,10 @@ test("direct route and event-list entry use backend session capability, never st
 			{ canReadAttendancePoints: false, canManageEventScoring: true },
 			"/dashboard",
 		],
-		[{ canReadAttendancePoints: true, canManageEventScoring: false }, null],
+		[
+			{ canReadAttendancePoints: true, canManageEventScoring: false },
+			"/penilaian?tab=points",
+		],
 	] as const) {
 		const module = load("../../app/(authenticated)/events/points/page.tsx", {
 			"next/navigation": {
@@ -480,11 +483,9 @@ test("direct route and event-list entry use backend session capability, never st
 				},
 			},
 			"@/features/identity/server": { getSrSession: async () => session },
-			"@/features/attendance/public": { PointsRecap: "PointsRecap" },
 		});
-		const page = module.default as () => Promise<Node>;
-		if (expected) await expect(page()).rejects.toThrow(expected);
-		else expect((await page()).type).toBe("PointsRecap");
+		const page = module.default as () => Promise<void>;
+		await expect(page()).rejects.toThrow(expected);
 	}
 	const module = load("../events/event-list.tsx", {
 		react: { useState: (value: unknown) => [value, () => {}] },

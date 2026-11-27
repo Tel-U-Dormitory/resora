@@ -9,6 +9,7 @@ import {
 	evaluationAuditHistorySchema,
 	evaluationDashboardSummarySchema,
 	evaluationPeriodIdSchema,
+	eventEvaluationTaskSchema,
 	finalizeEvaluationPeriodSchema,
 	listAttendancePointsSchema,
 	listDepartmentTasksSchema,
@@ -64,6 +65,7 @@ import {
 } from "./penilaian-recap.service";
 import {
 	configurePeriodEvent,
+	getEventEvaluationTaskForEvent,
 	listCandidateEventsForPeriod,
 	listMyDepartmentEvaluationTasks,
 	listMyEventEvaluationTasks,
@@ -110,6 +112,11 @@ export const penilaianRouter = router({
 		.input(evaluationPeriodIdSchema)
 		.query(({ ctx, input }) =>
 			listMyEventEvaluationTasks(ctx.db, ctx.identity, input),
+		),
+	eventEvaluationTask: protectedProcedure
+		.input(eventEvaluationTaskSchema)
+		.query(({ ctx, input }) =>
+			getEventEvaluationTaskForEvent(ctx.db, ctx.identity, input),
 		),
 	submitEventScore: protectedProcedure
 		.input(submitEventEvaluationSchema)

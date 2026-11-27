@@ -14,6 +14,7 @@ import type {
 
 export type DashboardDetailHref =
 	| "/penilaian"
+	| "/penilaian?tab=points"
 	| "/events/points"
 	| "/attendance/history"
 	| "/events"

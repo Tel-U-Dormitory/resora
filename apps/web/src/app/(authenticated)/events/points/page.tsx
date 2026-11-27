@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { PointsRecap } from "@/features/attendance/public";
 import { getSrSession } from "@/features/identity/server";
 
 export default async function PointsPage() {
@@ -7,5 +6,5 @@ export default async function PointsPage() {
 	if (!session) redirect("/login?reason=session");
 	if (session.requiresPasswordChange) redirect("/change-password");
 	if (!session.canReadAttendancePoints) redirect("/dashboard");
-	return <PointsRecap />;
+	redirect("/penilaian?tab=points");
 }
