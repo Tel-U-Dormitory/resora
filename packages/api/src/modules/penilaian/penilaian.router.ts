@@ -2,14 +2,22 @@ import { z } from "zod";
 import { protectedProcedure, router } from "../../index";
 import {
 	configurePeriodEventSchema,
+	confirmGformImportSchema,
 	createEvaluationPeriodSchema,
 	evaluationPeriodIdSchema,
 	listDepartmentTasksSchema,
+	listGformImportsSchema,
+	previewGformImportSchema,
 	setActiveEvaluationPeriodSchema,
 	submitDepartmentEvaluationSchema,
 	submitEventEvaluationSchema,
 	updateEvaluationPeriodConfigSchema,
 } from "./penilaian.contracts";
+import {
+	confirmGformImport,
+	listGformImports,
+	previewGformImport,
+} from "./penilaian-import.service";
 import {
 	createEvaluationPeriod,
 	listEvaluationPeriods,
@@ -78,4 +86,17 @@ export const penilaianRouter = router({
 		.mutation(({ ctx, input }) =>
 			submitDepartmentEvaluation(ctx.db, ctx.identity, input),
 		),
+	previewGformImport: protectedProcedure
+		.input(previewGformImportSchema)
+		.mutation(({ ctx, input }) =>
+			previewGformImport(ctx.db, ctx.identity, input),
+		),
+	confirmGformImport: protectedProcedure
+		.input(confirmGformImportSchema)
+		.mutation(({ ctx, input }) =>
+			confirmGformImport(ctx.db, ctx.identity, input),
+		),
+	listGformImports: protectedProcedure
+		.input(listGformImportsSchema)
+		.query(({ ctx, input }) => listGformImports(ctx.db, ctx.identity, input)),
 });

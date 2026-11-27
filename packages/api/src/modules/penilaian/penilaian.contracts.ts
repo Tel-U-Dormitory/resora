@@ -209,3 +209,123 @@ export const submitDepartmentEvaluationSchema = z
 		comment: plainEvaluationText(1, 2000, true).nullable().optional(),
 	})
 	.strict();
+
+export const gformSourceTypeSchema = z.enum([
+	"SR_MABA",
+	"EXTERNAL_ASUS_DITMAWA",
+]);
+
+export const gformImportRowSchema = z
+	.object({
+		rowNumber: z.number().int().min(1).max(10_000),
+		respondentKey: plainEvaluationText(1, 160),
+		respondentRole: z.enum(["SR", "MABA", "ASUS", "DITMAWA"]),
+		targetNim: plainEvaluationText(1, 64),
+		buildingCode: plainEvaluationText(1, 32).nullable().optional(),
+		answers: z.array(z.number().finite()).min(1).max(20),
+		comment: plainEvaluationText(1, 2000, true).nullable().optional(),
+	})
+	.strict();
+
+export const previewGformImportSchema = z
+	.object({
+		evaluationPeriodId: z.uuid(),
+		sourceType: gformSourceTypeSchema,
+		cycleNumber: z.number().int().min(1).max(12).default(1),
+		sourceReference: plainEvaluationText(1, 160),
+		rows: z.array(gformImportRowSchema).min(1).max(2000),
+	})
+	.strict();
+
+export const confirmGformImportSchema = previewGformImportSchema
+	.extend({
+		skipDuplicates: z.boolean().default(false),
+	})
+	.strict();
+
+export const listGformImportsSchema = z
+	.object({
+		evaluationPeriodId: z.uuid(),
+		sourceType: gformSourceTypeSchema.optional(),
+	})
+	.strict();
+
+export function parseCsvLine(line: string): string[] {
+	const cells: string[] = [];
+	let current = "";
+	let inQuotes = false;
+	for (let i = 0; i < line.length; i++) {
+		const ch = line[i];
+		if (ch === '"') {
+			if (inQuotes && line[i + 1] === '"') {
+				current += '"';
+				i++;
+			} else {
+				inQuotes = !inQuotes;
+			}
+		} else if (ch === "," && !inQuotes) {
+			cells.push(current.trim());
+			current = "";
+		} else {
+			current += ch;
+		}
+	}
+	cells.push(current.trim());
+	return cells;
+}
+
+export function parseGformCsv(
+	csvText: string,
+	sourceType: z.infer<typeof gformSourceTypeSchema>,
+): Array<z.input<typeof gformImportRowSchema>> {
+	const lines = csvText
+		.replace(/\r\n/g, "\n")
+		.replace(/\r/g, "\n")
+		.split("\n")
+		.filter((line) => line.trim().length > 0);
+	if (lines.length < 2) return [];
+	const header = parseCsvLine(lines[0] ?? "").map((h) => h.toLowerCase());
+	const col = (names: string[]) =>
+		names.map((n) => header.indexOf(n)).find((idx) => idx >= 0) ?? -1;
+	const respondentIdx = col([
+		"respondent_id",
+		"respondent_key",
+		"responden",
+		"email",
+	]);
+	const roleIdx = col(["respondent_role", "role", "peran"]);
+	const targetIdx = col(["target_nim", "nim_target", "nim"]);
+	const buildingIdx = col(["building_code", "gedung"]);
+	const commentIdx = col(["comment", "komentar", "feedback"]);
+	const questionCount = sourceType === "SR_MABA" ? 20 : 10;
+	const qIndices = Array.from({ length: questionCount }, (_, idx) =>
+		col([`q${idx + 1}`, `p${idx + 1}`]),
+	);
+
+	return lines.slice(1).map((line, index) => {
+		const cells = parseCsvLine(line);
+		const rawRole = (cells[roleIdx] ?? "").toUpperCase();
+		const role = (
+			["SR", "MABA", "ASUS", "DITMAWA"].includes(rawRole)
+				? rawRole
+				: sourceType === "SR_MABA"
+					? "MABA"
+					: "ASUS"
+		) as "SR" | "MABA" | "ASUS" | "DITMAWA";
+		const answers = qIndices
+			.map((idx) => (idx >= 0 ? Number(cells[idx]) : Number.NaN))
+			.filter((n) => Number.isFinite(n));
+		const comment = commentIdx >= 0 ? (cells[commentIdx] ?? "").trim() : "";
+		const buildingCode =
+			buildingIdx >= 0 ? (cells[buildingIdx] ?? "").trim() : "";
+		return {
+			rowNumber: index + 2,
+			respondentKey: cells[respondentIdx] ?? "",
+			respondentRole: role,
+			targetNim: cells[targetIdx] ?? "",
+			buildingCode: buildingCode || null,
+			answers,
+			comment: comment || null,
+		};
+	});
+}
