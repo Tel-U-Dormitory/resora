@@ -6,21 +6,35 @@ import {
 	correctEvaluationScoreSchema,
 	createEvaluationPeriodSchema,
 	decidePointTransactionSchema,
+	evaluationAuditHistorySchema,
+	evaluationDashboardSummarySchema,
 	evaluationPeriodIdSchema,
 	finalizeEvaluationPeriodSchema,
 	listAttendancePointsSchema,
 	listDepartmentTasksSchema,
 	listGformImportsSchema,
 	listPointTransactionsSchema,
+	memberDetailSchema,
 	openEvaluationRevisionSchema,
+	ownRecapSchema,
 	previewGformImportSchema,
 	proposePointTransactionSchema,
+	recapFilterSchema,
 	recordAttendanceFallbackSchema,
 	setActiveEvaluationPeriodSchema,
 	submitDepartmentEvaluationSchema,
 	submitEventEvaluationSchema,
 	updateEvaluationPeriodConfigSchema,
 } from "./penilaian.contracts";
+import {
+	exportEvaluationRecapCsv,
+	getEvaluationAnalytics,
+	getEvaluationDashboardSummary,
+	getEvaluationMemberDetail,
+	getEvaluationRecapList,
+	getOwnEvaluationRecap,
+	listEvaluationAudits,
+} from "./penilaian-analytics.service";
 import {
 	confirmGformImport,
 	listGformImports,
@@ -164,5 +178,40 @@ export const penilaianRouter = router({
 		.input(correctEvaluationScoreSchema)
 		.mutation(({ ctx, input }) =>
 			correctEvaluationScore(ctx.db, ctx.identity, input),
+		),
+	recapList: protectedProcedure
+		.input(recapFilterSchema)
+		.query(({ ctx, input }) =>
+			getEvaluationRecapList(ctx.db, ctx.identity, input),
+		),
+	memberDetail: protectedProcedure
+		.input(memberDetailSchema)
+		.query(({ ctx, input }) =>
+			getEvaluationMemberDetail(ctx.db, ctx.identity, input),
+		),
+	ownRecap: protectedProcedure
+		.input(ownRecapSchema)
+		.query(({ ctx, input }) =>
+			getOwnEvaluationRecap(ctx.db, ctx.identity, input),
+		),
+	analytics: protectedProcedure
+		.input(recapFilterSchema)
+		.query(({ ctx, input }) =>
+			getEvaluationAnalytics(ctx.db, ctx.identity, input),
+		),
+	exportRecapCsv: protectedProcedure
+		.input(recapFilterSchema)
+		.query(({ ctx, input }) =>
+			exportEvaluationRecapCsv(ctx.db, ctx.identity, input),
+		),
+	dashboardSummary: protectedProcedure
+		.input(evaluationDashboardSummarySchema)
+		.query(({ ctx, input }) =>
+			getEvaluationDashboardSummary(ctx.db, ctx.identity, input),
+		),
+	auditHistory: protectedProcedure
+		.input(evaluationAuditHistorySchema)
+		.query(({ ctx, input }) =>
+			listEvaluationAudits(ctx.db, ctx.identity, input),
 		),
 });

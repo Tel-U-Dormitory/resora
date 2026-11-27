@@ -380,6 +380,42 @@ export const correctEvaluationScoreSchema = z
 	})
 	.strict();
 
+export const recapFilterSchema = z
+	.object({
+		evaluationPeriodId: z.uuid(),
+		query: plainEvaluationText(1, 120).optional(),
+		departmentCode: plainEvaluationText(1, 32).optional(),
+		buildingCode: plainEvaluationText(1, 32).optional(),
+		aggregateOnly: z.boolean().default(false),
+	})
+	.strict();
+
+export const memberDetailSchema = z
+	.object({
+		evaluationPeriodId: z.uuid(),
+		targetUserId: z.string().trim().min(1).max(128),
+	})
+	.strict();
+
+export const ownRecapSchema = z
+	.object({
+		evaluationPeriodId: z.uuid().optional(),
+	})
+	.strict();
+
+export const evaluationDashboardSummarySchema = z
+	.object({
+		mode: z.enum(["personal", "management"]).default("personal"),
+	})
+	.strict();
+
+export const evaluationAuditHistorySchema = z
+	.object({
+		evaluationPeriodId: z.uuid(),
+		targetUserId: z.string().trim().min(1).max(128).optional(),
+	})
+	.strict();
+
 export function parseCsvLine(line: string): string[] {
 	const cells: string[] = [];
 	let current = "";
