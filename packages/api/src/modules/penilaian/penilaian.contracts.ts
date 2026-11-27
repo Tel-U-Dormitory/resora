@@ -351,6 +351,35 @@ export const listPointTransactionsSchema = z
 	})
 	.strict();
 
+export const finalizeEvaluationPeriodSchema = z
+	.object({
+		evaluationPeriodId: z.uuid(),
+		reason: plainEvaluationText(1, 500).default(
+			"Finalisasi hasil penilaian KPI periode",
+		),
+	})
+	.strict();
+
+export const openEvaluationRevisionSchema = z
+	.object({
+		evaluationPeriodId: z.uuid(),
+		reason: plainEvaluationText(1, 1000, true),
+	})
+	.strict();
+
+export const correctEvaluationScoreSchema = z
+	.object({
+		evaluationPeriodId: z.uuid(),
+		scoreType: z.enum(["EVENT_SCORE", "DEPARTMENT_SCORE"]),
+		scoreId: z.uuid(),
+		commitment: indicatorScoreSchema,
+		teamwork: indicatorScoreSchema,
+		attitude: indicatorScoreSchema,
+		contribution: indicatorScoreSchema,
+		reason: plainEvaluationText(1, 1000, true),
+	})
+	.strict();
+
 export function parseCsvLine(line: string): string[] {
 	const cells: string[] = [];
 	let current = "";

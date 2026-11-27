@@ -3,13 +3,16 @@ import { protectedProcedure, router } from "../../index";
 import {
 	configurePeriodEventSchema,
 	confirmGformImportSchema,
+	correctEvaluationScoreSchema,
 	createEvaluationPeriodSchema,
 	decidePointTransactionSchema,
 	evaluationPeriodIdSchema,
+	finalizeEvaluationPeriodSchema,
 	listAttendancePointsSchema,
 	listDepartmentTasksSchema,
 	listGformImportsSchema,
 	listPointTransactionsSchema,
+	openEvaluationRevisionSchema,
 	previewGformImportSchema,
 	proposePointTransactionSchema,
 	recordAttendanceFallbackSchema,
@@ -37,6 +40,12 @@ import {
 	proposePointTransaction,
 	recordAttendanceFallback,
 } from "./penilaian-points.service";
+import {
+	correctEvaluationScore,
+	finalizeEvaluationPeriod,
+	getPeriodCompletenessStatus,
+	openEvaluationRevision,
+} from "./penilaian-recap.service";
 import {
 	configurePeriodEvent,
 	listCandidateEventsForPeriod,
@@ -135,5 +144,25 @@ export const penilaianRouter = router({
 		.input(listPointTransactionsSchema)
 		.query(({ ctx, input }) =>
 			listPointTransactions(ctx.db, ctx.identity, input),
+		),
+	completenessStatus: protectedProcedure
+		.input(evaluationPeriodIdSchema)
+		.query(({ ctx, input }) =>
+			getPeriodCompletenessStatus(ctx.db, ctx.identity, input),
+		),
+	finalizePeriod: protectedProcedure
+		.input(finalizeEvaluationPeriodSchema)
+		.mutation(({ ctx, input }) =>
+			finalizeEvaluationPeriod(ctx.db, ctx.identity, input),
+		),
+	openRevision: protectedProcedure
+		.input(openEvaluationRevisionSchema)
+		.mutation(({ ctx, input }) =>
+			openEvaluationRevision(ctx.db, ctx.identity, input),
+		),
+	correctScore: protectedProcedure
+		.input(correctEvaluationScoreSchema)
+		.mutation(({ ctx, input }) =>
+			correctEvaluationScore(ctx.db, ctx.identity, input),
 		),
 });
