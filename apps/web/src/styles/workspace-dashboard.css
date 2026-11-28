@@ -352,12 +352,21 @@
 		color: var(--foreground);
 	}
 	.resora-dashboard-layout {
-		grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-		gap: 2rem;
+		grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+		gap: 1.5rem;
+		align-items: start;
 	}
 	.resora-dashboard-kpis,
+	.resora-dashboard-kpis-group,
 	.resora-dashboard-quick {
 		grid-column: 1 / -1;
+	}
+	:where(.resora-dashboard-layout) > :has(.resora-dashboard-kpis) {
+		grid-column: 1 / -1;
+	}
+	.resora-dashboard-section {
+		border-top: 0;
+		padding-top: 0;
 	}
 	.resora-metrics-surface {
 		margin-inline: 0;
@@ -365,12 +374,27 @@
 	.resora-dashboard-metrics {
 		grid-template-columns: repeat(4, minmax(0, 1fr));
 		gap: 1rem;
+		align-items: stretch;
 	}
 	.resora-dashboard-activities .grid {
 		grid-template-columns: minmax(0, 1fr);
 	}
 	.resora-dashboard-broadcasts .grid {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.resora-broadcast-deck[data-collapsed="true"] {
+		margin-bottom: 0;
+	}
+	.resora-broadcast-deck[data-collapsed="true"]::before,
+	.resora-broadcast-deck[data-collapsed="true"]::after {
+		display: none;
+	}
+	.resora-broadcast-deck[data-collapsed="true"]
+		> [data-resora-card]:nth-child(n + 2) {
+		display: flex;
+	}
+	.resora-dashboard-broadcasts .resora-broadcast-more-btn {
+		display: none;
 	}
 }
 .resora-dashboard .resora-panel {

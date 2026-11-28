@@ -458,7 +458,7 @@ export function LiveDashboardMetrics({
 	);
 
 	return (
-		<div className="space-y-4 sm:space-y-5">
+		<div className="resora-dashboard-kpis-group space-y-5">
 			<DashboardMetrics
 				showCleanliness={showCleanliness}
 				canAccessPenilaian={canAccessPenilaian}
@@ -470,15 +470,15 @@ export function LiveDashboardMetrics({
 			/>
 
 			{previewMode === "personal" && fixture === null && (
-				<div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-					<Card>
-						<CardContent className="space-y-4 p-4 sm:p-5">
-							<div className="flex flex-wrap items-start justify-between gap-2">
-								<div>
-									<h3 className="font-bold text-foreground text-sm sm:text-base">
+				<div className="grid grid-cols-1 items-stretch gap-5 min-[1200px]:grid-cols-12">
+					<Card className="flex flex-col min-[1200px]:col-span-7">
+						<CardContent className="flex flex-1 flex-col justify-between gap-4 p-4 sm:p-5">
+							<div className="flex items-start justify-between gap-3">
+								<div className="min-w-0 space-y-0.5">
+									<h3 className="font-bold text-base text-foreground">
 										Statistik Penilaian Pribadi
 									</h3>
-									<p className="text-muted-foreground text-xs">
+									<p className="truncate text-muted-foreground text-xs">
 										{liveAssessment.data?.periodName ??
 											"Rekap nilai periode final pribadi"}
 									</p>
@@ -488,7 +488,7 @@ export function LiveDashboardMetrics({
 										type="button"
 										variant="outline"
 										size="sm"
-										className="min-h-10 gap-1.5"
+										className="min-h-9 shrink-0 gap-1.5"
 										disabled={personalCsvDownloading}
 										onClick={() => void handleDownloadPersonalAssessmentCsv()}
 									>
@@ -510,8 +510,8 @@ export function LiveDashboardMetrics({
 
 							{personalSummaryReady &&
 							personalSummaryReady.finalScore !== null ? (
-								<div className="space-y-3">
-									<div className="flex flex-wrap items-baseline justify-between gap-2 rounded-xl border border-border bg-surface-subtle/60 px-3.5 py-2.5">
+								<div className="space-y-4">
+									<div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface-subtle/60 px-4 py-3">
 										<div>
 											<p className="text-muted-foreground text-xs">
 												Nilai Akhir Berbobot
@@ -522,7 +522,17 @@ export function LiveDashboardMetrics({
 												)}
 											</p>
 										</div>
-										<span className="rounded-full border border-border bg-surface px-2.5 py-1 font-semibold text-foreground text-xs">
+										<span
+											className={`shrink-0 rounded-full border px-2.5 py-1 font-semibold text-xs ${
+												personalSummaryReady.thresholdStatus ===
+												"MEMENUHI_STANDAR"
+													? "border-success/30 bg-success-tint text-success"
+													: personalSummaryReady.thresholdStatus ===
+															"PERLU_PENINGKATAN"
+														? "border-warning/30 bg-warning-tint text-warning"
+														: "border-border bg-surface text-foreground"
+											}`}
+										>
 											{personalSummaryReady.thresholdStatus ===
 											"MEMENUHI_STANDAR"
 												? "Memenuhi Standar"
@@ -533,7 +543,7 @@ export function LiveDashboardMetrics({
 										</span>
 									</div>
 
-									<div className="space-y-2">
+									<div className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
 										{componentBars.map((item) => {
 											const pct = Math.min(
 												100,
@@ -545,12 +555,12 @@ export function LiveDashboardMetrics({
 												),
 											);
 											return (
-												<div key={item.label} className="space-y-1">
+												<div key={item.label} className="space-y-1.5">
 													<div className="flex items-baseline justify-between gap-2 text-xs">
-														<span className="font-medium text-foreground">
+														<span className="truncate font-medium text-foreground">
 															{item.label}
 														</span>
-														<span className="font-semibold text-foreground tabular-nums">
+														<span className="shrink-0 font-semibold text-foreground tabular-nums">
 															{scoreNumberFormat.format(item.value)}
 															{item.unit}
 														</span>
@@ -580,18 +590,18 @@ export function LiveDashboardMetrics({
 						</CardContent>
 					</Card>
 
-					<Card>
-						<CardContent className="space-y-4 p-4 sm:p-5">
-							<div className="flex items-start justify-between gap-2">
-								<div>
-									<h3 className="font-bold text-foreground text-sm sm:text-base">
+					<Card className="flex flex-col min-[1200px]:col-span-5">
+						<CardContent className="flex flex-1 flex-col gap-4 p-4 sm:p-5">
+							<div className="flex items-start justify-between gap-3">
+								<div className="min-w-0 space-y-0.5">
+									<h3 className="font-bold text-base text-foreground">
 										Keaktifan Kepanitiaan
 									</h3>
 									<p className="text-muted-foreground text-xs">
 										Riwayat divisi dan jabatan kepanitiaan aktifmu
 									</p>
 								</div>
-								<span className="inline-flex items-center gap-1 rounded-full border border-border bg-surface-subtle px-2.5 py-1 font-bold text-foreground text-xs tabular-nums">
+								<span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-border bg-surface-subtle px-2.5 py-1 font-bold text-foreground text-xs tabular-nums">
 									<Users size={13} aria-hidden="true" />
 									{liveCommittee.data?.totalCommittees ?? 0} kepanitiaan
 								</span>
@@ -610,13 +620,13 @@ export function LiveDashboardMetrics({
 									Belum terdaftar pada kepanitiaan apa pun di periode ini.
 								</p>
 							) : (
-								<ul className="divide-y divide-border rounded-xl border border-border bg-surface">
+								<ul className="divide-y divide-border rounded-xl border border-border bg-surface-subtle/35">
 									{liveCommittee.data?.items.map((item) => (
 										<li
 											key={`${item.committeeId}:${item.divisionName}:${item.positionCode}`}
-											className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5"
+											className="flex items-center justify-between gap-3 px-4 py-3"
 										>
-											<div className="min-w-0">
+											<div className="min-w-0 flex-1 space-y-0.5">
 												<p className="truncate font-semibold text-foreground text-sm">
 													{item.committeeName}
 												</p>
@@ -624,7 +634,7 @@ export function LiveDashboardMetrics({
 													Divisi {item.divisionName}
 												</p>
 											</div>
-											<span className="shrink-0 rounded-full border border-border bg-surface-subtle px-2.5 py-0.5 font-semibold text-foreground text-xs">
+											<span className="shrink-0 whitespace-nowrap rounded-full border border-border bg-surface px-2.5 py-0.5 font-semibold text-foreground text-xs">
 												{item.positionCode}
 											</span>
 										</li>

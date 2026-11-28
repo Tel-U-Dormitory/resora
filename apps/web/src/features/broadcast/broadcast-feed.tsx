@@ -95,7 +95,9 @@ export default function BroadcastFeed({
 	return (
 		<section
 			className={
-				view === "LATEST" ? "space-y-3" : "resora-page resora-inbox space-y-4"
+				view === "LATEST"
+					? "space-y-3 rounded-2xl border border-border bg-surface p-4 sm:p-5"
+					: "resora-page resora-inbox space-y-4"
 			}
 			aria-label={heading}
 		>
