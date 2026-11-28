@@ -1,4 +1,6 @@
+import { randomBytes } from "node:crypto";
 import { appRouter } from "@resora/api/routers/index";
+import { createAuth } from "@resora/auth";
 import { createDb } from "@resora/db";
 import {
 	attendanceRecords,
@@ -13,6 +15,12 @@ import {
 	committeeMembers,
 	committees,
 } from "@resora/db/schema/committee";
+import {
+	dtAssignmentHistories,
+	dtAudits,
+	dtMemberships,
+} from "@resora/db/schema/dt";
+import { userProfiles } from "@resora/db/schema/identity";
 import {
 	evaluationAttendanceFallbacks,
 	evaluationAudits,
@@ -55,6 +63,8 @@ const SEED_IDS = {
 		upcomingRaker: "d0000000-0000-4000-8000-000000000204",
 		upcomingCareer: "d0000000-0000-4000-8000-000000000205",
 		draftMubes: "d0000000-0000-4000-8000-000000000206",
+		dtBriefingDone: "d0000000-0000-4000-8000-000000000207",
+		dtQrLive: "d0000000-0000-4000-8000-000000000208",
 	},
 	sessions: {
 		annualFest: "d0000000-0000-4000-8000-000000000301",
@@ -63,6 +73,24 @@ const SEED_IDS = {
 		upcomingRaker: "d0000000-0000-4000-8000-000000000304",
 		upcomingCareer: "d0000000-0000-4000-8000-000000000305",
 		draftMubes: "d0000000-0000-4000-8000-000000000306",
+		dtBriefingDone: "d0000000-0000-4000-8000-000000000307",
+		dtQrLive: "d0000000-0000-4000-8000-000000000308",
+	},
+	dtMemberships: {
+		activeA: "d0000000-0000-4000-8000-000000000901",
+		activeB: "d0000000-0000-4000-8000-000000000902",
+		candidateC: "d0000000-0000-4000-8000-000000000903",
+	},
+	dtAssignments: {
+		activeA: "d0000000-0000-4000-8000-000000000911",
+		activeB: "d0000000-0000-4000-8000-000000000912",
+	},
+	dtAudits: {
+		aReg: "d0000000-0000-4000-8000-000000000921",
+		aAct: "d0000000-0000-4000-8000-000000000922",
+		bReg: "d0000000-0000-4000-8000-000000000923",
+		bAct: "d0000000-0000-4000-8000-000000000924",
+		cReg: "d0000000-0000-4000-8000-000000000925",
 	},
 	evalPeriods: {
 		triwulan1Final: "d0000000-0000-4000-8000-000000000401",
@@ -1309,12 +1337,465 @@ async function main() {
 			});
 		}
 
+		// Step 4: Dorm Team (DT) accounts, memberships, building assignments, committee links, and DT events
+		const devAdaptif =
+			pickUser("kadep.adaptif") ??
+			pickUser("sekdep.adaptif") ??
+			pickUser("anggota.adaptif") ??
+			rosterRows.find(
+				(r) => r.departmentCode === "ADAPTIF" && r.isActive,
+			) ??
+			devHco;
+
+		const bldA = allBuildings[0];
+		const bldB = allBuildings[1] ?? bldA;
+		const bldC = allBuildings[2] ?? bldA;
+		if (!bldA || !bldB || !bldC) {
+			throw new Error("BUILDINGS_MISSING_FOR_DT_SEED");
+		}
+
+		const dtFixtures = [
+			{
+				key: "activeA" as const,
+				membershipId: SEED_IDS.dtMemberships.activeA,
+				assignmentId: SEED_IDS.dtAssignments.activeA,
+				nim: "1301269001",
+				name: "Rafi Dorm Team",
+				email: "1301269001@dt.resora.local",
+				status: "ACTIVE" as const,
+				startsOn: "2026-08-01",
+				endsOn: "2027-07-31",
+				building: bldA,
+				workProgram: "Piket Malam & Pendampingan Kebersihan Blok",
+				registrationNotes: "Anggota DT aktif gedung utama",
+			},
+			{
+				key: "activeB" as const,
+				membershipId: SEED_IDS.dtMemberships.activeB,
+				assignmentId: SEED_IDS.dtAssignments.activeB,
+				nim: "1301269002",
+				name: "Sinta Dorm Team",
+				email: "1301269002@dt.resora.local",
+				status: "ACTIVE" as const,
+				startsOn: "2026-08-01",
+				endsOn: "2027-07-31",
+				building: bldB,
+				workProgram: "Logistik Harian & Monitoring Gerbang Gedung",
+				registrationNotes: "Anggota DT aktif dukungan logistik",
+			},
+			{
+				key: "candidateC" as const,
+				membershipId: SEED_IDS.dtMemberships.candidateC,
+				assignmentId: null,
+				nim: "1301269003",
+				name: "Dimas Calon DT",
+				email: "1301269003@dt.resora.local",
+				status: "CANDIDATE" as const,
+				startsOn: null,
+				endsOn: null,
+				building: bldC,
+				workProgram: "Pendampingan Lantai Dasar",
+				registrationNotes: "Calon DT menunggu tinjauan Departemen Adaptif",
+			},
+		];
+
+		const existingDtUsersRes = await db.$client.query<{
+			id: string;
+			username: string;
+		}>(
+			`SELECT id, username FROM "user" WHERE username = ANY($1::text[])`,
+			[dtFixtures.map((f) => f.nim)],
+		);
+		const userIdByNim = new Map<string, string>();
+		for (const row of existingDtUsersRes.rows) {
+			if (row.username) userIdByNim.set(row.username, row.id);
+		}
+		const existingDtMembershipRes = await db.$client.query<{
+			user_id: string;
+		}>(
+			"SELECT user_id FROM dt_memberships WHERE user_id = ANY($1::text[])",
+			[[...userIdByNim.values()]],
+		);
+		const usersWithDtMembership = new Set(
+			existingDtMembershipRes.rows.map((r) => r.user_id),
+		);
+
+		await db.transaction(async (tx) => {
+			const ctx = await createAuth(ENV, tx).$context;
+			const seedDtPassword =
+				process.env.SEED_DT_PASSWORD ?? randomBytes(15).toString("base64url");
+			const dtPasswordHash = await ctx.password.hash(seedDtPassword);
+
+			for (const fixture of dtFixtures) {
+				let userId = userIdByNim.get(fixture.nim);
+				if (!userId) {
+					const created = await ctx.internalAdapter.createUser(
+						{
+							name: fixture.name,
+							email: fixture.email,
+							emailVerified: false,
+							username: fixture.nim,
+							displayUsername: fixture.nim,
+						},
+						{ method: "dt-seed" },
+					);
+					if (!created?.id) {
+						throw new Error(`DT_SEED_USER_CREATE_FAILED:${fixture.nim}`);
+					}
+					await ctx.internalAdapter.linkAccount({
+						userId: created.id,
+						accountId: created.id,
+						providerId: "credential",
+						password: dtPasswordHash,
+					});
+					await tx
+						.insert(userProfiles)
+						.values({
+							userId: created.id,
+							actor: "DT",
+							isActive: true,
+							mustChangePassword: fixture.status === "CANDIDATE",
+						})
+						.onConflictDoNothing();
+					userId = created.id;
+					userIdByNim.set(fixture.nim, userId);
+				}
+
+				if (!usersWithDtMembership.has(userId)) {
+					await tx
+						.insert(dtMemberships)
+						.values({
+							id: fixture.membershipId,
+							userId,
+							periodName: activeSrPeriod.name,
+							status: fixture.status,
+							startsOn: fixture.startsOn,
+							endsOn: fixture.endsOn,
+							departmentCode: null,
+							buildingId: fixture.building.id,
+							workProgram: fixture.workProgram,
+							registrationNotes: fixture.registrationNotes,
+							registeredByUserId: devAdaptif.userId,
+							reviewedByUserId:
+								fixture.status === "ACTIVE" ? devAdaptif.userId : null,
+							reviewedAt: fixture.status === "ACTIVE" ? hoursAgo(72) : null,
+							decisionReason:
+								fixture.status === "ACTIVE"
+									? "Aktivasi data seed development DT"
+									: null,
+						})
+						.onConflictDoNothing();
+
+					if (fixture.assignmentId) {
+						await tx
+							.insert(dtAssignmentHistories)
+							.values({
+								id: fixture.assignmentId,
+								membershipId: fixture.membershipId,
+								userId,
+								departmentCode: null,
+								buildingId: fixture.building.id,
+								workProgram: fixture.workProgram,
+								reason: "Penugasan awal gedung Dorm Team (seed development)",
+								assignedByUserId: devAdaptif.userId,
+							})
+							.onConflictDoNothing();
+					}
+				}
+			}
+
+			const dtAId = userIdByNim.get("1301269001");
+			const dtBId = userIdByNim.get("1301269002");
+			const dtCId = userIdByNim.get("1301269003");
+
+			if (dtAId && dtBId && dtCId) {
+				await tx
+					.insert(dtAudits)
+					.values([
+						{
+							id: SEED_IDS.dtAudits.aReg,
+							membershipId: SEED_IDS.dtMemberships.activeA,
+							targetUserId: dtAId,
+							actorUserId: devAdaptif.userId,
+							action: "CANDIDATE_REGISTERED",
+							reason: "Pendaftaran awal calon DT (seed development)",
+							beforeState: null,
+							afterState: {
+								status: "CANDIDATE",
+								buildingId: bldA.id,
+								workProgram: dtFixtures[0]?.workProgram ?? null,
+							},
+						},
+						{
+							id: SEED_IDS.dtAudits.aAct,
+							membershipId: SEED_IDS.dtMemberships.activeA,
+							targetUserId: dtAId,
+							actorUserId: devAdaptif.userId,
+							action: "MEMBERSHIP_ACTIVATED",
+							reason: "Aktivasi DT untuk pengujian development",
+							beforeState: { status: "CANDIDATE" },
+							afterState: { status: "ACTIVE", buildingId: bldA.id },
+						},
+						{
+							id: SEED_IDS.dtAudits.bReg,
+							membershipId: SEED_IDS.dtMemberships.activeB,
+							targetUserId: dtBId,
+							actorUserId: devAdaptif.userId,
+							action: "CANDIDATE_REGISTERED",
+							reason: "Pendaftaran awal calon DT (seed development)",
+							beforeState: null,
+							afterState: {
+								status: "CANDIDATE",
+								buildingId: bldB.id,
+								workProgram: dtFixtures[1]?.workProgram ?? null,
+							},
+						},
+						{
+							id: SEED_IDS.dtAudits.bAct,
+							membershipId: SEED_IDS.dtMemberships.activeB,
+							targetUserId: dtBId,
+							actorUserId: devAdaptif.userId,
+							action: "MEMBERSHIP_ACTIVATED",
+							reason: "Aktivasi DT untuk pengujian development",
+							beforeState: { status: "CANDIDATE" },
+							afterState: { status: "ACTIVE", buildingId: bldB.id },
+						},
+						{
+							id: SEED_IDS.dtAudits.cReg,
+							membershipId: SEED_IDS.dtMemberships.candidateC,
+							targetUserId: dtCId,
+							actorUserId: devAdaptif.userId,
+							action: "CANDIDATE_REGISTERED",
+							reason: "Pendaftaran calon DT uji alur review Adaptif",
+							beforeState: null,
+							afterState: {
+								status: "CANDIDATE",
+								buildingId: bldC.id,
+								workProgram: dtFixtures[2]?.workProgram ?? null,
+							},
+						},
+					])
+					.onConflictDoNothing();
+
+				// Link active DT members into committees
+				await tx
+					.insert(committeeMembers)
+					.values([
+						{
+							committeeId: SEED_IDS.committees.dormFest,
+							userId: dtAId,
+							divisionId: SEED_IDS.divisions.dfLogistik,
+							positionCode: "ANGGOTA",
+						},
+						{
+							committeeId: SEED_IDS.committees.careerTalk,
+							userId: dtBId,
+							divisionId: SEED_IDS.divisions.ctOps,
+							positionCode: "ANGGOTA",
+						},
+					])
+					.onConflictDoNothing();
+
+				// Seed DT-scoped events created by Adaptif (1 CLOSED + 1 PUBLISHED with live QR)
+				const dtDoneStart = hoursAgo(74);
+				const dtDoneEnd = hoursAgo(72);
+				for (const dtEv of [
+					{
+						id: SEED_IDS.events.dtBriefingDone,
+						title: "Briefing Operasional Gedung Dorm Team",
+						description:
+							"Koordinasi piket malam, kebersihan lantai, dan prosedur laporan DT per gedung.",
+						createdByUserId: devAdaptif.userId,
+						status: "CLOSED" as const,
+						visibility: "VISIBLE" as const,
+						attendanceScoringMode: "EXCLUDED" as const,
+						startsAt: dtDoneStart,
+						endsAt: dtDoneEnd,
+						rosterCriteria: {
+							allSr: false,
+							allDt: true,
+							inti: false,
+							departments: [],
+							kadep: false,
+							individuals: [],
+							include: [],
+							exclude: [],
+						},
+						organizationContext: "SR" as const,
+						committeeId: null,
+						snapshotCommitteeName: null,
+						publishedAt: hoursAgo(96),
+						closedAt: dtDoneEnd,
+					},
+					{
+						id: SEED_IDS.events.dtQrLive,
+						title: "Apel Siaga & Absensi QR Dorm Team",
+						description:
+							"Kegiatan absensi DT kelolaan Departemen Adaptif dengan sesi QR aktif untuk uji check-in.",
+						createdByUserId: devAdaptif.userId,
+						status: "PUBLISHED" as const,
+						visibility: "VISIBLE" as const,
+						attendanceScoringMode: "EXCLUDED" as const,
+						startsAt: daysFromNow(2, 12),
+						endsAt: daysFromNow(2, 14),
+						rosterCriteria: {
+							allSr: false,
+							allDt: true,
+							inti: false,
+							departments: [],
+							kadep: false,
+							individuals: [],
+							include: [],
+							exclude: [],
+						},
+						organizationContext: "SR" as const,
+						committeeId: null,
+						snapshotCommitteeName: null,
+						publishedAt: hoursAgo(4),
+						closedAt: null,
+					},
+				]) {
+					await tx.insert(events).values(dtEv).onConflictDoNothing();
+				}
+
+				await tx
+					.insert(attendanceSessions)
+					.values([
+						{
+							id: SEED_IDS.sessions.dtBriefingDone,
+							internalEventId: SEED_IDS.events.dtBriefingDone,
+							status: "CLOSED",
+							centerLat: -6.9712891,
+							centerLng: 107.628339,
+							geofenceRadiusM: 50,
+							lateGraceMinutes: 15,
+							qrTtlMinutes: 360,
+							activatedAt: hoursAgo(74),
+							closedAt: dtDoneEnd,
+						},
+						{
+							id: SEED_IDS.sessions.dtQrLive,
+							internalEventId: SEED_IDS.events.dtQrLive,
+							status: "ACTIVE",
+							centerLat: -6.9712891,
+							centerLng: 107.628339,
+							geofenceRadiusM: 50,
+							lateGraceMinutes: 15,
+							qrTtlMinutes: 360,
+							activatedAt: hoursAgo(1),
+							closedAt: null,
+						},
+					])
+					.onConflictDoNothing();
+
+				await tx
+					.insert(qrChallenges)
+					.values({
+						id: "d0000000-0000-4000-8000-000000000398",
+						sessionId: SEED_IDS.sessions.dtQrLive,
+						activatedAt: hoursAgo(1),
+						expiresAt: hoursFromNow(5),
+						revokedAt: null,
+						isCurrent: true,
+						issuedByUserId: devAdaptif.userId,
+					})
+					.onConflictDoNothing();
+
+				await tx
+					.insert(eventParticipants)
+					.values([
+						{
+							eventId: SEED_IDS.events.dtBriefingDone,
+							userId: dtAId,
+							nim: "1301269001",
+							name: "Rafi Dorm Team",
+							departmentCode: "DT",
+							positionCode: "DT",
+							buildingCode: bldA.code,
+							buildingName: bldA.name,
+							committeeDivision: null,
+							committeePosition: null,
+						},
+						{
+							eventId: SEED_IDS.events.dtBriefingDone,
+							userId: dtBId,
+							nim: "1301269002",
+							name: "Sinta Dorm Team",
+							departmentCode: "DT",
+							positionCode: "DT",
+							buildingCode: bldB.code,
+							buildingName: bldB.name,
+							committeeDivision: null,
+							committeePosition: null,
+						},
+						{
+							eventId: SEED_IDS.events.dtQrLive,
+							userId: dtAId,
+							nim: "1301269001",
+							name: "Rafi Dorm Team",
+							departmentCode: "DT",
+							positionCode: "DT",
+							buildingCode: bldA.code,
+							buildingName: bldA.name,
+							committeeDivision: null,
+							committeePosition: null,
+						},
+						{
+							eventId: SEED_IDS.events.dtQrLive,
+							userId: dtBId,
+							nim: "1301269002",
+							name: "Sinta Dorm Team",
+							departmentCode: "DT",
+							positionCode: "DT",
+							buildingCode: bldB.code,
+							buildingName: bldB.name,
+							committeeDivision: null,
+							committeePosition: null,
+						},
+					])
+					.onConflictDoNothing();
+
+				await tx
+					.insert(attendanceRecords)
+					.values([
+						{
+							sessionId: SEED_IDS.sessions.dtBriefingDone,
+							userId: dtAId,
+							attendanceAt: new Date(dtDoneStart.getTime() + 4 * 60_000),
+							source: "QR",
+							timingClass: "ON_TIME",
+							recordedByUserId: dtAId,
+							manualReason: null,
+							scanLat: -6.9712891,
+							scanLng: 107.628339,
+							gpsAccuracyM: 10.5,
+						},
+						{
+							sessionId: SEED_IDS.sessions.dtBriefingDone,
+							userId: dtBId,
+							attendanceAt: new Date(dtDoneStart.getTime() + 20 * 60_000),
+							source: "MANUAL",
+							timingClass: "LATE",
+							recordedByUserId: devAdaptif.userId,
+							manualReason: "Terlambat piket pengawasan blok",
+							scanLat: null,
+							scanLng: null,
+							gpsAccuracyM: null,
+						},
+					])
+					.onConflictDoNothing();
+			}
+		});
+
 		// Summary counts
 		const summaryTables = [
 			"broadcasts",
 			"committees",
 			"committee_divisions",
 			"committee_members",
+			"dt_memberships",
+			"dt_assignment_histories",
+			"dt_audits",
 			"events",
 			"event_participants",
 			"attendance_sessions",
