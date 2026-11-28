@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+import { type AuthConfig, createAuth } from "@resora/auth";
 import {
 	type ActiveIdentity,
 	getActiveIdentity,
@@ -5,7 +7,7 @@ import {
 } from "@resora/auth/sr-access";
 import type { Database, DatabaseTransaction } from "@resora/db";
 import { isValidSrAssignment } from "@resora/db/organization";
-import { user } from "@resora/db/schema/auth";
+import { account, session, user } from "@resora/db/schema/auth";
 import {
 	buildings,
 	departments,
@@ -18,15 +20,17 @@ import {
 	userProfiles,
 } from "@resora/db/schema/identity";
 import { srTenureStatus } from "@resora/db/sr-tenure";
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { canManageInternalAttendanceManually } from "./identity-policy";
 import { eligibleForManualGrant } from "./permission-catalog";
 
 export { isValidSrAssignment } from "@resora/db/organization";
 export {
+	canAccessPersonalDt,
 	canAccessPersonalSr,
 	canManageBroadcast,
 	canManageCommittee,
+	canManageDt,
 	canManageEventScoring,
 	canManageInternalAttendanceManually,
 	canManageInternalEvent,
@@ -374,4 +378,158 @@ export async function getUserDisplayNames(
 	return new Map(rows.map((row) => [row.userId, row.name]));
 }
 
-export type { ActiveIdentity, ActiveSrIdentity } from "@resora/auth/sr-access";
+export async function getActiveDepartments(db: Database | DatabaseTransaction) {
+	return db
+		.select({ code: departments.code, name: departments.name })
+		.from(departments)
+		.where(eq(departments.isActive, true))
+		.orderBy(asc(departments.code));
+}
+
+export async function getActiveDepartment(
+	db: Database | DatabaseTransaction,
+	code: string,
+	lock = false,
+) {
+	const query = db
+		.select({ code: departments.code, name: departments.name })
+		.from(departments)
+		.where(and(eq(departments.code, code), eq(departments.isActive, true)));
+	const [row] = await (lock ? query.for("share") : query);
+	return row ?? null;
+}
+
+export async function getMemberIdentities(
+	db: Database | DatabaseTransaction,
+	userIds: readonly string[],
+) {
+	if (!userIds.length) return [];
+	return db
+		.select({
+			userId: user.id,
+			name: user.name,
+			nim: user.username,
+			actor: userProfiles.actor,
+			isActive: userProfiles.isActive,
+		})
+		.from(user)
+		.innerJoin(userProfiles, eq(userProfiles.userId, user.id))
+		.where(inArray(user.id, [...new Set(userIds)]));
+}
+
+export async function getDtAccountIdentities(
+	db: Database | DatabaseTransaction,
+	userIds: readonly string[],
+) {
+	if (!userIds.length) return [];
+	return db
+		.select({
+			userId: user.id,
+			name: user.name,
+			nim: user.username,
+			email: user.email,
+			actor: userProfiles.actor,
+			isActive: userProfiles.isActive,
+		})
+		.from(user)
+		.innerJoin(userProfiles, eq(userProfiles.userId, user.id))
+		.where(inArray(user.id, [...new Set(userIds)]));
+}
+
+export async function findExistingIdentityByNimOrEmail(
+	tx: DatabaseTransaction,
+	nim: string,
+	email: string,
+) {
+	return tx
+		.select({
+			userId: user.id,
+			nim: user.username,
+			email: user.email,
+			name: user.name,
+			actor: userProfiles.actor,
+			isActive: userProfiles.isActive,
+		})
+		.from(user)
+		.leftJoin(userProfiles, eq(userProfiles.userId, user.id))
+		.where(or(eq(user.username, nim), eq(sql`lower(${user.email})`, email)));
+}
+
+export async function provisionDtUser(
+	tx: DatabaseTransaction,
+	authConfig: AuthConfig,
+	input: { name: string; nim: string; email: string },
+) {
+	const context = await createAuth(authConfig, tx).$context;
+	const placeholderSecret = randomBytes(24).toString("base64url");
+	const passwordHash = await context.password.hash(placeholderSecret);
+	const created = await context.internalAdapter.createUser(
+		{
+			name: input.name,
+			email: input.email,
+			emailVerified: false,
+			username: input.nim,
+			displayUsername: input.nim,
+		},
+		{ method: "dt-admin" },
+	);
+	if (!created?.id) throw new Error("AUTH_ACCOUNT_CREATION_FAILED");
+	const linked = await context.internalAdapter.linkAccount({
+		userId: created.id,
+		accountId: created.id,
+		providerId: "credential",
+		password: passwordHash,
+	});
+	if (!linked?.id) throw new Error("AUTH_ACCOUNT_CREATION_FAILED");
+	await tx.insert(userProfiles).values({
+		userId: created.id,
+		actor: "DT",
+		isActive: true,
+		mustChangePassword: true,
+	});
+	return created.id;
+}
+
+export async function issueDtTemporaryPassword(
+	tx: DatabaseTransaction,
+	authConfig: AuthConfig,
+	userId: string,
+	forceRotation = false,
+) {
+	const context = await createAuth(authConfig, tx).$context;
+	const temporaryPassword = randomBytes(18).toString("base64url");
+	const passwordHash = await context.password.hash(temporaryPassword);
+	const updated = await tx
+		.update(account)
+		.set({ password: passwordHash })
+		.where(
+			and(eq(account.userId, userId), eq(account.providerId, "credential")),
+		)
+		.returning({ id: account.id });
+	if (updated.length !== 1) throw new Error("INVALID_CREDENTIAL_ACCOUNT");
+	await tx
+		.update(userProfiles)
+		.set({
+			isActive: true,
+			mustChangePassword: true,
+			passwordResetRequired: forceRotation,
+		})
+		.where(and(eq(userProfiles.userId, userId), eq(userProfiles.actor, "DT")));
+	if (forceRotation) {
+		await tx.delete(session).where(eq(session.userId, userId));
+	}
+	return { temporaryPassword };
+}
+
+export async function revokeUserSessions(
+	tx: DatabaseTransaction,
+	userId: string,
+) {
+	await tx.delete(session).where(eq(session.userId, userId));
+}
+
+export type {
+	ActiveDtIdentity,
+	ActiveIdentity,
+	ActiveSrIdentity,
+} from "@resora/auth/sr-access";

@@ -48,6 +48,7 @@ import {
 } from "./accounts/account-period.schema";
 import {
 	canAccessPersonalSr,
+	canManageDt,
 	canManageManualAttendance,
 	isValidSrAssignment,
 } from "./identity.public";
@@ -126,6 +127,33 @@ export const identityRouter = router({
 				isActive: ctx.identity.isActive,
 			};
 		}
+		if (ctx.identity.actor === "DT") {
+			const [profile] = await ctx.db
+				.select({ name: user.name, email: user.email })
+				.from(user)
+				.where(eq(user.id, ctx.identity.userId));
+			if (!profile) throw new TRPCError({ code: "UNAUTHORIZED" });
+			const dept = ctx.identity.departmentCode
+				? ((
+						await ctx.db
+							.select({ name: departments.name })
+							.from(departments)
+							.where(eq(departments.code, ctx.identity.departmentCode))
+					)[0]?.name ?? ctx.identity.departmentCode)
+				: null;
+			return {
+				...profile,
+				actor: "DT" as const,
+				nim: ctx.identity.nim,
+				isActive: ctx.identity.isActive,
+				periodName: ctx.identity.periodName,
+				startsOn: ctx.identity.startsOn,
+				endsOn: ctx.identity.endsOn,
+				department: dept,
+				building: ctx.identity.buildingName ?? null,
+				workProgram: ctx.identity.workProgram ?? null,
+			};
+		}
 		const [profile] = await ctx.db
 			.select({
 				name: user.name,
@@ -160,12 +188,29 @@ export const identityRouter = router({
 			userId: identity.userId,
 			...(identity.actor === "SR"
 				? { actor: "SR" as const, nim: identity.nim }
-				: { actor: "SYSTEM_ADMIN" as const, username: identity.username }),
+				: identity.actor === "DT"
+					? { actor: "DT" as const, nim: identity.nim }
+					: { actor: "SYSTEM_ADMIN" as const, username: identity.username }),
 			mustChangePassword: identity.mustChangePassword,
 			requiresPasswordChange: requiresPasswordChange(identity),
 			name: ctx.session.user.name,
-			departmentCode: identity.actor === "SR" ? identity.departmentCode : null,
+			departmentCode:
+				identity.actor === "SR" || identity.actor === "DT"
+					? identity.departmentCode
+					: null,
 			positionCode: identity.actor === "SR" ? identity.positionCode : null,
+			dtMembership:
+				identity.actor === "DT"
+					? {
+							membershipId: identity.membershipId,
+							periodName: identity.periodName,
+							startsOn: identity.startsOn,
+							endsOn: identity.endsOn,
+							buildingCode: identity.buildingCode,
+							buildingName: identity.buildingName,
+							workProgram: identity.workProgram,
+						}
+					: null,
 			canAccessPenilaianWorkspace:
 				hasSuperadminPrivilege(identity) ||
 				(canAccessPersonalSr(identity) &&
@@ -183,6 +228,7 @@ export const identityRouter = router({
 				identity,
 			),
 			canOperateGeneralActivity: canOperateGeneralActivity(identity),
+			canManageDt: canManageDt(identity),
 			isSuperadmin: hasSuperadminPrivilege(identity),
 		};
 	}),

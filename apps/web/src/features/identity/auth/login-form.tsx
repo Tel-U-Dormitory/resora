@@ -288,11 +288,17 @@ export default function LoginForm({ expired = false }: { expired?: boolean }) {
 												? "maaf periode jabatan anda telah purna"
 												: result.error.code === "SR_TENURE_NOT_ACTIVE"
 													? "Periode jabatan Anda belum aktif. Hubungi administrator."
-													: result.error.status === 429
-														? "Terlalu banyak percobaan. Tunggu satu menit sebelum mencoba kembali."
-														: result.error.status >= 500
-															? "Layanan masuk sedang tidak tersedia. Silakan coba kembali."
-															: "NIM / username atau password tidak valid.",
+													: result.error.code === "DT_MEMBERSHIP_EXPIRED"
+														? "Masa keanggotaan Dorm Team Anda telah berakhir."
+														: result.error.code === "DT_MEMBERSHIP_NOT_ACTIVE"
+															? "Keanggotaan Dorm Team Anda belum aktif. Hubungi Departemen Adaptif."
+															: result.error.code === "DT_MEMBERSHIP_INACTIVE"
+																? "Akun Dorm Team Anda tidak aktif. Hubungi Departemen Adaptif."
+																: result.error.status === 429
+																	? "Terlalu banyak percobaan. Tunggu satu menit sebelum mencoba kembali."
+																	: result.error.status >= 500
+																		? "Layanan masuk sedang tidak tersedia. Silakan coba kembali."
+																		: "NIM / username atau password tidak valid.",
 										);
 										return;
 									}

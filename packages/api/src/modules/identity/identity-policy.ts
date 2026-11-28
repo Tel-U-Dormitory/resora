@@ -1,4 +1,5 @@
 import {
+	type ActiveDtIdentity,
 	type ActiveIdentity,
 	type ActiveSrIdentity,
 	requiresPasswordChange,
@@ -16,6 +17,27 @@ export function canAccessPersonalSr(
 		identity?.actor === "SR" &&
 		identity.isActive === true &&
 		!requiresPasswordChange(identity)
+	);
+}
+
+export function canAccessPersonalDt(
+	identity: Identity,
+): identity is ActiveDtIdentity {
+	return (
+		identity?.actor === "DT" &&
+		identity.isActive === true &&
+		!requiresPasswordChange(identity)
+	);
+}
+
+// Pengelola DT: Departemen Adaptif aktif dan SUPERADMIN sah.
+export function canManageDt(identity: Identity) {
+	return (
+		hasSuperadminPrivilege(identity) ||
+		(canAccessPersonalSr(identity) &&
+			identity != null &&
+			isValidSrAssignment(identity.departmentCode, identity.positionCode) &&
+			identity.departmentCode === "ADAPTIF")
 	);
 }
 

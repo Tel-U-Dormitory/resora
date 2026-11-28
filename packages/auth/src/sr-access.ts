@@ -1,12 +1,14 @@
 import type { Database } from "@resora/db";
 import { user } from "@resora/db/schema/auth";
+import { dtMemberships } from "@resora/db/schema/dt";
 import {
+	buildings,
 	srProfiles,
 	systemPrivileges,
 	userProfiles,
 } from "@resora/db/schema/identity";
 import { srTenureStatus } from "@resora/db/sr-tenure";
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 
 // Read current identity on every request; a session is not an active-account claim.
 export async function getActiveIdentity(
@@ -75,6 +77,49 @@ export async function getActiveIdentity(
 			username: profile.nim,
 			isSuperadmin: true as const,
 		};
+	if (profile.actor === "DT" && !profile.srUserId) {
+		const today = sql`(statement_timestamp() AT TIME ZONE 'Asia/Jakarta')::date`;
+		const [activeDt] = await database
+			.select({
+				membershipId: dtMemberships.id,
+				periodName: dtMemberships.periodName,
+				startsOn: dtMemberships.startsOn,
+				endsOn: dtMemberships.endsOn,
+				departmentCode: dtMemberships.departmentCode,
+				buildingId: dtMemberships.buildingId,
+				buildingCode: buildings.code,
+				buildingName: buildings.name,
+				workProgram: dtMemberships.workProgram,
+			})
+			.from(dtMemberships)
+			.leftJoin(buildings, eq(buildings.id, dtMemberships.buildingId))
+			.where(
+				and(
+					eq(dtMemberships.userId, profile.userId),
+					eq(dtMemberships.status, "ACTIVE"),
+					lte(dtMemberships.startsOn, today),
+					gte(dtMemberships.endsOn, today),
+				),
+			)
+			.limit(1);
+		if (activeDt?.startsOn && activeDt.endsOn) {
+			return {
+				...common,
+				actor: "DT" as const,
+				nim: profile.nim,
+				isSuperadmin: false as const,
+				membershipId: activeDt.membershipId,
+				periodName: activeDt.periodName,
+				startsOn: activeDt.startsOn,
+				endsOn: activeDt.endsOn,
+				departmentCode: activeDt.departmentCode,
+				buildingId: activeDt.buildingId,
+				buildingCode: activeDt.buildingCode ?? null,
+				buildingName: activeDt.buildingName ?? null,
+				workProgram: activeDt.workProgram,
+			};
+		}
+	}
 	return null;
 }
 
@@ -94,6 +139,8 @@ export type ActiveIdentity = NonNullable<
 export type ActiveSrIdentity = NonNullable<
 	Awaited<ReturnType<typeof getActiveSr>>
 >;
+
+export type ActiveDtIdentity = Extract<ActiveIdentity, { actor: "DT" }>;
 
 // Preserve the stored flag; only privileged accounts must rotate before access.
 export function requiresPasswordChange(
@@ -119,4 +166,73 @@ export async function getSrTenureStatus(
 		.from(userProfiles)
 		.where(and(eq(userProfiles.userId, userId), eq(userProfiles.actor, "SR")));
 	return row?.status ?? null;
+}
+
+export type DtAccessStatus =
+	| "ACTIVE"
+	| "CANDIDATE"
+	| "SCHEDULED"
+	| "EXPIRED"
+	| "INACTIVE";
+
+// Called only after credentials have been verified to give accurate DT lifecycle feedback.
+export async function getDtAccessStatus(
+	database: Pick<Database, "select">,
+	userId: string,
+): Promise<DtAccessStatus | null> {
+	const [profile] = await database
+		.select({ isActive: userProfiles.isActive })
+		.from(userProfiles)
+		.where(and(eq(userProfiles.userId, userId), eq(userProfiles.actor, "DT")));
+	if (!profile) return null;
+	if (!profile.isActive) return "INACTIVE";
+	const todayResult = await database
+		.select({
+			today: sql<string>`(statement_timestamp() AT TIME ZONE 'Asia/Jakarta')::date::text`,
+		})
+		.from(userProfiles)
+		.where(eq(userProfiles.userId, userId))
+		.limit(1);
+	const today = todayResult[0]?.today ?? "";
+	const memberships = await database
+		.select({
+			status: dtMemberships.status,
+			startsOn: dtMemberships.startsOn,
+			endsOn: dtMemberships.endsOn,
+		})
+		.from(dtMemberships)
+		.where(eq(dtMemberships.userId, userId))
+		.orderBy(desc(dtMemberships.createdAt));
+	if (!memberships.length) return "INACTIVE";
+	if (
+		memberships.some(
+			(row) =>
+				row.status === "ACTIVE" &&
+				row.startsOn !== null &&
+				row.endsOn !== null &&
+				row.startsOn <= today &&
+				row.endsOn >= today,
+		)
+	)
+		return "ACTIVE";
+	if (
+		memberships.some(
+			(row) =>
+				row.status === "ACTIVE" &&
+				row.startsOn !== null &&
+				row.startsOn > today,
+		)
+	)
+		return "SCHEDULED";
+	if (memberships.some((row) => row.status === "CANDIDATE")) return "CANDIDATE";
+	if (
+		memberships.some(
+			(row) =>
+				row.status === "ENDED" ||
+				row.status === "ARCHIVED" ||
+				(row.status === "ACTIVE" && row.endsOn !== null && row.endsOn < today),
+		)
+	)
+		return "EXPIRED";
+	return "INACTIVE";
 }

@@ -21,6 +21,7 @@ import {
 import type { SmtpConfig } from "./password-reset-mail";
 import {
 	getActiveIdentity,
+	getDtAccessStatus,
 	getSrTenureStatus,
 	requiresPasswordChange,
 } from "./sr-access";
@@ -187,6 +188,27 @@ export function createAuth(
 									code: "SR_TENURE_NOT_ACTIVE",
 									message:
 										"Periode jabatan Anda belum aktif. Hubungi administrator.",
+								});
+							const dtStatus = await getDtAccessStatus(
+								database,
+								session.userId,
+							);
+							if (dtStatus === "EXPIRED")
+								throw new APIError("UNAUTHORIZED", {
+									code: "DT_MEMBERSHIP_EXPIRED",
+									message: "Masa keanggotaan Dorm Team Anda telah berakhir.",
+								});
+							if (dtStatus === "CANDIDATE" || dtStatus === "SCHEDULED")
+								throw new APIError("UNAUTHORIZED", {
+									code: "DT_MEMBERSHIP_NOT_ACTIVE",
+									message:
+										"Keanggotaan Dorm Team Anda belum aktif. Hubungi Departemen Adaptif.",
+								});
+							if (dtStatus === "INACTIVE")
+								throw new APIError("UNAUTHORIZED", {
+									code: "DT_MEMBERSHIP_INACTIVE",
+									message:
+										"Akun Dorm Team Anda tidak aktif. Hubungi Departemen Adaptif.",
 								});
 
 							throw new APIError("UNAUTHORIZED", {
