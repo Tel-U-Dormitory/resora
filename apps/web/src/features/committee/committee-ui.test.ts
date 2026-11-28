@@ -458,7 +458,7 @@ test("bulk selection queries at two characters, persists across searches, reject
 		f.render({ committee: bulkCommittee, onClose: () => {} }, "Bulk");
 	f.setQuery({ data: [] });
 	expect(f.queries).toHaveLength(0);
-	expect(text(render())).toContain("0 / 30 SR dipilih");
+	expect(text(render())).toContain("0 / 30 anggota dipilih");
 	expect(f.queries.at(-1)?.enabled).toBe(false);
 	searchCandidates(render(), "S");
 	render();
@@ -612,7 +612,7 @@ test("bulk candidate loading, safe error/retry and empty states retain staged se
 	expect(text(render())).not.toContain("SQL private details");
 	expect(byText(render(), "Coba kembali")).toBeDefined();
 	f.setQuery({ data: [] });
-	expect(text(render())).toContain("Tidak ada SR yang sesuai");
+	expect(text(render())).toContain("Tidak ada SR atau DT yang sesuai");
 	expect(render().props.submitLabel).toBe("Tambahkan 1 anggota");
 });
 

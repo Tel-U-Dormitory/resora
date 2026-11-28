@@ -49,7 +49,6 @@ export function DtManagerWorkspace() {
 	const [activeTab, setActiveTab] = useState<TabId>("members");
 	const [search, setSearch] = useState("");
 	const [periodName, setPeriodName] = useState("");
-	const [departmentCode, setDepartmentCode] = useState("");
 	const [buildingId, setBuildingId] = useState("");
 	const [status, setStatus] = useState<DtEffectiveStatus | "">("");
 	const [page, setPage] = useState(0);
@@ -68,7 +67,6 @@ export function DtManagerWorkspace() {
 	const filterPayload = {
 		search: search.trim(),
 		periodName,
-		departmentCode,
 		buildingId: buildingId || undefined,
 		status: status || undefined,
 	};
@@ -150,7 +148,7 @@ export function DtManagerWorkspace() {
 	});
 
 	const counts = listQuery.data?.counts;
-	const references = refsQuery.data ?? { departments: [], buildings: [] };
+	const references = refsQuery.data ?? { buildings: [] };
 	const totalPages = Math.max(1, Math.ceil((listQuery.data?.total ?? 0) / 20));
 
 	return (
@@ -232,7 +230,7 @@ export function DtManagerWorkspace() {
 
 			<Card>
 				<CardContent className="p-4">
-					<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+					<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
 						<div className="space-y-1.5">
 							<Label htmlFor="dt-search">Cari nama / NIM / proker</Label>
 							<Input
@@ -261,24 +259,6 @@ export function DtManagerWorkspace() {
 								{(listQuery.data?.periodOptions ?? []).map((p) => (
 									<option key={p} value={p}>
 										{p}
-									</option>
-								))}
-							</Select>
-						</div>
-						<div className="space-y-1.5">
-							<Label htmlFor="dt-filter-dept">Departemen</Label>
-							<Select
-								id="dt-filter-dept"
-								value={departmentCode}
-								onChange={(e) => {
-									setDepartmentCode(e.target.value);
-									setPage(0);
-								}}
-							>
-								<option value="">Semua departemen</option>
-								{references.departments.map((d) => (
-									<option key={d.code} value={d.code}>
-										{d.name}
 									</option>
 								))}
 							</Select>
@@ -347,22 +327,17 @@ export function DtManagerWorkspace() {
 								variant="folder"
 								title="Belum ada anggota Dorm Team"
 								description={
-									search || periodName || departmentCode || buildingId || status
+									search || periodName || buildingId || status
 										? "Tidak ada anggota DT yang sesuai dengan filter pencarian."
 										: "Daftarkan mahasiswa sebagai calon DT untuk memulai pengelolaan."
 								}
 								action={
-									search ||
-									periodName ||
-									departmentCode ||
-									buildingId ||
-									status ? (
+									search || periodName || buildingId || status ? (
 										<Button
 											variant="outline"
 											onClick={() => {
 												setSearch("");
 												setPeriodName("");
-												setDepartmentCode("");
 												setBuildingId("");
 												setStatus("");
 												setPage(0);
@@ -401,7 +376,6 @@ export function DtManagerWorkspace() {
 												</span>
 											</div>
 											<p className="text-muted-foreground text-xs">
-												{member.departmentName ?? "Tanpa departemen"} ·{" "}
 												{member.buildingName ?? "Tanpa gedung"}
 												{member.workProgram ? ` · ${member.workProgram}` : ""}
 											</p>
@@ -524,7 +498,6 @@ export function DtManagerWorkspace() {
 													</td>
 													<td className="px-3 py-3">
 														<p className="font-medium">
-															{member.departmentName ?? "—"} ·{" "}
 															{member.buildingName ?? "—"}
 														</p>
 														{member.workProgram && (

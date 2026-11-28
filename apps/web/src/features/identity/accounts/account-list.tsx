@@ -4,15 +4,17 @@ import { Input } from "@resora/ui/components/input";
 import { Label } from "@resora/ui/components/label";
 import { Select } from "@resora/ui/components/select";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, Plus } from "lucide-react";
+import { ChevronLeft, Plus, UserCog } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { queryErrorMessage } from "@/utils/request-error";
 import { queryClient, trpc } from "@/utils/trpc";
 import AccountActions from "./account-actions";
+import AccountDtPanel from "./account-dt-panel";
 
 import {
 	accountStatus,
@@ -21,6 +23,7 @@ import {
 } from "./account-status";
 
 export default function AccountList() {
+	const [accountTab, setAccountTab] = useState<"sr" | "dt">("sr");
 	const [search, setSearch] = useState("");
 	const [departmentCode, setDepartmentCode] = useState("");
 	const [status, setStatus] = useState("");
@@ -67,20 +70,44 @@ export default function AccountList() {
 		<section className="resora-page resora-admin-accounts space-y-6">
 			<div className="flex flex-wrap items-start justify-between gap-4">
 				<div className="space-y-1.5">
-					<h1 className="font-bold text-2xl tracking-tight">Kelola akun SR</h1>
+					<h1 className="font-bold text-2xl tracking-tight">Kelola akun</h1>
 					<p className="hidden text-muted-foreground text-sm sm:block">
-						Kelola identitas, akses, dan keamanan akun Senior Resident.
+						Kelola identitas, akses, dan keamanan akun Senior Resident dan Dorm
+						Team.
 					</p>
 				</div>
-				<Link
-					href="/admin/users/new"
-					className="focus-ring inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 font-semibold text-sm text-white hover:bg-primary-hover hover:text-white sm:w-auto"
-				>
-					<Plus size={17} aria-hidden="true" /> Tambah akun
-				</Link>
+				{accountTab === "sr" ? (
+					<Link
+						href="/admin/users/new"
+						className="focus-ring inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 font-semibold text-sm text-white hover:bg-primary-hover hover:text-white sm:w-auto"
+					>
+						<Plus size={17} aria-hidden="true" /> Tambah akun
+					</Link>
+				) : (
+					<Link
+						href="/dt"
+						className="focus-ring inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-border-control bg-surface px-4 py-2.5 font-semibold text-foreground text-sm hover:bg-muted sm:w-auto"
+					>
+						<UserCog size={17} aria-hidden="true" /> Kelola keanggotaan DT
+					</Link>
+				)}
 			</div>
 
-			<Card>
+			<Tabs
+				value={accountTab}
+				onValueChange={(next) => setAccountTab(next as "sr" | "dt")}
+			>
+				<TabsList aria-label="Kategori akun dikelola">
+					<TabsTrigger value="sr">Akun SR</TabsTrigger>
+					<TabsTrigger value="dt">Akun DT</TabsTrigger>
+				</TabsList>
+			</Tabs>
+
+			{accountTab === "dt" ? (
+				<AccountDtPanel />
+			) : (
+				<>
+					<Card>
 				<CardContent>
 					<form
 						method="get"
@@ -453,6 +480,8 @@ export default function AccountList() {
 							</Button>
 						</div>
 					</div>
+				</>
+			)}
 				</>
 			)}
 		</section>

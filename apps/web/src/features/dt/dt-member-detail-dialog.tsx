@@ -99,7 +99,7 @@ export function DtMemberDetailDialog({
 										{dtStatusLabel(detail.data.membership.effectiveStatus)}
 									</span>
 								</div>
-								<dl className="grid gap-3 text-sm sm:grid-cols-2">
+								<dl className="grid gap-3 text-sm sm:grid-cols-3">
 									<div>
 										<dt className="text-muted-foreground text-xs">
 											Masa berlaku
@@ -109,15 +109,6 @@ export function DtMemberDetailDialog({
 												detail.data.membership.startsOn,
 												detail.data.membership.endsOn,
 											)}
-										</dd>
-									</div>
-									<div>
-										<dt className="text-muted-foreground text-xs">
-											Departemen pembina
-										</dt>
-										<dd className="font-medium">
-											{detail.data.membership.departmentName ??
-												"Belum ditentukan"}
 										</dd>
 									</div>
 									<div>
@@ -219,7 +210,6 @@ export function DtMemberDetailDialog({
 											className="space-y-1 rounded-xl border border-border p-3"
 										>
 											<p className="font-medium">
-												{item.departmentName ?? "Tanpa departemen"} ·{" "}
 												{item.buildingName ?? "Tanpa gedung"}
 												{item.workProgram ? ` · ${item.workProgram}` : ""}
 											</p>

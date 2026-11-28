@@ -108,19 +108,11 @@ export function DtPortalWorkspace() {
 								{dtStatusLabel(active.effectiveStatus)}
 							</span>
 						</div>
-						<dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+						<dl className="grid gap-3 text-sm sm:grid-cols-3">
 							<div>
 								<dt className="text-muted-foreground text-xs">Masa berlaku</dt>
 								<dd className="font-medium">
 									{formatDtPeriodRange(active.startsOn, active.endsOn)}
-								</dd>
-							</div>
-							<div>
-								<dt className="text-muted-foreground text-xs">
-									Departemen pembina
-								</dt>
-								<dd className="font-medium">
-									{active.departmentName ?? "Belum ditentukan"}
 								</dd>
 							</div>
 							<div>
@@ -323,7 +315,6 @@ export function DtPortalWorkspace() {
 											className="space-y-1 rounded-xl border border-border p-3"
 										>
 											<p className="font-semibold">
-												{item.departmentName ?? "Tanpa departemen"} ·{" "}
 												{item.buildingName ?? "Tanpa gedung"}
 												{item.workProgram ? ` · ${item.workProgram}` : ""}
 											</p>

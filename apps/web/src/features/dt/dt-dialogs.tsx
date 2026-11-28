@@ -179,8 +179,7 @@ export function RegisterCandidateDialog({
 		nim: string;
 		email: string;
 		periodName: string;
-		departmentCode: string | null;
-		buildingId: string | null;
+		buildingId: string;
 		workProgram: string | null;
 		registrationNotes: string;
 	}) => Promise<unknown>;
@@ -191,8 +190,7 @@ export function RegisterCandidateDialog({
 	const [nim, setNim] = useState("");
 	const [email, setEmail] = useState("");
 	const [periodName, setPeriodName] = useState("2026/2027");
-	const [departmentCode, setDepartmentCode] = useState("");
-	const [buildingId, setBuildingId] = useState("");
+	const [buildingId, setBuildingId] = useState(references.buildings[0]?.id ?? "");
 	const [workProgram, setWorkProgram] = useState("");
 	const [notes, setNotes] = useState("");
 
@@ -216,8 +214,7 @@ export function RegisterCandidateDialog({
 							nim: nim.trim(),
 							email: email.trim(),
 							periodName: periodName.trim(),
-							departmentCode: departmentCode || null,
-							buildingId: buildingId || null,
+							buildingId,
 							workProgram: workProgram.trim() || null,
 							registrationNotes: notes.trim(),
 						});
@@ -280,28 +277,14 @@ export function RegisterCandidateDialog({
 						/>
 					</div>
 					<div className="space-y-1.5">
-						<Label htmlFor="dt-reg-dept">Departemen pembina (opsional)</Label>
-						<Select
-							id="dt-reg-dept"
-							value={departmentCode}
-							onChange={(e) => setDepartmentCode(e.target.value)}
-						>
-							<option value="">Belum ditentukan</option>
-							{references.departments.map((d) => (
-								<option key={d.code} value={d.code}>
-									{d.name}
-								</option>
-							))}
-						</Select>
-					</div>
-					<div className="space-y-1.5">
-						<Label htmlFor="dt-reg-bldg">Gedung tugas (opsional)</Label>
+						<Label htmlFor="dt-reg-bldg">Gedung tugas</Label>
 						<Select
 							id="dt-reg-bldg"
+							required
 							value={buildingId}
 							onChange={(e) => setBuildingId(e.target.value)}
 						>
-							<option value="">Belum ditentukan</option>
+							<option value="">Pilih gedung</option>
 							{references.buildings.map((b) => (
 								<option key={b.id} value={b.id}>
 									{b.name}
@@ -309,7 +292,7 @@ export function RegisterCandidateDialog({
 							))}
 						</Select>
 					</div>
-					<div className="space-y-1.5">
+					<div className="space-y-1.5 sm:col-span-2">
 						<Label htmlFor="dt-reg-proker">Program kerja (opsional)</Label>
 						<Input
 							id="dt-reg-proker"
@@ -362,8 +345,7 @@ export function ActivateMembershipDialog({
 		periodName: string;
 		startsOn: string;
 		endsOn: string;
-		departmentCode: string | null;
-		buildingId: string | null;
+		buildingId: string;
 		workProgram: string | null;
 		reason: string;
 	}) => Promise<DtIssuedCredentials>;
@@ -377,10 +359,9 @@ export function ActivateMembershipDialog({
 		),
 	);
 	const [endsOn, setEndsOn] = useState("");
-	const [departmentCode, setDepartmentCode] = useState(
-		member.departmentCode ?? "",
+	const [buildingId, setBuildingId] = useState(
+		member.buildingId ?? references.buildings[0]?.id ?? "",
 	);
-	const [buildingId, setBuildingId] = useState(member.buildingId ?? "");
 	const [workProgram, setWorkProgram] = useState(member.workProgram ?? "");
 	const [reason, setReason] = useState("Disetujui dan diaktifkan oleh Adaptif");
 
@@ -404,8 +385,7 @@ export function ActivateMembershipDialog({
 							periodName: periodName.trim(),
 							startsOn,
 							endsOn,
-							departmentCode: departmentCode || null,
-							buildingId: buildingId || null,
+							buildingId,
 							workProgram: workProgram.trim() || null,
 							reason: reason.trim(),
 						});
@@ -455,29 +435,15 @@ export function ActivateMembershipDialog({
 							onChange={(e) => setEndsOn(e.target.value)}
 						/>
 					</div>
-					<div className="space-y-1.5">
-						<Label htmlFor="dt-act-dept">Departemen pembina</Label>
-						<Select
-							id="dt-act-dept"
-							value={departmentCode}
-							onChange={(e) => setDepartmentCode(e.target.value)}
-						>
-							<option value="">Belum ditentukan</option>
-							{references.departments.map((d) => (
-								<option key={d.code} value={d.code}>
-									{d.name}
-								</option>
-							))}
-						</Select>
-					</div>
-					<div className="space-y-1.5">
+					<div className="space-y-1.5 sm:col-span-2">
 						<Label htmlFor="dt-act-bldg">Gedung tugas</Label>
 						<Select
 							id="dt-act-bldg"
+							required
 							value={buildingId}
 							onChange={(e) => setBuildingId(e.target.value)}
 						>
-							<option value="">Belum ditentukan</option>
+							<option value="">Pilih gedung</option>
 							{references.buildings.map((b) => (
 								<option key={b.id} value={b.id}>
 									{b.name}
@@ -534,18 +500,16 @@ export function UpdateAssignmentDialog({
 	onClose: () => void;
 	onSubmit: (values: {
 		membershipId: string;
-		departmentCode: string | null;
-		buildingId: string | null;
+		buildingId: string;
 		workProgram: string | null;
 		reason: string;
 	}) => Promise<unknown>;
 }) {
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState("");
-	const [departmentCode, setDepartmentCode] = useState(
-		member.departmentCode ?? "",
+	const [buildingId, setBuildingId] = useState(
+		member.buildingId ?? references.buildings[0]?.id ?? "",
 	);
-	const [buildingId, setBuildingId] = useState(member.buildingId ?? "");
 	const [workProgram, setWorkProgram] = useState(member.workProgram ?? "");
 	const [reason, setReason] = useState("");
 
@@ -566,8 +530,7 @@ export function UpdateAssignmentDialog({
 					try {
 						await onSubmit({
 							membershipId: member.id,
-							departmentCode: departmentCode || null,
-							buildingId: buildingId || null,
+							buildingId,
 							workProgram: workProgram.trim() || null,
 							reason: reason.trim(),
 						});
@@ -588,28 +551,14 @@ export function UpdateAssignmentDialog({
 					</p>
 				)}
 				<div className="space-y-1.5">
-					<Label htmlFor="dt-assign-dept">Departemen pembina</Label>
-					<Select
-						id="dt-assign-dept"
-						value={departmentCode}
-						onChange={(e) => setDepartmentCode(e.target.value)}
-					>
-						<option value="">Belum ditentukan</option>
-						{references.departments.map((d) => (
-							<option key={d.code} value={d.code}>
-								{d.name}
-							</option>
-						))}
-					</Select>
-				</div>
-				<div className="space-y-1.5">
 					<Label htmlFor="dt-assign-bldg">Gedung tugas</Label>
 					<Select
 						id="dt-assign-bldg"
+						required
 						value={buildingId}
 						onChange={(e) => setBuildingId(e.target.value)}
 					>
-						<option value="">Belum ditentukan</option>
+						<option value="">Pilih gedung</option>
 						{references.buildings.map((b) => (
 							<option key={b.id} value={b.id}>
 								{b.name}

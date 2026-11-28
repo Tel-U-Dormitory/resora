@@ -111,7 +111,6 @@ export default function SrProfile({ userId }: { userId: string }) {
 						["Email", info.email],
 						["Periode DT", info.periodName],
 						["Masa berlaku", `${info.startsOn} s/d ${info.endsOn}`],
-						["Departemen pembina", info.department ?? "Belum ditentukan"],
 						["Gedung tugas", info.building ?? "Belum ditentukan"],
 						["Program kerja", info.workProgram ?? "Belum ditentukan"],
 					] as const)

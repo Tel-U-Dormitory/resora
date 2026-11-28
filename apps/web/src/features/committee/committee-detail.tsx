@@ -185,7 +185,8 @@ function BulkMemberDialog({
 							</div>
 						) : !candidates.data?.length ? (
 							<p role="status">
-								Tidak ada SR yang sesuai atau semua hasil sudah menjadi anggota.
+								Tidak ada SR atau DT yang sesuai atau semua hasil sudah menjadi
+								anggota.
 							</p>
 						) : (
 							<fieldset className="space-y-2">
@@ -214,7 +215,10 @@ function BulkMemberDialog({
 													htmlFor={`candidate-${row.userId}`}
 													className="min-w-0 break-words"
 												>
-													{row.name} · {row.nim}{" "}
+													{row.name} · {row.nim}
+													{row.actorType === "DT" && row.buildingName
+														? ` · ${row.buildingName}`
+														: ""}{" "}
 													<span className="ml-1 rounded-md border border-border bg-surface-subtle px-1.5 py-0.5 font-semibold text-[11px] text-muted-foreground">
 														{row.actorType}
 													</span>
@@ -229,7 +233,7 @@ function BulkMemberDialog({
 						<p
 							role="status"
 							className="font-semibold text-sm"
-						>{`${selected.length} / 30 SR dipilih`}</p>
+						>{`${selected.length} / 30 anggota dipilih`}</p>
 						{selected.length > 0 && (
 							<ul
 								aria-label="SR terpilih"
@@ -482,7 +486,11 @@ export default function CommitteeDetail({
 												</span>
 											</h3>
 											<p className="text-muted-foreground text-sm">
-												NIM {member.nim} · {divisionName(member.divisionId)} ·{" "}
+												NIM {member.nim}
+												{member.actorType === "DT" && member.buildingName
+													? ` · ${member.buildingName}`
+													: ""}{" "}
+												· {divisionName(member.divisionId)} ·{" "}
 												{committeePositionLabels[member.positionCode]}
 											</p>
 											{!member.eligible && (
