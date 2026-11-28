@@ -21,7 +21,7 @@ import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
 	buildings,
 	currentActor,
@@ -302,30 +302,22 @@ export function ViolationsWorkspace({ fixedAdmin }: { fixedAdmin?: boolean }) {
 				</p>
 			)}
 
-			<fieldset
-				aria-label="Tampilan pelanggaran"
-				className="grid w-full grid-cols-2 gap-1 rounded-xl border border-border bg-surface p-1 sm:inline-flex sm:w-auto"
+			<Tabs
+				value={view}
+				onValueChange={(next) => setView(next as View)}
+				className="w-full sm:w-auto"
 			>
-				{views.map((item) => {
-					const activeTab = view === item;
-					return (
-						<button
-							key={item}
-							type="button"
-							aria-pressed={activeTab}
-							onClick={() => setView(item)}
-							className={cn(
-								"focus-ring inline-flex min-h-10 items-center justify-center rounded-lg px-3.5 py-2 font-semibold text-sm transition-colors",
-								activeTab
-									? "bg-primary text-white shadow-xs"
-									: "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-							)}
-						>
+				<TabsList
+					aria-label="Tampilan pelanggaran"
+					className="grid w-full grid-cols-2 sm:inline-flex sm:w-auto"
+				>
+					{views.map((item) => (
+						<TabsTrigger key={item} value={item} className="w-full sm:w-auto">
 							{item}
-						</button>
-					);
-				})}
-			</fieldset>
+						</TabsTrigger>
+					))}
+				</TabsList>
+			</Tabs>
 
 			<Card className="rounded-2xl border-border bg-surface shadow-none">
 				<CardContent className="grid gap-3.5 p-3.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end sm:p-4">

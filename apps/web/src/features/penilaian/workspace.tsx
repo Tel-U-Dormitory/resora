@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/utils/trpc";
 import { PenilaianAdminPanel } from "./penilaian-admin-panel";
 import { PenilaianAnalyticsPanel } from "./penilaian-analytics-panel";
@@ -167,31 +168,18 @@ export function PenilaianWorkspace() {
 				</div>
 			</header>
 
-			<div
-				role="tablist"
-				aria-label="Navigasi modul penilaian SR"
-				className="resora-tabs-scroll flex items-center gap-1.5 overflow-x-auto pb-1"
+			<Tabs
+				value={activeTab}
+				onValueChange={(next) => setRequestedTab(next as TabId)}
 			>
-				{availableTabs.map((tab) => {
-					const selected = activeTab === tab.id;
-					return (
-						<button
-							key={tab.id}
-							type="button"
-							role="tab"
-							aria-selected={selected}
-							onClick={() => setRequestedTab(tab.id)}
-							className={`focus-ring inline-flex min-h-11 shrink-0 items-center rounded-xl px-4 font-semibold text-xs transition-colors sm:text-sm ${
-								selected
-									? "bg-primary text-primary-foreground shadow-2xs"
-									: "border border-border bg-surface text-text-secondary hover:bg-surface-subtle hover:text-foreground"
-							}`}
-						>
+				<TabsList aria-label="Navigasi modul penilaian SR">
+					{availableTabs.map((tab) => (
+						<TabsTrigger key={tab.id} value={tab.id}>
 							{tab.label}
-						</button>
-					);
-				})}
-			</div>
+						</TabsTrigger>
+					))}
+				</TabsList>
+			</Tabs>
 
 			{!activePeriod && activeTab !== "manage" ? (
 				<Card>

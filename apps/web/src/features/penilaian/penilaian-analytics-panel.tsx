@@ -33,6 +33,7 @@ export function PenilaianAnalyticsPanel({
 	const [search, setSearch] = useState("");
 	const [departmentCode, setDepartmentCode] = useState("");
 	const [buildingCode, setBuildingCode] = useState("");
+	const [page, setPage] = useState(1);
 	const [selectedTargetUserId, setSelectedTargetUserId] = useState<
 		string | null
 	>(null);
@@ -235,11 +236,11 @@ export function PenilaianAnalyticsPanel({
 							<h3 className="font-bold text-foreground text-sm">
 								Rata-rata per Departemen
 							</h3>
-							<div className="space-y-2">
+							<div className="divide-y divide-border rounded-xl border border-border bg-surface">
 								{analytics.byDepartment.map((dept) => (
 									<div
 										key={dept.departmentCode}
-										className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 text-xs"
+										className="flex items-center justify-between px-3 py-2 text-xs"
 									>
 										<span className="font-semibold text-foreground">
 											{dept.departmentCode} ({dept.assessedCount}/{dept.totalSr}
@@ -264,21 +265,30 @@ export function PenilaianAnalyticsPanel({
 							className="min-h-11"
 							placeholder="Cari NIM atau nama SR…"
 							value={search}
-							onChange={(event) => setSearch(event.target.value)}
+							onChange={(event) => {
+								setSearch(event.target.value);
+								setPage(1);
+							}}
 						/>
 						<Input
 							aria-label="Filter departemen"
 							className="min-h-11"
 							placeholder="Filter departemen (contoh: HCO)"
 							value={departmentCode}
-							onChange={(event) => setDepartmentCode(event.target.value)}
+							onChange={(event) => {
+								setDepartmentCode(event.target.value);
+								setPage(1);
+							}}
 						/>
 						<Input
 							aria-label="Filter gedung"
 							className="min-h-11"
 							placeholder="Filter kode gedung (contoh: A1)"
 							value={buildingCode}
-							onChange={(event) => setBuildingCode(event.target.value)}
+							onChange={(event) => {
+								setBuildingCode(event.target.value);
+								setPage(1);
+							}}
 						/>
 					</div>
 
@@ -305,54 +315,98 @@ export function PenilaianAnalyticsPanel({
 								</tr>
 							</thead>
 							<tbody className="divide-y divide-border">
-								{recap.rows.map((row) => (
-									<tr key={row.userId}>
-										<td className="px-3 py-2.5">
-											<p className="font-semibold text-foreground">
-												{row.name}
-											</p>
-											<p className="text-muted-foreground text-xs tabular-nums">
-												{row.nim}
-											</p>
-										</td>
-										<td className="px-3 py-2.5 text-xs">
-											{row.departmentCode} · {row.buildingCode}
-										</td>
-										<td className="px-3 py-2.5">
-											<span
-												className={`rounded-full border px-2 py-0.5 font-bold text-[11px] ${penilaianStatusBadgeClass(row.isComplete ? "APPROVED" : "BELUM_LENGKAP")}`}
-											>
-												{row.isComplete ? "Lengkap" : "Belum Lengkap"}
-											</span>
-										</td>
-										<td className="px-3 py-2.5 text-right font-bold tabular-nums">
-											{formatPenilaianScore(row.totalWeightedScore)}
-										</td>
-										<td className="px-3 py-2.5 text-right tabular-nums">
-											{formatPenilaianScore(row.attendancePointsTotal)}
-										</td>
-										<td className="px-3 py-2.5 text-right tabular-nums">
-											{formatPenilaianScore(row.netAdjustmentPoints)}
-										</td>
-										<td className="px-3 py-2.5 text-right tabular-nums">
-											{formatPenilaianScore(row.externalScoreAverage)}
-										</td>
-										<td className="px-3 py-2.5 text-right">
-											<Button
-												type="button"
-												variant="outline"
-												size="sm"
-												className="min-h-11"
-												onClick={() => setSelectedTargetUserId(row.userId)}
-											>
-												Detail
-											</Button>
-										</td>
-									</tr>
-								))}
+								{(() => {
+									const pageSize = 15;
+									const totalPages = Math.max(
+										1,
+										Math.ceil(recap.rows.length / pageSize),
+									);
+									const safePage = Math.min(page, totalPages);
+									return recap.rows
+										.slice((safePage - 1) * pageSize, safePage * pageSize)
+										.map((row) => (
+											<tr key={row.userId}>
+												<td className="px-3 py-2.5">
+													<p className="font-semibold text-foreground">
+														{row.name}
+													</p>
+													<p className="text-muted-foreground text-xs tabular-nums">
+														{row.nim}
+													</p>
+												</td>
+												<td className="px-3 py-2.5 text-xs">
+													{row.departmentCode} · {row.buildingCode}
+												</td>
+												<td className="px-3 py-2.5">
+													<span
+														className={`rounded-full border px-2 py-0.5 font-bold text-[11px] ${penilaianStatusBadgeClass(row.isComplete ? "APPROVED" : "BELUM_LENGKAP")}`}
+													>
+														{row.isComplete ? "Lengkap" : "Belum Lengkap"}
+													</span>
+												</td>
+												<td className="px-3 py-2.5 text-right font-bold tabular-nums">
+													{formatPenilaianScore(row.totalWeightedScore)}
+												</td>
+												<td className="px-3 py-2.5 text-right tabular-nums">
+													{formatPenilaianScore(row.attendancePointsTotal)}
+												</td>
+												<td className="px-3 py-2.5 text-right tabular-nums">
+													{formatPenilaianScore(row.netAdjustmentPoints)}
+												</td>
+												<td className="px-3 py-2.5 text-right tabular-nums">
+													{formatPenilaianScore(row.externalScoreAverage)}
+												</td>
+												<td className="px-3 py-2.5 text-right">
+													<Button
+														type="button"
+														variant="outline"
+														size="sm"
+														className="min-h-11"
+														onClick={() => setSelectedTargetUserId(row.userId)}
+													>
+														Detail
+													</Button>
+												</td>
+											</tr>
+										));
+								})()}
 							</tbody>
 						</table>
 					</div>
+					{recap.rows.length > 15 && (
+						<div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
+							<p className="text-muted-foreground tabular-nums">
+								Halaman {Math.min(page, Math.ceil(recap.rows.length / 15))} dari{" "}
+								{Math.ceil(recap.rows.length / 15)} · {recap.rows.length} SR
+							</p>
+							<div className="flex items-center gap-2">
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									className="min-h-10"
+									disabled={page <= 1}
+									onClick={() => setPage((p) => Math.max(1, p - 1))}
+								>
+									Sebelumnya
+								</Button>
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									className="min-h-10"
+									disabled={page >= Math.ceil(recap.rows.length / 15)}
+									onClick={() =>
+										setPage((p) =>
+											Math.min(Math.ceil(recap.rows.length / 15), p + 1),
+										)
+									}
+								>
+									Berikutnya
+								</Button>
+							</div>
+						</div>
+					)}
 				</CardContent>
 			</Card>
 

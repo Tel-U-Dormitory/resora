@@ -18,6 +18,27 @@ export function formatPenilaianScore(value: number | null | undefined): string {
 	return numberFormatter.format(value);
 }
 
+export function formatTargetSubtitle(input: {
+	departmentCode: string;
+	committeeDivision?: string | null;
+	committeePosition?: string | null;
+	fallbackLabel?: string | null;
+}): string {
+	const committeeParts = [
+		input.committeeDivision?.trim(),
+		input.committeePosition?.trim(),
+	].filter(Boolean);
+	if (committeeParts.length > 0) {
+		const [division, position] = committeeParts;
+		const committeeLabel = position ? `${division} (${position})` : division;
+		return `${input.departmentCode} · Panitia: ${committeeLabel}`;
+	}
+	if (input.fallbackLabel?.trim()) {
+		return `${input.departmentCode} · ${input.fallbackLabel.trim()}`;
+	}
+	return input.departmentCode;
+}
+
 export function formatPeriodStatusLabel(
 	status:
 		| "OPEN"

@@ -4,12 +4,32 @@ import {
 	buildGformCsvPreviewRows,
 	formatPenilaianScore,
 	formatPeriodStatusLabel,
+	formatTargetSubtitle,
 	penilaianErrorMessage,
 	penilaianStatusBadgeClass,
 	sampleGformCsvTemplate,
 } from "./penilaian-ui";
 
 describe("penilaian UI helpers", () => {
+	test("formatTargetSubtitle avoids empty parentheses when committee metadata is null", () => {
+		expect(
+			formatTargetSubtitle({
+				departmentCode: "RND",
+				committeeDivision: null,
+				committeePosition: null,
+				fallbackLabel: "Peserta Event",
+			}),
+		).toBe("RND · Peserta Event");
+		expect(
+			formatTargetSubtitle({
+				departmentCode: "HCO",
+				committeeDivision: "Acara",
+				committeePosition: "KADEP",
+				fallbackLabel: "Peserta Event",
+			}),
+		).toBe("HCO · Panitia: Acara (KADEP)");
+	});
+
 	test("formatPenilaianScore formats numbers and handles nullish values without faking zero", () => {
 		expect(formatPenilaianScore(null)).toBe("—");
 		expect(formatPenilaianScore(undefined)).toBe("—");

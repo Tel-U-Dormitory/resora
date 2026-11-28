@@ -78,6 +78,8 @@ export function PenilaianPointsPanel({
 }) {
 	const queryClient = useQueryClient();
 	const [showMatrix, setShowMatrix] = useState(false);
+	const [attendanceSearch, setAttendanceSearch] = useState("");
+	const [attendancePage, setAttendancePage] = useState(1);
 	const [feedback, setFeedback] = useState("");
 	const [error, setError] = useState("");
 
@@ -257,50 +259,124 @@ export function PenilaianPointsPanel({
 							Belum ada data poin kehadiran pada periode ini.
 						</p>
 					) : (
-						<div className="overflow-x-auto">
-							<table className="w-full text-left text-sm">
-								<thead>
-									<tr className="border-border border-b text-muted-foreground text-xs">
-										<th className="px-3 py-2 font-semibold">NIM</th>
-										<th className="px-3 py-2 font-semibold">Nama</th>
-										<th className="px-3 py-2 text-right font-semibold">
-											RESORA
-										</th>
-										<th className="px-3 py-2 text-right font-semibold">
-											Fallback
-										</th>
-										<th className="px-3 py-2 text-right font-semibold">
-											Total
-										</th>
-										<th className="px-3 py-2 text-right font-semibold">
-											Hadir / Total
-										</th>
-									</tr>
-								</thead>
-								<tbody className="divide-y divide-border">
-									{attendanceQuery.data.map((row) => (
-										<tr key={row.userId}>
-											<td className="px-3 py-2.5 text-xs tabular-nums">
-												{row.nim}
-											</td>
-											<td className="px-3 py-2.5 font-medium">{row.name}</td>
-											<td className="px-3 py-2.5 text-right tabular-nums">
-												{formatPenilaianScore(row.resoraPoints)}
-											</td>
-											<td className="px-3 py-2.5 text-right tabular-nums">
-												{formatPenilaianScore(row.fallbackPoints)}
-											</td>
-											<td className="px-3 py-2.5 text-right font-bold tabular-nums">
-												{formatPenilaianScore(row.totalAttendancePoints)}
-											</td>
-											<td className="px-3 py-2.5 text-right text-muted-foreground text-xs tabular-nums">
-												{row.attendedCount} / {row.eventCount}
-											</td>
-										</tr>
-									))}
-								</tbody>
-							</table>
-						</div>
+						(() => {
+							const needle = attendanceSearch.trim().toLowerCase();
+							const filtered = attendanceQuery.data.filter(
+								(row) =>
+									!needle ||
+									row.name.toLowerCase().includes(needle) ||
+									(row.nim ?? "").toLowerCase().includes(needle),
+							);
+							const pageSize = 15;
+							const totalPages = Math.max(
+								1,
+								Math.ceil(filtered.length / pageSize),
+							);
+							const safePage = Math.min(attendancePage, totalPages);
+							const visibleRows = filtered.slice(
+								(safePage - 1) * pageSize,
+								safePage * pageSize,
+							);
+							return (
+								<div className="space-y-3">
+									<div className="max-w-xs">
+										<Input
+											aria-label="Cari NIM atau nama SR pada poin kehadiran"
+											type="search"
+											className="min-h-11"
+											placeholder="Cari NIM atau nama SR…"
+											value={attendanceSearch}
+											onChange={(event) => {
+												setAttendanceSearch(event.target.value);
+												setAttendancePage(1);
+											}}
+										/>
+									</div>
+									<div className="overflow-x-auto">
+										<table className="w-full text-left text-sm">
+											<thead>
+												<tr className="border-border border-b text-muted-foreground text-xs">
+													<th className="px-3 py-2 font-semibold">NIM</th>
+													<th className="px-3 py-2 font-semibold">Nama</th>
+													<th className="px-3 py-2 text-right font-semibold">
+														RESORA
+													</th>
+													<th className="px-3 py-2 text-right font-semibold">
+														Fallback
+													</th>
+													<th className="px-3 py-2 text-right font-semibold">
+														Total
+													</th>
+													<th className="px-3 py-2 text-right font-semibold">
+														Hadir / Total
+													</th>
+												</tr>
+											</thead>
+											<tbody className="divide-y divide-border">
+												{visibleRows.map((row) => (
+													<tr key={row.userId}>
+														<td className="px-3 py-2.5 text-xs tabular-nums">
+															{row.nim}
+														</td>
+														<td className="px-3 py-2.5 font-medium">
+															{row.name}
+														</td>
+														<td className="px-3 py-2.5 text-right tabular-nums">
+															{formatPenilaianScore(row.resoraPoints)}
+														</td>
+														<td className="px-3 py-2.5 text-right tabular-nums">
+															{formatPenilaianScore(row.fallbackPoints)}
+														</td>
+														<td className="px-3 py-2.5 text-right font-bold tabular-nums">
+															{formatPenilaianScore(row.totalAttendancePoints)}
+														</td>
+														<td className="px-3 py-2.5 text-right text-muted-foreground text-xs tabular-nums">
+															{row.attendedCount} / {row.eventCount}
+														</td>
+													</tr>
+												))}
+											</tbody>
+										</table>
+									</div>
+									{totalPages > 1 && (
+										<div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
+											<p className="text-muted-foreground tabular-nums">
+												Halaman {safePage} dari {totalPages} · {filtered.length}{" "}
+												SR
+											</p>
+											<div className="flex items-center gap-2">
+												<Button
+													type="button"
+													variant="outline"
+													size="sm"
+													className="min-h-10"
+													disabled={safePage <= 1}
+													onClick={() =>
+														setAttendancePage((p) => Math.max(1, p - 1))
+													}
+												>
+													Sebelumnya
+												</Button>
+												<Button
+													type="button"
+													variant="outline"
+													size="sm"
+													className="min-h-10"
+													disabled={safePage >= totalPages}
+													onClick={() =>
+														setAttendancePage((p) =>
+															Math.min(totalPages, p + 1),
+														)
+													}
+												>
+													Berikutnya
+												</Button>
+											</div>
+										</div>
+									)}
+								</div>
+							);
+						})()
 					)}
 				</CardContent>
 			</Card>

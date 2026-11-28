@@ -15,6 +15,7 @@ import { useRef, useState } from "react";
 import { eventErrorMessage } from "@/components/event-feedback";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { participantPage } from "@/utils/participant-page";
 import { trpc, trpcClient } from "@/utils/trpc";
 
@@ -412,33 +413,22 @@ export default function PointsRecap() {
 											SR. CSV selalu mencakup seluruh anggota periode. Geser
 											tabel untuk melihat semua event.
 										</p>
-										<fieldset className="inline-flex rounded-xl border border-border bg-surface-subtle p-1 min-[1200px]:hidden">
-											<legend className="sr-only">Mode tampilan rekap</legend>
-											<button
-												type="button"
-												onClick={() => setMobileView("cards")}
-												aria-pressed={mobileView === "cards"}
-												className={`min-h-9 rounded-lg px-3 font-semibold text-xs ${
-													mobileView === "cards"
-														? "bg-primary text-white"
-														: "text-text-secondary"
-												}`}
-											>
-												Ringkasan Kartu
-											</button>
-											<button
-												type="button"
-												onClick={() => setMobileView("matrix")}
-												aria-pressed={mobileView === "matrix"}
-												className={`min-h-9 rounded-lg px-3 font-semibold text-xs ${
-													mobileView === "matrix"
-														? "bg-primary text-white"
-														: "text-text-secondary"
-												}`}
-											>
-												Tabel Matriks
-											</button>
-										</fieldset>
+										<Tabs
+											value={mobileView}
+											onValueChange={(value) =>
+												setMobileView(value as "cards" | "matrix")
+											}
+											className="min-[1200px]:hidden"
+										>
+											<TabsList aria-label="Mode tampilan rekap">
+												<TabsTrigger value="cards" className="text-xs">
+													Ringkasan Kartu
+												</TabsTrigger>
+												<TabsTrigger value="matrix" className="text-xs">
+													Tabel Matriks
+												</TabsTrigger>
+											</TabsList>
+										</Tabs>
 									</div>
 									<section
 										aria-label="Ringkasan poin per SR"

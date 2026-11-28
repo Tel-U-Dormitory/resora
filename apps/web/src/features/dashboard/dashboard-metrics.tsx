@@ -14,6 +14,7 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ModeToggle } from "@/components/mode-toggle";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { DashboardMetric, DashboardMode } from "./dashboard.contracts";
 import { DashboardExportDialog } from "./dashboard-export-dialog";
 import {
@@ -339,39 +340,32 @@ export function DashboardMetrics({
 								: "Ringkasan"}
 						</h2>
 						{canManage && (
-							<div
-								role="tablist"
-								aria-label="Cakupan ringkasan"
-								className="grid w-full grid-cols-2 items-center rounded-xl border border-border bg-surface-subtle p-1 min-[1200px]:inline-flex min-[1200px]:w-auto"
+							<Tabs
+								value={previewMode}
+								onValueChange={(value) =>
+									setPreviewMode(value as DashboardMode)
+								}
+								className="w-full min-[1200px]:w-auto"
 							>
 								<span className="sr-only">Cakupan ringkasan</span>
-								<button
-									type="button"
-									role="tab"
-									aria-selected={previewMode === "personal"}
-									onClick={() => setPreviewMode("personal")}
-									className={`focus-ring min-h-9 w-full rounded-sm px-3 font-semibold text-xs transition-colors min-[1200px]:w-auto ${
-										previewMode === "personal"
-											? "bg-primary text-primary-foreground shadow-2xs"
-											: "text-text-secondary hover:text-foreground"
-									}`}
+								<TabsList
+									aria-label="Cakupan ringkasan"
+									className="grid w-full grid-cols-2 min-[1200px]:inline-flex min-[1200px]:w-auto"
 								>
-									Personal
-								</button>
-								<button
-									type="button"
-									role="tab"
-									aria-selected={previewMode === "management"}
-									onClick={() => setPreviewMode("management")}
-									className={`focus-ring min-h-9 w-full rounded-sm px-3 font-semibold text-xs transition-colors min-[1200px]:w-auto ${
-										previewMode === "management"
-											? "bg-primary text-primary-foreground shadow-2xs"
-											: "text-text-secondary hover:text-foreground"
-									}`}
-								>
-									Manajemen
-								</button>
-							</div>
+									<TabsTrigger
+										value="personal"
+										className="w-full min-[1200px]:w-auto"
+									>
+										Personal
+									</TabsTrigger>
+									<TabsTrigger
+										value="management"
+										className="w-full min-[1200px]:w-auto"
+									>
+										Manajemen
+									</TabsTrigger>
+								</TabsList>
+							</Tabs>
 						)}
 					</div>
 					{previewMode === "management" && (
@@ -636,31 +630,28 @@ function DashboardMetricDetailView({
 					</div>
 				</div>
 
-				<div className="relative min-w-0">
-					<div
-						role="tablist"
-						aria-label="Pilih modul detail dashboard"
-						className="resora-tabs-scroll flex items-center gap-1.5 overflow-x-auto py-0.5 pr-6 min-[1200px]:pr-0"
-					>
+				<Tabs
+					value={metric.id}
+					onValueChange={(value) => {
+						const target = allMetrics.find((item) => item.id === value);
+						const isComingSoon =
+							!target ||
+							target.id === "cleanliness" ||
+							target.state.kind === "coming_soon";
+						if (!isComingSoon) onSelectMetric(target.id);
+					}}
+					className="relative min-w-0"
+				>
+					<TabsList aria-label="Pilih modul detail dashboard" className="pr-2">
 						{allMetrics.map((item) => {
 							const isComingSoon =
 								item.id === "cleanliness" || item.state.kind === "coming_soon";
-							const isSelected = item.id === metric.id;
 							return (
-								<button
+								<TabsTrigger
 									key={item.id}
-									type="button"
-									role="tab"
-									aria-selected={isSelected}
+									value={item.id}
 									disabled={isComingSoon}
-									onClick={() => !isComingSoon && onSelectMetric(item.id)}
-									className={`focus-ring inline-flex min-h-9 shrink-0 snap-start items-center gap-1.5 whitespace-nowrap rounded-lg px-3 font-semibold text-xs transition-colors ${
-										isSelected
-											? "bg-primary text-primary-foreground"
-											: isComingSoon
-												? "cursor-not-allowed border border-border border-dashed bg-surface-subtle text-muted-foreground"
-												: "border border-border bg-surface text-text-secondary hover:text-foreground"
-									}`}
+									className="snap-start text-xs"
 								>
 									<span>{item.title}</span>
 									{isComingSoon && (
@@ -668,11 +659,11 @@ function DashboardMetricDetailView({
 											Segera hadir
 										</span>
 									)}
-								</button>
+								</TabsTrigger>
 							);
 						})}
-					</div>
-				</div>
+					</TabsList>
+				</Tabs>
 			</div>
 
 			{/* Secondary Action Row (Export simulation / Personal CSV / Module link when genuine route exists) */}
@@ -782,35 +773,23 @@ function DashboardMetricDetailView({
 											: `Ringkasan tercatat (${scopes[displayedMetric.scope].toLowerCase()})`}
 								</p>
 							</div>
-							<fieldset className="inline-flex rounded-xl border border-border bg-surface-subtle p-1">
-								<legend className="sr-only">
-									Mode tampilan detail {displayedMetric.title}
-								</legend>
-								<button
-									type="button"
-									onClick={() => setChartView("chart")}
-									aria-pressed={chartView === "chart"}
-									className={`min-h-9 rounded-sm px-3 font-semibold text-xs ${
-										chartView === "chart"
-											? "bg-primary text-primary-foreground"
-											: "text-text-secondary"
-									}`}
+							<Tabs
+								value={chartView}
+								onValueChange={(value) =>
+									setChartView(value as "chart" | "table")
+								}
+							>
+								<TabsList
+									aria-label={`Mode tampilan detail ${displayedMetric.title}`}
 								>
-									Grafik
-								</button>
-								<button
-									type="button"
-									onClick={() => setChartView("table")}
-									aria-pressed={chartView === "table"}
-									className={`min-h-9 rounded-sm px-3 font-semibold text-xs ${
-										chartView === "table"
-											? "bg-primary text-primary-foreground"
-											: "text-text-secondary"
-									}`}
-								>
-									Tabel
-								</button>
-							</fieldset>
+									<TabsTrigger value="chart" className="text-xs">
+										Grafik
+									</TabsTrigger>
+									<TabsTrigger value="table" className="text-xs">
+										Tabel
+									</TabsTrigger>
+								</TabsList>
+							</Tabs>
 						</div>
 
 						{chartView === "chart" ? (
