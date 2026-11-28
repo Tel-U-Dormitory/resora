@@ -1030,6 +1030,15 @@ export async function readActiveDtDirectory(
 	return result.sort((a, b) => a.name.localeCompare(b.name, "id"));
 }
 
+export async function getAllDtUserIds(
+	db: Database | DatabaseTransaction,
+): Promise<Set<string>> {
+	const rows = await db
+		.selectDistinct({ userId: dtMemberships.userId })
+		.from(dtMemberships);
+	return new Set(rows.map((r) => r.userId));
+}
+
 export async function getLatestDtMembershipsByUserIds(
 	db: Database | DatabaseTransaction,
 	userIds: readonly string[],

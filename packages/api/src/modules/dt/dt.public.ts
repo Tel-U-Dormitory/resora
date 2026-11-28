@@ -7,6 +7,7 @@ export {
 	archiveDtMembership,
 	endDtMembership,
 	extendDtPeriod,
+	getAllDtUserIds,
 	getDtMembershipCore,
 	getDtReferences,
 	getLatestDtMembershipsByUserIds,

@@ -8,13 +8,14 @@ import {
 } from "../../contracts/attendance";
 
 import { getCommitteeRoster } from "../../modules/committee/committee.public";
-import { getActiveDtDirectory } from "../../modules/dt/dt.public";
+import { getActiveDtDirectory, getAllDtUserIds } from "../../modules/dt/dt.public";
 
 import * as eventOperations from "../../modules/events/events.public";
-import { visibilityActions } from "../../modules/events/events.public";
+import { isDtScopedCriteria, visibilityActions } from "../../modules/events/events.public";
 import {
 	canAccessPersonalDt,
 	canAccessPersonalSr,
+	canManageDt,
 	canManageEventScoring,
 	canManageInternalEvent,
 	getActiveSrDirectory,
@@ -35,19 +36,62 @@ export async function listEvents(
 	if (
 		!canAccessPersonalSr(identity) &&
 		!canAccessPersonalDt(identity) &&
+		!canManageDt(identity) &&
 		!hasSuperadminPrivilege(identity)
 	)
 		throw new TRPCError({ code: "FORBIDDEN" });
 	const canManage = canManageInternalEvent(identity);
+	const canManageDtEvents = canManageDt(identity);
 	const isSuperadmin = hasSuperadminPrivilege(identity);
 	const filter = eventListSchema.parse(input);
 	if (!isSuperadmin && filter.visibility !== "NON_ARCHIVED")
 		throw new TRPCError({ code: "FORBIDDEN" });
 
-	const rows = canManage
-		? await eventOperations.listManagedEvents(db, filter)
-		: await eventOperations.listInvitedEvents(db, identity.userId);
-	return { canManage, isSuperadmin, events: rows };
+	const dtIds = canManage || canManageDtEvents ? await getAllDtUserIds(db) : new Set<string>();
+	if (canManage) {
+		const managed = await eventOperations.listManagedEvents(db, filter);
+		const events = managed.map((ev) => ({
+			...ev,
+			isDtScoped: isDtScopedCriteria(ev.rosterCriteria, ev.organizationContext, dtIds),
+		}));
+		return { canManage, canManageDtEvents, isSuperadmin, events };
+	}
+
+	const invited = await eventOperations.listInvitedEvents(db, identity.userId);
+	if (!canManageDtEvents) {
+		return {
+			canManage,
+			canManageDtEvents,
+			isSuperadmin,
+			events: invited.map((ev) => ({ ...ev, isDtScoped: false })),
+		};
+	}
+
+	const managedCandidates = await eventOperations.listManagedEvents(db, {
+		visibility: "NON_ARCHIVED",
+	});
+	const dtManaged = managedCandidates
+		.filter((ev) =>
+			isDtScopedCriteria(ev.rosterCriteria, ev.organizationContext, dtIds),
+		)
+		.map((ev) => ({
+			id: ev.id,
+			title: ev.title,
+			description: ev.description,
+			status: ev.status,
+			startsAt: ev.startsAt,
+			endsAt: ev.endsAt,
+			visibility: ev.visibility,
+			isDtScoped: true,
+		}));
+	const dtIdsSet = new Set(dtManaged.map((ev) => ev.id));
+	const merged = [
+		...dtManaged,
+		...invited
+			.filter((ev) => !dtIdsSet.has(ev.id))
+			.map((ev) => ({ ...ev, isDtScoped: false })),
+	].sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime());
+	return { canManage, canManageDtEvents, isSuperadmin, events: merged };
 }
 
 export async function readEventDetail(
@@ -58,13 +102,23 @@ export async function readEventDetail(
 	if (
 		!canAccessPersonalSr(identity) &&
 		!canAccessPersonalDt(identity) &&
+		!canManageDt(identity) &&
 		!hasSuperadminPrivilege(identity)
 	)
 		throw new TRPCError({ code: "FORBIDDEN" });
 	const [row] = await readEventContext(db, eventId);
 	if (!row)
 		throw new TRPCError({ code: "NOT_FOUND", message: "Event unavailable" });
-	const canManage = canManageInternalEvent(identity);
+	const canManageFull = canManageInternalEvent(identity);
+	const canManageDtScope =
+		!canManageFull &&
+		canManageDt(identity) &&
+		isDtScopedCriteria(
+			row.event.rosterCriteria,
+			row.event.organizationContext,
+			await getAllDtUserIds(db),
+		);
+	const canManage = canManageFull || canManageDtScope;
 	if (!canManage) {
 		if (row.event.visibility !== "VISIBLE")
 			throw new TRPCError({ code: "NOT_FOUND", message: "Event unavailable" });
@@ -115,6 +169,14 @@ export async function getRosterDirectory(
 	identity: ActiveIdentity,
 ) {
 	operator(identity);
+	if (!canManageInternalEvent(identity)) {
+		const dtCandidates = await getActiveDtDirectory(db);
+		return {
+			candidates: [],
+			invalidAssignmentCount: 0,
+			dtCandidates: dtCandidates.map(eventOperations.dtCandidateToRosterCandidate),
+		};
+	}
 	const [srDirectory, dtCandidates] = await Promise.all([
 		getActiveSrDirectory(db),
 		getActiveDtDirectory(db),

@@ -117,7 +117,11 @@ export async function eventHasDeletionReferences(db: Db, eventId: string) {
 
 export async function listManagedEvents(db: Db, filter: EventListInput) {
 	return await db
-		.select(eventListFields)
+		.select({
+			...eventListFields,
+			rosterCriteria: events.rosterCriteria,
+			organizationContext: events.organizationContext,
+		})
 		.from(events)
 		.where(
 			filter.visibility === "NON_ARCHIVED"

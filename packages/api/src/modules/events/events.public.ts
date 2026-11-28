@@ -1,6 +1,6 @@
 // Server-only domain operations; writes share the caller transaction and resource authorization.
 
-export { sameRoster, visibilityActions } from "./event.policy";
+export { isDtScopedCriteria, sameRoster, visibilityActions } from "./event.policy";
 export type {
 	EventEditAuditState,
 	EventFact,

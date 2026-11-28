@@ -12,7 +12,9 @@ import {
 	auditHistorySchema,
 	ownHistorySchema,
 } from "../../contracts/attendance";
+import { getAllDtUserIds } from "../dt/dt.public";
 import {
+	isDtScopedCriteria,
 	ownInvitedEventHistory,
 	readEvent,
 	reportInvitationSnapshots,
@@ -20,6 +22,7 @@ import {
 import {
 	canAccessPersonalDt,
 	canAccessPersonalSr,
+	canManageDt,
 	canManageInternalEvent,
 	canManageManualAttendance,
 	getUserDisplayNames,
@@ -43,12 +46,26 @@ export async function recap(
 	identity: ActiveIdentity,
 	eventId: string,
 ) {
-	if (!canManageInternalEvent(identity))
+	const fullEventManager = canManageInternalEvent(identity);
+	const dtEventManager = canManageDt(identity);
+	if (!fullEventManager && !dtEventManager)
 		throw new TRPCError({ code: "FORBIDDEN" });
 	// The context and participant report share one MVCC snapshot even if close/correct races a read.
 	return db.transaction(
 		async (tx) => {
 			const [event] = await readEvent(tx, eventId);
+			if (event && !fullEventManager) {
+				const dtIds = await getAllDtUserIds(tx);
+				if (
+					!isDtScopedCriteria(
+						event.rosterCriteria,
+						event.organizationContext,
+						dtIds,
+					)
+				) {
+					throw new TRPCError({ code: "FORBIDDEN" });
+				}
+			}
 			const [session] = await tx
 				.select({
 					id: attendanceSessions.id,

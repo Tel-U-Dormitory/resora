@@ -6,10 +6,12 @@ import type { SessionFact } from "../../modules/attendance/attendance.public";
 import * as attendanceOperations from "../../modules/attendance/attendance.public";
 
 import { getCommitteeRoster } from "../../modules/committee/committee.public";
-import type { EventFact } from "../../modules/events/events.public";
+import { getAllDtUserIds } from "../../modules/dt/dt.public";
+import type { EventFact, RosterCriteria } from "../../modules/events/events.public";
 import * as eventOperations from "../../modules/events/events.public";
 
 import {
+	canManageDt,
 	canManageInternalEvent,
 	getLiveOperationalIdentity,
 	hasSuperadminPrivilege,
@@ -51,8 +53,38 @@ export async function lockedRosterEvent(
 }
 
 export function operator(identity: ActiveIdentity | null) {
-	if (!canManageInternalEvent(identity))
+	if (!canManageInternalEvent(identity) && !canManageDt(identity))
 		throw new TRPCError({ code: "FORBIDDEN", message: "HCO access required" });
+}
+
+export async function assertEventScopeOperator(
+	db: Database | DatabaseTransaction,
+	identity: ActiveIdentity | null,
+	scope?: {
+		rosterCriteria: Pick<
+			RosterCriteria,
+			"allSr" | "inti" | "kadep" | "departments" | "allDt" | "individuals" | "include"
+		>;
+		organizationContext?: string | null;
+	},
+) {
+	if (canManageInternalEvent(identity)) return;
+	if (!canManageDt(identity))
+		throw new TRPCError({ code: "FORBIDDEN", message: "HCO access required" });
+	if (!scope) return;
+	const dtIds = await getAllDtUserIds(db);
+	if (
+		!eventOperations.isDtScopedCriteria(
+			scope.rosterCriteria,
+			scope.organizationContext,
+			dtIds,
+		)
+	) {
+		throw new TRPCError({
+			code: "FORBIDDEN",
+			message: "DT_EVENT_SCOPE_REQUIRED",
+		});
+	}
 }
 
 export async function lockedEvent(
@@ -70,7 +102,7 @@ export async function lockedEvent(
 	if (superadminOnly) {
 		if (!hasSuperadminPrivilege(live))
 			throw new TRPCError({ code: "FORBIDDEN" });
-	} else operator(live);
+	} else await assertEventScopeOperator(tx, live, event);
 	return { event, session, identity: live };
 }
 

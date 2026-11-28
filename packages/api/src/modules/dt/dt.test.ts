@@ -17,6 +17,7 @@ import {
 } from "./dt.contracts";
 import { listDtMembers, registerDtCandidate } from "./dt.service";
 import { authorizeDtManager, authorizeDtPersonal } from "./dt-policy";
+import { isDtScopedCriteria } from "../events/events.public";
 
 function srIdentity(
 	departmentCode: string,
@@ -241,4 +242,85 @@ test("unauthorized actors fail closed before touching database", async () => {
 			),
 		).rejects.toMatchObject({ code: "FORBIDDEN" });
 	}
+});
+
+test("isDtScopedCriteria allows DT-only rosters and rejects SR or committee scopes", () => {
+	const dtA = randomUUID();
+	const srA = randomUUID();
+	const dtIds = new Set([dtA]);
+	expect(
+		isDtScopedCriteria(
+			{
+				allSr: false,
+				allDt: true,
+				departments: [],
+				inti: false,
+				kadep: false,
+				individuals: [],
+				include: [],
+			},
+			"SR",
+			dtIds,
+		),
+	).toBe(true);
+	expect(
+		isDtScopedCriteria(
+			{
+				allSr: false,
+				allDt: false,
+				departments: [],
+				inti: false,
+				kadep: false,
+				individuals: [dtA],
+				include: [],
+			},
+			"SR",
+			dtIds,
+		),
+	).toBe(true);
+	expect(
+		isDtScopedCriteria(
+			{
+				allSr: true,
+				allDt: true,
+				departments: [],
+				inti: false,
+				kadep: false,
+				individuals: [],
+				include: [],
+			},
+			"SR",
+			dtIds,
+		),
+	).toBe(false);
+	expect(
+		isDtScopedCriteria(
+			{
+				allSr: false,
+				allDt: true,
+				departments: [],
+				inti: false,
+				kadep: false,
+				individuals: [],
+				include: [srA],
+			},
+			"SR",
+			dtIds,
+		),
+	).toBe(false);
+	expect(
+		isDtScopedCriteria(
+			{
+				allSr: false,
+				allDt: true,
+				departments: [],
+				inti: false,
+				kadep: false,
+				individuals: [],
+				include: [],
+			},
+			"COMMITTEE",
+			dtIds,
+		),
+	).toBe(false);
 });

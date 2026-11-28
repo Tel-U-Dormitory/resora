@@ -33,7 +33,7 @@ import {
 	listEvents,
 	publishEvent,
 } from "../../../../application/internal-events";
-import { manualInsert, ownHistory } from "../../../attendance/attendance.public";
+import { manualInsert, ownHistory, recap as recapAttendance } from "../../../attendance/attendance.public";
 import {
 	addMembers,
 	committeeCandidates,
@@ -342,6 +342,76 @@ if (!TEST_DB_URL) {
 		});
 		await publishEvent(db, hcoSr, srOnlyEvent.eventId);
 
+		// ADAPTIF creates & publishes DT-only attendance event and checks its recap,
+		// while being rejected from creating or recapping SR-wide events
+		const adaptifDtEvent = await createEvent(db, adaptifSr, {
+			title: "Briefing Gedung DT oleh Adaptif",
+			description: "Absensi khusus DT",
+			startsAt: new Date(now + 5 * 60 * 60 * 1000).toISOString(),
+			endsAt: new Date(now + 6 * 60 * 60 * 1000).toISOString(),
+			organizationContext: "SR",
+			rosterCriteria: {
+				allSr: false,
+				allDt: true,
+				departments: [],
+				inti: false,
+				kadep: false,
+				individuals: [],
+				include: [],
+				exclude: [],
+			},
+			session: {
+				centerLat: -6.9712891,
+				centerLng: 107.628339,
+				geofenceRadiusM: 20,
+				lateGraceMinutes: 15,
+				qrTtlMinutes: 360,
+			},
+		});
+		await publishEvent(db, adaptifSr, adaptifDtEvent.eventId);
+		const adaptifEvents = await listEvents(db, adaptifSr);
+		expect(adaptifEvents.canManageDtEvents).toBe(true);
+		const managedDtRow = adaptifEvents.events.find(
+			(e) => e.id === adaptifDtEvent.eventId,
+		);
+		expect(managedDtRow?.isDtScoped).toBe(true);
+		const adaptifRecap = await recapAttendance(
+			db,
+			adaptifSr,
+			adaptifDtEvent.eventId,
+		);
+		expect(
+			adaptifRecap.participants.some((r) => r.userId === registered.userId),
+		).toBe(true);
+		await expect(
+			createEvent(db, adaptifSr, {
+				title: "Illegal SR Event by Adaptif",
+				description: "Must fail",
+				startsAt: new Date(now + 7 * 60 * 60 * 1000).toISOString(),
+				endsAt: new Date(now + 8 * 60 * 60 * 1000).toISOString(),
+				organizationContext: "SR",
+				rosterCriteria: {
+					allSr: true,
+					departments: [],
+					inti: false,
+					kadep: false,
+					individuals: [],
+					include: [],
+					exclude: [],
+				},
+				session: {
+					centerLat: -6.9712891,
+					centerLng: 107.628339,
+					geofenceRadiusM: 20,
+					lateGraceMinutes: 15,
+					qrTtlMinutes: 360,
+				},
+			}),
+		).rejects.toMatchObject({ code: "FORBIDDEN" });
+		await expect(
+			recapAttendance(db, adaptifSr, srOnlyEvent.eventId),
+		).rejects.toMatchObject({ code: "FORBIDDEN" });
+
 		const dtEventsList = await listEvents(db, dtIdentity);
 		expect(dtEventsList.events.some((e) => e.id === dtEvent.eventId)).toBe(
 			true,
@@ -361,8 +431,13 @@ if (!TEST_DB_URL) {
 			limit: 10,
 			offset: 0,
 		});
-		expect(dtOwnHistory.items[0]?.event.id).toBe(dtEvent.eventId);
-		expect(dtOwnHistory.items[0]?.presence).toBe("PRESENT");
+		expect(
+			dtOwnHistory.items.find((item) => item.event.id === dtEvent.eventId)
+				?.presence,
+		).toBe("PRESENT");
+		expect(
+			dtOwnHistory.items.some((item) => item.event.id === adaptifDtEvent.eventId),
+		).toBe(true);
 
 		// Portal & Recap
 		const portal = await getMyDtPortal(db, dtIdentity);

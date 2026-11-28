@@ -31,3 +31,25 @@ export function visibilityActions(
 	if (closed) actions.push("ARCHIVE");
 	return actions;
 }
+
+export function isDtScopedCriteria(
+	criteria: Pick<
+		RosterCriteria,
+		"allSr" | "inti" | "kadep" | "departments" | "allDt" | "individuals" | "include"
+	>,
+	organizationContext: string | null | undefined,
+	dtUserIds: ReadonlySet<string>,
+) {
+	if ((organizationContext ?? "SR") !== "SR") return false;
+	if (
+		criteria.allSr ||
+		criteria.inti ||
+		criteria.kadep ||
+		criteria.departments.length > 0
+	) {
+		return false;
+	}
+	const explicit = [...criteria.individuals, ...criteria.include];
+	if (!explicit.every((id) => dtUserIds.has(id))) return false;
+	return Boolean(criteria.allDt || explicit.length > 0);
+}

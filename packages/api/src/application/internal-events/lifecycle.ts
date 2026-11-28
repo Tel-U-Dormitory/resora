@@ -19,6 +19,7 @@ import {
 	getLiveOperationalIdentity,
 } from "../../modules/identity/identity.public";
 import {
+	assertEventScopeOperator,
 	lockedEvent,
 	lockedRosterEvent,
 	operator,
@@ -35,7 +36,8 @@ export async function createEvent(
 	return db.transaction(async (tx) => {
 		if (draft.committeeId)
 			await getCommitteeRoster(tx, draft.committeeId, true);
-		operator(await getLiveOperationalIdentity(tx, identity.userId));
+		const live = await getLiveOperationalIdentity(tx, identity.userId);
+		await assertEventScopeOperator(tx, live, draft);
 		const [event] = await eventOperations.createInternalDraft(
 			tx,
 			draft,
@@ -66,6 +68,7 @@ export async function editDraft(
 			identity,
 			draft.committeeId,
 		);
+		await assertEventScopeOperator(tx, identity, draft);
 		requireState(event.status, "DRAFT");
 		requireState(session.status, "INACTIVE");
 		await eventOperations.replaceDraftDetails(tx, eventId, draft);
