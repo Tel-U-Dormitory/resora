@@ -164,6 +164,28 @@ export async function lockEventForCheckIn(
 		.for("share");
 }
 
+export async function eventHasDtParticipants(db: Db, eventId: string) {
+	const [row] = await db
+		.select({ userId: eventParticipants.userId })
+		.from(eventParticipants)
+		.where(
+			and(
+				eq(eventParticipants.eventId, eventId),
+				eq(eventParticipants.positionCode, "DT"),
+			),
+		)
+		.limit(1);
+	return Boolean(row);
+}
+
+export async function listEventIdsWithDtParticipants(db: Db) {
+	const rows = await db
+		.select({ eventId: eventParticipants.eventId })
+		.from(eventParticipants)
+		.where(eq(eventParticipants.positionCode, "DT"));
+	return new Set(rows.map((r) => r.eventId));
+}
+
 export async function listEvaluatableEvents(
 	db: Db,
 	startsOn: string,

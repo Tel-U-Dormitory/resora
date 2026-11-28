@@ -20,6 +20,7 @@ import { committeePositionCodes, committees } from "./committee";
 
 export type RosterCriteria = {
 	allSr: boolean;
+	allDt?: boolean;
 	departments: (typeof officialDepartments)[number]["code"][];
 	inti: boolean;
 	kadep: boolean;

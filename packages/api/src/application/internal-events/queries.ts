@@ -52,7 +52,13 @@ export async function listEvents(
 		const managed = await eventOperations.listManagedEvents(db, filter);
 		const events = managed.map((ev) => ({
 			...ev,
-			isDtScoped: isDtScopedCriteria(ev.rosterCriteria, ev.organizationContext, dtIds),
+			isDtScoped: isDtScopedCriteria(
+				ev.rosterCriteria,
+				ev.organizationContext,
+				dtIds,
+			),
+			isExternalCommitteeQr: false,
+			canControlSession: true,
 		}));
 		return { canManage, canManageDtEvents, isSuperadmin, events };
 	}
@@ -63,33 +69,64 @@ export async function listEvents(
 			canManage,
 			canManageDtEvents,
 			isSuperadmin,
-			events: invited.map((ev) => ({ ...ev, isDtScoped: false })),
+			events: invited.map((ev) => ({
+				...ev,
+				isDtScoped: false,
+				isExternalCommitteeQr: false,
+				canControlSession: false,
+			})),
 		};
 	}
 
-	const managedCandidates = await eventOperations.listManagedEvents(db, {
-		visibility: "NON_ARCHIVED",
-	});
+	const [managedCandidates, eventIdsWithDt] = await Promise.all([
+		eventOperations.listManagedEvents(db, {
+			visibility: "NON_ARCHIVED",
+		}),
+		eventOperations.listEventIdsWithDtParticipants(db),
+	]);
 	const dtManaged = managedCandidates
-		.filter((ev) =>
-			isDtScopedCriteria(ev.rosterCriteria, ev.organizationContext, dtIds),
-		)
-		.map((ev) => ({
-			id: ev.id,
-			title: ev.title,
-			description: ev.description,
-			status: ev.status,
-			startsAt: ev.startsAt,
-			endsAt: ev.endsAt,
-			visibility: ev.visibility,
-			isDtScoped: true,
-		}));
+		.filter((ev) => {
+			const ownDt = isDtScopedCriteria(
+				ev.rosterCriteria,
+				ev.organizationContext,
+				dtIds,
+			);
+			const externalDtMirror =
+				ev.status === "PUBLISHED" &&
+				ev.visibility === "VISIBLE" &&
+				(Boolean(ev.rosterCriteria.allDt) || eventIdsWithDt.has(ev.id));
+			return ownDt || externalDtMirror;
+		})
+		.map((ev) => {
+			const ownDt = isDtScopedCriteria(
+				ev.rosterCriteria,
+				ev.organizationContext,
+				dtIds,
+			);
+			return {
+				id: ev.id,
+				title: ev.title,
+				description: ev.description,
+				status: ev.status,
+				startsAt: ev.startsAt,
+				endsAt: ev.endsAt,
+				visibility: ev.visibility,
+				isDtScoped: true,
+				isExternalCommitteeQr: !ownDt,
+				canControlSession: ownDt,
+			};
+		});
 	const dtIdsSet = new Set(dtManaged.map((ev) => ev.id));
 	const merged = [
 		...dtManaged,
 		...invited
 			.filter((ev) => !dtIdsSet.has(ev.id))
-			.map((ev) => ({ ...ev, isDtScoped: false })),
+			.map((ev) => ({
+				...ev,
+				isDtScoped: false,
+				isExternalCommitteeQr: false,
+				canControlSession: false,
+			})),
 	].sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime());
 	return { canManage, canManageDtEvents, isSuperadmin, events: merged };
 }
@@ -110,34 +147,52 @@ export async function readEventDetail(
 	if (!row)
 		throw new TRPCError({ code: "NOT_FOUND", message: "Event unavailable" });
 	const canManageFull = canManageInternalEvent(identity);
-	const canManageDtScope =
-		!canManageFull &&
-		canManageDt(identity) &&
-		isDtScopedCriteria(
-			row.event.rosterCriteria,
-			row.event.organizationContext,
-			await getAllDtUserIds(db),
-		);
+	const dtIds =
+		canManageFull || canManageDt(identity)
+			? await getAllDtUserIds(db)
+			: new Set<string>();
+	const isDtOnlyEvent = isDtScopedCriteria(
+		row.event.rosterCriteria,
+		row.event.organizationContext,
+		dtIds,
+	);
+	const canManageDtScope = !canManageFull && canManageDt(identity) && isDtOnlyEvent;
 	const canManage = canManageFull || canManageDtScope;
-	if (!canManage) {
-		if (row.event.visibility !== "VISIBLE")
-			throw new TRPCError({ code: "NOT_FOUND", message: "Event unavailable" });
-		const [invited] = await eventOperations.invitationForUser(
-			db,
-			eventId,
-			identity.userId,
-		);
-		if (row.event.status !== "PUBLISHED" || !invited)
-			throw new TRPCError({ code: "NOT_FOUND", message: "Event unavailable" });
-	}
 	const participants = canManage
 		? await eventOperations.invitationSnapshots(db, eventId)
 		: [];
+	const hasDtParticipants =
+		Boolean(row.event.rosterCriteria.allDt) ||
+		(canManage
+			? participants.some((p) => p.positionCode === "DT")
+			: canManageDt(identity) &&
+				row.event.status === "PUBLISHED" &&
+				row.event.visibility === "VISIBLE" &&
+				(await eventOperations.eventHasDtParticipants(db, eventId)));
+	const canViewDtQr =
+		canManage ||
+		(canManageDt(identity) &&
+			row.event.status === "PUBLISHED" &&
+			row.event.visibility === "VISIBLE" &&
+			hasDtParticipants);
+	const [invited] = !canManage
+		? await eventOperations.invitationForUser(db, eventId, identity.userId)
+		: [];
+	if (!canManage && !canViewDtQr) {
+		if (row.event.visibility !== "VISIBLE")
+			throw new TRPCError({ code: "NOT_FOUND", message: "Event unavailable" });
+		if (row.event.status !== "PUBLISHED" || !invited)
+			throw new TRPCError({ code: "NOT_FOUND", message: "Event unavailable" });
+	}
 	const deletionBlockedReason = hasSuperadminPrivilege(identity)
 		? await draftDeletionBlocker(db, row.event, row.session)
 		: null;
 	return {
 		canManage,
+		canViewDtQr,
+		isInvited: Boolean(invited),
+		hasSrAudience: !isDtOnlyEvent,
+		hasDtAudience: isDtOnlyEvent || hasDtParticipants,
 		committeeName:
 			row.event.snapshotCommitteeName ??
 			(canManage && row.event.committeeId && row.event.status === "DRAFT"

@@ -2,7 +2,12 @@
 // locks and revalidates live Identity before writes; reuse the SAME transaction.
 
 export { checkIn } from "./check-in/check-in";
-export { signChallenge, verifySessionChallenge } from "./check-in/qr";
+export {
+	extractSessionIdFromToken,
+	type QrChannel,
+	signChallenge,
+	verifySessionChallenge,
+} from "./check-in/qr";
 export { manualCorrect, manualInsert } from "./manual-attendance";
 export {
 	exportPointsCsv,

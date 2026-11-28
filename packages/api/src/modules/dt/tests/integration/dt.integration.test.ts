@@ -29,11 +29,21 @@ import {
 	listAdminDtAccounts,
 } from "../../../../application/dt";
 import {
+	activateSession,
+	changeQr,
 	createEvent,
+	getEvent,
+	getQr,
 	listEvents,
 	publishEvent,
 } from "../../../../application/internal-events";
-import { manualInsert, ownHistory, recap as recapAttendance } from "../../../attendance/attendance.public";
+import {
+	checkIn,
+	currentChallenge,
+	ownHistory,
+	recap as recapAttendance,
+	signChallenge,
+} from "../../../attendance/attendance.public";
 import {
 	addMembers,
 	committeeCandidates,
@@ -279,8 +289,8 @@ if (!TEST_DB_URL) {
 		await addMembers(db, hcoSr, {
 			committeeId: committee.id,
 			divisionId: division.id,
-			positionCode: "ANGGOTA",
-			userIds: [registered.userId],
+			positionCode: "PIC1",
+			userIds: [hcoSr.userId, registered.userId],
 		});
 		const cDetail = await committeeDetail(db, hcoSr, committee.id);
 		expect(
@@ -342,6 +352,67 @@ if (!TEST_DB_URL) {
 		});
 		await publishEvent(db, hcoSr, srOnlyEvent.eventId);
 
+		// Two-QR flow on HCO mixed committee event: HCO gets SR+DT QRs; ADAPTIF mirrors DT QR read-only;
+		// SR cannot scan DT QR and DT cannot scan SR QR
+		const qrSecret = "synthetic-dt-qr-signing-secret-0000000000000";
+		await activateSession(db, hcoSr, dtEvent.eventId);
+		const hcoQrs = await getQr(db, hcoSr, dtEvent.eventId, qrSecret);
+		expect(hcoQrs.state).toBe("ACTIVE");
+		expect(hcoQrs.srImage).toBeTruthy();
+		expect(hcoQrs.dtImage).toBeTruthy();
+
+		const adaptifMirrorDetail = await getEvent(db, adaptifSr, dtEvent.eventId);
+		expect(adaptifMirrorDetail.canManage).toBe(false);
+		expect(adaptifMirrorDetail.canViewDtQr).toBe(true);
+		const adaptifMirrorQrs = await getQr(db, adaptifSr, dtEvent.eventId, qrSecret);
+		expect(adaptifMirrorQrs.srImage).toBeNull();
+		expect(adaptifMirrorQrs.dtImage).toBe(hcoQrs.dtImage);
+		await expect(
+			changeQr(db, adaptifSr, dtEvent.eventId, "revoke"),
+		).rejects.toMatchObject({ code: "FORBIDDEN" });
+		await expect(
+			getQr(db, adaptifSr, srOnlyEvent.eventId, qrSecret),
+		).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+		const [activeChallenge] = await currentChallenge(
+			db,
+			adaptifMirrorDetail.session.id,
+		);
+		if (!activeChallenge) throw new Error("Missing active QR challenge");
+		const srToken = signChallenge(
+			qrSecret,
+			adaptifMirrorDetail.session.id,
+			activeChallenge.id,
+			"SR",
+		);
+		const dtToken = signChallenge(
+			qrSecret,
+			adaptifMirrorDetail.session.id,
+			activeChallenge.id,
+			"DT",
+		);
+		const checkInLocation = {
+			latitude: -6.9712891,
+			longitude: 107.628339,
+			accuracyMeters: 10,
+		};
+		await expect(
+			checkIn(db, hcoSr, qrSecret, {
+				qrToken: dtToken,
+				location: checkInLocation,
+			}),
+		).rejects.toMatchObject({ message: "DT_ONLY_QR" });
+		await expect(
+			checkIn(db, dtIdentity, qrSecret, {
+				qrToken: srToken,
+				location: checkInLocation,
+			}),
+		).rejects.toMatchObject({ message: "SR_ONLY_QR" });
+		await checkIn(db, dtIdentity, qrSecret, {
+			qrToken: dtToken,
+			location: checkInLocation,
+		});
+
 		// ADAPTIF creates & publishes DT-only attendance event and checks its recap,
 		// while being rejected from creating or recapping SR-wide events
 		const adaptifDtEvent = await createEvent(db, adaptifSr, {
@@ -374,7 +445,19 @@ if (!TEST_DB_URL) {
 		const managedDtRow = adaptifEvents.events.find(
 			(e) => e.id === adaptifDtEvent.eventId,
 		);
-		expect(managedDtRow?.isDtScoped).toBe(true);
+		expect(managedDtRow).toMatchObject({
+			isDtScoped: true,
+			isExternalCommitteeQr: false,
+			canControlSession: true,
+		});
+		const mirrorCommitteeRow = adaptifEvents.events.find(
+			(e) => e.id === dtEvent.eventId,
+		);
+		expect(mirrorCommitteeRow).toMatchObject({
+			isDtScoped: true,
+			isExternalCommitteeQr: true,
+			canControlSession: false,
+		});
 		const adaptifRecap = await recapAttendance(
 			db,
 			adaptifSr,
@@ -420,13 +503,7 @@ if (!TEST_DB_URL) {
 			false,
 		);
 
-		// Manual attendance record & ownHistory for DT
-		await manualInsert(db, hcoSr, {
-			eventId: dtEvent.eventId,
-			userId: registered.userId,
-			attendanceAt: new Date(now - 5_000).toISOString(),
-			reason: "Simulasi kehadiran DT",
-		});
+		// QR check-in already recorded PRESENT for dtEvent; verify ownHistory
 		const dtOwnHistory = await ownHistory(db, dtIdentity, {
 			limit: 10,
 			offset: 0,

@@ -25,8 +25,10 @@ export {
 export {
 	closedEventsForScoring,
 	eventHasDeletionReferences,
+	eventHasDtParticipants,
 	eventOrganizationHint,
 	listEvaluatableEvents,
+	listEventIdsWithDtParticipants,
 	listInvitedEvents,
 	listInvitedEventsForUsers,
 	listManagedEvents,

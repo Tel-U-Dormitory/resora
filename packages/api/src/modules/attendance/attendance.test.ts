@@ -8,7 +8,12 @@ import {
 import { eventDraftSchema, rosterSchema } from "../../contracts/attendance";
 import { resolveCommitteeRoster, resolveRoster } from "../events/roster";
 import type { SrCandidate } from "../identity/identity.public";
-import { parseChallenge, signChallenge } from "./check-in/qr";
+import {
+	extractSessionIdFromToken,
+	parseChallenge,
+	parseChallengeWithChannel,
+	signChallenge,
+} from "./check-in/qr";
 
 test("committee roster intersects eligibility, deduplicates explicit invitations and applies exclusion last", () => {
 	const members = [
@@ -174,4 +179,28 @@ test("signed QR redisplays identically, rejects tampering and binds to session",
 	).toBeNull();
 	expect(parseChallenge(secret, "malformed", sessionId)).toBeNull();
 	expect(() => signChallenge("short", sessionId, challengeId)).toThrow();
+
+	const srToken = signChallenge(secret, sessionId, challengeId, "SR");
+	const dtToken = signChallenge(secret, sessionId, challengeId, "DT");
+	expect(extractSessionIdFromToken(srToken)).toBe(sessionId);
+	expect(extractSessionIdFromToken(dtToken)).toBe(sessionId);
+	expect(parseChallengeWithChannel(secret, token, sessionId)).toEqual({
+		challengeId,
+		channel: "ALL",
+	});
+	expect(parseChallengeWithChannel(secret, srToken, sessionId)).toEqual({
+		challengeId,
+		channel: "SR",
+	});
+	expect(parseChallengeWithChannel(secret, dtToken, sessionId)).toEqual({
+		challengeId,
+		channel: "DT",
+	});
+	expect(
+		parseChallengeWithChannel(
+			secret,
+			dtToken.replace(":dt:", ":sr:"),
+			sessionId,
+		),
+	).toBeNull();
 });

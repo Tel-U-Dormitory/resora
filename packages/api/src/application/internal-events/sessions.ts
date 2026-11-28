@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 
 import * as attendanceOperations from "../../modules/attendance/attendance.public";
 import { signChallenge } from "../../modules/attendance/attendance.public";
+import { canManageInternalEvent } from "../../modules/identity/identity.public";
 import { lockedEvent, operator, requireState } from "./context";
 import { getEvent } from "./queries";
 
@@ -79,12 +80,24 @@ export async function getQr(
 ) {
 	operator(identity);
 	const row = await getEvent(db, identity, eventId);
+	if (!row.canViewDtQr) {
+		throw new TRPCError({ code: "FORBIDDEN", message: "HCO access required" });
+	}
+	const isFullManager = canManageInternalEvent(identity);
+	const canControlSession = row.canManage;
 	const [challenge] = await attendanceOperations.currentChallenge(
 		db,
 		row.session.id,
 	);
 	if (!challenge)
-		return { state: "NONE" as const, expiresAt: null, image: null };
+		return {
+			state: "NONE" as const,
+			expiresAt: null,
+			image: null,
+			srImage: null,
+			dtImage: null,
+			canControlSession,
+		};
 	const state = challenge.revokedAt
 		? "REVOKED"
 		: challenge.expiresAt <= new Date()
@@ -92,15 +105,29 @@ export async function getQr(
 			: row.session.status !== "ACTIVE"
 				? "INACTIVE"
 				: "ACTIVE";
-	const token =
-		state === "ACTIVE"
-			? signChallenge(secret, row.session.id, challenge.id)
+	const srToken =
+		state === "ACTIVE" && isFullManager && row.hasSrAudience
+			? signChallenge(secret, row.session.id, challenge.id, "SR")
 			: null;
+	const dtToken =
+		state === "ACTIVE" &&
+		(row.hasDtAudience || (!row.hasSrAudience && !isFullManager))
+			? signChallenge(secret, row.session.id, challenge.id, "DT")
+			: null;
+	const [srImage, dtImage] = await Promise.all([
+		srToken
+			? QRCode.toDataURL(srToken, { width: 320, errorCorrectionLevel: "M" })
+			: Promise.resolve(null),
+		dtToken
+			? QRCode.toDataURL(dtToken, { width: 320, errorCorrectionLevel: "M" })
+			: Promise.resolve(null),
+	]);
 	return {
 		state,
 		expiresAt: challenge.expiresAt,
-		image: token
-			? await QRCode.toDataURL(token, { width: 320, errorCorrectionLevel: "M" })
-			: null,
+		image: srImage ?? dtImage,
+		srImage,
+		dtImage,
+		canControlSession,
 	};
 }

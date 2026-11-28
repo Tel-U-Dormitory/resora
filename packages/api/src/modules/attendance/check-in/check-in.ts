@@ -25,7 +25,11 @@ import {
 	haversineMeters,
 	locationFailure,
 } from "./check-in-policy";
-import { parseChallenge, verifySessionChallenge } from "./qr";
+import {
+	extractSessionIdFromToken,
+	parseChallenge,
+	verifySessionChallenge,
+} from "./qr";
 
 function denied(message: string): never {
 	throw new TRPCError({ code: "FORBIDDEN", message });
@@ -42,7 +46,7 @@ export async function checkIn(
 		isValidSrAssignment(identity.departmentCode, identity.positionCode);
 	const isEligibleDt = canAccessPersonalDt(identity);
 	if (!isEligibleSr && !isEligibleDt) denied("NOT_ELIGIBLE");
-	const sessionId = input.qrToken.split(":")[2];
+	const sessionId = extractSessionIdFromToken(input.qrToken);
 	const challengeId = sessionId
 		? parseChallenge(secret, input.qrToken, sessionId)
 		: null;
@@ -94,6 +98,10 @@ export async function checkIn(
 			if (challenge.expiresAt <= now) denied("QR_EXPIRED");
 			denied("INVALID_QR");
 		}
+		if (verified.channel === "DT" && identity.actor !== "DT")
+			denied("DT_ONLY_QR");
+		if (verified.channel === "SR" && identity.actor !== "SR")
+			denied("SR_ONLY_QR");
 		const failure = locationFailure(
 			input.location,
 			{ latitude: verified.centerLat, longitude: verified.centerLng },
