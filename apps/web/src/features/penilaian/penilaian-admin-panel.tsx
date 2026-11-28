@@ -21,6 +21,66 @@ import {
 	triggerCsvDownload,
 } from "./penilaian-ui";
 
+type ScheduleWindow = {
+	startsOn: string | null;
+	endsOn: string | null;
+	cadenceNote: string | null;
+};
+
+type EvaluationSchedules = {
+	annualEvent: ScheduleWindow;
+	monthlyEvent: ScheduleWindow;
+	weeklyEvent: ScheduleWindow;
+	department: ScheduleWindow;
+	gform: ScheduleWindow;
+	external: ScheduleWindow;
+};
+
+const defaultSchedules: EvaluationSchedules = {
+	annualEvent: {
+		startsOn: null,
+		endsOn: null,
+		cadenceNote: "Evaluasi setiap 3 bulan",
+	},
+	monthlyEvent: {
+		startsOn: null,
+		endsOn: null,
+		cadenceNote: "Evaluasi setiap 3 bulan",
+	},
+	weeklyEvent: {
+		startsOn: null,
+		endsOn: null,
+		cadenceNote: "Evaluasi setiap 2 minggu",
+	},
+	department: {
+		startsOn: null,
+		endsOn: null,
+		cadenceNote: "Evaluasi setiap 3 bulan",
+	},
+	gform: {
+		startsOn: null,
+		endsOn: null,
+		cadenceNote: "Evaluasi setiap 3 bulan",
+	},
+	external: {
+		startsOn: null,
+		endsOn: null,
+		cadenceNote: "Jadwal evaluasi eksternal belum ditentukan",
+	},
+};
+
+const scheduleKeys: Array<{
+	key: keyof EvaluationSchedules;
+	label: string;
+}> = [
+	{ key: "annualEvent", label: "Event Tahunan (25%)" },
+	{ key: "monthlyEvent", label: "Event Bulanan (10%)" },
+	{ key: "weeklyEvent", label: "Event Mingguan (10%)" },
+	{ key: "department", label: "Penilaian Departemen (25%)" },
+	{ key: "gform", label: "GForm SR & Maba (50%)" },
+	{ key: "external", label: "Eksternal ASUS/Ditmawa" },
+];
+
 type PeriodSummary = {
 	id: string;
 	srPeriodId: string;
@@ -30,6 +90,7 @@ type PeriodSummary = {
 	isActive: boolean;
 	sidakMaxPoints: number;
 	performanceThreshold: number | null;
+	schedules?: EvaluationSchedules;
 };
 
 type ParsedPreviewRow = ReturnType<typeof buildGformCsvPreviewRows>[number];
@@ -67,6 +128,10 @@ export function PenilaianAdminPanel({
 			: "",
 	);
 	const [cfgReason, setCfgReason] = useState("");
+	const [cfgSchedules, setCfgSchedules] = useState<EvaluationSchedules>(
+		() => selectedPeriod?.schedules ?? defaultSchedules,
+	);
+	const [showScheduleEditor, setShowScheduleEditor] = useState(false);
 
 	const [eventCategories, setEventCategories] = useState<
 		Record<
@@ -141,6 +206,18 @@ export function PenilaianAdminPanel({
 			evaluationPeriodId: selectedPeriod?.id ?? "",
 		}),
 		enabled: Boolean(selectedPeriod?.id) && canManageRoutine,
+		retry: false,
+		meta: { errorHandledLocally: true },
+	});
+
+	const correctableScoresQuery = useQuery({
+		...trpc.penilaian.listCorrectableScores.queryOptions({
+			evaluationPeriodId: selectedPeriod?.id ?? "",
+		}),
+		enabled:
+			Boolean(selectedPeriod?.id) &&
+			canManageGovernance &&
+			selectedPeriod?.status !== "FINAL",
 		retry: false,
 		meta: { errorHandledLocally: true },
 	});
@@ -537,24 +614,106 @@ export function PenilaianAdminPanel({
 										/>
 									</div>
 								</div>
-								<Button
-									type="button"
-									variant="outline"
-									className="min-h-11"
-									disabled={!cfgReason.trim() || updateConfigMutation.isPending}
-									onClick={() =>
-										updateConfigMutation.mutate({
-											evaluationPeriodId: selectedPeriod.id,
-											sidakMaxPoints: Number(cfgSidakMax) || 10,
-											performanceThreshold: cfgThreshold.trim()
-												? Number(cfgThreshold)
-												: null,
-											reason: cfgReason.trim(),
-										})
-									}
-								>
-									Simpan Konfigurasi Periode
-								</Button>
+								<div className="space-y-3">
+									<div className="flex flex-wrap items-center justify-between gap-2">
+										<button
+											type="button"
+											onClick={() => setShowScheduleEditor((v) => !v)}
+											className="font-semibold text-primary text-xs underline-offset-4 hover:underline"
+										>
+											{showScheduleEditor
+												? "Sembunyikan Pengaturan Jadwal Instrumen"
+												: "Atur Jadwal Instrumen Penilaian (Tahunan, Bulanan, Mingguan, Dept, GForm)"}
+										</button>
+									</div>
+
+									{showScheduleEditor && (
+										<div className="grid grid-cols-1 gap-2.5 rounded-xl border border-border bg-surface-subtle p-3.5 md:grid-cols-2">
+											{scheduleKeys.map(({ key, label }) => {
+												const win = cfgSchedules[key];
+												return (
+													<div
+														key={key}
+														className="space-y-2 rounded-lg border border-border bg-surface p-3"
+													>
+														<p className="font-semibold text-foreground text-xs">
+															{label}
+														</p>
+														<div className="grid grid-cols-2 gap-2">
+															<Input
+																aria-label={`Mulai ${label}`}
+																type="date"
+																className="min-h-10 text-xs"
+																value={win.startsOn ?? ""}
+																onChange={(event) =>
+																	setCfgSchedules((prev) => ({
+																		...prev,
+																		[key]: {
+																			...prev[key],
+																			startsOn: event.target.value || null,
+																		},
+																	}))
+																}
+															/>
+															<Input
+																aria-label={`Selesai ${label}`}
+																type="date"
+																className="min-h-10 text-xs"
+																value={win.endsOn ?? ""}
+																onChange={(event) =>
+																	setCfgSchedules((prev) => ({
+																		...prev,
+																		[key]: {
+																			...prev[key],
+																			endsOn: event.target.value || null,
+																		},
+																	}))
+																}
+															/>
+														</div>
+														<Input
+															aria-label={`Catatan jadwal ${label}`}
+															placeholder="Catatan frekuensi / jadwal"
+															className="min-h-10 text-xs"
+															value={win.cadenceNote ?? ""}
+															onChange={(event) =>
+																setCfgSchedules((prev) => ({
+																	...prev,
+																	[key]: {
+																		...prev[key],
+																		cadenceNote: event.target.value || null,
+																	},
+																}))
+															}
+														/>
+													</div>
+												);
+											})}
+										</div>
+									)}
+
+									<Button
+										type="button"
+										variant="outline"
+										className="min-h-11"
+										disabled={
+											!cfgReason.trim() || updateConfigMutation.isPending
+										}
+										onClick={() =>
+											updateConfigMutation.mutate({
+												evaluationPeriodId: selectedPeriod.id,
+												sidakMaxPoints: Number(cfgSidakMax) || 10,
+												performanceThreshold: cfgThreshold.trim()
+													? Number(cfgThreshold)
+													: null,
+												schedules: cfgSchedules,
+												reason: cfgReason.trim(),
+											})
+										}
+									>
+										Simpan Konfigurasi & Jadwal Periode
+									</Button>
+								</div>
 
 								{completenessQuery.data && (
 									<div className="space-y-3 rounded-xl border border-border bg-surface-subtle p-4">
@@ -657,30 +816,39 @@ export function PenilaianAdminPanel({
 										<h3 className="font-bold text-foreground text-sm">
 											Koreksi Skor Ber-Audit (Saat OPEN / REVISING)
 										</h3>
-										<div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+										<div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
 											<Select
-												aria-label="Jenis skor yang dikoreksi"
-												value={corrType}
-												onChange={(event) =>
-													setCorrType(
-														event.target.value as
-															| "EVENT_SCORE"
-															| "DEPARTMENT_SCORE",
-													)
-												}
-											>
-												<option value="EVENT_SCORE">Skor Event</option>
-												<option value="DEPARTMENT_SCORE">
-													Skor Departemen
-												</option>
-											</Select>
-											<Input
-												aria-label="ID record skor"
-												className="min-h-11"
-												placeholder="UUID record skor"
+												aria-label="Pilih record skor yang dikoreksi"
 												value={corrScoreId}
-												onChange={(event) => setCorrScoreId(event.target.value)}
-											/>
+												onChange={(event) => {
+													const nextId = event.target.value;
+													setCorrScoreId(nextId);
+													const picked =
+														correctableScoresQuery.data?.items.find(
+															(item) => item.id === nextId,
+														);
+													if (picked) {
+														setCorrType(picked.scoreType);
+														setCorrCommitment(String(picked.commitment));
+														setCorrTeamwork(String(picked.teamwork));
+														setCorrAttitude(String(picked.attitude));
+														setCorrContribution(String(picked.contribution));
+													}
+												}}
+											>
+												<option value="">
+													{correctableScoresQuery.isLoading
+														? "Memuat daftar skor…"
+														: "Pilih skor event / departemen…"}
+												</option>
+												{(correctableScoresQuery.data?.items ?? []).map(
+													(item) => (
+														<option key={item.id} value={item.id}>
+															{item.label}
+														</option>
+													),
+												)}
+											</Select>
 											<Input
 												aria-label="Alasan koreksi"
 												className="min-h-11"

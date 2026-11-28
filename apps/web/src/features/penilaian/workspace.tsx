@@ -171,6 +171,7 @@ export function PenilaianWorkspace() {
 			<Tabs
 				value={activeTab}
 				onValueChange={(next) => setRequestedTab(next as TabId)}
+				className="print:hidden"
 			>
 				<TabsList aria-label="Navigasi modul penilaian SR">
 					{availableTabs.map((tab) => (
@@ -180,6 +181,38 @@ export function PenilaianWorkspace() {
 					))}
 				</TabsList>
 			</Tabs>
+
+			{activePeriod?.schedules && (
+				<Card className="print:hidden">
+					<CardContent className="flex flex-wrap items-center gap-2 p-3.5 text-xs">
+						<span className="font-semibold text-foreground">
+							Jadwal Penilaian:
+						</span>
+						{(
+							[
+								["Tahunan (25%)", activePeriod.schedules.annualEvent],
+								["Bulanan (10%)", activePeriod.schedules.monthlyEvent],
+								["Mingguan (10%)", activePeriod.schedules.weeklyEvent],
+								["Departemen (25%)", activePeriod.schedules.department],
+								["GForm (50%)", activePeriod.schedules.gform],
+							] as const
+						).map(([label, win]) => {
+							const range =
+								win?.startsOn || win?.endsOn
+									? `${win.startsOn ?? "—"} s/d ${win.endsOn ?? "—"}`
+									: win?.cadenceNote || "Sesuai jadwal periode";
+							return (
+								<span
+									key={label}
+									className="rounded-lg border border-border bg-surface-subtle px-2.5 py-1 text-text-secondary"
+								>
+									<strong className="text-foreground">{label}:</strong> {range}
+								</span>
+							);
+						})}
+					</CardContent>
+				</Card>
+			)}
 
 			{!activePeriod && activeTab !== "manage" ? (
 				<Card>
