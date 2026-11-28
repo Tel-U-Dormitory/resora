@@ -87,11 +87,12 @@ export function getSidebarGroups({
 	isSuperadmin: boolean;
 }) {
 	void canReadAttendancePoints;
+	const showDepartmentDt = canManageDt && !isSuperadmin;
 	const hasDepartmentAccess =
 		canManageEvents ||
 		canManageCommittee ||
 		canAccessPenilaianWorkspace ||
-		canManageDt;
+		showDepartmentDt;
 	const departmentTitle = departmentCode
 		? `Departemen · ${departmentCode}`
 		: "Departemen · HCO";
@@ -187,7 +188,7 @@ export function getSidebarGroups({
 						id: "hco",
 						title: departmentTitle,
 						items: [
-							...(canManageDt
+							...(showDepartmentDt
 								? ([
 										{
 											title: "Kelola DT",
@@ -226,7 +227,10 @@ export function getSidebarGroups({
 					{
 						id: "administration",
 						title: "Administrasi",
-						items: [...ADMIN_NAVIGATION] as SidebarNavItem[],
+						items: [
+							...ADMIN_NAVIGATION,
+							{ title: "Kelola DT", href: "/dt", icon: "dt" },
+						] as SidebarNavItem[],
 					},
 				]
 			: []),

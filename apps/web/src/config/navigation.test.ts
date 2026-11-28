@@ -69,7 +69,7 @@ test("global, senior-resident, department and administration groups follow backe
 						groups
 							.find((group) => group.id === "administration")
 							?.items.map((item) => item.href) ?? [],
-					).toEqual(isSuperadmin ? ["/admin/users", "/admin/periods"] : []);
+					).toEqual(isSuperadmin ? ["/admin/users", "/admin/periods", "/dt"] : []);
 					expect(groups.every((group) => group.items.length > 0)).toBe(true);
 				}
 			}
@@ -177,6 +177,7 @@ test("Apps reuses sidebar capabilities and excludes primary destinations, disabl
 		"/penilaian",
 		"/admin/users",
 		"/admin/periods",
+		"/dt",
 	]);
 	const empty = getAppItems({
 		isSr: false,

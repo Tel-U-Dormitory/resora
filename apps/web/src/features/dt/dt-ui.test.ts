@@ -39,12 +39,24 @@ test("desktop sidebar and mobile Apps navbar include Kelola DT for ADAPTIF and S
 	};
 	const superadminGroups = getSidebarGroups(superadminCaps);
 	expect(
-		superadminGroups.some((g) =>
-			g.items.some((item) => item.href === "/dt" && item.title === "Kelola DT"),
+		superadminGroups.some(
+			(g) =>
+				g.id === "administration" &&
+				g.items.some((item) => item.href === "/dt" && item.title === "Kelola DT"),
 		),
 	).toBe(true);
 	expect(
+		superadminGroups
+			.flatMap((g) => g.items)
+			.filter((item) => item.href === "/dt"),
+	).toHaveLength(1);
+	expect(
 		getAppItems(superadminCaps).some(
+			(item) => item.href === "/dt" && item.title === "Kelola DT",
+		),
+	).toBe(true);
+	expect(
+		getAppItems({ isSr: false, canManageEvents: false, isSuperadmin: true }).some(
 			(item) => item.href === "/dt" && item.title === "Kelola DT",
 		),
 	).toBe(true);

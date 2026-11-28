@@ -7,10 +7,9 @@ export default async function DtPage() {
 	if (!session) redirect("/login?reason=session");
 	if (session.requiresPasswordChange) redirect("/change-password");
 	const isDtMember = session.actor === "DT";
-	if (!session.canManageDt && !isDtMember) {
+	const canManageDt = Boolean(session.canManageDt || session.isSuperadmin);
+	if (!canManageDt && !isDtMember) {
 		redirect("/dashboard");
 	}
-	return (
-		<DtWorkspace canManageDt={session.canManageDt} isDtMember={isDtMember} />
-	);
+	return <DtWorkspace canManageDt={canManageDt} isDtMember={isDtMember} />;
 }

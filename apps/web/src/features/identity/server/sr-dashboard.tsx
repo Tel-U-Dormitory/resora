@@ -68,7 +68,7 @@ export default async function SrDashboard() {
 					},
 				]
 			: []),
-		...(session.canManageDt
+		...(session.canManageDt || session.isSuperadmin
 			? [
 					{
 						href: "/dt" as const,
