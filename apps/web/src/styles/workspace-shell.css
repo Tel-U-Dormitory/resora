@@ -232,6 +232,33 @@ body:has(.resora-workspace),
 .resora-app-icon[data-icon="cleanliness"] {
 	background: #f59e0b;
 }
+.resora-app-icon[data-icon="facilities"] {
+	background: #64748b;
+}
+.resora-app-icon[data-icon="achievements"] {
+	background: #d97706;
+}
+.resora-app-icon[data-icon="registration"] {
+	background: #0ea5e9;
+}
+.resora-app-icon[data-icon="peerReview"] {
+	background: #8b5cf6;
+}
+.resora-app-icon[data-icon="dailyLog"] {
+	background: #14b8a6;
+}
+.resora-app-icon[data-icon="aspiration"] {
+	background: #ec4899;
+}
+.resora-app-icon[data-icon="projects"] {
+	background: #6366f1;
+}
+.resora-app-icon[data-icon="mabaSurvey"] {
+	background: #a855f7;
+}
+.resora-app-icon[data-icon="cms"] {
+	background: #06b6d4;
+}
 .resora-app-icon[data-icon="violations"] {
 	background: #ef4444;
 }

@@ -3,9 +3,21 @@ import {
 	getAppItems,
 	getPrimaryDestination,
 	getSidebarGroups,
+	getUpcomingAppItems,
 	isSidebarLinkActive,
 	type NavigationItem,
 } from "./navigation";
+
+const UPCOMING_SR_HREFS = [
+	"#kebersihan-kamar",
+	"#keluhan-fasilitas",
+	"#pendaftaran-event",
+	"#manajemen-prestasi",
+	"#penilaian-sesama-sr",
+	"#berita-acara-harian",
+	"#aspirasi-anonim",
+	"#proyek-event",
+] as const;
 
 test("global, senior-resident, department and administration groups follow backend capabilities", () => {
 	const hasViolations = (isSr: boolean, isSuperadmin: boolean) =>
@@ -32,10 +44,10 @@ test("global, senior-resident, department and administration groups follow backe
 					]);
 
 					const srGroup = groups.find((group) => group.id === "sr");
+					const hasSrGroup =
+						isSr || isSuperadmin || hasViolations(isSr, isSuperadmin);
 					expect(srGroup?.title).toBe(
-						isSr || hasViolations(isSr, isSuperadmin)
-							? "Senior Resident"
-							: undefined,
+						hasSrGroup ? "Senior Resident" : undefined,
 					);
 					expect(srGroup?.items.map((item) => item.href) ?? []).toEqual([
 						...(isSr
@@ -44,9 +56,7 @@ test("global, senior-resident, department and administration groups follow backe
 						...(hasViolations(isSr, isSuperadmin)
 							? (["/pelanggaran"] as const)
 							: []),
-						...(isSr
-							? (["#kebersihan-kamar", "#keluhan-fasilitas"] as const)
-							: []),
+						...(isSr || isSuperadmin ? UPCOMING_SR_HREFS : []),
 					]);
 
 					const hasDept = canManageEvents || canAccessPenilaianWorkspace;
@@ -59,6 +69,7 @@ test("global, senior-resident, department and administration groups follow backe
 						expect(deptGroup.items.map((item) => item.href)).toEqual([
 							...(canAccessPenilaianWorkspace ? (["/penilaian"] as const) : []),
 							...(canManageEvents ? (["/events?view=manage"] as const) : []),
+							"#penilaian-maba",
 						]);
 					}
 
@@ -75,7 +86,9 @@ test("global, senior-resident, department and administration groups follow backe
 						groups
 							.find((group) => group.id === "administration")
 							?.items.map((item) => item.href) ?? [],
-					).toEqual(isSuperadmin ? ["/admin/users", "/admin/periods"] : []);
+					).toEqual(
+						isSuperadmin ? ["/admin/users", "/admin/periods", "#cms-website"] : [],
+					);
 					expect(groups.every((group) => group.items.length > 0)).toBe(true);
 				}
 			}
@@ -199,6 +212,23 @@ test("Apps reuses sidebar capabilities and excludes primary destinations, disabl
 		).toBe(false);
 		expect(items.some((item) => item.disabled)).toBe(false);
 	}
+	expect(
+		getUpcomingAppItems({
+			isSr: true,
+			departmentCode: "HCO",
+			canManageEvents: true,
+			canAccessPenilaianWorkspace: true,
+			isSuperadmin: false,
+		}).map((item) => item.href),
+	).toEqual([...UPCOMING_SR_HREFS, "#penilaian-maba"]);
+	expect(
+		getUpcomingAppItems({
+			isSr: true,
+			departmentCode: "MEDIA",
+			canManageEvents: false,
+			isSuperadmin: false,
+		}).map((item) => item.href),
+	).toEqual([...UPCOMING_SR_HREFS, "#cms-website"]);
 });
 
 test("primary destinations include Inbox history and personal attendance under Profil", () => {

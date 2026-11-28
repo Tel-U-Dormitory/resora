@@ -1,24 +1,21 @@
 "use client";
 
-import {
-	Grip,
-	House,
-	Inbox,
-	QrCode,
-	ShieldAlert,
-	Sparkles,
-	UserRound,
-} from "lucide-react";
+import { Grip, House, Inbox, QrCode, UserRound } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getAppItems, getPrimaryDestination } from "@/config/navigation";
+import {
+	getAppItems,
+	getPrimaryDestination,
+	getUpcomingAppItems,
+} from "@/config/navigation";
 import { navigationIcons } from "./navigation-icons";
 
 export function AppNavigation({
 	isSr,
 	isDt = false,
+	departmentCode,
 	canManageEvents,
 	canManageCommittee,
 	canReadAttendancePoints,
@@ -32,16 +29,19 @@ export function AppNavigation({
 	const trigger = useRef<HTMLButtonElement>(null);
 	const title = useRef<HTMLHeadingElement>(null);
 	const historyEntry = useRef(false);
-	const items = getAppItems({
+	const navCapabilities = {
 		isSr,
 		isDt,
+		departmentCode,
 		canManageEvents,
 		canManageCommittee,
 		canReadAttendancePoints,
 		canAccessPenilaianWorkspace,
 		canManageDt,
 		isSuperadmin,
-	});
+	};
+	const items = getAppItems(navCapabilities);
+	const upcomingItems = getUpcomingAppItems(navCapabilities);
 	const destinations = [
 		{ label: "Beranda", href: "/dashboard" as Route, icon: House },
 		isDt
@@ -187,32 +187,24 @@ export function AppNavigation({
 										</Link>
 									);
 								})}
-								{[
-									{
-										id: "cleanliness",
-										title: "Kebersihan Kamar",
-										icon: Sparkles,
-									},
-									{
-										id: "violations",
-										title: "Pelanggaran",
-										icon: ShieldAlert,
-									},
-								].map(({ id, title: upcomingTitle, icon: UpcomingIcon }) => (
-									<div
-										key={upcomingTitle}
-										aria-disabled="true"
-										className="resora-app-item resora-app-upcoming"
-									>
-										<span className="resora-app-tile">
-											<span className="resora-app-icon" data-icon={id}>
-												<UpcomingIcon aria-hidden="true" />
+								{upcomingItems.map(({ title: upcomingTitle, href, icon }) => {
+									const UpcomingIcon = navigationIcons[icon];
+									return (
+										<div
+											key={href}
+											aria-disabled="true"
+											className="resora-app-item resora-app-upcoming"
+										>
+											<span className="resora-app-tile">
+												<span className="resora-app-icon" data-icon={icon}>
+													<UpcomingIcon aria-hidden="true" />
+												</span>
 											</span>
-										</span>
-										<span className="resora-app-label">{upcomingTitle}</span>
-										<span className="resora-app-soon">Segera</span>
-									</div>
-								))}
+											<span className="resora-app-label">{upcomingTitle}</span>
+											<span className="resora-app-soon">Segera</span>
+										</div>
+									);
+								})}
 							</div>
 						</div>
 					)}

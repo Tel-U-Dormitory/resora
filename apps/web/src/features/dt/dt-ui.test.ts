@@ -54,7 +54,7 @@ test("desktop sidebar and mobile Apps navbar include Kelola DT for ADAPTIF and S
 		superadminGroups
 			.find((g) => g.id === "administration")
 			?.items.map((i) => i.href),
-	).toEqual(["/admin/users", "/admin/periods"]);
+	).toEqual(["/admin/users", "/admin/periods", "#cms-website"]);
 	expect(
 		superadminGroups
 			.flatMap((g) => g.items)

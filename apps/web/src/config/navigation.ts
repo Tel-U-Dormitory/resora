@@ -47,7 +47,15 @@ export type SidebarNavIcon =
 	| "points"
 	| "violations"
 	| "cleanliness"
-	| "facilities";
+	| "facilities"
+	| "achievements"
+	| "registration"
+	| "peerReview"
+	| "dailyLog"
+	| "aspiration"
+	| "projects"
+	| "mabaSurvey"
+	| "cms";
 
 export type SidebarNavItem =
 	| {
@@ -117,7 +125,7 @@ export function getSidebarGroups({
 					},
 				] as SidebarNavItem[])
 			: []),
-		...(isSr
+		...(isSr || isSuperadmin
 			? ([
 					{
 						title: "Kebersihan Kamar",
@@ -133,6 +141,48 @@ export function getSidebarGroups({
 						disabled: true,
 						badge: "Segera hadir",
 					},
+					{
+						title: "Pendaftaran Event",
+						href: "#pendaftaran-event",
+						icon: "registration",
+						disabled: true,
+						badge: "Segera hadir",
+					},
+					{
+						title: "Manajemen Prestasi",
+						href: "#manajemen-prestasi",
+						icon: "achievements",
+						disabled: true,
+						badge: "Segera hadir",
+					},
+					{
+						title: "Penilaian Sesama SR",
+						href: "#penilaian-sesama-sr",
+						icon: "peerReview",
+						disabled: true,
+						badge: "Segera hadir",
+					},
+					{
+						title: "Berita Acara Harian",
+						href: "#berita-acara-harian",
+						icon: "dailyLog",
+						disabled: true,
+						badge: "Segera hadir",
+					},
+					{
+						title: "Aspirasi Anonim",
+						href: "#aspirasi-anonim",
+						icon: "aspiration",
+						disabled: true,
+						badge: "Segera hadir",
+					},
+					{
+						title: "Proyek Event",
+						href: "#proyek-event",
+						icon: "projects",
+						disabled: true,
+						badge: "Segera hadir",
+					},
 				] as SidebarNavItem[])
 			: []),
 	];
@@ -145,6 +195,20 @@ export function getSidebarGroups({
 					title: "Riwayat kehadiran",
 					href: "/attendance/history",
 					icon: "history",
+				},
+				{
+					title: "Berita Acara Harian",
+					href: "#berita-acara-harian",
+					icon: "dailyLog",
+					disabled: true,
+					badge: "Segera hadir",
+				},
+				{
+					title: "Aspirasi Anonim",
+					href: "#aspirasi-anonim",
+					icon: "aspiration",
+					disabled: true,
+					badge: "Segera hadir",
 				},
 			]
 		: [];
@@ -218,7 +282,38 @@ export function getSidebarGroups({
 										},
 									] as SidebarNavItem[])
 								: []),
+							...(canAccessPenilaianWorkspace ||
+							canManageEvents ||
+							departmentCode === "HCO" ||
+							isSuperadmin
+								? ([
+										{
+											title: "Penilaian Maba ke SR",
+											href: "#penilaian-maba",
+											icon: "mabaSurvey",
+											disabled: true,
+											badge: "Segera hadir",
+										},
+									] as SidebarNavItem[])
+								: []),
 						],
+					},
+				]
+			: []),
+		...(departmentCode === "MEDIA"
+			? [
+					{
+						id: "media",
+						title: "Departemen · MEDIA",
+						items: [
+							{
+								title: "CMS Website",
+								href: "#cms-website",
+								icon: "cms",
+								disabled: true,
+								badge: "Segera hadir",
+							},
+						] satisfies SidebarNavItem[],
 					},
 				]
 			: []),
@@ -227,7 +322,16 @@ export function getSidebarGroups({
 					{
 						id: "administration",
 						title: "Administrasi",
-						items: [...ADMIN_NAVIGATION] as SidebarNavItem[],
+						items: [
+							...ADMIN_NAVIGATION,
+							{
+								title: "CMS Website",
+								href: "#cms-website",
+								icon: "cms",
+								disabled: true,
+								badge: "Segera hadir",
+							},
+						] as SidebarNavItem[],
 					},
 				]
 			: []),
@@ -246,6 +350,19 @@ export function getAppItems(
 				!item.disabled &&
 				!["/dashboard", "/broadcasts", "/profile", "/scan"].includes(item.href),
 		);
+}
+
+export function getUpcomingAppItems(
+	capabilities: Parameters<typeof getSidebarGroups>[0],
+) {
+	const seen = new Set<string>();
+	return getSidebarGroups(capabilities)
+		.flatMap<NavigationItem>((group) => group.items)
+		.filter((item): item is Extract<NavigationItem, { disabled: true }> => {
+			if (!item.disabled || seen.has(item.href)) return false;
+			seen.add(item.href);
+			return true;
+		});
 }
 
 export function getPrimaryDestination(pathname: string) {
