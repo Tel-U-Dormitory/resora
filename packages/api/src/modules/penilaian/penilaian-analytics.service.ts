@@ -1,13 +1,20 @@
 import type { ActiveIdentity } from "@resora/auth/sr-access";
 import type { Database, DatabaseTransaction } from "@resora/db";
 import {
+	evaluationAttendanceFallbacks,
 	evaluationAudits,
+	evaluationDepartmentScores,
+	evaluationEventScores,
+	evaluationGformResponses,
+	evaluationPeriodEvents,
 	evaluationPeriods,
+	evaluationPointTransactions,
 	evaluationResultSnapshots,
 } from "@resora/db/schema/penilaian";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq } from "drizzle-orm";
 import type { z } from "zod";
+import { readEvent } from "../events/events.public";
 import {
 	getUserDisplayNames,
 	readOperationalIdentity,
@@ -28,6 +35,7 @@ import {
 } from "./penilaian.contracts";
 import {
 	canReadPenilaianModule,
+	canViewCommentsAndEvaluatorIdentity,
 	canViewFinalAllMembers,
 	canViewPreFinalResults,
 } from "./penilaian-policy";
@@ -75,6 +83,332 @@ function csvCell(value: unknown, preserveText = false): string {
 function roundDisplay(value: number | null): number | null {
 	if (value === null) return null;
 	return Math.round(value * 100) / 100;
+}
+
+type StoredEventBreakdown = {
+	periodEventId: string;
+	eventId: string;
+	title: string;
+	category: "ANNUAL" | "MONTHLY" | "WEEKLY";
+	weight: number;
+	isMandatory: boolean;
+	expectedEvaluators: number;
+	submittedEvaluators: number;
+	rawAverage: number | null;
+	weightedScore: number | null;
+	isComplete: boolean;
+};
+
+async function loadMemberDetailedBreakdown(
+	tx: Database | DatabaseTransaction,
+	params: {
+		evaluationPeriodId: string;
+		targetUserId: string;
+		member: ProjectedRecapMember;
+		includeSensitive: boolean;
+		includeAllTxStatuses: boolean;
+	},
+) {
+	const [
+		periodEvents,
+		eventScores,
+		deptScores,
+		attendanceFallbacks,
+		pointTransactions,
+		gformResponses,
+	] = await Promise.all([
+		tx
+			.select()
+			.from(evaluationPeriodEvents)
+			.where(
+				eq(
+					evaluationPeriodEvents.evaluationPeriodId,
+					params.evaluationPeriodId,
+				),
+			),
+		tx
+			.select()
+			.from(evaluationEventScores)
+			.where(
+				and(
+					eq(
+						evaluationEventScores.evaluationPeriodId,
+						params.evaluationPeriodId,
+					),
+					eq(evaluationEventScores.targetUserId, params.targetUserId),
+				),
+			),
+		tx
+			.select()
+			.from(evaluationDepartmentScores)
+			.where(
+				and(
+					eq(
+						evaluationDepartmentScores.evaluationPeriodId,
+						params.evaluationPeriodId,
+					),
+					eq(evaluationDepartmentScores.targetUserId, params.targetUserId),
+				),
+			),
+		tx
+			.select()
+			.from(evaluationAttendanceFallbacks)
+			.where(
+				and(
+					eq(
+						evaluationAttendanceFallbacks.evaluationPeriodId,
+						params.evaluationPeriodId,
+					),
+					eq(evaluationAttendanceFallbacks.targetUserId, params.targetUserId),
+				),
+			),
+		tx
+			.select()
+			.from(evaluationPointTransactions)
+			.where(
+				and(
+					eq(
+						evaluationPointTransactions.evaluationPeriodId,
+						params.evaluationPeriodId,
+					),
+					eq(evaluationPointTransactions.targetUserId, params.targetUserId),
+				),
+			),
+		params.includeSensitive
+			? tx
+					.select()
+					.from(evaluationGformResponses)
+					.where(
+						and(
+							eq(
+								evaluationGformResponses.evaluationPeriodId,
+								params.evaluationPeriodId,
+							),
+							eq(evaluationGformResponses.targetUserId, params.targetUserId),
+						),
+					)
+			: Promise.resolve([]),
+	]);
+
+	const cb = params.member.componentBreakdown as
+		| {
+				eventBreakdowns?: StoredEventBreakdown[];
+				departmentScoreAverage?: number | null;
+				gformScoreAverage?: number | null;
+				resoraAttendancePoints?: number;
+				fallbackAttendancePoints?: number;
+				approvedAdditionPoints?: number;
+				approvedDeductionPoints?: number;
+				externalResponseCount?: number;
+		  }
+		| undefined;
+
+	const rawEventTitleMap = new Map<string, string>();
+	for (const pe of periodEvents) {
+		const storedTitle = cb?.eventBreakdowns?.find(
+			(item) => item.periodEventId === pe.id,
+		)?.title;
+		if (storedTitle) {
+			rawEventTitleMap.set(pe.id, storedTitle);
+		} else {
+			const [evt] = await readEvent(tx, pe.eventId);
+			rawEventTitleMap.set(pe.id, evt?.title ?? pe.eventId);
+		}
+	}
+
+	const eventIndicatorMap = new Map<
+		string,
+		{
+			commitment: number;
+			teamwork: number;
+			attitude: number;
+			contribution: number;
+			count: number;
+		}
+	>();
+	for (const row of eventScores) {
+		const curr = eventIndicatorMap.get(row.periodEventId) ?? {
+			commitment: 0,
+			teamwork: 0,
+			attitude: 0,
+			contribution: 0,
+			count: 0,
+		};
+		curr.commitment += row.commitment;
+		curr.teamwork += row.teamwork;
+		curr.attitude += row.attitude;
+		curr.contribution += row.contribution;
+		curr.count++;
+		eventIndicatorMap.set(row.periodEventId, curr);
+	}
+
+	const storedEvents = cb?.eventBreakdowns ?? [];
+	const eventHistory = storedEvents.map((evt) => {
+		const ind = eventIndicatorMap.get(evt.periodEventId);
+		return {
+			periodEventId: evt.periodEventId,
+			title: evt.title,
+			category: evt.category,
+			weight: evt.weight,
+			isMandatory: evt.isMandatory,
+			expectedEvaluators: evt.expectedEvaluators,
+			submittedEvaluators: evt.submittedEvaluators,
+			rawAverage: roundDisplay(evt.rawAverage),
+			weightedScore: roundDisplay(evt.weightedScore),
+			isComplete: evt.isComplete,
+			indicators: ind?.count
+				? {
+						commitment: roundDisplay(ind.commitment / ind.count),
+						teamwork: roundDisplay(ind.teamwork / ind.count),
+						attitude: roundDisplay(ind.attitude / ind.count),
+						contribution: roundDisplay(ind.contribution / ind.count),
+					}
+				: null,
+		};
+	});
+
+	const deptByQuarter = new Map<number, typeof deptScores>();
+	for (const row of deptScores) {
+		const bucket = deptByQuarter.get(row.quarterNumber) ?? [];
+		bucket.push(row);
+		deptByQuarter.set(row.quarterNumber, bucket);
+	}
+	const departmentQuarters = [...deptByQuarter.entries()]
+		.sort(([a], [b]) => a - b)
+		.map(([quarterNumber, rows]) => {
+			const len = rows.length;
+			const commitment = rows.reduce((s, r) => s + r.commitment, 0) / len;
+			const teamwork = rows.reduce((s, r) => s + r.teamwork, 0) / len;
+			const attitude = rows.reduce((s, r) => s + r.attitude, 0) / len;
+			const contribution = rows.reduce((s, r) => s + r.contribution, 0) / len;
+			const rawAvg = (commitment + teamwork + attitude + contribution) / 4;
+			return {
+				quarterNumber,
+				evaluatorCount: len,
+				commitment: roundDisplay(commitment),
+				teamwork: roundDisplay(teamwork),
+				attitude: roundDisplay(attitude),
+				contribution: roundDisplay(contribution),
+				rawAverage: roundDisplay(rawAvg),
+				weightedScore: roundDisplay(rawAvg * 0.25),
+			};
+		});
+
+	const visibleTx = pointTransactions.filter(
+		(txRow) => params.includeAllTxStatuses || txRow.status === "APPROVED",
+	);
+
+	let evaluatorDetails: {
+		eventScores: Array<{
+			id: string;
+			eventTitle: string;
+			evaluatorName: string;
+			commitment: number;
+			teamwork: number;
+			attitude: number;
+			contribution: number;
+			averageScore: number | null;
+			comment: string | null;
+		}>;
+		departmentScores: Array<{
+			id: string;
+			quarterNumber: number;
+			evaluatorName: string;
+			commitment: number;
+			teamwork: number;
+			attitude: number;
+			contribution: number;
+			averageScore: number | null;
+			comment: string | null;
+		}>;
+		gformResponses: Array<{
+			id: string;
+			sourceType: "SR_MABA" | "EXTERNAL_ASUS_DITMAWA";
+			cycleNumber: number;
+			respondentKey: string;
+			respondentRole: string;
+			totalScore: number;
+			comment: string | null;
+		}>;
+	} | null = null;
+
+	if (params.includeSensitive) {
+		const evaluatorNames = await getUserDisplayNames(tx, [
+			...eventScores.map((r) => r.evaluatorUserId),
+			...deptScores.map((r) => r.evaluatorUserId),
+		]);
+		evaluatorDetails = {
+			eventScores: eventScores.map((r) => ({
+				id: r.id,
+				eventTitle: rawEventTitleMap.get(r.periodEventId) ?? r.periodEventId,
+				evaluatorName:
+					evaluatorNames.get(r.evaluatorUserId) ?? r.evaluatorUserId,
+				commitment: r.commitment,
+				teamwork: r.teamwork,
+				attitude: r.attitude,
+				contribution: r.contribution,
+				averageScore: roundDisplay(
+					(r.commitment + r.teamwork + r.attitude + r.contribution) / 4,
+				),
+				comment: r.comment,
+			})),
+			departmentScores: deptScores.map((r) => ({
+				id: r.id,
+				quarterNumber: r.quarterNumber,
+				evaluatorName:
+					evaluatorNames.get(r.evaluatorUserId) ?? r.evaluatorUserId,
+				commitment: r.commitment,
+				teamwork: r.teamwork,
+				attitude: r.attitude,
+				contribution: r.contribution,
+				averageScore: roundDisplay(
+					(r.commitment + r.teamwork + r.attitude + r.contribution) / 4,
+				),
+				comment: r.comment,
+			})),
+			gformResponses: gformResponses.map((r) => ({
+				id: r.id,
+				sourceType: r.sourceType,
+				cycleNumber: r.cycleNumber,
+				respondentKey: r.respondentKey,
+				respondentRole: r.respondentRole,
+				totalScore: r.totalScore,
+				comment: r.comment,
+			})),
+		};
+	}
+
+	return {
+		eventHistory,
+		departmentQuarters,
+		departmentScoreAverage: roundDisplay(cb?.departmentScoreAverage ?? null),
+		gformScoreAverage: roundDisplay(cb?.gformScoreAverage ?? null),
+		externalResponseCount: cb?.externalResponseCount ?? 0,
+		resoraAttendancePoints:
+			cb?.resoraAttendancePoints ?? params.member.attendancePointsTotal,
+		fallbackAttendancePoints: cb?.fallbackAttendancePoints ?? 0,
+		fallbackEntries: attendanceFallbacks.map((fb) => ({
+			id: fb.id,
+			activityType: fb.activityType,
+			activityTitle: fb.activityTitle,
+			activityDate: fb.activityDate,
+			attendanceStatus: fb.attendanceStatus,
+			earnedPoints: fb.earnedPoints,
+			maxPoints: fb.maxPoints,
+		})),
+		approvedAdditionPoints: cb?.approvedAdditionPoints ?? 0,
+		approvedDeductionPoints: cb?.approvedDeductionPoints ?? 0,
+		pointTransactions: visibleTx.map((pt) => ({
+			id: pt.id,
+			transactionType: pt.transactionType,
+			points: pt.points,
+			category: pt.category,
+			reason: pt.reason,
+			occurredOn: pt.occurredOn,
+			status: pt.status,
+		})),
+		evaluatorDetails,
+	};
 }
 
 async function loadPeriodDataset(
@@ -285,6 +619,16 @@ export async function getEvaluationMemberDetail(
 			);
 			if (!member) fail("NOT_FOUND", "EVALUATION_MEMBER_NOT_FOUND");
 
+			const includeSensitive = canViewCommentsAndEvaluatorIdentity(live);
+			const detailed = await loadMemberDetailedBreakdown(tx, {
+				evaluationPeriodId: period.id,
+				targetUserId: member.userId,
+				member,
+				includeSensitive,
+				includeAllTxStatuses: canViewPreFinalResults(live),
+			});
+			const { componentBreakdown: _cb, ...memberSummary } = member;
+
 			return {
 				period: {
 					id: period.id,
@@ -295,14 +639,17 @@ export async function getEvaluationMemberDetail(
 					finalizedAt: period.finalizedAt,
 				},
 				member: {
-					...member,
-					annualWeighted: roundDisplay(member.annualWeighted),
-					monthlyWeighted: roundDisplay(member.monthlyWeighted),
-					weeklyWeighted: roundDisplay(member.weeklyWeighted),
-					departmentWeighted: roundDisplay(member.departmentWeighted),
-					gformWeighted: roundDisplay(member.gformWeighted),
-					totalWeightedScore: roundDisplay(member.totalWeightedScore),
-					externalScoreAverage: roundDisplay(member.externalScoreAverage),
+					...memberSummary,
+					annualWeighted: roundDisplay(memberSummary.annualWeighted),
+					monthlyWeighted: roundDisplay(memberSummary.monthlyWeighted),
+					weeklyWeighted: roundDisplay(memberSummary.weeklyWeighted),
+					departmentWeighted: roundDisplay(memberSummary.departmentWeighted),
+					gformWeighted: roundDisplay(memberSummary.gformWeighted),
+					totalWeightedScore: roundDisplay(memberSummary.totalWeightedScore),
+					externalScoreAverage: roundDisplay(
+						memberSummary.externalScoreAverage,
+					),
+					detailed,
 				},
 			};
 		},
@@ -360,6 +707,19 @@ export async function getOwnEvaluationRecap(
 
 			const dataset = await loadPeriodDataset(tx, period);
 			const own = dataset.members.find((m) => m.userId === live.userId) ?? null;
+			const detailed = own
+				? await loadMemberDetailedBreakdown(tx, {
+						evaluationPeriodId: period.id,
+						targetUserId: own.userId,
+						member: own,
+						// Own personal recap never exposes evaluator identities or comments (FR-EVAL-027/036).
+						includeSensitive: false,
+						includeAllTxStatuses: false,
+					})
+				: null;
+			const ownSummary = own
+				? (({ componentBreakdown: _cb, ...rest }) => rest)(own)
+				: null;
 
 			return {
 				status: "FINAL" as const,
@@ -371,18 +731,22 @@ export async function getOwnEvaluationRecap(
 					performanceThreshold: period.performanceThreshold,
 					finalizedAt: period.finalizedAt,
 				},
-				recap: own
-					? {
-							...own,
-							annualWeighted: roundDisplay(own.annualWeighted),
-							monthlyWeighted: roundDisplay(own.monthlyWeighted),
-							weeklyWeighted: roundDisplay(own.weeklyWeighted),
-							departmentWeighted: roundDisplay(own.departmentWeighted),
-							gformWeighted: roundDisplay(own.gformWeighted),
-							totalWeightedScore: roundDisplay(own.totalWeightedScore),
-							externalScoreAverage: roundDisplay(own.externalScoreAverage),
-						}
-					: null,
+				recap:
+					ownSummary && detailed
+						? {
+								...ownSummary,
+								annualWeighted: roundDisplay(ownSummary.annualWeighted),
+								monthlyWeighted: roundDisplay(ownSummary.monthlyWeighted),
+								weeklyWeighted: roundDisplay(ownSummary.weeklyWeighted),
+								departmentWeighted: roundDisplay(ownSummary.departmentWeighted),
+								gformWeighted: roundDisplay(ownSummary.gformWeighted),
+								totalWeightedScore: roundDisplay(ownSummary.totalWeightedScore),
+								externalScoreAverage: roundDisplay(
+									ownSummary.externalScoreAverage,
+								),
+								detailed,
+							}
+						: null,
 			};
 		},
 		{ isolationLevel: "repeatable read", accessMode: "read only" },

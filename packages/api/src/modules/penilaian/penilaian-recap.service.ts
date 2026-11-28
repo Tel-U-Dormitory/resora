@@ -12,12 +12,13 @@ import {
 	evaluationResultSnapshots,
 } from "@resora/db/schema/penilaian";
 import { TRPCError } from "@trpc/server";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import type { z } from "zod";
 import { readPeriodAttendancePoints } from "../attendance/attendance.public";
 import { invitationSnapshots, readEvent } from "../events/events.public";
 import {
 	getLiveOperationalIdentity,
+	getUserDisplayNames,
 	readOperationalIdentity,
 	readSrPeriodEvaluationRoster,
 } from "../identity/identity.public";
@@ -463,4 +464,140 @@ export async function correctEvaluationScore(
 
 		return updated;
 	});
+}
+
+export async function listCorrectableScores(
+	db: Database,
+	identity: ActiveIdentity,
+	input: z.input<typeof evaluationPeriodIdSchema>,
+) {
+	if (!canManagePeriodGovernance(identity))
+		fail("FORBIDDEN", "HCO_KADEP_OR_SUPERADMIN_REQUIRED");
+	const { evaluationPeriodId } = evaluationPeriodIdSchema.parse(input);
+
+	return db.transaction(
+		async (tx) => {
+			const live = await readOperationalIdentity(tx, identity.userId);
+			if (!canManagePeriodGovernance(live))
+				fail("FORBIDDEN", "HCO_KADEP_OR_SUPERADMIN_REQUIRED");
+
+			const [period] = await tx
+				.select({
+					id: evaluationPeriods.id,
+					status: evaluationPeriods.status,
+				})
+				.from(evaluationPeriods)
+				.where(eq(evaluationPeriods.id, evaluationPeriodId));
+			if (!period) fail("NOT_FOUND", "EVALUATION_PERIOD_NOT_FOUND");
+			if (period.status === "FINAL") {
+				return { canCorrect: false, items: [] };
+			}
+
+			const [periodEvents, eventScoreRows, deptScoreRows] = await Promise.all([
+				tx
+					.select({
+						id: evaluationPeriodEvents.id,
+						eventId: evaluationPeriodEvents.eventId,
+						category: evaluationPeriodEvents.category,
+					})
+					.from(evaluationPeriodEvents)
+					.where(
+						eq(evaluationPeriodEvents.evaluationPeriodId, evaluationPeriodId),
+					),
+				tx
+					.select()
+					.from(evaluationEventScores)
+					.where(
+						eq(evaluationEventScores.evaluationPeriodId, evaluationPeriodId),
+					)
+					.orderBy(desc(evaluationEventScores.submittedAt)),
+				tx
+					.select()
+					.from(evaluationDepartmentScores)
+					.where(
+						eq(
+							evaluationDepartmentScores.evaluationPeriodId,
+							evaluationPeriodId,
+						),
+					)
+					.orderBy(desc(evaluationDepartmentScores.submittedAt)),
+			]);
+
+			const eventTitleMap = new Map<string, string>();
+			for (const pe of periodEvents) {
+				const [event] = await readEvent(tx, pe.eventId);
+				eventTitleMap.set(pe.id, event?.title ?? pe.eventId);
+			}
+
+			const names = await getUserDisplayNames(tx, [
+				...eventScoreRows.flatMap((row) => [
+					row.targetUserId,
+					row.evaluatorUserId,
+				]),
+				...deptScoreRows.flatMap((row) => [
+					row.targetUserId,
+					row.evaluatorUserId,
+				]),
+			]);
+
+			const items = [
+				...eventScoreRows.map((row) => {
+					const targetName = names.get(row.targetUserId) ?? row.targetUserId;
+					const evaluatorName =
+						names.get(row.evaluatorUserId) ?? row.evaluatorUserId;
+					const title = eventTitleMap.get(row.periodEventId) ?? "Event";
+					const avg =
+						Math.round(
+							((row.commitment +
+								row.teamwork +
+								row.attitude +
+								row.contribution) /
+								4) *
+								100,
+						) / 100;
+					return {
+						id: row.id,
+						scoreType: "EVENT_SCORE" as const,
+						label: `Event: ${title} · ${targetName} (oleh ${evaluatorName} · ${avg})`,
+						targetName,
+						evaluatorName,
+						commitment: row.commitment,
+						teamwork: row.teamwork,
+						attitude: row.attitude,
+						contribution: row.contribution,
+						averageScore: avg,
+					};
+				}),
+				...deptScoreRows.map((row) => {
+					const targetName = names.get(row.targetUserId) ?? row.targetUserId;
+					const evaluatorName =
+						names.get(row.evaluatorUserId) ?? row.evaluatorUserId;
+					const avg =
+						Math.round(
+							((row.commitment +
+								row.teamwork +
+								row.attitude +
+								row.contribution) /
+								4) *
+								100,
+						) / 100;
+					return {
+						id: row.id,
+						scoreType: "DEPARTMENT_SCORE" as const,
+						label: `Dept Q${row.quarterNumber}: ${targetName} (oleh ${evaluatorName} · ${avg})`,
+						targetName,
+						evaluatorName,
+						commitment: row.commitment,
+						teamwork: row.teamwork,
+						attitude: row.attitude,
+						contribution: row.contribution,
+						averageScore: avg,
+					};
+				}),
+			];
+
+			return { canCorrect: true, items };
+		},
+		{ isolationLevel: "repeatable read", accessMode: "read only" },
+	);
 }

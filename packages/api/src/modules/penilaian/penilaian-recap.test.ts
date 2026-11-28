@@ -8,6 +8,7 @@ import { calculatePeriodEvaluations } from "./penilaian-calculator";
 import {
 	correctEvaluationScore,
 	finalizeEvaluationPeriod,
+	listCorrectableScores,
 	openEvaluationRevision,
 } from "./penilaian-recap.service";
 
@@ -390,4 +391,84 @@ test("finalizeEvaluationPeriod blocks incomplete periods and openRevision increm
 	});
 	expect(reopened?.status).toBe("REVISING");
 	expect(reopened?.version).toBe(2);
+});
+
+test("listCorrectableScores returns labeled items for KADEP HCO and hides scores on FINAL periods", async () => {
+	const readSpy = spyOn(
+		identityPublic,
+		"readOperationalIdentity",
+	).mockResolvedValue(hcoKadep);
+	const namesSpy = spyOn(
+		identityPublic,
+		"getUserDisplayNames",
+	).mockResolvedValue(
+		new Map([
+			["sr-1", "SR Satu"],
+			["eval-1", "Evaluator Satu"],
+		]),
+	);
+	try {
+		const finalDb = {
+			transaction: async (run: (t: unknown) => unknown) =>
+				run({
+					select: () => ({
+						from: () => ({
+							where: async () => [{ id: periodId, status: "FINAL" }],
+						}),
+					}),
+				}),
+		} as unknown as Database;
+		const whenFinal = await listCorrectableScores(finalDb, hcoKadep, {
+			evaluationPeriodId: periodId,
+		});
+		expect(whenFinal.canCorrect).toBe(false);
+		expect(whenFinal.items).toHaveLength(0);
+
+		let queryCall = 0;
+		const openDb = {
+			transaction: async (run: (t: unknown) => unknown) =>
+				run({
+					select: () => ({
+						from: () => ({
+							where: () => {
+								queryCall++;
+								if (queryCall === 1) {
+									return Promise.resolve([{ id: periodId, status: "OPEN" }]);
+								}
+								if (queryCall === 2) {
+									return Promise.resolve([]);
+								}
+								return {
+									orderBy: async () =>
+										queryCall === 3
+											? []
+											: [
+													{
+														id: scoreId,
+														quarterNumber: 2,
+														targetUserId: "sr-1",
+														evaluatorUserId: "eval-1",
+														commitment: 80,
+														teamwork: 84,
+														attitude: 88,
+														contribution: 92,
+													},
+												],
+								};
+							},
+						}),
+					}),
+				}),
+		} as unknown as Database;
+		const whenOpen = await listCorrectableScores(openDb, hcoKadep, {
+			evaluationPeriodId: periodId,
+		});
+		expect(whenOpen.canCorrect).toBe(true);
+		expect(whenOpen.items).toHaveLength(1);
+		expect(whenOpen.items[0]?.label).toContain("Dept Q2: SR Satu");
+		expect(whenOpen.items[0]?.averageScore).toBe(86);
+	} finally {
+		readSpy.mockRestore();
+		namesSpy.mockRestore();
+	}
 });

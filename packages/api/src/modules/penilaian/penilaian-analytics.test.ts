@@ -1,6 +1,16 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import type { ActiveIdentity } from "@resora/auth/sr-access";
 import type { Database } from "@resora/db";
+import {
+	evaluationAttendanceFallbacks,
+	evaluationDepartmentScores,
+	evaluationEventScores,
+	evaluationGformResponses,
+	evaluationPeriodEvents,
+	evaluationPeriods,
+	evaluationPointTransactions,
+	evaluationResultSnapshots,
+} from "@resora/db/schema/penilaian";
 import * as identityPublic from "../identity/identity.public";
 import {
 	exportEvaluationRecapCsv,
@@ -99,28 +109,83 @@ const snapshots = [
 
 let liveIdentity: ActiveIdentity = sr1;
 let readSpy: ReturnType<typeof spyOn>;
+let namesSpy: ReturnType<typeof spyOn>;
 
 beforeEach(() => {
 	liveIdentity = sr1;
 	readSpy = spyOn(identityPublic, "readOperationalIdentity").mockImplementation(
 		async () => liveIdentity,
 	);
+	namesSpy = spyOn(identityPublic, "getUserDisplayNames").mockResolvedValue(
+		new Map([["eval-1", "Evaluator Satu"]]),
+	);
 });
 
 afterEach(() => {
 	readSpy.mockRestore();
+	namesSpy.mockRestore();
 });
 
+const mockEventScores = [
+	{
+		id: "es-1",
+		evaluationPeriodId: periodId,
+		periodEventId: "pe-1",
+		evaluatorUserId: "eval-1",
+		targetUserId: "sr-1",
+		commitment: 90,
+		teamwork: 88,
+		attitude: 92,
+		contribution: 90,
+		comment: "Kinerja event sangat baik",
+	},
+];
+
+const mockDeptScores = [
+	{
+		id: "ds-1",
+		evaluationPeriodId: periodId,
+		quarterNumber: 1,
+		evaluatorUserId: "eval-1",
+		targetUserId: "sr-1",
+		commitment: 90,
+		teamwork: 90,
+		attitude: 90,
+		contribution: 90,
+		comment: "Catatan departemen rahasia HCO",
+	},
+];
+
+const mockGform = [
+	{
+		id: "gf-1",
+		evaluationPeriodId: periodId,
+		sourceType: "SR_MABA" as const,
+		cycleNumber: 1,
+		respondentKey: "resp-rahasia",
+		respondentRole: "MABA" as const,
+		targetUserId: "sr-1",
+		totalScore: 85,
+		comment: "Sangat membantu di gedung",
+	},
+];
+
 function makeFinalDb(periodRow: Record<string, unknown> = finalPeriod) {
-	let call = 0;
+	const tableData = (table: unknown) => {
+		if (table === evaluationPeriods) return [periodRow];
+		if (table === evaluationResultSnapshots) return snapshots;
+		if (table === evaluationPeriodEvents) return [];
+		if (table === evaluationEventScores) return mockEventScores;
+		if (table === evaluationDepartmentScores) return mockDeptScores;
+		if (table === evaluationAttendanceFallbacks) return [];
+		if (table === evaluationPointTransactions) return [];
+		if (table === evaluationGformResponses) return mockGform;
+		return [];
+	};
 	const tx = {
 		select: () => ({
-			from: () => ({
-				where: () => {
-					call++;
-					if (call === 1) return Promise.resolve([periodRow]);
-					return Promise.resolve(snapshots);
-				},
+			from: (table: unknown) => ({
+				where: async () => tableData(table),
 				orderBy: () => ({
 					limit: async () => [periodRow],
 				}),
@@ -195,13 +260,43 @@ test("finalized recap, detail, and CSV export enforce per-role scope and CSV for
 	expect(csv.content).toContain(`"'=CMD|calc"`);
 	expect(csv.content).not.toContain("0001002");
 
-	// KADEP sees final analytics across all SR.
+	// KADEP sees final analytics across all SR, without evaluator identity or comments.
 	liveIdentity = rndKadep;
 	const analytics = await getEvaluationAnalytics(makeFinalDb(), rndKadep, {
 		evaluationPeriodId: periodId,
 	});
 	expect(analytics.summary.totalSr).toBe(2);
 	expect(analytics.summary.averageTotalScore).toBe(129.25);
+
+	const kadepDetail = await getEvaluationMemberDetail(makeFinalDb(), rndKadep, {
+		evaluationPeriodId: periodId,
+		targetUserId: "sr-1",
+	});
+	expect(kadepDetail.member.detailed.departmentQuarters).toHaveLength(1);
+	expect(kadepDetail.member.detailed.evaluatorDetails).toBeNull();
+
+	// HCO sees evaluator names and comments on memberDetail.
+	liveIdentity = hcoMember;
+	const hcoDetail = await getEvaluationMemberDetail(makeFinalDb(), hcoMember, {
+		evaluationPeriodId: periodId,
+		targetUserId: "sr-1",
+	});
+	expect(hcoDetail.member.detailed.evaluatorDetails).not.toBeNull();
+	expect(
+		hcoDetail.member.detailed.evaluatorDetails?.eventScores[0]?.evaluatorName,
+	).toBe("Evaluator Satu");
+	expect(
+		hcoDetail.member.detailed.evaluatorDetails?.gformResponses[0]?.comment,
+	).toBe("Sangat membantu di gedung");
+
+	// Regular SR final ownRecap gets detailed breakdown without evaluator identity/comments.
+	liveIdentity = sr1;
+	const ownFinal = await getOwnEvaluationRecap(makeFinalDb(), sr1, {
+		evaluationPeriodId: periodId,
+	});
+	expect(ownFinal.status).toBe("FINAL");
+	expect(ownFinal.recap?.detailed.departmentQuarters[0]?.rawAverage).toBe(90);
+	expect(ownFinal.recap?.detailed.evaluatorDetails).toBeNull();
 });
 
 test("dashboardSummary returns personal final score and management summary without client calculation", async () => {

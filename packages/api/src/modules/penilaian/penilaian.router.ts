@@ -61,6 +61,7 @@ import {
 	correctEvaluationScore,
 	finalizeEvaluationPeriod,
 	getPeriodCompletenessStatus,
+	listCorrectableScores,
 	openEvaluationRevision,
 } from "./penilaian-recap.service";
 import {
@@ -190,6 +191,11 @@ export const penilaianRouter = router({
 		.input(openEvaluationRevisionSchema)
 		.mutation(({ ctx, input }) =>
 			openEvaluationRevision(ctx.db, ctx.identity, input),
+		),
+	listCorrectableScores: protectedProcedure
+		.input(evaluationPeriodIdSchema)
+		.query(({ ctx, input }) =>
+			listCorrectableScores(ctx.db, ctx.identity, input),
 		),
 	correctScore: protectedProcedure
 		.input(correctEvaluationScoreSchema)
