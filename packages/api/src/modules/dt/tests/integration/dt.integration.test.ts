@@ -14,13 +14,19 @@ import {
 	buildings,
 	srPeriodMemberships,
 	srPeriods,
+	systemPrivileges,
+	userProfiles,
 } from "@resora/db/schema/identity";
-import { eq } from "drizzle-orm";
+import { eq, ne } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import {
+	adminArchiveDtAccount,
+	adminResetDtAccountPassword,
+	adminUpdateDtAccount,
 	getDtMemberDetail,
 	getDtParticipationRecap,
 	getMyDtPortal,
+	listAdminDtAccounts,
 } from "../../../../application/dt";
 import {
 	createEvent,
@@ -63,9 +69,11 @@ if (!TEST_DB_URL) {
 	const db = createDb({ DATABASE_URL: TEST_DB_URL });
 
 	let buildingId = "";
+	let buildingId2 = "";
 	let adaptifSr!: NonNullable<Awaited<ReturnType<typeof getActiveIdentity>>>;
 	let hcoSr!: NonNullable<Awaited<ReturnType<typeof getActiveIdentity>>>;
 	let rndSr!: NonNullable<Awaited<ReturnType<typeof getActiveIdentity>>>;
+	let superadminSr!: NonNullable<Awaited<ReturnType<typeof getActiveIdentity>>>;
 
 	async function provisionActiveSr(input: {
 		name: string;
@@ -74,6 +82,7 @@ if (!TEST_DB_URL) {
 		departmentCode: string;
 		positionCode: string;
 		periodId: string;
+		grantSuperadmin?: boolean;
 	}) {
 		const userId = await db.transaction(async (tx) => {
 			const ctx = await createAuth(authConfig, tx).$context;
@@ -95,6 +104,17 @@ if (!TEST_DB_URL) {
 			await tx
 				.insert(srPeriodMemberships)
 				.values({ userId: id, periodId: input.periodId });
+			if (input.grantSuperadmin) {
+				await tx
+					.update(userProfiles)
+					.set({ mustChangePassword: false })
+					.where(eq(userProfiles.userId, id));
+				await tx.insert(systemPrivileges).values({
+					userId: id,
+					privilegeCode: "SUPERADMIN",
+					grantedByUserId: id,
+				});
+			}
 			return id;
 		});
 		const identity = await getActiveIdentity(db, userId);
@@ -115,6 +135,11 @@ if (!TEST_DB_URL) {
 			.where(eq(buildings.code, "A"));
 		if (!bldg) throw new Error("Missing building A");
 		buildingId = bldg.id;
+		const [bldg2] = await db
+			.select({ id: buildings.id })
+			.from(buildings)
+			.where(ne(buildings.id, bldg.id));
+		buildingId2 = bldg2?.id ?? bldg.id;
 
 		const [period] = await db
 			.insert(srPeriods)
@@ -150,6 +175,15 @@ if (!TEST_DB_URL) {
 			positionCode: "ANGGOTA",
 			periodId: period.id,
 		});
+		superadminSr = await provisionActiveSr({
+			name: "Superadmin Operator",
+			nim: `9904${randomUUID().slice(0, 6)}`,
+			email: `sa-${randomUUID().slice(0, 6)}@example.invalid`,
+			departmentCode: "INTI",
+			positionCode: "KETUM",
+			periodId: period.id,
+			grantSuperadmin: true,
+		});
 	});
 
 	afterAll(async () => {
@@ -167,6 +201,7 @@ if (!TEST_DB_URL) {
 				nim: candidateNim,
 				email: candidateEmail,
 				periodName: "2026/2027",
+				buildingId,
 				registrationNotes: "",
 			}),
 		).rejects.toMatchObject({ code: "FORBIDDEN" });
@@ -177,7 +212,6 @@ if (!TEST_DB_URL) {
 			nim: candidateNim,
 			email: candidateEmail,
 			periodName: "2026/2027",
-			departmentCode: "ADAPTIF",
 			buildingId,
 			workProgram: "Pendampingan Maba",
 			registrationNotes: "Lolos seleksi berkas",
@@ -190,7 +224,6 @@ if (!TEST_DB_URL) {
 			membershipId: registered.membershipId,
 			startsOn: "2026-01-01",
 			endsOn: "2026-12-31",
-			departmentCode: "ADAPTIF",
 			buildingId,
 			workProgram: "Pendampingan Maba",
 			reason: "Lulus wawancara",
@@ -204,13 +237,12 @@ if (!TEST_DB_URL) {
 		}
 		expect(dtIdentity.periodName).toBe("2026/2027");
 
-		// AC04: Update assignment with mandatory reason writes history & audit
+		// AC04: Update building assignment with mandatory reason writes history & audit
 		await updateDtAssignment(db, adaptifSr, {
 			membershipId: registered.membershipId,
-			departmentCode: "SOSIAL",
-			buildingId,
-			workProgram: "Bakti Sosial Asrama",
-			reason: "Rotasi program kerja triwulan 2",
+			buildingId: buildingId2,
+			workProgram: "Pendampingan Gedung",
+			reason: "Rotasi gedung triwulan 2",
 		});
 
 		// AC05: Extend period
@@ -341,7 +373,6 @@ if (!TEST_DB_URL) {
 		const recap = await getDtParticipationRecap(db, adaptifSr, {
 			search: candidateNim,
 			periodName: "",
-			departmentCode: "",
 			limit: 20,
 			offset: 0,
 		});
@@ -354,6 +385,64 @@ if (!TEST_DB_URL) {
 			registered.membershipId,
 		);
 		expect(detail.audits.length).toBeGreaterThanOrEqual(4);
+
+		// SUPERADMIN manages DT accounts (non-superadmin ADAPTIF rejected on admin account API)
+		await expect(listAdminDtAccounts(db, adaptifSr)).rejects.toMatchObject({
+			code: "FORBIDDEN",
+		});
+		const adminAccounts = await listAdminDtAccounts(db, superadminSr);
+		const targetAccount = adminAccounts.accounts.find(
+			(a) => a.userId === registered.userId,
+		);
+		expect(targetAccount?.nim).toBe(candidateNim);
+		if (!targetAccount) throw new Error("Missing DT admin account row");
+		await adminUpdateDtAccount(db, superadminSr, {
+			userId: targetAccount.userId,
+			name: "Budi Dorm Team Edited",
+			email: targetAccount.email,
+			buildingId,
+			isActive: true,
+			expectedUpdatedAt: targetAccount.updatedAt.toISOString(),
+		});
+		const adminAccountsAfterEdit = await listAdminDtAccounts(db, superadminSr);
+		const editedRow = adminAccountsAfterEdit.accounts.find(
+			(a) => a.userId === registered.userId,
+		);
+		expect(editedRow?.name).toBe("Budi Dorm Team Edited");
+		expect(editedRow?.buildingId).toBe(buildingId);
+		const adminResetRes = await adminResetDtAccountPassword(
+			db,
+			superadminSr,
+			authConfig,
+			{ userId: registered.userId },
+		);
+		expect(adminResetRes.temporaryPassword.length).toBeGreaterThan(10);
+		const adminAccountsAfterReset = await listAdminDtAccounts(db, superadminSr);
+		const rowAfterReset = adminAccountsAfterReset.accounts.find(
+			(a) => a.userId === registered.userId,
+		);
+		if (!rowAfterReset) throw new Error("Missing row after password reset");
+		await adminArchiveDtAccount(db, superadminSr, {
+			userId: rowAfterReset.userId,
+			expectedUpdatedAt: rowAfterReset.updatedAt.toISOString(),
+		});
+		expect(await getActiveIdentity(db, registered.userId)).toBeNull();
+		const adminAccountsAfterArchive = await listAdminDtAccounts(
+			db,
+			superadminSr,
+		);
+		const archivedRow = adminAccountsAfterArchive.accounts.find(
+			(a) => a.userId === registered.userId,
+		);
+		expect(archivedRow?.isActive).toBe(false);
+		if (!archivedRow) throw new Error("Missing archived row");
+		await adminUpdateDtAccount(db, superadminSr, {
+			userId: archivedRow.userId,
+			name: "Budi Dorm Team Edited",
+			email: archivedRow.email,
+			isActive: true,
+			expectedUpdatedAt: archivedRow.updatedAt.toISOString(),
+		});
 
 		// Reset password rotates & revokes sessions
 		await db.insert(session).values({
@@ -393,7 +482,7 @@ if (!TEST_DB_URL) {
 			registered.membershipId,
 		);
 		expect(archivedDetail.membership.effectiveStatus).toBe("ARCHIVED");
-		expect(archivedDetail.assignmentHistory.length).toBe(2);
+		expect(archivedDetail.assignmentHistory.length).toBe(3);
 
 		// AC10: Append-only audit trigger blocks mutation
 		await expect(
@@ -411,6 +500,7 @@ if (!TEST_DB_URL) {
 			nim: rejNim,
 			email: `rej-${rejNim}@example.invalid`,
 			periodName: "2026/2027",
+			buildingId,
 			registrationNotes: "",
 		});
 		await rejectDtCandidate(db, adaptifSr, {
@@ -421,7 +511,6 @@ if (!TEST_DB_URL) {
 			await listDtMembers(db, adaptifSr, {
 				search: rejNim,
 				periodName: "",
-				departmentCode: "",
 				limit: 20,
 				offset: 0,
 			})

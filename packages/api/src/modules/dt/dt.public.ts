@@ -9,11 +9,13 @@ export {
 	extendDtPeriod,
 	getDtMembershipCore,
 	getDtReferences,
+	getLatestDtMembershipsByUserIds,
 	getOwnDtMembershipRecords,
 	listDtMembers,
 	registerDtCandidate,
 	rejectDtCandidate,
 	resetDtPassword,
+	syncAdminDtBuildingAssignment,
 	updateDtAssignment,
 } from "./dt.service";
 export { authorizeDtManager, authorizeDtPersonal } from "./dt-policy";

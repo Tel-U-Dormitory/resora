@@ -7,14 +7,12 @@ import {
 	dtMemberships,
 } from "@resora/db/schema/dt";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import type { z } from "zod";
 import {
 	findExistingIdentityByNimOrEmail,
 	getActiveBuilding,
 	getActiveBuildings,
-	getActiveDepartment,
-	getActiveDepartments,
 	getDtAccountIdentities,
 	getLiveOperationalIdentity,
 	getUserDisplayNames,
@@ -61,44 +59,31 @@ async function lockMembership(
 	return row;
 }
 
-async function validateAssignmentReferences(
+async function validateBuildingReference(
 	tx: DatabaseTransaction,
-	departmentCode: string | null | undefined,
 	buildingId: string | null | undefined,
 ) {
-	const normalizedDept = departmentCode?.trim() || null;
-	const normalizedBuilding = buildingId ?? null;
-	if (normalizedDept) {
-		const dept = await getActiveDepartment(tx, normalizedDept, true);
-		if (!dept) {
-			throw new TRPCError({
-				code: "BAD_REQUEST",
-				message: "DT_INVALID_DEPARTMENT",
-			});
-		}
+	if (!buildingId) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "DT_BUILDING_REQUIRED",
+		});
 	}
-	if (normalizedBuilding) {
-		const bldg = await getActiveBuilding(tx, normalizedBuilding, true);
-		if (!bldg) {
-			throw new TRPCError({
-				code: "BAD_REQUEST",
-				message: "DT_INVALID_BUILDING",
-			});
-		}
+	const bldg = await getActiveBuilding(tx, buildingId, true);
+	if (!bldg) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "DT_INVALID_BUILDING",
+		});
 	}
-	return {
-		departmentCode: normalizedDept,
-		buildingId: normalizedBuilding,
-	};
+	return bldg.id;
 }
 
 function assignmentSnapshot(row: {
-	departmentCode: string | null;
 	buildingId: string | null;
 	workProgram: string | null;
 }) {
 	return {
-		departmentCode: row.departmentCode,
 		buildingId: row.buildingId,
 		workProgram: row.workProgram,
 	};
@@ -143,11 +128,8 @@ async function withManagerWrite<T>(
 
 export async function getDtReferences(db: Database, identity: ActiveIdentity) {
 	requireManager(identity);
-	const [departments, buildings] = await Promise.all([
-		getActiveDepartments(db),
-		getActiveBuildings(db),
-	]);
-	return { departments, buildings };
+	const buildings = await getActiveBuildings(db);
+	return { buildings };
 }
 
 export type EnrichedDtMembership = {
@@ -162,8 +144,6 @@ export type EnrichedDtMembership = {
 	effectiveStatus: ReturnType<typeof computeEffectiveDtStatus>;
 	startsOn: string | null;
 	endsOn: string | null;
-	departmentCode: string | null;
-	departmentName: string | null;
 	buildingId: string | null;
 	buildingCode: string | null;
 	buildingName: string | null;
@@ -183,16 +163,14 @@ export async function enrichDtMemberships(
 	rows: (typeof dtMemberships.$inferSelect)[],
 ): Promise<EnrichedDtMembership[]> {
 	if (!rows.length) return [];
-	const [accounts, departments, buildings] = await Promise.all([
+	const [accounts, buildings] = await Promise.all([
 		getDtAccountIdentities(
 			db,
 			rows.map((r) => r.userId),
 		),
-		getActiveDepartments(db),
 		getActiveBuildings(db),
 	]);
 	const accountById = new Map(accounts.map((a) => [a.userId, a]));
-	const deptByCode = new Map(departments.map((d) => [d.code, d.name]));
 	const bldgById = new Map(buildings.map((b) => [b.id, b]));
 	const today = jakartaTodayDateString();
 	return rows.map((row) => {
@@ -210,10 +188,6 @@ export async function enrichDtMemberships(
 			effectiveStatus: computeEffectiveDtStatus(row, today),
 			startsOn: row.startsOn,
 			endsOn: row.endsOn,
-			departmentCode: row.departmentCode,
-			departmentName: row.departmentCode
-				? (deptByCode.get(row.departmentCode) ?? row.departmentCode)
-				: null,
 			buildingId: row.buildingId,
 			buildingCode: bldg?.code ?? null,
 			buildingName: bldg?.name ?? null,
@@ -257,9 +231,6 @@ export async function listDtMembers(
 			return false;
 		}
 		if (input.periodName && item.periodName !== input.periodName) {
-			return false;
-		}
-		if (input.departmentCode && item.departmentCode !== input.departmentCode) {
 			return false;
 		}
 		if (input.buildingId && item.buildingId !== input.buildingId) {
@@ -310,26 +281,24 @@ export async function getDtMembershipCore(
 			message: "DT_MEMBERSHIP_NOT_FOUND",
 		});
 	}
-	const [assignments, audits, departments, buildings, userPeriods] =
-		await Promise.all([
-			db
-				.select()
-				.from(dtAssignmentHistories)
-				.where(eq(dtAssignmentHistories.membershipId, membershipId))
-				.orderBy(desc(dtAssignmentHistories.effectiveFrom)),
-			db
-				.select()
-				.from(dtAudits)
-				.where(eq(dtAudits.membershipId, membershipId))
-				.orderBy(desc(dtAudits.createdAt)),
-			getActiveDepartments(db),
-			getActiveBuildings(db),
-			db
-				.select()
-				.from(dtMemberships)
-				.where(eq(dtMemberships.userId, row.userId))
-				.orderBy(desc(dtMemberships.createdAt)),
-		]);
+	const [assignments, audits, buildings, userPeriods] = await Promise.all([
+		db
+			.select()
+			.from(dtAssignmentHistories)
+			.where(eq(dtAssignmentHistories.membershipId, membershipId))
+			.orderBy(desc(dtAssignmentHistories.effectiveFrom)),
+		db
+			.select()
+			.from(dtAudits)
+			.where(eq(dtAudits.membershipId, membershipId))
+			.orderBy(desc(dtAudits.createdAt)),
+		getActiveBuildings(db),
+		db
+			.select()
+			.from(dtMemberships)
+			.where(eq(dtMemberships.userId, row.userId))
+			.orderBy(desc(dtMemberships.createdAt)),
+	]);
 
 	const actorIds = [
 		row.registeredByUserId,
@@ -340,7 +309,6 @@ export async function getDtMembershipCore(
 		...audits.map((a) => a.actorUserId),
 	].filter((id): id is string => Boolean(id));
 	const actorNames = await getUserDisplayNames(db, actorIds);
-	const deptByCode = new Map(departments.map((d) => [d.code, d.name]));
 	const bldgById = new Map(buildings.map((b) => [b.id, b.name]));
 	const today = jakartaTodayDateString();
 
@@ -360,10 +328,6 @@ export async function getDtMembershipCore(
 		},
 		assignmentHistory: assignments.map((a) => ({
 			id: a.id,
-			departmentCode: a.departmentCode,
-			departmentName: a.departmentCode
-				? (deptByCode.get(a.departmentCode) ?? a.departmentCode)
-				: null,
 			buildingId: a.buildingId,
 			buildingName: a.buildingId ? (bldgById.get(a.buildingId) ?? null) : null,
 			workProgram: a.workProgram,
@@ -379,10 +343,6 @@ export async function getDtMembershipCore(
 			effectiveStatus: computeEffectiveDtStatus(p, today),
 			startsOn: p.startsOn,
 			endsOn: p.endsOn,
-			departmentCode: p.departmentCode,
-			departmentName: p.departmentCode
-				? (deptByCode.get(p.departmentCode) ?? p.departmentCode)
-				: null,
 			buildingName: p.buildingId ? (bldgById.get(p.buildingId) ?? null) : null,
 			workProgram: p.workProgram,
 			createdAt: p.createdAt,
@@ -411,21 +371,13 @@ export async function getOwnDtMembershipRecords(db: Database, userId: string) {
 		.from(dtAssignmentHistories)
 		.where(eq(dtAssignmentHistories.userId, userId))
 		.orderBy(desc(dtAssignmentHistories.effectiveFrom));
-	const [departments, buildings] = await Promise.all([
-		getActiveDepartments(db),
-		getActiveBuildings(db),
-	]);
-	const deptByCode = new Map(departments.map((d) => [d.code, d.name]));
+	const buildings = await getActiveBuildings(db);
 	const bldgById = new Map(buildings.map((b) => [b.id, b.name]));
 	return {
 		memberships: enriched,
 		assignmentHistory: assignments.map((a) => ({
 			id: a.id,
 			membershipId: a.membershipId,
-			departmentCode: a.departmentCode,
-			departmentName: a.departmentCode
-				? (deptByCode.get(a.departmentCode) ?? a.departmentCode)
-				: null,
 			buildingId: a.buildingId,
 			buildingName: a.buildingId ? (bldgById.get(a.buildingId) ?? null) : null,
 			workProgram: a.workProgram,
@@ -447,11 +399,7 @@ export async function registerDtCandidate(
 		await tx.execute(
 			sql`SELECT pg_advisory_xact_lock(hashtext('resora:dt-provisioning'))`,
 		);
-		const refs = await validateAssignmentReferences(
-			tx,
-			input.departmentCode,
-			input.buildingId,
-		);
+		const validBuildingId = await validateBuildingReference(tx, input.buildingId);
 		const matches = await findExistingIdentityByNimOrEmail(
 			tx,
 			input.nim,
@@ -510,8 +458,8 @@ export async function registerDtCandidate(
 				userId: targetUserId,
 				periodName: input.periodName,
 				status: "CANDIDATE",
-				departmentCode: refs.departmentCode,
-				buildingId: refs.buildingId,
+				departmentCode: null,
+				buildingId: validBuildingId,
 				workProgram: input.workProgram ?? null,
 				registrationNotes: input.registrationNotes,
 				registeredByUserId: live.userId,
@@ -561,17 +509,13 @@ export async function activateDtMembership(
 					message: "DT_NOT_CANDIDATE",
 				});
 			}
-			const nextDept =
-				input.departmentCode !== undefined
-					? input.departmentCode
-					: existing.departmentCode;
 			const nextBldg =
 				input.buildingId !== undefined ? input.buildingId : existing.buildingId;
 			const nextWorkProgram =
 				input.workProgram !== undefined
 					? input.workProgram
 					: existing.workProgram;
-			const refs = await validateAssignmentReferences(tx, nextDept, nextBldg);
+			const validBuildingId = await validateBuildingReference(tx, nextBldg);
 			const nextPeriodName = input.periodName ?? existing.periodName;
 			const now = new Date();
 
@@ -589,8 +533,8 @@ export async function activateDtMembership(
 					periodName: nextPeriodName,
 					startsOn: input.startsOn,
 					endsOn: input.endsOn,
-					departmentCode: refs.departmentCode,
-					buildingId: refs.buildingId,
+					departmentCode: null,
+					buildingId: validBuildingId,
 					workProgram: nextWorkProgram ?? null,
 					reviewedByUserId: live.userId,
 					reviewedAt: now,
@@ -600,18 +544,16 @@ export async function activateDtMembership(
 				.returning();
 			if (!updated) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
-			if (refs.departmentCode || refs.buildingId || nextWorkProgram) {
-				await tx.insert(dtAssignmentHistories).values({
-					membershipId: updated.id,
-					userId: existing.userId,
-					departmentCode: refs.departmentCode,
-					buildingId: refs.buildingId,
-					workProgram: nextWorkProgram ?? null,
-					reason: input.reason,
-					assignedByUserId: live.userId,
-					effectiveFrom: now,
-				});
-			}
+			await tx.insert(dtAssignmentHistories).values({
+				membershipId: updated.id,
+				userId: existing.userId,
+				departmentCode: null,
+				buildingId: validBuildingId,
+				workProgram: nextWorkProgram ?? null,
+				reason: input.reason,
+				assignedByUserId: live.userId,
+				effectiveFrom: now,
+			});
 
 			await tx.insert(dtAudits).values({
 				membershipId: updated.id,
@@ -913,17 +855,13 @@ export async function updateDtAssignment(
 					message: "DT_NOT_ACTIVE",
 				});
 			}
-			const nextDept =
-				input.departmentCode !== undefined
-					? input.departmentCode
-					: existing.departmentCode;
 			const nextBldg =
 				input.buildingId !== undefined ? input.buildingId : existing.buildingId;
 			const nextWorkProgram =
 				input.workProgram !== undefined
 					? input.workProgram
 					: existing.workProgram;
-			const refs = await validateAssignmentReferences(tx, nextDept, nextBldg);
+			const validBuildingId = await validateBuildingReference(tx, nextBldg);
 			const now = new Date();
 
 			await tx
@@ -939,8 +877,8 @@ export async function updateDtAssignment(
 			await tx.insert(dtAssignmentHistories).values({
 				membershipId: existing.id,
 				userId: existing.userId,
-				departmentCode: refs.departmentCode,
-				buildingId: refs.buildingId,
+				departmentCode: null,
+				buildingId: validBuildingId,
 				workProgram: nextWorkProgram ?? null,
 				reason: input.reason,
 				assignedByUserId: live.userId,
@@ -950,8 +888,8 @@ export async function updateDtAssignment(
 			const [updated] = await tx
 				.update(dtMemberships)
 				.set({
-					departmentCode: refs.departmentCode,
-					buildingId: refs.buildingId,
+					departmentCode: null,
+					buildingId: validBuildingId,
 					workProgram: nextWorkProgram ?? null,
 				})
 				.where(eq(dtMemberships.id, existing.id))
@@ -1090,4 +1028,84 @@ export async function readActiveDtDirectory(
 		});
 	}
 	return result.sort((a, b) => a.name.localeCompare(b.name, "id"));
+}
+
+export async function getLatestDtMembershipsByUserIds(
+	db: Database | DatabaseTransaction,
+	userIds: readonly string[],
+) {
+	if (!userIds.length) return new Map<string, EnrichedDtMembership>();
+	const rows = await db
+		.select()
+		.from(dtMemberships)
+		.where(inArray(dtMemberships.userId, [...new Set(userIds)]))
+		.orderBy(desc(dtMemberships.createdAt), desc(dtMemberships.id));
+	const enriched = await enrichDtMemberships(db, rows);
+	const map = new Map<string, EnrichedDtMembership>();
+	for (const item of enriched) {
+		const prev = map.get(item.userId);
+		if (!prev || (item.status === "ACTIVE" && prev.status !== "ACTIVE")) {
+			map.set(item.userId, item);
+		}
+	}
+	return map;
+}
+
+export async function syncAdminDtBuildingAssignment(
+	tx: DatabaseTransaction,
+	actorUserId: string,
+	userId: string,
+	buildingId: string,
+) {
+	const validBuildingId = await validateBuildingReference(tx, buildingId);
+	const [membership] = await tx
+		.select()
+		.from(dtMemberships)
+		.where(
+			and(
+				eq(dtMemberships.userId, userId),
+				inArray(dtMemberships.status, ["ACTIVE", "CANDIDATE"]),
+			),
+		)
+		.orderBy(desc(dtMemberships.createdAt))
+		.limit(1)
+		.for("update");
+	if (!membership || membership.buildingId === validBuildingId) return;
+	const now = new Date();
+	if (membership.status === "ACTIVE") {
+		await tx
+			.update(dtAssignmentHistories)
+			.set({ effectiveTo: now })
+			.where(
+				and(
+					eq(dtAssignmentHistories.membershipId, membership.id),
+					isNull(dtAssignmentHistories.effectiveTo),
+				),
+			);
+		await tx.insert(dtAssignmentHistories).values({
+			membershipId: membership.id,
+			userId,
+			departmentCode: null,
+			buildingId: validBuildingId,
+			workProgram: membership.workProgram,
+			reason: "Pembaruan gedung oleh SUPERADMIN",
+			assignedByUserId: actorUserId,
+			effectiveFrom: now,
+		});
+	}
+	const [updated] = await tx
+		.update(dtMemberships)
+		.set({ departmentCode: null, buildingId: validBuildingId })
+		.where(eq(dtMemberships.id, membership.id))
+		.returning();
+	if (!updated) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+	await tx.insert(dtAudits).values({
+		membershipId: updated.id,
+		targetUserId: userId,
+		actorUserId,
+		action: "ASSIGNMENT_UPDATED",
+		reason: "Pembaruan gedung oleh SUPERADMIN",
+		beforeState: assignmentSnapshot(membership),
+		afterState: assignmentSnapshot(updated),
+	});
 }

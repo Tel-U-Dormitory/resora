@@ -1,12 +1,19 @@
 import { z } from "zod";
 import {
+	adminArchiveDtAccount,
+	adminResetDtAccountPassword,
+	adminUpdateDtAccount,
 	getDtMemberDetail,
 	getDtParticipationRecap,
 	getMyDtPortal,
+	listAdminDtAccounts,
 } from "../application/dt";
 import { protectedProcedure, router } from "../index";
 import {
 	activateDtMembershipSchema,
+	adminArchiveDtAccountSchema,
+	adminResetDtAccountPasswordSchema,
+	adminUpdateDtAccountSchema,
 	archiveDtMembershipSchema,
 	dtMembershipIdSchema,
 	endDtMembershipSchema,
@@ -90,5 +97,28 @@ export const dtRouter = router({
 		.input(dtMembershipIdSchema)
 		.mutation(({ ctx, input }) =>
 			resetDtPassword(ctx.db, ctx.identity, ctx.authConfig, input.membershipId),
+		),
+	adminListAccounts: protectedProcedure
+		.input(z.void())
+		.query(({ ctx }) => listAdminDtAccounts(ctx.db, ctx.identity)),
+	adminUpdateAccount: protectedProcedure
+		.input(adminUpdateDtAccountSchema)
+		.mutation(({ ctx, input }) =>
+			adminUpdateDtAccount(ctx.db, ctx.identity, input),
+		),
+	adminArchiveAccount: protectedProcedure
+		.input(adminArchiveDtAccountSchema)
+		.mutation(({ ctx, input }) =>
+			adminArchiveDtAccount(ctx.db, ctx.identity, input),
+		),
+	adminResetPassword: protectedProcedure
+		.input(adminResetDtAccountPasswordSchema)
+		.mutation(({ ctx, input }) =>
+			adminResetDtAccountPassword(
+				ctx.db,
+				ctx.identity,
+				ctx.authConfig,
+				input,
+			),
 		),
 });

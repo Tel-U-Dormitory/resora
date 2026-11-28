@@ -9,6 +9,7 @@ import type { Database, DatabaseTransaction } from "@resora/db";
 import { isValidSrAssignment } from "@resora/db/organization";
 import { account, session, user } from "@resora/db/schema/auth";
 import {
+	accountAuditLogs,
 	buildings,
 	departments,
 	positions,
@@ -20,6 +21,7 @@ import {
 	userProfiles,
 } from "@resora/db/schema/identity";
 import { srTenureStatus } from "@resora/db/sr-tenure";
+import { TRPCError } from "@trpc/server";
 import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { canManageInternalAttendanceManually } from "./identity-policy";
 import { eligibleForManualGrant } from "./permission-catalog";
@@ -526,6 +528,150 @@ export async function revokeUserSessions(
 	userId: string,
 ) {
 	await tx.delete(session).where(eq(session.userId, userId));
+}
+
+export async function listAllDtAccountProfiles(
+	db: Database | DatabaseTransaction,
+) {
+	return db
+		.select({
+			userId: user.id,
+			updatedAt: userProfiles.updatedAt,
+			nim: user.username,
+			name: user.name,
+			email: user.email,
+			isActive: userProfiles.isActive,
+			mustChangePassword: userProfiles.mustChangePassword,
+		})
+		.from(user)
+		.innerJoin(userProfiles, eq(userProfiles.userId, user.id))
+		.where(eq(userProfiles.actor, "DT"))
+		.orderBy(asc(user.username), asc(user.id));
+}
+
+export async function maintainDtUserAccountTx(
+	tx: DatabaseTransaction,
+	actorUserId: string,
+	input:
+		| {
+				kind: "edit";
+				userId: string;
+				name: string;
+				email: string;
+				isActive: boolean;
+				expectedUpdatedAt: string;
+		  }
+		| {
+				kind: "archive";
+				userId: string;
+				expectedUpdatedAt: string;
+		  },
+) {
+	const [target] = await tx
+		.select()
+		.from(userProfiles)
+		.where(
+			and(eq(userProfiles.userId, input.userId), eq(userProfiles.actor, "DT")),
+		)
+		.for("update");
+	if (!target) {
+		throw new TRPCError({ code: "NOT_FOUND", message: "DT_ACCOUNT_NOT_FOUND" });
+	}
+	if (target.updatedAt.toISOString() !== input.expectedUpdatedAt) {
+		throw new TRPCError({
+			code: "CONFLICT",
+			message:
+				"Data akun DT sudah berubah. Perbarui data sebelum mencoba lagi.",
+		});
+	}
+	const [before] = await tx
+		.select({ name: user.name, email: user.email })
+		.from(user)
+		.where(eq(user.id, input.userId));
+	if (!before) {
+		throw new TRPCError({ code: "NOT_FOUND", message: "DT_ACCOUNT_NOT_FOUND" });
+	}
+	if (input.kind === "edit") {
+		const normalizedEmail = input.email.trim().toLowerCase();
+		const [duplicate] = await tx
+			.select({ id: user.id })
+			.from(user)
+			.where(eq(sql`lower(${user.email})`, normalizedEmail));
+		if (duplicate && duplicate.id !== input.userId) {
+			throw new TRPCError({ code: "CONFLICT", message: "EMAIL_EXISTS" });
+		}
+		await tx
+			.update(user)
+			.set({
+				name: input.name,
+				email: normalizedEmail,
+				...(normalizedEmail !== before.email ? { emailVerified: false } : {}),
+			})
+			.where(eq(user.id, input.userId));
+	}
+	await tx
+		.update(userProfiles)
+		.set({
+			isActive: input.kind === "edit" ? input.isActive : false,
+			updatedAt: sql`greatest(clock_timestamp(), ${userProfiles.updatedAt} + interval '1 millisecond')`,
+		})
+		.where(eq(userProfiles.userId, input.userId));
+	await tx.delete(session).where(eq(session.userId, input.userId));
+	await tx.insert(accountAuditLogs).values({
+		actorUserId,
+		targetUserId: input.userId,
+		action: input.kind === "archive" ? "ACCOUNT_ARCHIVED" : "ACCOUNT_UPDATED",
+		details: {
+			actorType: "DT",
+			before: { ...before, isActive: target.isActive },
+			after:
+				input.kind === "edit"
+					? {
+							name: input.name,
+							email: input.email.trim().toLowerCase(),
+							isActive: input.isActive,
+						}
+					: { isActive: false },
+		},
+	});
+	return { userId: input.userId };
+}
+
+export async function resetDtUserAccountPasswordTx(
+	tx: DatabaseTransaction,
+	actorUserId: string,
+	authConfig: AuthConfig,
+	targetUserId: string,
+) {
+	const [target] = await tx
+		.select({ userId: userProfiles.userId, isActive: userProfiles.isActive })
+		.from(userProfiles)
+		.where(
+			and(eq(userProfiles.userId, targetUserId), eq(userProfiles.actor, "DT")),
+		)
+		.for("update");
+	if (!target) {
+		throw new TRPCError({ code: "NOT_FOUND", message: "DT_ACCOUNT_NOT_FOUND" });
+	}
+	const { temporaryPassword } = await issueDtTemporaryPassword(
+		tx,
+		authConfig,
+		targetUserId,
+		true,
+	);
+	if (!target.isActive) {
+		await tx
+			.update(userProfiles)
+			.set({ isActive: false })
+			.where(eq(userProfiles.userId, targetUserId));
+	}
+	await tx.insert(accountAuditLogs).values({
+		actorUserId,
+		targetUserId,
+		action: "PASSWORD_RESET",
+		details: { actorType: "DT" },
+	});
+	return { temporaryPassword };
 }
 
 export type {

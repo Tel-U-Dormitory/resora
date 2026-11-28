@@ -107,20 +107,32 @@ test("DT personal policy allows active DT without password rotation gate", () =>
 	expect(authorizeDtPersonal(srIdentity("ADAPTIF", "KADEP"))).toBe(false);
 });
 
-test("DT contracts enforce valid dates, nonblank reasons, and reject forged fields", () => {
+test("DT contracts enforce valid dates, building requirement, nonblank reasons, and reject forged fields", () => {
+	const buildingId = randomUUID();
 	expect(
 		registerDtCandidateSchema.parse({
 			name: "  Calon DT  ",
 			nim: " 1301230001 ",
 			email: "DT.USER@EXAMPLE.COM",
 			periodName: " 2026/2027 ",
+			buildingId,
 		}),
 	).toMatchObject({
 		name: "Calon DT",
 		nim: "1301230001",
 		email: "dt.user@example.com",
 		periodName: "2026/2027",
+		buildingId,
 	});
+
+	expect(
+		registerDtCandidateSchema.safeParse({
+			name: "Calon DT",
+			nim: "1301230001",
+			email: "dt@example.com",
+			periodName: "2026/2027",
+		}).success,
+	).toBe(false);
 
 	expect(
 		registerDtCandidateSchema.safeParse({
@@ -128,6 +140,7 @@ test("DT contracts enforce valid dates, nonblank reasons, and reject forged fiel
 			nim: "1301 230001",
 			email: "dt@example.com",
 			periodName: "2026/2027",
+			buildingId,
 		}).success,
 	).toBe(false);
 
@@ -203,7 +216,6 @@ test("unauthorized actors fail closed before touching database", async () => {
 			listDtMembers(db, actor, {
 				search: "",
 				periodName: "",
-				departmentCode: "",
 				limit: 20,
 				offset: 0,
 			}),
@@ -223,6 +235,7 @@ test("unauthorized actors fail closed before touching database", async () => {
 					nim: "1301230001",
 					email: "test@example.com",
 					periodName: "2026/2027",
+					buildingId: randomUUID(),
 					registrationNotes: "",
 				},
 			),

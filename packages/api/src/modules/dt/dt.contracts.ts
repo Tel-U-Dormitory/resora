@@ -61,8 +61,7 @@ export const registerDtCandidateSchema = z
 			.refine((v) => !/\s/.test(v), "NIM tidak boleh mengandung spasi"),
 		email: z.string().trim().toLowerCase().email().max(255),
 		periodName: z.string().trim().min(1).max(100),
-		departmentCode: optionalTrimmedText(32),
-		buildingId: z.uuid().nullable().optional(),
+		buildingId: z.uuid(),
 		workProgram: optionalTrimmedText(200),
 		registrationNotes: z.string().trim().max(500).default(""),
 	})
@@ -74,8 +73,7 @@ export const activateDtMembershipSchema = z
 		periodName: z.string().trim().min(1).max(100).optional(),
 		startsOn: dateSchema,
 		endsOn: dateSchema,
-		departmentCode: optionalTrimmedText(32),
-		buildingId: z.uuid().nullable().optional(),
+		buildingId: z.uuid().optional(),
 		workProgram: optionalTrimmedText(200),
 		reason: z.string().trim().min(1).max(500).default("Aktivasi anggota DT"),
 	})
@@ -123,8 +121,7 @@ export const archiveDtMembershipSchema = z
 export const updateDtAssignmentSchema = z
 	.object({
 		membershipId: z.uuid(),
-		departmentCode: optionalTrimmedText(32),
-		buildingId: z.uuid().nullable().optional(),
+		buildingId: z.uuid(),
 		workProgram: optionalTrimmedText(200),
 		reason: z.string().trim().min(1).max(500),
 	})
@@ -134,7 +131,6 @@ export const listDtMembersSchema = z
 	.object({
 		search: z.string().trim().max(100).default(""),
 		periodName: z.string().trim().max(100).default(""),
-		departmentCode: z.string().trim().max(32).default(""),
 		buildingId: z.uuid().optional(),
 		status: z.enum(dtEffectiveStatuses).optional(),
 		limit: z.number().int().min(1).max(50).default(20),
@@ -144,10 +140,33 @@ export const listDtMembersSchema = z
 	.default({
 		search: "",
 		periodName: "",
-		departmentCode: "",
 		limit: 20,
 		offset: 0,
 	});
+
+export const adminUpdateDtAccountSchema = z
+	.object({
+		userId: z.string().trim().min(1).max(200),
+		name: z.string().trim().min(1).max(200),
+		email: z.string().trim().toLowerCase().email().max(255),
+		buildingId: z.uuid().optional(),
+		isActive: z.boolean(),
+		expectedUpdatedAt: z.iso.datetime(),
+	})
+	.strict();
+
+export const adminArchiveDtAccountSchema = z
+	.object({
+		userId: z.string().trim().min(1).max(200),
+		expectedUpdatedAt: z.iso.datetime(),
+	})
+	.strict();
+
+export const adminResetDtAccountPasswordSchema = z
+	.object({
+		userId: z.string().trim().min(1).max(200),
+	})
+	.strict();
 
 export function jakartaTodayDateString(now = new Date()): string {
 	return new Intl.DateTimeFormat("sv-SE", {

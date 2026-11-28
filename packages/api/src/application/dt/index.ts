@@ -1,18 +1,34 @@
+import type { AuthConfig } from "@resora/auth";
 import type { ActiveIdentity } from "@resora/auth/sr-access";
 import type { Database } from "@resora/db";
 import { TRPCError } from "@trpc/server";
 import type { z } from "zod";
 import { readAttendanceRecordsForUsers } from "../../modules/attendance/attendance.public";
 import { listCommitteesForUsers } from "../../modules/committee/committee.public";
-import type { listDtMembersSchema } from "../../modules/dt/dt.contracts";
+import type {
+	adminArchiveDtAccountSchema,
+	adminResetDtAccountPasswordSchema,
+	adminUpdateDtAccountSchema,
+	listDtMembersSchema,
+} from "../../modules/dt/dt.contracts";
 import {
 	authorizeDtManager,
 	authorizeDtPersonal,
 	getDtMembershipCore,
+	getLatestDtMembershipsByUserIds,
 	getOwnDtMembershipRecords,
 	listDtMembers,
+	syncAdminDtBuildingAssignment,
 } from "../../modules/dt/dt.public";
 import { listInvitedEventsForUsers } from "../../modules/events/events.public";
+import {
+	getActiveBuildings,
+	getLiveOperationalIdentity,
+	hasSuperadminPrivilege,
+	listAllDtAccountProfiles,
+	maintainDtUserAccountTx,
+	resetDtUserAccountPasswordTx,
+} from "../../modules/identity/identity.public";
 
 function summarizeUserParticipation(
 	userId: string,
@@ -166,8 +182,6 @@ export async function getDtParticipationRecap(
 			nim: member.nim,
 			periodName: member.periodName,
 			effectiveStatus: member.effectiveStatus,
-			departmentCode: member.departmentCode,
-			departmentName: member.departmentName,
 			buildingName: member.buildingName,
 			workProgram: member.workProgram,
 			attendance: summary.attendanceSummary,
@@ -222,4 +236,115 @@ export async function getMyDtPortal(db: Database, identity: ActiveIdentity) {
 		assignmentHistory: ownRecords.assignmentHistory,
 		...participation,
 	};
+}
+
+function requireSuperadmin(identity: ActiveIdentity | null | undefined) {
+	if (!hasSuperadminPrivilege(identity)) {
+		throw new TRPCError({ code: "FORBIDDEN", message: "SUPERADMIN_REQUIRED" });
+	}
+}
+
+export async function listAdminDtAccounts(
+	db: Database,
+	identity: ActiveIdentity,
+) {
+	requireSuperadmin(identity);
+	const [profiles, buildings] = await Promise.all([
+		listAllDtAccountProfiles(db),
+		getActiveBuildings(db),
+	]);
+	const latestByUser = await getLatestDtMembershipsByUserIds(
+		db,
+		profiles.map((p) => p.userId),
+	);
+	return {
+		accounts: profiles.map((p) => {
+			const m = latestByUser.get(p.userId);
+			return {
+				userId: p.userId,
+				updatedAt: p.updatedAt,
+				nim: p.nim,
+				name: p.name,
+				email: p.email,
+				isActive: p.isActive,
+				mustChangePassword: p.mustChangePassword,
+				membershipId: m?.id ?? null,
+				periodName: m?.periodName ?? null,
+				membershipStatus: m?.effectiveStatus ?? null,
+				startsOn: m?.startsOn ?? null,
+				endsOn: m?.endsOn ?? null,
+				buildingId: m?.buildingId ?? null,
+				buildingCode: m?.buildingCode ?? null,
+				buildingName: m?.buildingName ?? null,
+				workProgram: m?.workProgram ?? null,
+			};
+		}),
+		buildings,
+	};
+}
+
+export async function adminUpdateDtAccount(
+	db: Database,
+	identity: ActiveIdentity,
+	input: z.infer<typeof adminUpdateDtAccountSchema>,
+) {
+	requireSuperadmin(identity);
+	return db.transaction(async (tx) => {
+		const live = await getLiveOperationalIdentity(tx, identity.userId);
+		requireSuperadmin(live);
+		await maintainDtUserAccountTx(tx, identity.userId, {
+			kind: "edit",
+			userId: input.userId,
+			name: input.name,
+			email: input.email,
+			isActive: input.isActive,
+			expectedUpdatedAt: input.expectedUpdatedAt,
+		});
+		if (input.buildingId) {
+			await syncAdminDtBuildingAssignment(
+				tx,
+				identity.userId,
+				input.userId,
+				input.buildingId,
+			);
+		}
+		return { userId: input.userId };
+	});
+}
+
+export async function adminArchiveDtAccount(
+	db: Database,
+	identity: ActiveIdentity,
+	input: z.infer<typeof adminArchiveDtAccountSchema>,
+) {
+	requireSuperadmin(identity);
+	return db.transaction(async (tx) => {
+		const live = await getLiveOperationalIdentity(tx, identity.userId);
+		requireSuperadmin(live);
+		return maintainDtUserAccountTx(tx, identity.userId, {
+			kind: "archive",
+			userId: input.userId,
+			expectedUpdatedAt: input.expectedUpdatedAt,
+		});
+	});
+}
+
+export async function adminResetDtAccountPassword(
+	db: Database,
+	identity: ActiveIdentity,
+	authConfig: AuthConfig | undefined,
+	input: z.infer<typeof adminResetDtAccountPasswordSchema>,
+) {
+	requireSuperadmin(identity);
+	if (!authConfig) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+	return db.transaction(async (tx) => {
+		const live = await getLiveOperationalIdentity(tx, identity.userId);
+		requireSuperadmin(live);
+		return resetDtUserAccountPasswordTx(
+			tx,
+			identity.userId,
+			authConfig,
+			input.userId,
+		);
+	});
 }

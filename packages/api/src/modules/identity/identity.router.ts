@@ -133,14 +133,6 @@ export const identityRouter = router({
 				.from(user)
 				.where(eq(user.id, ctx.identity.userId));
 			if (!profile) throw new TRPCError({ code: "UNAUTHORIZED" });
-			const dept = ctx.identity.departmentCode
-				? ((
-						await ctx.db
-							.select({ name: departments.name })
-							.from(departments)
-							.where(eq(departments.code, ctx.identity.departmentCode))
-					)[0]?.name ?? ctx.identity.departmentCode)
-				: null;
 			return {
 				...profile,
 				actor: "DT" as const,
@@ -149,7 +141,6 @@ export const identityRouter = router({
 				periodName: ctx.identity.periodName,
 				startsOn: ctx.identity.startsOn,
 				endsOn: ctx.identity.endsOn,
-				department: dept,
 				building: ctx.identity.buildingName ?? null,
 				workProgram: ctx.identity.workProgram ?? null,
 			};
@@ -195,9 +186,7 @@ export const identityRouter = router({
 			requiresPasswordChange: requiresPasswordChange(identity),
 			name: ctx.session.user.name,
 			departmentCode:
-				identity.actor === "SR" || identity.actor === "DT"
-					? identity.departmentCode
-					: null,
+				identity.actor === "SR" ? identity.departmentCode : null,
 			positionCode: identity.actor === "SR" ? identity.positionCode : null,
 			dtMembership:
 				identity.actor === "DT"

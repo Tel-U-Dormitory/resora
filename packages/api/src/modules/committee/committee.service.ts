@@ -163,6 +163,7 @@ export async function committeeDetail(
 			...candidates.map((row) => row.userId),
 			...dtCandidates.map((row) => row.userId),
 		]);
+		const dtById = new Map(dtCandidates.map((row) => [row.userId, row]));
 		const byId = new Map(identities.map((row) => [row.userId, row]));
 		const members = memberships
 			.map((row) => ({
@@ -173,6 +174,7 @@ export async function committeeDetail(
 					byId.get(row.userId)?.actor === "DT"
 						? ("DT" as const)
 						: ("SR" as const),
+				buildingName: dtById.get(row.userId)?.buildingName ?? null,
 				eligible: eligibleIds.has(row.userId),
 			}))
 			.sort(
@@ -219,19 +221,21 @@ export async function committeeCandidates(
 			name: row.name,
 			nim: row.nim,
 			actorType: "SR" as const,
+			buildingName: row.buildingName,
 		})),
 		...dtCandidates.map((row) => ({
 			userId: row.userId,
 			name: row.name,
 			nim: row.nim,
 			actorType: "DT" as const,
+			buildingName: row.buildingName,
 		})),
 	];
 	return combined
 		.filter(
 			(row) =>
 				!existing.has(row.userId) &&
-				`${row.name} ${row.nim} ${row.actorType === "DT" ? "dorm team dt" : "sr"}`
+				`${row.name} ${row.nim} ${row.buildingName ?? ""} ${row.actorType === "DT" ? "dorm team dt" : "sr"}`
 					.toLocaleLowerCase("id")
 					.includes(term),
 		)
