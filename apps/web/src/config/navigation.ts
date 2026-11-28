@@ -25,7 +25,6 @@ export type SidebarNavHref =
 	| "/scan"
 	| "/attendance/history"
 	| "/events?view=manage"
-	| "/events?view=dt"
 	| "/committees"
 	| "/penilaian"
 	| "/pelanggaran"
@@ -188,11 +187,6 @@ export function getSidebarGroups({
 						title: "Departemen · ADAPTIF",
 						items: [
 							{ title: "Kelola DT", href: "/dt", icon: "dt" },
-							{
-								title: "Absensi DT",
-								href: "/events?view=dt",
-								icon: "manage",
-							},
 						] satisfies SidebarNavItem[],
 					},
 				]
@@ -279,7 +273,9 @@ export function isSidebarLinkActive(
 		(managementView ||
 			pathname === "/events/new" ||
 			pathname.endsWith("/edit"));
-	if (href === "/events?view=dt") return dtEventsView;
+	if (href === "/dt") {
+		return dtEventsView || pathname === "/dt" || pathname.startsWith("/dt/");
+	}
 	if (href === "/events?view=manage") return managingEvents && !dtEventsView;
 	if (href === "/events")
 		return (

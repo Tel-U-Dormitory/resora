@@ -74,9 +74,9 @@ export function DraftEditor(props: DraftEditorProps) {
 					<li>
 						<Link
 							className="focus-ring rounded-md text-muted-foreground hover:text-primary"
-							href={dtOnly ? "/events?view=dt" : "/events?view=manage"}
+							href={dtOnly ? "/dt?tab=events" : "/events?view=manage"}
 						>
-							{dtOnly ? "Absensi & kegiatan DT" : "Kelola event"}
+							{dtOnly ? "Kelola DT · Absensi" : "Kelola event"}
 						</Link>
 					</li>
 					<li aria-hidden="true" className="text-muted-foreground">

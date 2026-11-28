@@ -20,11 +20,7 @@ test("desktop sidebar and mobile Apps navbar include Kelola DT for ADAPTIF and S
 			(g) =>
 				g.id === "adaptif" &&
 				g.title === "Departemen · ADAPTIF" &&
-				g.items.some((item) => item.href === "/dt" && item.title === "Kelola DT") &&
-				g.items.some(
-					(item) =>
-						item.href === "/events?view=dt" && item.title === "Absensi DT",
-				),
+				g.items.map((item) => item.href).join(",") === "/dt",
 		),
 	).toBe(true);
 	expect(
@@ -32,11 +28,9 @@ test("desktop sidebar and mobile Apps navbar include Kelola DT for ADAPTIF and S
 			(item) => item.href === "/dt" && item.title === "Kelola DT",
 		),
 	).toBe(true);
-	expect(
-		getAppItems(adaptifCaps).some(
-			(item) => item.href === "/events?view=dt" && item.title === "Absensi DT",
-		),
-	).toBe(true);
+	expect(getAppItems(adaptifCaps).map((item) => item.href)).not.toContain(
+		"/events?view=dt",
+	);
 
 	const superadminCaps = {
 		isSr: false,
@@ -53,11 +47,7 @@ test("desktop sidebar and mobile Apps navbar include Kelola DT for ADAPTIF and S
 			(g) =>
 				g.id === "adaptif" &&
 				g.title === "Departemen · ADAPTIF" &&
-				g.items.some((item) => item.href === "/dt" && item.title === "Kelola DT") &&
-				g.items.some(
-					(item) =>
-						item.href === "/events?view=dt" && item.title === "Absensi DT",
-				),
+				g.items.map((item) => item.href).join(",") === "/dt",
 		),
 	).toBe(true);
 	expect(

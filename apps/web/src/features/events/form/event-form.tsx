@@ -69,9 +69,9 @@ export default function EventForm({
 						</Button>
 						<Link
 							className="focus-ring rounded-lg text-primary text-sm"
-							href={dtOnlyScope ? "/events?view=dt" : "/events?view=manage"}
+							href={dtOnlyScope ? "/dt?tab=events" : "/events?view=manage"}
 						>
-							Kembali ke daftar event
+							{dtOnlyScope ? "Kembali ke Kelola DT" : "Kembali ke daftar event"}
 						</Link>
 					</div>
 				</CardContent>

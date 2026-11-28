@@ -66,7 +66,7 @@ test("global, senior-resident, department and administration groups follow backe
 						groups
 							.find((group) => group.id === "adaptif")
 							?.items.map((item) => item.href) ?? [],
-					).toEqual(isSuperadmin ? ["/dt", "/events?view=dt"] : []);
+					).toEqual(isSuperadmin ? ["/dt"] : []);
 
 					expect(groups.some((group) => group.id === "administration")).toBe(
 						isSuperadmin,
@@ -181,7 +181,6 @@ test("Apps reuses sidebar capabilities and excludes primary destinations, disabl
 			? (["/pelanggaran"] as const)
 			: []),
 		"/dt",
-		"/events?view=dt",
 		"/penilaian",
 		"/admin/users",
 		"/admin/periods",

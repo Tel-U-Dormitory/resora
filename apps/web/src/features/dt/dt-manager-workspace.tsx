@@ -6,6 +6,7 @@ import { Select } from "@resora/ui/components/select";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, Plus, RefreshCw } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/empty-state";
@@ -13,6 +14,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc, trpcClient } from "@/utils/trpc";
+import {
+	eventErrorMessage,
+	formatEventSchedule,
+	StatusBadge,
+} from "@/components/event-feedback";
 import {
 	ActivateMembershipDialog,
 	DtCredentialsDialog,
@@ -33,7 +39,7 @@ import {
 	formatDtPeriodRange,
 } from "./dt-ui";
 
-type TabId = "members" | "recap";
+type TabId = "members" | "events" | "recap";
 type ActiveModal =
 	| { kind: "register" }
 	| { kind: "detail"; membershipId: string }
@@ -47,7 +53,13 @@ type ActiveModal =
 
 export function DtManagerWorkspace() {
 	const queryClient = useQueryClient();
-	const [activeTab, setActiveTab] = useState<TabId>("members");
+	const params = useSearchParams();
+	const initialTabParam = params.get("tab");
+	const [activeTab, setActiveTab] = useState<TabId>(
+		initialTabParam === "events" || initialTabParam === "recap"
+			? initialTabParam
+			: "members",
+	);
 	const [search, setSearch] = useState("");
 	const [periodName, setPeriodName] = useState("");
 	const [buildingId, setBuildingId] = useState("");
@@ -87,8 +99,21 @@ export function DtManagerWorkspace() {
 		meta: { errorHandledLocally: true },
 	});
 
+	const eventsQuery = useQuery({
+		...trpc.attendance.list.queryOptions({ visibility: "NON_ARCHIVED" }),
+		enabled: activeTab === "events",
+		meta: { errorHandledLocally: true },
+	});
+	const dtScopedEvents =
+		eventsQuery.data?.events.filter((ev) =>
+			Boolean((ev as { isDtScoped?: boolean }).isDtScoped),
+		) ?? [];
+
 	const invalidateDt = () =>
-		queryClient.invalidateQueries({ queryKey: trpc.dt.pathKey() });
+		Promise.all([
+			queryClient.invalidateQueries({ queryKey: trpc.dt.pathKey() }),
+			queryClient.invalidateQueries({ queryKey: trpc.attendance.pathKey() }),
+		]);
 
 	const registerMutation = useMutation({
 		mutationFn: (
@@ -168,17 +193,11 @@ export function DtManagerWorkspace() {
 					<Button
 						variant="outline"
 						leftIcon={<RefreshCw size={15} aria-hidden="true" />}
-						loading={listQuery.isFetching}
+						loading={listQuery.isFetching || eventsQuery.isFetching}
 						onClick={() => void invalidateDt()}
 					>
 						Perbarui
 					</Button>
-					<Link
-						href="/events?view=dt"
-						className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl border border-border-control bg-surface px-4 py-2 font-semibold text-foreground text-sm hover:bg-muted"
-					>
-						<CalendarDays size={16} aria-hidden="true" /> Absensi DT
-					</Link>
 					<Button
 						leftIcon={<Plus size={16} aria-hidden="true" />}
 						onClick={() => setModal({ kind: "register" })}
@@ -231,12 +250,14 @@ export function DtManagerWorkspace() {
 			>
 				<TabsList aria-label="Navigasi manajemen Dorm Team">
 					<TabsTrigger value="members">Daftar & Kelola DT</TabsTrigger>
+					<TabsTrigger value="events">Absensi & Event DT</TabsTrigger>
 					<TabsTrigger value="recap">Rekap Partisipasi</TabsTrigger>
 				</TabsList>
 			</Tabs>
 
-			<Card>
-				<CardContent className="p-4">
+			{activeTab !== "events" && (
+				<Card>
+					<CardContent className="p-4">
 					<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
 						<div className="space-y-1.5">
 							<Label htmlFor="dt-search">Cari nama / NIM / proker</Label>
@@ -308,7 +329,107 @@ export function DtManagerWorkspace() {
 						</div>
 					</div>
 				</CardContent>
-			</Card>
+				</Card>
+			)}
+
+			{activeTab === "events" && (
+				<Card>
+					<CardContent className="space-y-4 p-4">
+						<div className="flex flex-wrap items-start justify-between gap-3">
+							<div className="space-y-1">
+								<h2 className="font-semibold text-base">
+									Absensi & Event Dorm Team
+								</h2>
+								<p className="text-muted-foreground text-xs sm:text-sm">
+									Buat kegiatan khusus DT, kelola sesi QR kehadiran, dan cek
+									status hadir anggota DT per kegiatan.
+								</p>
+							</div>
+							<Link
+								href="/events/new?scope=dt"
+								className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 py-2 font-semibold text-sm text-white hover:bg-primary-hover hover:text-white"
+							>
+								<Plus size={16} aria-hidden="true" /> Buat absensi DT
+							</Link>
+						</div>
+
+						{eventsQuery.isPending ? (
+							<p role="status" className="text-muted-foreground text-sm">
+								Memuat daftar event & absensi DT…
+							</p>
+						) : eventsQuery.isError ? (
+							<div role="alert" className="space-y-3">
+								<p className="text-danger text-sm">
+									{eventErrorMessage(eventsQuery.error)}
+								</p>
+								<Button
+									variant="outline"
+									onClick={() => void eventsQuery.refetch()}
+								>
+									Coba kembali
+								</Button>
+							</div>
+						) : !dtScopedEvents.length ? (
+							<EmptyState
+								variant="folder"
+								title="Belum ada kegiatan atau absensi DT"
+								description="Buat kegiatan absensi pertama untuk anggota Dorm Team."
+								action={
+									<Link
+										href="/events/new?scope=dt"
+										className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 py-2 font-semibold text-sm text-white hover:bg-primary-hover hover:text-white"
+									>
+										<Plus size={16} aria-hidden="true" /> Buat absensi DT
+									</Link>
+								}
+							/>
+						) : (
+							<div className="grid gap-3 md:grid-cols-2">
+								{dtScopedEvents.map((ev) => (
+									<article
+										key={ev.id}
+										className="flex flex-col justify-between gap-3 rounded-xl border border-border bg-surface p-4"
+									>
+										<div className="space-y-2">
+											<div className="flex flex-wrap items-center justify-between gap-2">
+												<StatusBadge status={ev.status} />
+												<span className="inline-flex items-center gap-1 text-muted-foreground text-xs">
+													<CalendarDays size={13} aria-hidden="true" />{" "}
+													{formatEventSchedule(ev.startsAt, ev.endsAt)}
+												</span>
+											</div>
+											<h3 className="font-bold text-base leading-snug">
+												{ev.title}
+											</h3>
+											{ev.description && (
+												<p className="line-clamp-2 text-muted-foreground text-xs">
+													{ev.description}
+												</p>
+											)}
+										</div>
+										<div className="flex flex-wrap items-center gap-2 pt-1">
+											<Link
+												href={`/events/${ev.id}`}
+												className="focus-ring inline-flex min-h-9 items-center rounded-lg border border-border px-3 py-1.5 font-semibold text-foreground text-xs hover:bg-muted"
+											>
+												Detail & Cek Absensi
+											</Link>
+											{ev.status === "DRAFT" && (
+												<Link
+													href={`/events/${ev.id}/edit`}
+													className="focus-ring inline-flex min-h-9 items-center rounded-lg border border-border px-3 py-1.5 font-semibold text-primary text-xs hover:bg-muted"
+												>
+													Edit draft
+												</Link>
+											)}
+										</div>
+									</article>
+								))}
+							</div>
+						)}
+					</CardContent>
+				</Card>
+			)}
 
 			{activeTab === "members" && (
 				<Card>
