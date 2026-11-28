@@ -7,6 +7,7 @@ import { type EventDraft, eventDraftSchema } from "../../contracts/attendance";
 import * as attendanceOperations from "../../modules/attendance/attendance.public";
 
 import { getCommitteeRoster } from "../../modules/committee/committee.public";
+import { getActiveDtDirectory } from "../../modules/dt/dt.public";
 
 import * as eventOperations from "../../modules/events/events.public";
 import {
@@ -99,21 +100,28 @@ export async function previewRoster(
 	return db.transaction(async (tx) => {
 		const { event, committee } = await lockedRosterEvent(tx, eventId, identity);
 		requireState(event.status, "DRAFT");
-		const directory = await getActiveSrDirectory(tx);
+		const [directory, dtCandidates] = await Promise.all([
+			getActiveSrDirectory(tx),
+			getActiveDtDirectory(tx),
+		]);
 		return {
 			participants: committee
 				? resolveCommitteeRoster(
 						directory.candidates,
 						event.rosterCriteria,
 						committee.members,
+						undefined,
+						dtCandidates,
 					)
-				: resolveRoster(directory.candidates, event.rosterCriteria).map(
-						(sr) => ({
-							...sr,
-							committeeDivision: null,
-							committeePosition: null,
-						}),
-					),
+				: resolveRoster(
+						directory.candidates,
+						event.rosterCriteria,
+						dtCandidates,
+					).map((sr) => ({
+						...sr,
+						committeeDivision: null,
+						committeePosition: null,
+					})),
 			invalidAssignmentCount: directory.invalidAssignmentCount,
 		};
 	});
@@ -133,14 +141,23 @@ export async function publishEvent(
 		);
 		requireState(event.status, "DRAFT");
 		requireState(session.status, "INACTIVE");
-		const directory = await getActiveSrDirectory(tx, true);
+		const [directory, dtCandidates] = await Promise.all([
+			getActiveSrDirectory(tx, true),
+			getActiveDtDirectory(tx, true),
+		]);
 		const roster = committee
 			? resolveCommitteeRoster(
 					directory.candidates,
 					event.rosterCriteria,
 					committee.members,
+					undefined,
+					dtCandidates,
 				)
-			: resolveRoster(directory.candidates, event.rosterCriteria);
+			: resolveRoster(
+					directory.candidates,
+					event.rosterCriteria,
+					dtCandidates,
+				);
 		if (roster.length)
 			await eventOperations.addInvitationSnapshots(tx, eventId, roster);
 		await eventOperations.publishInternalDraft(

@@ -18,6 +18,7 @@ import {
 	reportInvitationSnapshots,
 } from "../events/events.public";
 import {
+	canAccessPersonalDt,
 	canAccessPersonalSr,
 	canManageInternalEvent,
 	canManageManualAttendance,
@@ -152,11 +153,11 @@ export async function ownHistory(
 	identity: ActiveIdentity,
 	input: z.input<typeof ownHistorySchema>,
 ) {
-	if (
-		!canAccessPersonalSr(identity) ||
-		!isValidSrAssignment(identity.departmentCode, identity.positionCode)
-	)
-		throw new TRPCError({ code: "FORBIDDEN" });
+	const isValidSr =
+		canAccessPersonalSr(identity) &&
+		isValidSrAssignment(identity.departmentCode, identity.positionCode);
+	const isValidDt = canAccessPersonalDt(identity);
+	if (!isValidSr && !isValidDt) throw new TRPCError({ code: "FORBIDDEN" });
 	const { limit, offset } = ownHistorySchema.parse(input);
 	return db.transaction(
 		async (tx) => {
@@ -280,4 +281,31 @@ export async function auditHistory(
 		isolationLevel: "repeatable read",
 		accessMode: "read only",
 	});
+}
+
+export async function readAttendanceRecordsForUsers(
+	db: Database | DatabaseTransaction,
+	userIds: readonly string[],
+	eventIds: readonly string[],
+) {
+	if (!userIds.length || !eventIds.length) return [];
+	return db
+		.select({
+			eventId: attendanceSessions.internalEventId,
+			userId: attendanceRecords.userId,
+			attendanceAt: attendanceRecords.attendanceAt,
+			timingClass: attendanceRecords.timingClass,
+			source: attendanceRecords.source,
+		})
+		.from(attendanceRecords)
+		.innerJoin(
+			attendanceSessions,
+			eq(attendanceSessions.id, attendanceRecords.sessionId),
+		)
+		.where(
+			and(
+				inArray(attendanceRecords.userId, [...new Set(userIds)]),
+				inArray(attendanceSessions.internalEventId, [...new Set(eventIds)]),
+			),
+		);
 }

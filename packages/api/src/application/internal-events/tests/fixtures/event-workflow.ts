@@ -203,9 +203,9 @@ export function fixture() {
 							...state.identity,
 							tenureStatus: state.tenureStatus,
 							nim:
-								state.identity.actor === "SR"
-									? state.identity.nim
-									: state.identity.username,
+								state.identity.actor === "SYSTEM_ADMIN"
+									? state.identity.username
+									: state.identity.nim,
 							srUserId:
 								state.identity.actor === "SR" ? state.identity.userId : null,
 						};

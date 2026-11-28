@@ -4,7 +4,19 @@ import {
 	eventParticipants,
 	events,
 } from "@resora/db/schema/attendance";
-import { and, asc, desc, eq, gte, isNull, lt, ne, or, sql } from "drizzle-orm";
+import {
+	and,
+	asc,
+	desc,
+	eq,
+	gte,
+	inArray,
+	isNull,
+	lt,
+	ne,
+	or,
+	sql,
+} from "drizzle-orm";
 import type { EventListInput } from "../../contracts/attendance";
 import type { EventFact } from "./event.types";
 
@@ -180,4 +192,34 @@ export async function listEvaluatableEvents(
 			),
 		)
 		.orderBy(asc(events.startsAt), asc(events.id));
+}
+
+export async function listInvitedEventsForUsers(
+	db: Db,
+	userIds: readonly string[],
+) {
+	if (!userIds.length) return [];
+	return db
+		.select({
+			userId: eventParticipants.userId,
+			eventId: events.id,
+			title: events.title,
+			status: events.status,
+			visibility: events.visibility,
+			startsAt: events.startsAt,
+			endsAt: events.endsAt,
+			closedAt: events.closedAt,
+			organizationContext: events.organizationContext,
+			committeeName: events.snapshotCommitteeName,
+		})
+		.from(eventParticipants)
+		.innerJoin(events, eq(events.id, eventParticipants.eventId))
+		.where(
+			and(
+				inArray(eventParticipants.userId, [...new Set(userIds)]),
+				or(eq(events.status, "PUBLISHED"), eq(events.status, "CLOSED")),
+				ne(events.visibility, "ARCHIVED"),
+			),
+		)
+		.orderBy(desc(events.startsAt), asc(events.id));
 }

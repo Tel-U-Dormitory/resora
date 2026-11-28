@@ -9,11 +9,13 @@ import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
 import type { CheckInInput } from "../../../contracts/attendance";
 import { AttendanceLocationError } from "../../../contracts/attendance-diagnostics";
+import { getActiveDtCandidate } from "../../dt/dt.public";
 import {
 	invitationForUser,
 	lockEventForCheckIn,
 } from "../../events/events.public";
 import {
+	canAccessPersonalDt,
 	canAccessPersonalSr,
 	getCheckInSr,
 	isValidSrAssignment,
@@ -35,11 +37,11 @@ export async function checkIn(
 	secret: string,
 	input: CheckInInput,
 ) {
-	if (
-		!canAccessPersonalSr(identity) ||
-		!isValidSrAssignment(identity.departmentCode, identity.positionCode)
-	)
-		denied("NOT_ELIGIBLE");
+	const isEligibleSr =
+		canAccessPersonalSr(identity) &&
+		isValidSrAssignment(identity.departmentCode, identity.positionCode);
+	const isEligibleDt = canAccessPersonalDt(identity);
+	if (!isEligibleSr && !isEligibleDt) denied("NOT_ELIGIBLE");
 	const sessionId = input.qrToken.split(":")[2];
 	const challengeId = sessionId
 		? parseChallenge(secret, input.qrToken, sessionId)
@@ -65,8 +67,14 @@ export async function checkIn(
 			denied("SESSION_CLOSED");
 		if (event.status !== "PUBLISHED" || session.status !== "ACTIVE")
 			denied("SESSION_INACTIVE");
-		// Re-read/lock live eligibility through Identity's public interface, not cached client claims.
-		if (!(await getCheckInSr(tx, identity.userId))) denied("NOT_ELIGIBLE");
+		// Re-read/lock live eligibility through Identity/DT public interface, not cached client claims.
+		if (identity.actor === "SR" && !(await getCheckInSr(tx, identity.userId)))
+			denied("NOT_ELIGIBLE");
+		if (
+			identity.actor === "DT" &&
+			!(await getActiveDtCandidate(tx, identity.userId))
+		)
+			denied("NOT_ELIGIBLE");
 		const [invitation] = await invitationForUser(tx, event.id, identity.userId);
 		if (!invitation) denied("NOT_INVITED");
 		const now = new Date(); // After lock waits; never a client timestamp or scheduled-end cutoff.

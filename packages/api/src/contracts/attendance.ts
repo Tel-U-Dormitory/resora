@@ -14,6 +14,7 @@ export const rosterSchema = z
 		individuals: ids,
 		include: ids,
 		exclude: ids,
+		allDt: z.boolean().optional(),
 	})
 	.strict();
 export const sessionConfigSchema = z

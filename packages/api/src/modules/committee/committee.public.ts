@@ -5,7 +5,7 @@ import {
 	committees,
 } from "@resora/db/schema/committee";
 import { TRPCError } from "@trpc/server";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 
 // Backend-only attendance contract. Callers enforce event authorization.
 // Committee SHARE precedes event/session/identity locks; CRUD takes committee UPDATE first.
@@ -40,6 +40,32 @@ export async function getCommitteeRoster(
 		)
 		.where(eq(committeeMembers.committeeId, committeeId));
 	return { ...committee, members };
+}
+
+export async function listCommitteesForUsers(
+	db: Database | DatabaseTransaction,
+	userIds: readonly string[],
+) {
+	if (!userIds.length) return [];
+	return db
+		.select({
+			userId: committeeMembers.userId,
+			committeeId: committees.id,
+			committeeName: committees.name,
+			divisionName: committeeDivisions.name,
+			positionCode: committeeMembers.positionCode,
+		})
+		.from(committeeMembers)
+		.innerJoin(committees, eq(committees.id, committeeMembers.committeeId))
+		.innerJoin(
+			committeeDivisions,
+			and(
+				eq(committeeDivisions.id, committeeMembers.divisionId),
+				eq(committeeDivisions.committeeId, committeeMembers.committeeId),
+			),
+		)
+		.where(inArray(committeeMembers.userId, [...new Set(userIds)]))
+		.orderBy(asc(committees.name), asc(committeeDivisions.name));
 }
 
 export { committeeRouter } from "./committee.router";

@@ -5,12 +5,14 @@ import { identityRouter } from "../modules/identity/identity-transport.public";
 import { penilaianRouter } from "../modules/penilaian/penilaian.public";
 import { violationsRouter } from "../modules/violations/violations.public";
 import { attendanceRouter } from "../transport/attendance.router";
+import { dtRouter } from "../transport/dt.router";
 
 export const appRouter = router({
 	identity: identityRouter,
 	attendance: attendanceRouter,
 	broadcast: broadcastRouter,
 	committee: committeeRouter,
+	dt: dtRouter,
 	penilaian: penilaianRouter,
 	violations: violationsRouter,
 	healthCheck: publicProcedure.query(() => {
@@ -24,10 +26,12 @@ export const appRouter = router({
 				name: ctx.session.user.name,
 				...(ctx.identity.actor === "SR"
 					? { actor: "SR" as const, nim: ctx.identity.nim }
-					: {
-							actor: "SYSTEM_ADMIN" as const,
-							username: ctx.identity.username,
-						}),
+					: ctx.identity.actor === "DT"
+						? { actor: "DT" as const, nim: ctx.identity.nim }
+						: {
+								actor: "SYSTEM_ADMIN" as const,
+								username: ctx.identity.username,
+							}),
 			},
 		};
 	}),

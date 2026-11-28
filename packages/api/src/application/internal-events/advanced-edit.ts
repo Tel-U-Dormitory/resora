@@ -8,6 +8,7 @@ import {
 } from "../../contracts/attendance";
 
 import * as attendanceOperations from "../../modules/attendance/attendance.public";
+import { getActiveDtDirectory } from "../../modules/dt/dt.public";
 
 import type { EventEditAuditState } from "../../modules/events/events.public";
 import * as eventOperations from "../../modules/events/events.public";
@@ -99,15 +100,23 @@ export async function advancedEditEvent(
 			// A changed criterion uses the same locked live directory as publication.
 			// Retained invitees keep their original personal/organization snapshot.
 			if (rosterChanged) {
-				const directory = await getActiveSrDirectory(tx, true);
+				const [directory, dtCandidates] = await Promise.all([
+					getActiveSrDirectory(tx, true),
+					getActiveDtDirectory(tx, true),
+				]);
 				const roster = committee
 					? resolveCommitteeRoster(
 							directory.candidates,
 							draft.rosterCriteria,
 							committee.members,
 							new Set(),
+							dtCandidates,
 						)
-					: resolveRoster(directory.candidates, draft.rosterCriteria);
+					: resolveRoster(
+							directory.candidates,
+							draft.rosterCriteria,
+							dtCandidates,
+						);
 				const existing = await eventOperations.invitationIds(tx, event.id);
 				const oldIds = new Set(existing.map((sr) => sr.userId));
 				// Published committee membership is a frozen base, never the current committee roster.

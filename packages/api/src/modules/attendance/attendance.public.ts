@@ -11,7 +11,13 @@ export {
 	pointsRecap,
 	readPeriodAttendancePoints,
 } from "./points-recap";
-export { auditHistory, exportCsv, ownHistory, recap } from "./reporting";
+export {
+	auditHistory,
+	exportCsv,
+	ownHistory,
+	readAttendanceRecordsForUsers,
+	recap,
+} from "./reporting";
 export type { SessionFact } from "./session.types";
 export {
 	activateInternalSession,

@@ -8,10 +8,12 @@ import {
 } from "../../contracts/attendance";
 
 import { getCommitteeRoster } from "../../modules/committee/committee.public";
+import { getActiveDtDirectory } from "../../modules/dt/dt.public";
 
 import * as eventOperations from "../../modules/events/events.public";
 import { visibilityActions } from "../../modules/events/events.public";
 import {
+	canAccessPersonalDt,
 	canAccessPersonalSr,
 	canManageEventScoring,
 	canManageInternalEvent,
@@ -30,7 +32,11 @@ export async function listEvents(
 	identity: ActiveIdentity,
 	input: EventListInput = { visibility: "NON_ARCHIVED" },
 ) {
-	if (!canAccessPersonalSr(identity) && !hasSuperadminPrivilege(identity))
+	if (
+		!canAccessPersonalSr(identity) &&
+		!canAccessPersonalDt(identity) &&
+		!hasSuperadminPrivilege(identity)
+	)
 		throw new TRPCError({ code: "FORBIDDEN" });
 	const canManage = canManageInternalEvent(identity);
 	const isSuperadmin = hasSuperadminPrivilege(identity);
@@ -49,7 +55,11 @@ export async function readEventDetail(
 	identity: ActiveIdentity,
 	eventId: string,
 ) {
-	if (!canAccessPersonalSr(identity) && !hasSuperadminPrivilege(identity))
+	if (
+		!canAccessPersonalSr(identity) &&
+		!canAccessPersonalDt(identity) &&
+		!hasSuperadminPrivilege(identity)
+	)
 		throw new TRPCError({ code: "FORBIDDEN" });
 	const [row] = await readEventContext(db, eventId);
 	if (!row)
@@ -105,7 +115,14 @@ export async function getRosterDirectory(
 	identity: ActiveIdentity,
 ) {
 	operator(identity);
-	return getActiveSrDirectory(db);
+	const [srDirectory, dtCandidates] = await Promise.all([
+		getActiveSrDirectory(db),
+		getActiveDtDirectory(db),
+	]);
+	return {
+		...srDirectory,
+		dtCandidates: dtCandidates.map(eventOperations.dtCandidateToRosterCandidate),
+	};
 }
 
 export async function getEvent(

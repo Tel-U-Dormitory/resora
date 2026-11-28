@@ -9,14 +9,16 @@ import {
 import { TRPCError } from "@trpc/server";
 import { and, asc, count, desc, eq, ilike, inArray, sql } from "drizzle-orm";
 import type { z } from "zod";
+import { getActiveDtCandidate, getActiveDtDirectory } from "../dt/dt.public";
 import {
+	canAccessPersonalDt,
 	canAccessPersonalSr,
 	canManageCommittee,
 	canManageInternalEvent,
 	getActiveSrCandidate,
 	getActiveSrDirectory,
 	getLiveOperationalIdentity,
-	getSrMemberIdentities,
+	getMemberIdentities,
 } from "../identity/identity.public";
 import type {
 	addMembersSchema,
@@ -149,18 +151,28 @@ export async function committeeDetail(
 			})
 			.from(committeeMembers)
 			.where(eq(committeeMembers.committeeId, committeeId));
-		const identities = await getSrMemberIdentities(
+		const identities = await getMemberIdentities(
 			tx,
 			memberships.map((row) => row.userId),
 		);
-		const { candidates } = await getActiveSrDirectory(tx);
-		const eligibleIds = new Set(candidates.map((row) => row.userId));
+		const [{ candidates }, dtCandidates] = await Promise.all([
+			getActiveSrDirectory(tx),
+			getActiveDtDirectory(tx),
+		]);
+		const eligibleIds = new Set([
+			...candidates.map((row) => row.userId),
+			...dtCandidates.map((row) => row.userId),
+		]);
 		const byId = new Map(identities.map((row) => [row.userId, row]));
 		const members = memberships
 			.map((row) => ({
 				...row,
-				name: byId.get(row.userId)?.name ?? "SR tidak tersedia",
+				name: byId.get(row.userId)?.name ?? "Anggota tidak tersedia",
 				nim: byId.get(row.userId)?.nim ?? "",
+				actorType:
+					byId.get(row.userId)?.actor === "DT"
+						? ("DT" as const)
+						: ("SR" as const),
 				eligible: eligibleIds.has(row.userId),
 			}))
 			.sort(
@@ -191,25 +203,43 @@ export async function committeeCandidates(
 		.limit(1);
 	if (!committee)
 		throw new TRPCError({ code: "NOT_FOUND", message: "COMMITTEE_NOT_FOUND" });
-	const { candidates } = await getActiveSrDirectory(db);
+	const [{ candidates }, dtCandidates] = await Promise.all([
+		getActiveSrDirectory(db),
+		getActiveDtDirectory(db),
+	]);
 	const members = await db
 		.select({ userId: committeeMembers.userId })
 		.from(committeeMembers)
 		.where(eq(committeeMembers.committeeId, committeeId));
 	const existing = new Set(members.map((row) => row.userId));
 	const term = search.toLocaleLowerCase("id");
-	return candidates
+	const combined = [
+		...candidates.map((row) => ({
+			userId: row.userId,
+			name: row.name,
+			nim: row.nim,
+			actorType: "SR" as const,
+		})),
+		...dtCandidates.map((row) => ({
+			userId: row.userId,
+			name: row.name,
+			nim: row.nim,
+			actorType: "DT" as const,
+		})),
+	];
+	return combined
 		.filter(
 			(row) =>
 				!existing.has(row.userId) &&
-				`${row.name} ${row.nim}`.toLocaleLowerCase("id").includes(term),
+				`${row.name} ${row.nim} ${row.actorType === "DT" ? "dorm team dt" : "sr"}`
+					.toLocaleLowerCase("id")
+					.includes(term),
 		)
 		.sort(
 			(a, b) =>
 				a.name.localeCompare(b.name, "id") || a.userId.localeCompare(b.userId),
 		)
-		.slice(0, 20)
-		.map(({ userId, name, nim }) => ({ userId, name, nim }));
+		.slice(0, 20);
 }
 
 export function createCommittee(
@@ -323,7 +353,10 @@ export function saveMember(
 	update = false,
 ) {
 	return write(db, identity, input.committeeId, async (tx) => {
-		if (!(await getActiveSrCandidate(tx, input.userId)))
+		const eligible =
+			(await getActiveSrCandidate(tx, input.userId)) ??
+			(await getActiveDtCandidate(tx, input.userId));
+		if (!eligible)
 			throw new TRPCError({
 				code: "BAD_REQUEST",
 				message: "COMMITTEE_MEMBER_INELIGIBLE",
@@ -383,12 +416,16 @@ export function addMembers(
 				message: "COMMITTEE_DIVISION_NOT_FOUND",
 			});
 		// Keep candidate SHARE locks and their order consistent across batches.
-		for (const userId of [...input.userIds].sort())
-			if (!(await getActiveSrCandidate(tx, userId)))
+		for (const userId of [...input.userIds].sort()) {
+			const eligible =
+				(await getActiveSrCandidate(tx, userId)) ??
+				(await getActiveDtCandidate(tx, userId));
+			if (!eligible)
 				throw new TRPCError({
 					code: "BAD_REQUEST",
 					message: "COMMITTEE_MEMBER_INELIGIBLE",
 				});
+		}
 		const [existing] = await tx
 			.select({ userId: committeeMembers.userId })
 			.from(committeeMembers)
@@ -441,7 +478,7 @@ export async function ownCommitteeMemberships(
 	db: Database,
 	identity: ActiveIdentity,
 ) {
-	if (!canAccessPersonalSr(identity)) {
+	if (!canAccessPersonalSr(identity) && !canAccessPersonalDt(identity)) {
 		return {
 			totalCommittees: 0,
 			items: [] as Array<{
@@ -455,7 +492,7 @@ export async function ownCommitteeMemberships(
 
 	return db.transaction(async (tx) => {
 		const live = await getLiveOperationalIdentity(tx, identity.userId);
-		if (!canAccessPersonalSr(live)) {
+		if (!canAccessPersonalSr(live) && !canAccessPersonalDt(live)) {
 			return {
 				totalCommittees: 0,
 				items: [] as Array<{

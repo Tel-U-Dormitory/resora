@@ -5,6 +5,7 @@ import type { EventFact, RosterCriteria } from "./events.public";
 export function sameRoster(left: RosterCriteria, right: RosterCriteria) {
 	const normalize = (criteria: RosterCriteria) => ({
 		allSr: criteria.allSr,
+		allDt: Boolean(criteria.allDt),
 		inti: criteria.inti,
 		kadep: criteria.kadep,
 		departments: [...new Set(criteria.departments)].sort(),

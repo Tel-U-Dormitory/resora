@@ -28,6 +28,7 @@ export {
 	eventOrganizationHint,
 	listEvaluatableEvents,
 	listInvitedEvents,
+	listInvitedEventsForUsers,
 	listManagedEvents,
 	lockEventForCheckIn,
 	lockEventForManagement,
@@ -43,4 +44,8 @@ export {
 	reportInvitationSnapshots,
 	scoringInvitationSnapshots,
 } from "./invitation-operations";
-export { resolveCommitteeRoster, resolveRoster } from "./roster";
+export {
+	dtCandidateToRosterCandidate,
+	resolveCommitteeRoster,
+	resolveRoster,
+} from "./roster";

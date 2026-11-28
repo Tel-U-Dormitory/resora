@@ -12,6 +12,7 @@ import {
 	manualCorrectSchema,
 	manualInsertSchema,
 } from "../../contracts/attendance";
+import { getActiveDtCandidate } from "../dt/dt.public";
 import {
 	invitationForUser,
 	lockEventForManagement,
@@ -96,7 +97,10 @@ export async function manualInsert(
 				code: "CONFLICT",
 				message: "ATTENDANCE_ALREADY_RECORDED",
 			});
-		if (!(await getActiveSrCandidate(tx, data.userId)))
+		const activeTarget =
+			(await getActiveSrCandidate(tx, data.userId)) ??
+			(await getActiveDtCandidate(tx, data.userId));
+		if (!activeTarget)
 			throw new TRPCError({
 				code: "FORBIDDEN",
 				message: "MANUAL_TARGET_INACTIVE_OR_INELIGIBLE",
