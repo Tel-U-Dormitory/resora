@@ -18,13 +18,23 @@ test("desktop sidebar and mobile Apps navbar include Kelola DT for ADAPTIF and S
 	expect(
 		adaptifGroups.some(
 			(g) =>
+				g.id === "adaptif" &&
 				g.title === "Departemen · ADAPTIF" &&
-				g.items.some((item) => item.href === "/dt" && item.title === "Kelola DT"),
+				g.items.some((item) => item.href === "/dt" && item.title === "Kelola DT") &&
+				g.items.some(
+					(item) =>
+						item.href === "/events?view=dt" && item.title === "Absensi DT",
+				),
 		),
 	).toBe(true);
 	expect(
 		getAppItems(adaptifCaps).some(
 			(item) => item.href === "/dt" && item.title === "Kelola DT",
+		),
+	).toBe(true);
+	expect(
+		getAppItems(adaptifCaps).some(
+			(item) => item.href === "/events?view=dt" && item.title === "Absensi DT",
 		),
 	).toBe(true);
 
@@ -41,10 +51,20 @@ test("desktop sidebar and mobile Apps navbar include Kelola DT for ADAPTIF and S
 	expect(
 		superadminGroups.some(
 			(g) =>
-				g.id === "administration" &&
-				g.items.some((item) => item.href === "/dt" && item.title === "Kelola DT"),
+				g.id === "adaptif" &&
+				g.title === "Departemen · ADAPTIF" &&
+				g.items.some((item) => item.href === "/dt" && item.title === "Kelola DT") &&
+				g.items.some(
+					(item) =>
+						item.href === "/events?view=dt" && item.title === "Absensi DT",
+				),
 		),
 	).toBe(true);
+	expect(
+		superadminGroups
+			.find((g) => g.id === "administration")
+			?.items.map((i) => i.href),
+	).toEqual(["/admin/users", "/admin/periods"]);
 	expect(
 		superadminGroups
 			.flatMap((g) => g.items)

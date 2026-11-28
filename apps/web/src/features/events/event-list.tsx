@@ -44,13 +44,21 @@ export default function EventList({
 		retry: false,
 		meta: { errorHandledLocally: true },
 	});
-	const management = query.data?.canManage && params.get("view") === "manage";
+	const dtManageView =
+		Boolean(query.data?.canManageDtEvents) && params.get("view") === "dt";
+	const management = Boolean(
+		(query.data?.canManage && params.get("view") === "manage") || dtManageView,
+	);
 	const eligibleEvents =
-		query.data?.events.filter(
-			(event) =>
+		query.data?.events.filter((event) => {
+			if (dtManageView) {
+				return Boolean((event as { isDtScoped?: boolean }).isDtScoped);
+			}
+			return (
 				management ||
-				(event.status === "PUBLISHED" && event.visibility === "VISIBLE"),
-		) ?? [];
+				(event.status === "PUBLISHED" && event.visibility === "VISIBLE")
+			);
+		}) ?? [];
 	const keyword = search.trim().toLocaleLowerCase("id-ID");
 	const matching = eligibleEvents.filter(
 		(event) =>
@@ -67,21 +75,27 @@ export default function EventList({
 			<div className="flex flex-wrap items-start justify-between gap-4">
 				<div className="space-y-1.5">
 					<h1 className="font-bold text-2xl tracking-tight">
-						{management ? "Kelola kegiatan" : "Kegiatan"}
+						{dtManageView
+							? "Absensi & kegiatan DT"
+							: management
+								? "Kelola kegiatan"
+								: "Kegiatan"}
 					</h1>
 					<p className="hidden text-muted-foreground text-sm sm:block">
-						{management
-							? "Atur kegiatan dan kehadiran Senior Resident."
-							: "Kegiatan yang mengundang kamu."}
+						{dtManageView
+							? "Buat dan kelola kegiatan serta sesi absensi QR untuk Dorm Team."
+							: management
+								? "Atur kegiatan dan kehadiran Senior Resident."
+								: "Kegiatan yang mengundang kamu."}
 					</p>
 				</div>
 				{management && (
 					<Link
-						href="/events/new"
+						href={dtManageView ? "/events/new?scope=dt" : "/events/new"}
 						className="focus-ring inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 font-semibold text-sm text-white hover:bg-primary-hover hover:text-white sm:w-auto"
 					>
 						<Plus size={18} aria-hidden="true" />
-						Buat event
+						{dtManageView ? "Buat absensi DT" : "Buat event"}
 					</Link>
 				)}
 			</div>
@@ -195,11 +209,11 @@ export default function EventList({
 										</Button>
 									) : management && visibility === "NON_ARCHIVED" ? (
 										<Link
-											href="/events/new"
+											href={dtManageView ? "/events/new?scope=dt" : "/events/new"}
 											className="focus-ring inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-primary px-4 py-2 font-semibold text-primary-foreground text-xs hover:bg-primary-hover"
 										>
 											<Plus size={15} aria-hidden="true" />
-											Buat event
+											{dtManageView ? "Buat absensi DT" : "Buat event"}
 										</Link>
 									) : undefined
 								}

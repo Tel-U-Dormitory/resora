@@ -25,6 +25,7 @@ export type SidebarNavHref =
 	| "/scan"
 	| "/attendance/history"
 	| "/events?view=manage"
+	| "/events?view=dt"
 	| "/committees"
 	| "/penilaian"
 	| "/pelanggaran"
@@ -87,15 +88,13 @@ export function getSidebarGroups({
 	isSuperadmin: boolean;
 }) {
 	void canReadAttendancePoints;
-	const showDepartmentDt = canManageDt && !isSuperadmin;
+	const showAdaptifGroup = canManageDt || isSuperadmin;
 	const hasDepartmentAccess =
-		canManageEvents ||
-		canManageCommittee ||
-		canAccessPenilaianWorkspace ||
-		showDepartmentDt;
-	const departmentTitle = departmentCode
-		? `Departemen · ${departmentCode}`
-		: "Departemen · HCO";
+		canManageEvents || canManageCommittee || canAccessPenilaianWorkspace;
+	const departmentTitle =
+		departmentCode && departmentCode !== "ADAPTIF"
+			? `Departemen · ${departmentCode}`
+			: "Departemen · HCO";
 	const srItems: SidebarNavItem[] = [
 		...(isSr
 			? ([
@@ -182,21 +181,28 @@ export function getSidebarGroups({
 					},
 				]
 			: []),
+		...(showAdaptifGroup
+			? [
+					{
+						id: "adaptif",
+						title: "Departemen · ADAPTIF",
+						items: [
+							{ title: "Kelola DT", href: "/dt", icon: "dt" },
+							{
+								title: "Absensi DT",
+								href: "/events?view=dt",
+								icon: "manage",
+							},
+						] satisfies SidebarNavItem[],
+					},
+				]
+			: []),
 		...(hasDepartmentAccess
 			? [
 					{
 						id: "hco",
 						title: departmentTitle,
 						items: [
-							...(showDepartmentDt
-								? ([
-										{
-											title: "Kelola DT",
-											href: "/dt",
-											icon: "dt",
-										},
-									] as SidebarNavItem[])
-								: []),
 							...(canAccessPenilaianWorkspace
 								? ([
 										{
@@ -227,10 +233,7 @@ export function getSidebarGroups({
 					{
 						id: "administration",
 						title: "Administrasi",
-						items: [
-							...ADMIN_NAVIGATION,
-							{ title: "Kelola DT", href: "/dt", icon: "dt" },
-						] as SidebarNavItem[],
+						items: [...ADMIN_NAVIGATION] as SidebarNavItem[],
 					},
 				]
 			: []),
@@ -268,6 +271,7 @@ export function isSidebarLinkActive(
 	href: string,
 	pathname: string,
 	managementView: boolean,
+	dtEventsView = false,
 ) {
 	const managingEvents =
 		pathname.startsWith("/events") &&
@@ -275,12 +279,14 @@ export function isSidebarLinkActive(
 		(managementView ||
 			pathname === "/events/new" ||
 			pathname.endsWith("/edit"));
-	if (href === "/events?view=manage") return managingEvents;
+	if (href === "/events?view=dt") return dtEventsView;
+	if (href === "/events?view=manage") return managingEvents && !dtEventsView;
 	if (href === "/events")
 		return (
 			pathname.startsWith("/events") &&
 			pathname !== "/events/points" &&
-			!managingEvents
+			!managingEvents &&
+			!dtEventsView
 		);
 	return pathname === href || pathname.startsWith(`${href}/`);
 }

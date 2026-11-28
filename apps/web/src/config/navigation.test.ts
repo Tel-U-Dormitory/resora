@@ -62,6 +62,12 @@ test("global, senior-resident, department and administration groups follow backe
 						]);
 					}
 
+					expect(
+						groups
+							.find((group) => group.id === "adaptif")
+							?.items.map((item) => item.href) ?? [],
+					).toEqual(isSuperadmin ? ["/dt", "/events?view=dt"] : []);
+
 					expect(groups.some((group) => group.id === "administration")).toBe(
 						isSuperadmin,
 					);
@@ -69,7 +75,7 @@ test("global, senior-resident, department and administration groups follow backe
 						groups
 							.find((group) => group.id === "administration")
 							?.items.map((item) => item.href) ?? [],
-					).toEqual(isSuperadmin ? ["/admin/users", "/admin/periods", "/dt"] : []);
+					).toEqual(isSuperadmin ? ["/admin/users", "/admin/periods"] : []);
 					expect(groups.every((group) => group.items.length > 0)).toBe(true);
 				}
 			}
@@ -174,10 +180,11 @@ test("Apps reuses sidebar capabilities and excludes primary destinations, disabl
 		process.env.NODE_ENV === "test"
 			? (["/pelanggaran"] as const)
 			: []),
+		"/dt",
+		"/events?view=dt",
 		"/penilaian",
 		"/admin/users",
 		"/admin/periods",
-		"/dt",
 	]);
 	const empty = getAppItems({
 		isSr: false,

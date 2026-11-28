@@ -4,7 +4,8 @@ import { Input } from "@resora/ui/components/input";
 import { Label } from "@resora/ui/components/label";
 import { Select } from "@resora/ui/components/select";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, RefreshCw } from "lucide-react";
+import { CalendarDays, Plus, RefreshCw } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/empty-state";
@@ -172,6 +173,12 @@ export function DtManagerWorkspace() {
 					>
 						Perbarui
 					</Button>
+					<Link
+						href="/events?view=dt"
+						className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl border border-border-control bg-surface px-4 py-2 font-semibold text-foreground text-sm hover:bg-muted"
+					>
+						<CalendarDays size={16} aria-hidden="true" /> Absensi DT
+					</Link>
 					<Button
 						leftIcon={<Plus size={16} aria-hidden="true" />}
 						onClick={() => setModal({ kind: "register" })}

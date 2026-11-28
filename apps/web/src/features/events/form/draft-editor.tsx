@@ -65,6 +65,7 @@ export function DraftEditor(props: DraftEditorProps) {
 		edit,
 		advanced,
 		invitedCount,
+		dtOnly,
 	} = view;
 	return (
 		<section className="resora-page resora-events resora-events-editor min-w-0 space-y-6">
@@ -73,9 +74,9 @@ export function DraftEditor(props: DraftEditorProps) {
 					<li>
 						<Link
 							className="focus-ring rounded-md text-muted-foreground hover:text-primary"
-							href="/events?view=manage"
+							href={dtOnly ? "/events?view=dt" : "/events?view=manage"}
 						>
-							Kelola event
+							{dtOnly ? "Absensi & kegiatan DT" : "Kelola event"}
 						</Link>
 					</li>
 					<li aria-hidden="true" className="text-muted-foreground">

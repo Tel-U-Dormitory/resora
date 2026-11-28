@@ -18,6 +18,7 @@ import { type DraftEditorView, departments, fieldClass } from "./form-model";
 export function RosterFields({ view }: { view: DraftEditorView }) {
 	const {
 		advancedMode,
+		dtOnly,
 		invalidCount,
 		initialCommitteeName,
 		draft,
@@ -52,28 +53,30 @@ export function RosterFields({ view }: { view: DraftEditorView }) {
 				<Users className="size-4 text-muted-foreground" aria-hidden="true" />{" "}
 				Peserta
 			</h2>
-			<div className="space-y-2">
-				<label htmlFor="organization-context" className="font-medium text-sm">
-					Kepengurusan Event
-				</label>
-				<Select
-					id="organization-context"
-					value={draft.organizationContext ?? "SR"}
-					disabled={Boolean(advancedMode)}
-					onChange={(event) => {
-						setDraft(
-							resetEventOrganization(
-								draft,
-								event.target.value as "SR" | "COMMITTEE",
-							),
-						);
-						setPage(1);
-					}}
-				>
-					<option value="SR">Struktural SR</option>
-					<option value="COMMITTEE">Kepanitiaan Kegiatan</option>
-				</Select>
-			</div>
+			{!dtOnly && (
+				<div className="space-y-2">
+					<label htmlFor="organization-context" className="font-medium text-sm">
+						Kepengurusan Event
+					</label>
+					<Select
+						id="organization-context"
+						value={draft.organizationContext ?? "SR"}
+						disabled={Boolean(advancedMode)}
+						onChange={(event) => {
+							setDraft(
+								resetEventOrganization(
+									draft,
+									event.target.value as "SR" | "COMMITTEE",
+								),
+							);
+							setPage(1);
+						}}
+					>
+						<option value="SR">Struktural SR</option>
+						<option value="COMMITTEE">Kepanitiaan Kegiatan</option>
+					</Select>
+				</div>
+			)}
 			{committeeMode && (
 				<div className="space-y-3">
 					{frozenCommittee ? (
@@ -224,13 +227,14 @@ export function RosterFields({ view }: { view: DraftEditorView }) {
 						Kelompok undangan
 					</legend>
 					<div className="flex flex-wrap items-center gap-3">
-						{(
-							[
-								["allSr", "Semua SR aktif"],
-								["allDt", "Semua DT aktif"],
-								["inti", "INTI"],
-								["kadep", "KADEP lintas departemen"],
-							] as const
+						{(dtOnly
+							? ([["allDt", "Semua DT aktif"]] as const)
+							: ([
+									["allSr", "Semua SR aktif"],
+									["allDt", "Semua DT aktif"],
+									["inti", "INTI"],
+									["kadep", "KADEP lintas departemen"],
+								] as const)
 						).map(([key, label]) => (
 							<label
 								key={key}
@@ -252,54 +256,60 @@ export function RosterFields({ view }: { view: DraftEditorView }) {
 								{label}
 							</label>
 						))}
-						<Button
-							type="button"
-							variant={
-								criteria.inti && criteria.kadep ? "secondary" : "outline"
-							}
-							aria-pressed={Boolean(criteria.inti && criteria.kadep)}
-							onClick={() =>
-								setDraft({
-									...draft,
-									rosterCriteria: {
-										...criteria,
-										inti: !(criteria.inti && criteria.kadep),
-										kadep: !(criteria.inti && criteria.kadep),
-									},
-								})
-							}
-						>
-							INTI + KADEP
-						</Button>
-					</div>
-					<p className="font-semibold text-sm">Departemen</p>
-					<div className="flex flex-wrap gap-3">
-						{departments.map((code) => (
-							<label
-								key={code}
-								className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm has-checked:border-primary has-checked:bg-primary-soft"
+						{!dtOnly && (
+							<Button
+								type="button"
+								variant={
+									criteria.inti && criteria.kadep ? "secondary" : "outline"
+								}
+								aria-pressed={Boolean(criteria.inti && criteria.kadep)}
+								onClick={() =>
+									setDraft({
+										...draft,
+										rosterCriteria: {
+											...criteria,
+											inti: !(criteria.inti && criteria.kadep),
+											kadep: !(criteria.inti && criteria.kadep),
+										},
+									})
+								}
 							>
-								<input
-									type="checkbox"
-									checked={criteria.departments?.includes(code) ?? false}
-									onChange={(e) =>
-										setDraft({
-											...draft,
-											rosterCriteria: {
-												...criteria,
-												departments: e.target.checked
-													? [...(criteria.departments ?? []), code]
-													: criteria.departments?.filter(
-															(value) => value !== code,
-														),
-											},
-										})
-									}
-								/>
-								{code}
-							</label>
-						))}
+								INTI + KADEP
+							</Button>
+						)}
 					</div>
+					{!dtOnly && (
+						<>
+							<p className="font-semibold text-sm">Departemen</p>
+							<div className="flex flex-wrap gap-3">
+								{departments.map((code) => (
+									<label
+										key={code}
+										className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm has-checked:border-primary has-checked:bg-primary-soft"
+									>
+										<input
+											type="checkbox"
+											checked={criteria.departments?.includes(code) ?? false}
+											onChange={(e) =>
+												setDraft({
+													...draft,
+													rosterCriteria: {
+														...criteria,
+														departments: e.target.checked
+															? [...(criteria.departments ?? []), code]
+															: criteria.departments?.filter(
+																	(value) => value !== code,
+																),
+													},
+												})
+											}
+										/>
+										{code}
+									</label>
+								))}
+							</div>
+						</>
+					)}
 				</fieldset>
 			)}
 			<div className="border-border border-t pt-5">

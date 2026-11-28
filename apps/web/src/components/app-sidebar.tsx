@@ -141,6 +141,9 @@ export function AppSidebar({
 										href,
 										pathname,
 										canManageEvents && params.get("view") === "manage",
+										pathname.startsWith("/events") &&
+											(params.get("view") === "dt" ||
+												params.get("scope") === "dt"),
 									);
 									return (
 										<SidebarMenuItem key={href}>

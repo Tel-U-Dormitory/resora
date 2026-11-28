@@ -54,6 +54,7 @@ export type DraftEditorProps = {
 	initial: Draft;
 	advancedMode?: "FULL" | "LIMITED" | "METADATA";
 	eventId?: string;
+	dtOnly?: boolean;
 	candidates: RosterCandidate[];
 	invalidCount: number;
 	initialCommitteeName: string;
@@ -64,6 +65,7 @@ export function useDraftEditor(props: DraftEditorProps) {
 		initial,
 		advancedMode,
 		eventId,
+		dtOnly = false,
 		candidates,
 		invalidCount,
 		initialCommitteeName,
@@ -111,14 +113,16 @@ export function useDraftEditor(props: DraftEditorProps) {
 		? "Edit event"
 		: eventId
 			? "Edit draft"
-			: "Buat event";
+			: dtOnly
+				? "Buat absensi DT"
+				: "Buat event";
 	const [endError, setEndError] = useState("");
 	const [search, setSearch] = useState("");
 	const [page, setPage] = useState(1);
 	const [saving, setSaving] = useState(false);
 	const [restoredAt, setRestoredAt] = useState<string | null>(null);
 	const [confirmDiscard, setConfirmDiscard] = useState(false);
-	const storageKey = `resora_event_draft_v1_${eventId ?? "new"}`;
+	const storageKey = `resora_event_draft_v1_${eventId ?? (dtOnly ? "new_dt" : "new")}`;
 	const hydratedDraft = useRef(false);
 	const clearStoredDraft = useCallback(() => {
 		setRestoredAt(null);
@@ -240,6 +244,7 @@ export function useDraftEditor(props: DraftEditorProps) {
 		initial,
 		advancedMode,
 		eventId,
+		dtOnly,
 		candidates,
 		invalidCount,
 		initialCommitteeName,

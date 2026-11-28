@@ -12,7 +12,13 @@ import { trpc } from "@/utils/trpc";
 import { eventErrorMessage } from "../../../components/event-feedback";
 import { DraftEditor } from "./draft-editor";
 import { type Draft, empty } from "./form-model";
-export default function EventForm({ eventId }: { eventId?: string }) {
+export default function EventForm({
+	eventId,
+	dtOnlyScope = false,
+}: {
+	eventId?: string;
+	dtOnlyScope?: boolean;
+}) {
 	const detail = useQuery({
 		...trpc.attendance.detail.queryOptions({
 			eventId: eventId ?? "00000000-0000-0000-0000-000000000000",
@@ -63,7 +69,7 @@ export default function EventForm({ eventId }: { eventId?: string }) {
 						</Button>
 						<Link
 							className="focus-ring rounded-lg text-primary text-sm"
-							href="/events?view=manage"
+							href={dtOnlyScope ? "/events?view=dt" : "/events?view=manage"}
 						>
 							Kembali ke daftar event
 						</Link>
@@ -82,6 +88,10 @@ export default function EventForm({ eventId }: { eventId?: string }) {
 			</p>
 		);
 	const data = detail.data;
+	const dtOnly = Boolean(
+		dtOnlyScope ||
+			(!eventId && directory.data && directory.data.candidates.length === 0),
+	);
 	const initial: Draft = data?.event.rosterCriteria
 		? {
 				title: data.event.title,
@@ -99,10 +109,15 @@ export default function EventForm({ eventId }: { eventId?: string }) {
 					qrTtlMinutes: data.session.qrTtlMinutes,
 				},
 			}
-		: empty;
+		: dtOnly
+			? {
+					...empty,
+					rosterCriteria: { ...empty.rosterCriteria, allDt: true },
+				}
+			: empty;
 	return (
 		<DraftEditor
-			key={eventId ?? "new"}
+			key={eventId ?? (dtOnly ? "new-dt" : "new")}
 			initial={initial}
 			initialCommitteeName={data?.committeeName ?? ""}
 			frozenParticipants={
@@ -113,8 +128,9 @@ export default function EventForm({ eventId }: { eventId?: string }) {
 			}
 			advancedMode={advancedMode}
 			eventId={eventId}
+			dtOnly={dtOnly}
 			candidates={[
-				...(directory.data?.candidates ?? []),
+				...(dtOnly ? [] : (directory.data?.candidates ?? [])),
 				...(directory.data?.dtCandidates ?? []),
 			]}
 			invalidCount={directory.data?.invalidAssignmentCount ?? 0}
