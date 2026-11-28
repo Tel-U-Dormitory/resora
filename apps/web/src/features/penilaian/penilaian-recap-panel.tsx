@@ -1,11 +1,69 @@
 "use client";
 
+import { Printer } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
 	formatPenilaianScore,
 	penilaianErrorMessage,
 	penilaianStatusBadgeClass,
 } from "./penilaian-ui";
+
+type DetailedRecapBreakdown = {
+	eventHistory: Array<{
+		periodEventId: string;
+		title: string;
+		category: "ANNUAL" | "MONTHLY" | "WEEKLY";
+		weight: number;
+		isMandatory: boolean;
+		expectedEvaluators: number;
+		submittedEvaluators: number;
+		rawAverage: number | null;
+		weightedScore: number | null;
+		isComplete: boolean;
+		indicators: {
+			commitment: number | null;
+			teamwork: number | null;
+			attitude: number | null;
+			contribution: number | null;
+		} | null;
+	}>;
+	departmentQuarters: Array<{
+		quarterNumber: number;
+		evaluatorCount: number;
+		commitment: number | null;
+		teamwork: number | null;
+		attitude: number | null;
+		contribution: number | null;
+		rawAverage: number | null;
+		weightedScore: number | null;
+	}>;
+	departmentScoreAverage: number | null;
+	gformScoreAverage: number | null;
+	externalResponseCount: number;
+	resoraAttendancePoints: number;
+	fallbackAttendancePoints: number;
+	fallbackEntries: Array<{
+		id: string;
+		activityType: string;
+		activityTitle: string;
+		activityDate: string;
+		attendanceStatus: string;
+		earnedPoints: number;
+		maxPoints: number;
+	}>;
+	approvedAdditionPoints: number;
+	approvedDeductionPoints: number;
+	pointTransactions: Array<{
+		id: string;
+		transactionType: "ADDITION" | "DEDUCTION";
+		points: number;
+		category: string;
+		reason: string;
+		occurredOn: string;
+		status: "PENDING" | "APPROVED" | "REJECTED";
+	}>;
+};
 
 type OwnRecapData =
 	| { status: "BELUM_TERSEDIA"; period: null; recap: null }
@@ -49,6 +107,7 @@ type OwnRecapData =
 				isComplete: boolean;
 				missingComponents: string[];
 				thresholdStatus: "MEMENUHI_STANDAR" | "PERLU_PENINGKATAN" | null;
+				detailed?: DetailedRecapBreakdown;
 			} | null;
 	  };
 
@@ -183,6 +242,16 @@ export function PenilaianRecapPanel({
 							</p>
 						</div>
 						<div className="flex flex-wrap items-center gap-2">
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								className="min-h-10 gap-1.5 print:hidden"
+								onClick={() => window.print()}
+							>
+								<Printer size={14} aria-hidden="true" />
+								<span>Cetak / Simpan PDF</span>
+							</Button>
 							<span
 								className={`rounded-full border px-3 py-1 font-bold text-xs ${penilaianStatusBadgeClass("FINAL")}`}
 							>
@@ -245,10 +314,12 @@ export function PenilaianRecapPanel({
 								Evaluasi Eksternal (ASUS/Ditmawa)
 							</p>
 							<p className="mt-1 font-bold text-2xl text-foreground tabular-nums">
-								{formatPenilaianScore(recap.externalScoreAverage)}
+								{recap.externalScoreAverage !== null
+									? `${formatPenilaianScore(recap.externalScoreAverage)} / 50`
+									: "—"}
 							</p>
 							<p className="mt-1 text-[11px] text-muted-foreground">
-								Disajikan terpisah dari Total Nilai
+								10 soal skala 1–5 · terpisah dari Total Nilai
 							</p>
 						</div>
 					</div>
@@ -287,6 +358,200 @@ export function PenilaianRecapPanel({
 					)}
 				</CardContent>
 			</Card>
+
+			{recap.detailed && (
+				<>
+					{recap.detailed.eventHistory.length > 0 && (
+						<Card>
+							<CardContent className="space-y-3 p-5">
+								<h3 className="font-bold text-base text-foreground">
+									Riwayat & Rincian Indikator per Event
+								</h3>
+								<div className="overflow-x-auto">
+									<table className="w-full text-left text-xs">
+										<thead>
+											<tr className="border-border border-b text-muted-foreground">
+												<th className="py-2 pr-3">Event</th>
+												<th className="px-2 py-2">Kategori</th>
+												<th className="px-2 py-2 text-right">Komitmen</th>
+												<th className="px-2 py-2 text-right">Teamwork</th>
+												<th className="px-2 py-2 text-right">Sikap</th>
+												<th className="px-2 py-2 text-right">Kontribusi</th>
+												<th className="px-2 py-2 text-right">Rata-rata</th>
+												<th className="py-2 pl-2 text-right">Berbobot</th>
+											</tr>
+										</thead>
+										<tbody className="divide-y divide-border">
+											{recap.detailed.eventHistory.map((evt) => (
+												<tr key={evt.periodEventId}>
+													<td className="py-2 pr-3 font-medium text-foreground">
+														{evt.title}
+														<span className="ml-1.5 text-[11px] text-muted-foreground">
+															({evt.submittedEvaluators}/
+															{evt.expectedEvaluators} penilai)
+														</span>
+													</td>
+													<td className="px-2 py-2">
+														{evt.category === "ANNUAL"
+															? "Tahunan (25%)"
+															: evt.category === "MONTHLY"
+																? "Bulanan (10%)"
+																: "Mingguan (10%)"}
+													</td>
+													<td className="px-2 py-2 text-right tabular-nums">
+														{formatPenilaianScore(evt.indicators?.commitment)}
+													</td>
+													<td className="px-2 py-2 text-right tabular-nums">
+														{formatPenilaianScore(evt.indicators?.teamwork)}
+													</td>
+													<td className="px-2 py-2 text-right tabular-nums">
+														{formatPenilaianScore(evt.indicators?.attitude)}
+													</td>
+													<td className="px-2 py-2 text-right tabular-nums">
+														{formatPenilaianScore(evt.indicators?.contribution)}
+													</td>
+													<td className="px-2 py-2 text-right tabular-nums">
+														{formatPenilaianScore(evt.rawAverage)}
+													</td>
+													<td className="py-2 pl-2 text-right font-semibold tabular-nums">
+														{formatPenilaianScore(evt.weightedScore)}
+													</td>
+												</tr>
+											))}
+										</tbody>
+									</table>
+								</div>
+							</CardContent>
+						</Card>
+					)}
+
+					<div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+						{recap.detailed.departmentQuarters.length > 0 && (
+							<Card>
+								<CardContent className="space-y-3 p-5">
+									<h3 className="font-bold text-base text-foreground">
+										Rincian Penilaian Departemen (25%)
+									</h3>
+									<div className="space-y-2">
+										{recap.detailed.departmentQuarters.map((q) => (
+											<div
+												key={q.quarterNumber}
+												className="rounded-xl border border-border bg-surface-subtle p-3 text-xs"
+											>
+												<div className="flex items-center justify-between font-semibold text-foreground">
+													<span>Kuartal {q.quarterNumber}</span>
+													<span className="tabular-nums">
+														Rata-rata {formatPenilaianScore(q.rawAverage)} ·
+														Berbobot {formatPenilaianScore(q.weightedScore)}
+													</span>
+												</div>
+												<p className="mt-1 text-muted-foreground tabular-nums">
+													Komitmen {formatPenilaianScore(q.commitment)} ·
+													Teamwork {formatPenilaianScore(q.teamwork)} · Sikap{" "}
+													{formatPenilaianScore(q.attitude)} · Kontribusi{" "}
+													{formatPenilaianScore(q.contribution)}
+												</p>
+											</div>
+										))}
+									</div>
+								</CardContent>
+							</Card>
+						)}
+
+						<Card>
+							<CardContent className="space-y-3 p-5">
+								<h3 className="font-bold text-base text-foreground">
+									Detail Kehadiran & Penyesuaian Poin
+								</h3>
+								<div className="grid grid-cols-2 gap-2 text-xs">
+									<div className="rounded-lg border border-border bg-surface-subtle p-2.5">
+										Poin Kehadiran RESORA:{" "}
+										<strong className="tabular-nums">
+											{formatPenilaianScore(
+												recap.detailed.resoraAttendancePoints,
+											)}
+										</strong>
+									</div>
+									<div className="rounded-lg border border-border bg-surface-subtle p-2.5">
+										Poin Fallback / Sidak:{" "}
+										<strong className="tabular-nums">
+											{formatPenilaianScore(
+												recap.detailed.fallbackAttendancePoints,
+											)}
+										</strong>
+									</div>
+									<div className="rounded-lg border border-border bg-surface-subtle p-2.5">
+										Tambahan Disetujui:{" "}
+										<strong className="text-success tabular-nums">
+											+
+											{formatPenilaianScore(
+												recap.detailed.approvedAdditionPoints,
+											)}
+										</strong>
+									</div>
+									<div className="rounded-lg border border-border bg-surface-subtle p-2.5">
+										Pengurangan Disetujui:{" "}
+										<strong className="text-danger tabular-nums">
+											-
+											{formatPenilaianScore(
+												recap.detailed.approvedDeductionPoints,
+											)}
+										</strong>
+									</div>
+								</div>
+
+								{recap.detailed.fallbackEntries.length > 0 && (
+									<div className="space-y-1.5">
+										<p className="font-semibold text-muted-foreground text-xs">
+											Riwayat Kehadiran Fallback / Sidak
+										</p>
+										<ul className="space-y-1 text-xs">
+											{recap.detailed.fallbackEntries.map((fb) => (
+												<li
+													key={fb.id}
+													className="flex items-center justify-between rounded-lg border border-border px-2.5 py-1.5"
+												>
+													<span>
+														{fb.activityTitle} ({fb.activityDate})
+													</span>
+													<span className="font-semibold tabular-nums">
+														{formatPenilaianScore(fb.earnedPoints)} /{" "}
+														{formatPenilaianScore(fb.maxPoints)}
+													</span>
+												</li>
+											))}
+										</ul>
+									</div>
+								)}
+
+								{recap.detailed.pointTransactions.length > 0 && (
+									<div className="space-y-1.5">
+										<p className="font-semibold text-muted-foreground text-xs">
+											Riwayat Transaksi Poin
+										</p>
+										<ul className="space-y-1 text-xs">
+											{recap.detailed.pointTransactions.map((pt) => (
+												<li
+													key={pt.id}
+													className="flex items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-1.5"
+												>
+													<span className="truncate">
+														{pt.category}: {pt.reason} ({pt.occurredOn})
+													</span>
+													<span className="shrink-0 font-semibold tabular-nums">
+														{pt.transactionType === "ADDITION" ? "+" : "-"}
+														{formatPenilaianScore(pt.points)}
+													</span>
+												</li>
+											))}
+										</ul>
+									</div>
+								)}
+							</CardContent>
+						</Card>
+					</div>
+				</>
+			)}
 		</div>
 	);
 }

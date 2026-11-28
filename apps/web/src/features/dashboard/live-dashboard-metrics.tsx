@@ -247,7 +247,7 @@ export function LiveDashboardMetrics({
 							{
 								label: "Kegiatan Eksternal",
 								value: summary.components.externalScoreAverage,
-								unit: "/100",
+								unit: "/50",
 							},
 						]
 					: []),
@@ -434,7 +434,7 @@ export function LiveDashboardMetrics({
 				{
 					label: "Kegiatan Eksternal",
 					value: personalSummaryReady.components.externalScoreAverage,
-					unit: "/100",
+					unit: "/50",
 				},
 				{
 					label: "Poin Kehadiran",

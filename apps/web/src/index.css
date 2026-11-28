@@ -458,3 +458,24 @@
 		font-size: 1rem;
 	}
 }
+
+@media print {
+	html
+		:is(
+			[data-slot="sidebar"],
+			[data-sidebar="sidebar"],
+			.resora-sidebar-trigger,
+			.resora-mobile-dock,
+			[data-mobile-navigation]
+		) {
+		display: none;
+	}
+	html :is(body, .resora-workspace, main) {
+		background: #ffffff;
+		color: #0f172a;
+		margin: 0;
+		padding: 0;
+		width: 100%;
+		max-width: none;
+	}
+}

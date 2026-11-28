@@ -102,9 +102,7 @@ function metricDetailHref(
 	canAccessPenilaian = false,
 ): DashboardDetailHref | undefined {
 	if (metricId === "assessment") {
-		return previewMode === "management" && (canManage || canAccessPenilaian)
-			? "/penilaian"
-			: undefined;
+		return canManage || canAccessPenilaian ? "/penilaian" : undefined;
 	}
 	if (metricId === "attendance") {
 		return previewMode === "management" && canManage
@@ -561,7 +559,9 @@ function DashboardMetricDetailView({
 	const tableRows = breakdownItems.map((item) => {
 		const display = `${numberFormat.format(item.value)}${item.unit ? ` ${item.unit.trim()}` : ""}`;
 		let context = scopes[displayedMetric.scope];
-		if (item.unit === "/100") {
+		if (item.unit === "/50") {
+			context = `Skor ${numberFormat.format(item.value)} dari 50 (10 soal skala 1–5)`;
+		} else if (item.unit === "/100") {
 			context = `${numberFormat.format(item.value)}% dari skala 100`;
 		} else if (item.unit === "%") {
 			context = "Proporsi capaian periode";
