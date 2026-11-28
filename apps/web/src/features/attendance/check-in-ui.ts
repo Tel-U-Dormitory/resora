@@ -12,6 +12,10 @@ const messages: Record<string, string> = {
 	QR_EXPIRED: "QR telah kedaluwarsa. Minta HCO menampilkan QR baru.",
 	QR_REVOKED:
 		"QR telah dibatalkan atau diganti. Minta HCO menampilkan QR terbaru.",
+	DT_ONLY_QR:
+		"QR ini khusus untuk check-in anggota Dorm Team (DT). Gunakan QR Senior Resident (SR) dari HCO.",
+	SR_ONLY_QR:
+		"QR ini khusus untuk Senior Resident (SR). Gunakan QR Dorm Team (DT) dari Adaptif atau HCO.",
 	SESSION_INACTIVE: "Sesi kehadiran belum aktif. Hubungi HCO.",
 	SESSION_CLOSED: "Sesi kehadiran sudah ditutup.",
 	NOT_INVITED: "Kamu tidak termasuk dalam daftar undangan kegiatan ini.",

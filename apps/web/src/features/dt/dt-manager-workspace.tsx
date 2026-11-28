@@ -392,7 +392,15 @@ export function DtManagerWorkspace() {
 									>
 										<div className="space-y-2">
 											<div className="flex flex-wrap items-center justify-between gap-2">
-												<StatusBadge status={ev.status} />
+												<div className="flex flex-wrap items-center gap-1.5">
+													<StatusBadge status={ev.status} />
+													{(ev as { isExternalCommitteeQr?: boolean })
+														.isExternalCommitteeQr && (
+														<span className="inline-flex rounded-full border border-border bg-surface-subtle px-2 py-0.5 font-semibold text-[11px] text-primary">
+															Kepanitiaan HCO · QR DT
+														</span>
+													)}
+												</div>
 												<span className="inline-flex items-center gap-1 text-muted-foreground text-xs">
 													<CalendarDays size={13} aria-hidden="true" />{" "}
 													{formatEventSchedule(ev.startsAt, ev.endsAt)}
@@ -412,16 +420,21 @@ export function DtManagerWorkspace() {
 												href={`/events/${ev.id}`}
 												className="focus-ring inline-flex min-h-9 items-center rounded-lg border border-border px-3 py-1.5 font-semibold text-foreground text-xs hover:bg-muted"
 											>
-												Detail & Cek Absensi
+												{(ev as { isExternalCommitteeQr?: boolean })
+													.isExternalCommitteeQr
+													? "Lihat QR DT"
+													: "Detail & Cek Absensi"}
 											</Link>
-											{ev.status === "DRAFT" && (
-												<Link
-													href={`/events/${ev.id}/edit`}
-													className="focus-ring inline-flex min-h-9 items-center rounded-lg border border-border px-3 py-1.5 font-semibold text-primary text-xs hover:bg-muted"
-												>
-													Edit draft
-												</Link>
-											)}
+											{ev.status === "DRAFT" &&
+												(ev as { canControlSession?: boolean })
+													.canControlSession !== false && (
+													<Link
+														href={`/events/${ev.id}/edit`}
+														className="focus-ring inline-flex min-h-9 items-center rounded-lg border border-border px-3 py-1.5 font-semibold text-primary text-xs hover:bg-muted"
+													>
+														Edit draft
+													</Link>
+												)}
 										</div>
 									</article>
 								))}

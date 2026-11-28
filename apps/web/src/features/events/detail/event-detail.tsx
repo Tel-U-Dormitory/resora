@@ -73,6 +73,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 		administration,
 		busy,
 		data,
+		canViewDtQr,
 	} = view;
 	return (
 		<section className="resora-page resora-events resora-events-detail min-w-0 space-y-6">
@@ -81,9 +82,13 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 					<li>
 						<Link
 							className="focus-ring rounded-md text-muted-foreground hover:text-primary"
-							href="/events"
+							href={
+								!canManage && canViewDtQr ? "/dt?tab=events" : "/events"
+							}
 						>
-							Event internal
+							{!canManage && canViewDtQr
+								? "Kelola DT · Absensi"
+								: "Event internal"}
 						</Link>
 					</li>
 					<li aria-hidden="true" className="text-muted-foreground">
@@ -326,7 +331,10 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 				</>
 			)}
 			{canManage && <InvitationsPanel view={view} />}
-			{!canManage && (
+			{!canManage && canViewDtQr && event.status === "PUBLISHED" && (
+				<SessionPanel view={view} />
+			)}
+			{!canManage && (!canViewDtQr || data.isInvited) && (
 				<p className="rounded-xl border border-border bg-surface-subtle p-5 text-foreground text-sm">
 					Kamu diundang pada kegiatan ini. Gunakan Scan QR untuk check-in dan
 					riwayat kehadiran untuk melihat status pribadi.

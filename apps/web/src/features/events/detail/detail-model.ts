@@ -38,6 +38,7 @@ export function useEventDetail(eventId: string) {
 		meta: { errorHandledLocally: true },
 	});
 	const canManage = detail.data?.canManage ?? false;
+	const canViewDtQr = detail.data?.canViewDtQr ?? false;
 	const preview = useQuery({
 		...trpc.attendance.preview.queryOptions({ eventId }),
 		enabled:
@@ -51,7 +52,7 @@ export function useEventDetail(eventId: string) {
 	const qr = useQuery({
 		...trpc.attendance.qr.queryOptions({ eventId }),
 		enabled:
-			canManage &&
+			(canManage || canViewDtQr) &&
 			detail.data?.session.status === "ACTIVE" &&
 			!activeAction &&
 			!close.isSuccess,
@@ -142,6 +143,7 @@ export function useEventDetail(eventId: string) {
 		close,
 		detail,
 		canManage,
+		canViewDtQr,
 		preview,
 		qr,
 		activate,
@@ -226,6 +228,7 @@ export function createDetailView(
 	return {
 		...state,
 		data,
+		canViewDtQr: data.canViewDtQr ?? false,
 		event,
 		session,
 		participants,

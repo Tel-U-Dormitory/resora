@@ -132,9 +132,11 @@ Semua otorisasi ditegakkan di server pada setiap prosedur tRPC dan pemeriksaan i
    - `committee.candidates` mengembalikan kandidat `SR` aktif dan `DT` aktif (diberi label `actorType: 'SR' | 'DT'`) tanpa mengubah aturan jabatan kepanitiaan yang ada.
 2. **Event & Absensi (`FR-DT-009`, `010`, `011`, `014`):**
    - `events.rosterCriteria` mendukung flag opsional `allDt?: boolean` (default `false`), serta event berjenis `COMMITTEE` otomatis mengevaluasi anggota `DT` aktif yang berada di dalam kepanitiaan event tersebut bersama kandidat `SR`.
+   - Saat event kepanitiaan HCO melibatkan `DT` dan sesinya diaktifkan oleh HCO, sistem menghasilkan dua QR dari challenge aktif yang sama: **QR SR** (khusus `actor = 'SR'`, hanya tampil di HCO/SUPERADMIN) dan **QR DT** (khusus `actor = 'DT'`, tampil di HCO dan mirror read-only otomatis di `Kelola DT -> Absensi & Event DT` milik `ADAPTIF`). `SR` ditolak bila mencoba scan `QR DT` (`DT_ONLY_QR`), begitu pula `DT` ditolak pada `QR SR` (`SR_ONLY_QR`).
+   - Departemen Adaptif juga tetap dapat membuat, mengelola, mengaktifkan QR DT, dan merekap kehadiran kegiatan khusus DT di luar kepanitiaan secara independen (`allDt` / individu DT).
    - `event_participants` mencatat snapshot peserta DT dengan `departmentCode = dt.departmentCode ?? 'DT'`, `positionCode = 'DT'`, dan gedung sesuai penugasan DT (atau `'NON_GEDUNG'` / `'Dorm Team'` jika belum terikat gedung tertentu).
    - `attendance.checkIn`, `events.list`, `events.detail`, dan `attendance.ownHistory` mengizinkan `actor = 'DT'` aktif untuk kegiatan yang mengundangnya (`event_participants`).
-   - Kegiatan SR biasa (`allSr: true` tanpa `allDt` dan tanpa kepanitiaan berisi DT) **tidak** mengundang DT sehingga pemisahan ruang SR dan DT tetap terjaga.
+   - Kegiatan SR biasa (`allSr: true` tanpa `allDt` dan tanpa kepanitiaan berisi DT) **tidak** mengundang DT sehingga pemisahan ruang SR dan DT tetap terjaga, dan `ADAPTIF` tidak dapat mengaksesnya.
 3. **Rekap Kehadiran & Partisipasi DT (`FR-DT-012`):**
    - Pengelola DT (`ADAPTIF` / `SUPERADMIN`) dapat melihat ringkasan dan detail per anggota DT: jumlah undangan event, hadir (`EARLY`, `ON_TIME`, `LATE`), pending, tidak hadir (`ABSENT`), serta daftar kepanitiaan yang diikuti.
 
