@@ -62,6 +62,9 @@ Keputusan proses bisnis yang belum jelas tetap diputuskan PM.
 | P1-02 Landing Page & CMS | 29 Approved, 1 Rejected (FR-WEB-013) | [RSA-6](https://telkomdormitory.atlassian.net/browse/RSA-6) |
 | P1-03 Pelanggaran | 20 Approved, 1 Pending (FR-VIOL-006), 6 Rejected (007/008/009/015/016/020) | [RSA-7](https://telkomdormitory.atlassian.net/browse/RSA-7) |
 | P1-04 Dashboard RESORA | 9 Approved (FR-DASH-001–009) | Not specified in the source tab |
+| P2-04 Manajemen DT | 22 FR (`FR-DT-001`–`022`) — arahan implementasi MVP (2026-11-28): pengelola = Departemen `ADAPTIF`, role = aktor `DT` | Not specified in the source tab |
+
+Detail P2-04 MVP mengikuti [PRD modul Manajemen DT](modules/dt/prd.md) dan [rencana fase MVP](modules/dt/roadmap.md), dengan dependensi PX (`FR-DT-015`–`017`) dan skor poin partisipasi (`FR-DT-012`) tetap dikecualikan dari MVP.
 
 Detail P1-01 mengikuti [PRD modul Penilaian & Analitik](modules/penilaian/prd.md) dan [rencana fase eksekusi](modules/penilaian/roadmap.md), diturunkan dari tab `P1-01 Penilaian & Analitik` (37 FR, diperbarui PM 2026-11-27) serta *Pedoman Pembuatan Website Penilaian Senior Resident (SR)* (2026-11-27); dokumen tersebut menetapkan baseline persyaratan dan paket keputusan D01–D10 sebelum implementasi runtime F1–F8 pada branch `feat/modul-penilaian-sr`.
 

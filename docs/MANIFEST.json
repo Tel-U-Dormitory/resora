@@ -13,6 +13,8 @@
 		"docs/decisions/README.md",
 		"docs/modules/pelanggaran/prd.md",
 		"docs/modules/pelanggaran/roadmap.md",
+		"docs/modules/dt/prd.md",
+		"docs/modules/dt/roadmap.md",
 		"docs/modules/penilaian/prd.md",
 		"docs/modules/penilaian/roadmap.md",
 		"docs/modules/need-001/acceptance-tests.md",

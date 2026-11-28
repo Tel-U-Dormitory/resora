@@ -15,6 +15,7 @@ public data API for domain consumers.
 | Broadcast | broadcasts |
 | Pelanggaran | violations_reports, violations_audits, violations_upload_intents |
 | Penilaian (planned F1) | `evaluation_*` tables (evaluation periods, event/department assessments, GForm SR/Maba & external imports, fallback attendance entries, bonus/deduction point transactions, revision versions, and append-only evaluation audits) |
+| Manajemen DT (`dt`) | `dt_memberships`, `dt_assignment_histories`, `dt_audits` (periode, status keanggotaan, riwayat penugasan, dan audit append-only Dorm Team) |
 
 Identity supplies minimal display names and active SR/building facts through its
 server-only public operations for cross-domain audit and module composition.
