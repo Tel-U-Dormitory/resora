@@ -21,6 +21,7 @@ function selectedByGroup(
 	defaultIds?: ReadonlySet<string>,
 ) {
 	if (defaultIds) return defaultIds.has(sr.userId);
+	if (sr.positionCode === "DT") return Boolean(criteria.allDt);
 	return Boolean(
 		criteria.allSr ||
 			criteria.departments?.some((code) => code === sr.departmentCode) ||

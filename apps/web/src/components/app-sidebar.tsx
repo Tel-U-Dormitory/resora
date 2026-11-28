@@ -29,8 +29,10 @@ export function AppSidebar({
 	canManageCommittee,
 	canReadAttendancePoints,
 	canAccessPenilaianWorkspace,
+	canManageDt,
 	isSuperadmin,
 	isSr,
+	isDt = false,
 }: {
 	name: string;
 	departmentCode?: string | null;
@@ -38,8 +40,10 @@ export function AppSidebar({
 	canManageCommittee?: boolean;
 	canReadAttendancePoints?: boolean;
 	canAccessPenilaianWorkspace?: boolean;
+	canManageDt?: boolean;
 	isSuperadmin: boolean;
 	isSr: boolean;
+	isDt?: boolean;
 }) {
 	const pathname = usePathname();
 	const params = useSearchParams();
@@ -47,11 +51,13 @@ export function AppSidebar({
 	const compact = state === "collapsed" && !isMobile;
 	const groups = getSidebarGroups({
 		isSr,
+		isDt,
 		departmentCode,
 		canManageEvents,
 		canManageCommittee,
 		canReadAttendancePoints,
 		canAccessPenilaianWorkspace,
+		canManageDt,
 		isSuperadmin,
 	});
 	const routeKey = `${pathname}?${params.toString()}`;
@@ -164,7 +170,13 @@ export function AppSidebar({
 				<UserMenu
 					name={name}
 					compact={compact}
-					accountLabel={isSr ? "Senior Resident" : "Administrator Sistem"}
+					accountLabel={
+						isSr
+							? "Senior Resident"
+							: isDt
+								? "Dorm Team"
+								: "Administrator Sistem"
+					}
 					onNavigate={() => setOpenMobile(false)}
 				/>
 			</SidebarFooter>

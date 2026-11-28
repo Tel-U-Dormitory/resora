@@ -235,6 +235,9 @@ body:has(.resora-workspace),
 .resora-app-icon[data-icon="violations"] {
 	background: #ef4444;
 }
+.resora-app-icon[data-icon="dt"] {
+	background: #0284c7;
+}
 .resora-app-label {
 	display: block;
 	max-width: 100%;

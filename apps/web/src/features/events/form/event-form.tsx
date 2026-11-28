@@ -113,7 +113,10 @@ export default function EventForm({ eventId }: { eventId?: string }) {
 			}
 			advancedMode={advancedMode}
 			eventId={eventId}
-			candidates={directory.data?.candidates ?? []}
+			candidates={[
+				...(directory.data?.candidates ?? []),
+				...(directory.data?.dtCandidates ?? []),
+			]}
 			invalidCount={directory.data?.invalidAssignmentCount ?? 0}
 		/>
 	);

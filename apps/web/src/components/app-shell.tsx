@@ -29,8 +29,10 @@ export function AppShell({
 	canManageCommittee,
 	canReadAttendancePoints,
 	canAccessPenilaianWorkspace,
+	canManageDt,
 	isSuperadmin,
 	isSr,
+	isDt = false,
 	children,
 }: {
 	name: string;
@@ -39,8 +41,10 @@ export function AppShell({
 	canManageCommittee?: boolean;
 	canReadAttendancePoints?: boolean;
 	canAccessPenilaianWorkspace?: boolean;
+	canManageDt?: boolean;
 	isSuperadmin: boolean;
 	isSr: boolean;
+	isDt?: boolean;
 	children: ReactNode;
 }) {
 	const pathname = usePathname();
@@ -108,16 +112,22 @@ export function AppShell({
 									? "Inbox"
 									: pathname.startsWith("/penilaian")
 										? "Penilaian SR"
-										: pathname === "/profile"
-											? "Profil"
-											: "Beranda";
+										: pathname.startsWith("/dt")
+											? isDt
+												? "Portal DT"
+												: "Kelola DT"
+											: pathname === "/profile"
+												? "Profil"
+												: "Beranda";
 	const capabilities = {
 		isSr,
+		isDt,
 		departmentCode,
 		canManageEvents,
 		canManageCommittee,
 		canReadAttendancePoints,
 		canAccessPenilaianWorkspace,
+		canManageDt,
 		isSuperadmin,
 	};
 	if (pathname === "/scan") {
@@ -166,7 +176,11 @@ export function AppShell({
 									{name}
 								</p>
 								<p className="truncate text-muted-foreground text-xs leading-tight">
-									{isSr ? "Senior Resident" : "Administrator"}
+									{isSr
+										? "Senior Resident"
+										: isDt
+											? "Dorm Team"
+											: "Administrator"}
 								</p>
 							</div>
 						</Link>

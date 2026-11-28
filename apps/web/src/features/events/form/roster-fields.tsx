@@ -227,6 +227,7 @@ export function RosterFields({ view }: { view: DraftEditorView }) {
 						{(
 							[
 								["allSr", "Semua SR aktif"],
+								["allDt", "Semua DT aktif"],
 								["inti", "INTI"],
 								["kadep", "KADEP lintas departemen"],
 							] as const

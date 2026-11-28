@@ -6,6 +6,6 @@ export default async function AttendanceHistoryPage() {
 	const session = await getSrSession();
 	if (!session) redirect("/login?reason=session");
 	if (session.requiresPasswordChange) redirect("/change-password");
-	if (session.actor !== "SR") redirect("/profile");
+	if (session.actor !== "SR" && session.actor !== "DT") redirect("/profile");
 	return <OwnHistory userId={session.userId} />;
 }

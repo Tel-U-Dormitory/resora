@@ -145,7 +145,9 @@ function BulkMemberDialog({
 			{(busy) => (
 				<>
 					<div className="space-y-2">
-						<Label htmlFor="candidate-search">Cari SR aktif (nama / NIM)</Label>
+						<Label htmlFor="candidate-search">
+							Cari SR / DT aktif (nama / NIM)
+						</Label>
 						<Input
 							id="candidate-search"
 							type="search"
@@ -212,7 +214,10 @@ function BulkMemberDialog({
 													htmlFor={`candidate-${row.userId}`}
 													className="min-w-0 break-words"
 												>
-													{row.name} · {row.nim}
+													{row.name} · {row.nim}{" "}
+													<span className="ml-1 rounded-md border border-border bg-surface-subtle px-1.5 py-0.5 font-semibold text-[11px] text-muted-foreground">
+														{row.actorType}
+													</span>
 												</Label>
 											</li>
 										);
@@ -471,7 +476,10 @@ export default function CommitteeDetail({
 									>
 										<div className="min-w-0 space-y-1">
 											<h3 className="break-words font-semibold">
-												{member.name}
+												{member.name}{" "}
+												<span className="ml-1.5 rounded-md border border-border bg-surface-subtle px-1.5 py-0.5 font-semibold text-[11px] text-muted-foreground">
+													{member.actorType}
+												</span>
 											</h3>
 											<p className="text-muted-foreground text-sm">
 												NIM {member.nim} · {divisionName(member.divisionId)} ·{" "}

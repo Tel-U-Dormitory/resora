@@ -18,9 +18,12 @@ import { navigationIcons } from "./navigation-icons";
 
 export function AppNavigation({
 	isSr,
+	isDt = false,
 	canManageEvents,
 	canManageCommittee,
 	canReadAttendancePoints,
+	canAccessPenilaianWorkspace,
+	canManageDt,
 	isSuperadmin,
 }: Parameters<typeof getAppItems>[0]) {
 	const pathname = usePathname();
@@ -31,17 +34,26 @@ export function AppNavigation({
 	const historyEntry = useRef(false);
 	const items = getAppItems({
 		isSr,
+		isDt,
 		canManageEvents,
 		canManageCommittee,
 		canReadAttendancePoints,
+		canAccessPenilaianWorkspace,
+		canManageDt,
 		isSuperadmin,
 	});
 	const destinations = [
-		{ label: "Beranda", href: "/dashboard", icon: House },
-		{ label: "Inbox", href: "/broadcasts", icon: Inbox },
-		{ label: "Profil", href: "/profile", icon: UserRound },
-	] as const;
-	const destination = getPrimaryDestination(pathname);
+		{ label: "Beranda", href: "/dashboard" as Route, icon: House },
+		isDt
+			? { label: "Portal DT", href: "/dt" as Route, icon: navigationIcons.dt }
+			: { label: "Inbox", href: "/broadcasts" as Route, icon: Inbox },
+		{ label: "Profil", href: "/profile" as Route, icon: UserRound },
+	];
+	const baseDestination = getPrimaryDestination(pathname);
+	const destination =
+		isDt && (pathname === "/dt" || pathname.startsWith("/dt/"))
+			? ("/dt" as Route)
+			: baseDestination;
 	const appsCurrent = !destination && pathname !== "/scan";
 	const activeNavIndex =
 		open || appsCurrent
@@ -267,7 +279,7 @@ export function AppNavigation({
 						</button>
 					</nav>
 				</div>
-				{isSr && (
+				{(isSr || isDt) && (
 					<Link
 						href="/scan"
 						className="resora-scan-action"

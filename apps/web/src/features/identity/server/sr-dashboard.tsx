@@ -26,11 +26,13 @@ export default async function SrDashboard() {
 	if (!session) redirect("/login?reason=session");
 	if (session.requiresPasswordChange) redirect("/change-password");
 	const isSr = session.actor === "SR";
+	const isDt = session.actor === "DT";
+	const isParticipant = isSr || isDt;
 	const canManageDashboard = session.canManageBroadcast || session.isSuperadmin;
 	// Backend KPI modules are not integrated yet; real /dashboard renders all 4 cards as "Segera hadir".
 	const previewFixtures = null;
 	const actions = [
-		...(isSr
+		...(isParticipant
 			? [
 					{
 						href: "/scan" as const,
@@ -51,6 +53,28 @@ export default async function SrDashboard() {
 						title: "Riwayat kehadiran",
 						shortTitle: "Riwayat",
 						icon: History,
+						highlight: false,
+					},
+				]
+			: []),
+		...(isDt
+			? [
+					{
+						href: "/dt" as const,
+						title: "Portal Dorm Team",
+						shortTitle: "Portal DT",
+						icon: Users,
+						highlight: false,
+					},
+				]
+			: []),
+		...(session.canManageDt
+			? [
+					{
+						href: "/dt" as const,
+						title: "Kelola Dorm Team",
+						shortTitle: "Kelola DT",
+						icon: Users,
 						highlight: false,
 					},
 				]
@@ -100,6 +124,11 @@ export default async function SrDashboard() {
 				]
 			: []),
 	];
+	const broadcastSection = isDt ? null : (
+		<div className="resora-dashboard-broadcasts resora-dashboard-section">
+			<BroadcastFeed view="LATEST" canManage={session.canManageBroadcast} />
+		</div>
+	);
 	return (
 		<section className="resora-page resora-dashboard space-y-5">
 			<DashboardHeader
@@ -160,11 +189,9 @@ export default async function SrDashboard() {
 					</div>
 				</section>
 				<div className="resora-dashboard-activities resora-dashboard-section">
-					<DashboardActivities personalSr={isSr} />
+					<DashboardActivities personalSr={isParticipant} />
 				</div>
-				<div className="resora-dashboard-broadcasts resora-dashboard-section">
-					<BroadcastFeed view="LATEST" canManage={session.canManageBroadcast} />
-				</div>
+				{broadcastSection}
 			</DashboardPreviewProvider>
 			<section aria-label="Modul mendatang" className="sr-only">
 				<h2>Modul mendatang</h2>
@@ -184,7 +211,11 @@ export default async function SrDashboard() {
 			</section>
 			<details className="sr-only">
 				<summary>Informasi akun</summary>
-				<p>{isSr ? `NIM: ${session.nim}` : `Username: ${session.username}`}</p>
+				<p>
+					{session.actor === "SYSTEM_ADMIN"
+						? `Username: ${session.username}`
+						: `NIM: ${session.nim}`}
+				</p>
 			</details>
 		</section>
 	);

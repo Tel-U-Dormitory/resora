@@ -6,5 +6,6 @@ export default async function BroadcastsPage() {
 	const session = await getSrSession();
 	if (!session) redirect("/login?reason=session");
 	if (session.requiresPasswordChange) redirect("/change-password");
+	if (session.actor === "DT") redirect("/dt");
 	return <BroadcastFeed view="ACTIVE" canManage={session.canManageBroadcast} />;
 }

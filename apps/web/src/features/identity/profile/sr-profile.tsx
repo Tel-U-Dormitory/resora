@@ -104,11 +104,22 @@ export default function SrProfile({ userId }: { userId: string }) {
 					["Jabatan", info.position],
 					["Gedung", info.building],
 				] as const)
-			: ([
-					["Nama lengkap", info.name],
-					["Username", info.username],
-					["Email", info.email],
-				] as const);
+			: info.actor === "DT"
+				? ([
+						["Nama lengkap", info.name],
+						["NIM", info.nim],
+						["Email", info.email],
+						["Periode DT", info.periodName],
+						["Masa berlaku", `${info.startsOn} s/d ${info.endsOn}`],
+						["Departemen pembina", info.department ?? "Belum ditentukan"],
+						["Gedung tugas", info.building ?? "Belum ditentukan"],
+						["Program kerja", info.workProgram ?? "Belum ditentukan"],
+					] as const)
+				: ([
+						["Nama lengkap", info.name],
+						["Username", info.username],
+						["Email", info.email],
+					] as const);
 	return (
 		<section className="resora-page resora-profile min-w-0 space-y-6">
 			{profile.fetchStatus === "paused" && (
@@ -118,7 +129,11 @@ export default function SrProfile({ userId }: { userId: string }) {
 			)}
 			<div>
 				<p className="font-semibold text-primary text-xs uppercase tracking-wider">
-					{info.actor === "SR" ? "Akun SR" : "Akun Sistem / SUPERADMIN"}
+					{info.actor === "SR"
+						? "Akun SR"
+						: info.actor === "DT"
+							? "Akun Dorm Team (DT)"
+							: "Akun Sistem / SUPERADMIN"}
 				</p>
 				<h1 className="mt-1.5 font-bold text-2xl tracking-tight">Profil</h1>
 				<p className="mt-1.5 hidden text-muted-foreground text-sm sm:block">
@@ -145,7 +160,9 @@ export default function SrProfile({ userId }: { userId: string }) {
 						<p className="mt-0.5 truncate text-muted-foreground text-sm">
 							{info.actor === "SR"
 								? "Akun Senior Resident"
-								: "Akun Sistem / SUPERADMIN"}
+								: info.actor === "DT"
+									? "Akun Dorm Team (Pembantu SR)"
+									: "Akun Sistem / SUPERADMIN"}
 						</p>
 					</div>
 				</CardContent>
@@ -179,7 +196,7 @@ export default function SrProfile({ userId }: { userId: string }) {
 					</dl>
 				</CardContent>
 			</Card>
-			{info.actor === "SR" && (
+			{(info.actor === "SR" || info.actor === "DT") && (
 				<section aria-label="Kehadiran pribadi" className="space-y-3">
 					<h2 className="font-bold text-lg">Kehadiran pribadi</h2>
 					<Card className="resora-profile-attendance">

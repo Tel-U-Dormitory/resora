@@ -24,8 +24,10 @@ export default async function AuthenticatedLayout({
 			canManageCommittee={session.canManageCommittee}
 			canReadAttendancePoints={session.canReadAttendancePoints}
 			canAccessPenilaianWorkspace={session.canAccessPenilaianWorkspace}
+			canManageDt={session.canManageDt}
 			isSuperadmin={session.isSuperadmin}
 			isSr={session.actor === "SR"}
+			isDt={session.actor === "DT"}
 		>
 			{children}
 		</AppShell>

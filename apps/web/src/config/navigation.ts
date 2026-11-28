@@ -28,6 +28,7 @@ export type SidebarNavHref =
 	| "/committees"
 	| "/penilaian"
 	| "/pelanggaran"
+	| "/dt"
 	| "/admin/users"
 	| "/admin/periods";
 
@@ -35,6 +36,7 @@ export type SidebarNavIcon =
 	| "dashboard"
 	| "inbox"
 	| "profile"
+	| "dt"
 	| "events"
 	| "scan"
 	| "history"
@@ -65,24 +67,31 @@ export type SidebarNavItem =
 
 export function getSidebarGroups({
 	isSr,
+	isDt = false,
 	departmentCode = null,
 	canManageEvents,
 	canManageCommittee = false,
 	canReadAttendancePoints = false,
 	canAccessPenilaianWorkspace = false,
+	canManageDt = false,
 	isSuperadmin,
 }: {
 	isSr: boolean;
+	isDt?: boolean;
 	departmentCode?: string | null;
 	canManageEvents: boolean;
 	canManageCommittee?: boolean;
 	canReadAttendancePoints?: boolean;
 	canAccessPenilaianWorkspace?: boolean;
+	canManageDt?: boolean;
 	isSuperadmin: boolean;
 }) {
 	void canReadAttendancePoints;
 	const hasDepartmentAccess =
-		canManageEvents || canManageCommittee || canAccessPenilaianWorkspace;
+		canManageEvents ||
+		canManageCommittee ||
+		canAccessPenilaianWorkspace ||
+		canManageDt;
 	const departmentTitle = departmentCode
 		? `Departemen · ${departmentCode}`
 		: "Departemen · HCO";
@@ -128,6 +137,18 @@ export function getSidebarGroups({
 				] as SidebarNavItem[])
 			: []),
 	];
+	const dtPersonalItems: SidebarNavItem[] = isDt
+		? [
+				{ title: "Portal DT", href: "/dt", icon: "dt" },
+				{ title: "Kegiatan", href: "/events", icon: "events" },
+				{ title: "Scan QR", href: "/scan", icon: "scan" },
+				{
+					title: "Riwayat kehadiran",
+					href: "/attendance/history",
+					icon: "history",
+				},
+			]
+		: [];
 
 	return [
 		{
@@ -135,9 +156,22 @@ export function getSidebarGroups({
 			title: "Umum",
 			items: [
 				{ title: "Beranda", href: "/dashboard", icon: "dashboard" },
-				{ title: "Inbox", href: "/broadcasts", icon: "inbox" },
+				...(isDt
+					? []
+					: ([
+							{ title: "Inbox", href: "/broadcasts", icon: "inbox" },
+						] as SidebarNavItem[])),
 			] satisfies SidebarNavItem[],
 		},
+		...(dtPersonalItems.length > 0
+			? [
+					{
+						id: "dt",
+						title: "Dorm Team",
+						items: dtPersonalItems,
+					},
+				]
+			: []),
 		...(srItems.length > 0
 			? [
 					{
@@ -153,6 +187,15 @@ export function getSidebarGroups({
 						id: "hco",
 						title: departmentTitle,
 						items: [
+							...(canManageDt
+								? ([
+										{
+											title: "Kelola DT",
+											href: "/dt",
+											icon: "dt",
+										},
+									] as SidebarNavItem[])
+								: []),
 							...(canAccessPenilaianWorkspace
 								? ([
 										{
