@@ -51,6 +51,7 @@ test("primary actors are exclusive and superadmin is a separate system privilege
 		"ASUS",
 		"DITMAWA",
 		"SYSTEM_ADMIN",
+		"DT",
 	]);
 	expect(systemPrivilege.enumValues).toEqual(["SUPERADMIN"]);
 	expect(userProfiles.userId.primary).toBe(true);

@@ -137,6 +137,9 @@ const tableOwners: Record<string, string> = {
 	evaluation_point_transactions: "penilaian",
 	evaluation_result_snapshots: "penilaian",
 	evaluation_audits: "penilaian",
+	dt_memberships: "dt",
+	dt_assignment_histories: "dt",
+	dt_audits: "dt",
 };
 function explicitSqlTables(path: string, source: string) {
 	const result = new Set<string>();

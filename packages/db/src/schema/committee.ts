@@ -12,7 +12,7 @@ import {
 	uuid,
 } from "drizzle-orm/pg-core";
 import { user } from "./auth";
-import { srProfiles } from "./identity";
+import { srProfiles, userProfiles } from "./identity";
 
 export const committeePositionCodes = [
 	"ANGGOTA",
@@ -79,7 +79,7 @@ export const committeeMembers = pgTable(
 			.references(() => committees.id),
 		userId: text("user_id")
 			.notNull()
-			.references(() => srProfiles.userId),
+			.references(() => userProfiles.userId),
 		divisionId: uuid("division_id").notNull(),
 		positionCode: text("position_code")
 			.$type<(typeof committeePositionCodes)[number]>()
@@ -102,7 +102,14 @@ export const committeeMembers = pgTable(
 ).enableRLS();
 
 export const committeeRelations = defineRelationsPart(
-	{ committees, committeeDivisions, committeeMembers, user, srProfiles },
+	{
+		committees,
+		committeeDivisions,
+		committeeMembers,
+		user,
+		userProfiles,
+		srProfiles,
+	},
 	(r) => ({
 		committees: {
 			creator: r.one.user({
@@ -141,10 +148,15 @@ export const committeeRelations = defineRelationsPart(
 				to: r.committeeDivisions.id,
 				optional: false,
 			}),
+			profile: r.one.userProfiles({
+				from: r.committeeMembers.userId,
+				to: r.userProfiles.userId,
+				optional: false,
+			}),
 			sr: r.one.srProfiles({
 				from: r.committeeMembers.userId,
 				to: r.srProfiles.userId,
-				optional: false,
+				optional: true,
 			}),
 		},
 	}),

@@ -21,6 +21,7 @@ export const actorType = pgEnum("actor_type", [
 	"ASUS",
 	"DITMAWA",
 	"SYSTEM_ADMIN",
+	"DT",
 ]);
 export const systemPrivilege = pgEnum("system_privilege", ["SUPERADMIN"]);
 

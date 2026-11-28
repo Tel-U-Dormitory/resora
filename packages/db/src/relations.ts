@@ -9,6 +9,7 @@ export const relations = {
 	...schema.attendanceRelations,
 	...schema.committeeRelations,
 	...schema.broadcastRelations,
+	...schema.dtRelations,
 	...schema.penilaianRelations,
 	user: {
 		...schema.authRelations.user,
